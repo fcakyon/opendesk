@@ -175,6 +175,9 @@ func registerPages(d *deps.Deps, api huma.API) {
 				if err := recordRevision(ctx, tx, p, id, title, icon, body, false); err != nil {
 					return err
 				}
+				if err := indexBody(ctx, tx, p.WorkspaceID, id, body); err != nil {
+					return err
+				}
 				if pg, err = loadPage(ctx, tx, p.WorkspaceID, id); err != nil {
 					return err
 				}
@@ -245,6 +248,11 @@ func registerPages(d *deps.Deps, api huma.API) {
 					}
 					if err := recordRevision(ctx, tx, p, id, next.title, next.icon, next.body, true); err != nil {
 						return err
+					}
+					if next.body != body {
+						if err := indexBody(ctx, tx, p.WorkspaceID, id, next.body); err != nil {
+							return err
+						}
 					}
 				}
 				settings, err := b.settings(cur)

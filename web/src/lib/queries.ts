@@ -237,6 +237,11 @@ export const qk = {
   wikiRevisions: (id: string) => w(["wiki", "revisions", id] as const),
   wikiRevision: (id: string, rid: string) => w(["wiki", "revision", id, rid] as const),
   wikiSearch: (q: string) => w(["wiki", "search", q] as const),
+  wikiBacklinks: (id: string) => w(["wiki", "backlinks", id] as const),
+  wikiMentions: (id: string) => w(["wiki", "mentions", id] as const),
+  get wikiGraph() {
+    return w(["wiki", "graph"] as const);
+  },
   reports: (r: ReportsQuery) => w(["reports", r] as const),
   reportAgents: (r: ReportsQuery) => w(["reports", "agents", r] as const),
   get widgetSettings() {
@@ -492,6 +497,9 @@ export const q = {
   wikiPage: (id: string) => queryOptions({ queryKey: qk.wikiPage(id), queryFn: () => api.wiki.get(id) }),
   wikiRevisions: (id: string) => list(qk.wikiRevisions(id), () => api.wiki.revisions(id)),
   wikiRevision: (id: string, rid: string) => queryOptions({ queryKey: qk.wikiRevision(id, rid), queryFn: () => api.wiki.revision(id, rid), staleTime: Infinity }),
+  wikiBacklinks: (id: string) => list(qk.wikiBacklinks(id), () => api.wiki.backlinks(id)),
+  wikiMentions: (id: string) => list(qk.wikiMentions(id), () => api.wiki.mentions(id)),
+  wikiGraph: () => list(qk.wikiGraph, () => api.wiki.graph()),
   wikiSearch: (term: string) =>
     queryOptions({ queryKey: qk.wikiSearch(term), queryFn: async () => (await api.wiki.search(term)).data, enabled: term.trim().length > 0, staleTime: 5_000 }),
   search: (term: string) =>

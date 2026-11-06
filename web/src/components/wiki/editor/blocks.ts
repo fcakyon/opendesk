@@ -198,7 +198,8 @@ export const PageLink = Node.create({
       block: { default: "", parseHTML: (el) => el.getAttribute("data-block") ?? "" },
     };
   },
-  parseHTML: () => [{ tag: 'a[data-type="page"]' }],
+  // Before the link mark's a[href], which would otherwise take it as a plain link.
+  parseHTML: () => [{ tag: 'a[data-type="page"]', priority: 100 }],
   renderHTML: ({ node }) => [
     "a",
     { "data-type": "page", "data-id": node.attrs.id, ...(node.attrs.block ? { "data-block": node.attrs.block } : {}), href: `/wiki/${node.attrs.id}${node.attrs.block ? `#${node.attrs.block}` : ""}` },

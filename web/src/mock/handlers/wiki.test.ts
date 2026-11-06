@@ -81,7 +81,7 @@ describe("mock wiki", () => {
 });
 
 describe("wiki events on the cache", () => {
-  const node = (id: string, parent: string | null, position: number, version = 1): WikiNode => ({ id, parent_id: parent, title: id, icon: "", position, version, updated_at: "2026-10-01T00:00:00Z", created_by_id: null });
+  const node = (id: string, parent: string | null, position: number, version = 1): WikiNode => ({ id, parent_id: parent, title: id, icon: "", position, version, updated_at: "2026-10-01T00:00:00Z", created_by_id: null, tags: [] });
 
   it("patches the tree, refetches a page someone else changed and drops deleted subpages", () => {
     const qc = new QueryClient();

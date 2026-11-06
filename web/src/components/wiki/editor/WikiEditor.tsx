@@ -5,6 +5,7 @@
 
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import "katex/dist/katex.min.css";
@@ -41,6 +42,7 @@ export const WikiEditor = forwardRef<RichEditorHandle, WikiEditorProps>(function
   const { t } = useTranslation("wiki");
   const { tree } = useWikiTree();
   const members = useQuery(q.members());
+  const navigate = useNavigate();
 
   // The menus read these when they open, so they never go stale.
   const live = useRef({ props, pages: [] as WikiNode[], members: [] as Member[] });
@@ -53,6 +55,7 @@ export const WikiEditor = forwardRef<RichEditorHandle, WikiEditorProps>(function
     () =>
       wikiExtensions({
         placeholder: () => live.current.props.placeholder,
+        onOpenTag: (tag) => void navigate({ to: "/wiki/tags", search: { tag } }),
         sources: {
           t,
           untitled: t("untitled"),

@@ -1,14 +1,15 @@
 // The wiki's home (/wiki). A new workspace gets a first-run state with starter pages;
 // otherwise the pages edited lately and the top-level pages to start from.
 
-import { Link } from "@tanstack/react-router";
-import { ChevronRight, Plus } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { ChevronRight, Hash, Network, Plus, Shuffle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "@/app/RootLayout";
 import { Button } from "@/components/ui/button";
 import { EmptyState, GhostList } from "@/components/ui/empty";
 import { Kbd } from "@/components/ui/kbd";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
 import { PageIcon } from "@/components/wiki/WikiTree";
 import { useCreatePage, useTitle, useWikiTree } from "@/components/wiki/hooks";
 import { TEMPLATES, templatePage, type TemplateId } from "@/components/wiki/templates";
@@ -25,15 +26,43 @@ export default function WikiHome() {
   const create = useCreatePage();
   const title = useTitle();
   useDocumentTitle(t("title"));
+  const navigate = useNavigate();
+  // Obsidian's random note: a page to read when you don't know where to start.
+  const openRandom = () => {
+    const pages = data ?? [];
+    const pick = pages[Math.floor(Math.random() * pages.length)];
+    if (pick) void navigate({ to: "/wiki/$pageId", params: { pageId: pick.id } });
+  };
 
   const header = (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4">
       <PagesButton />
       <h1 className="text-[13.5px] font-semibold tracking-[-0.01em] text-fg">{t("title")}</h1>
-      {canEdit && !!data?.length && (
-        <Button variant="primary" size="sm" className="ml-auto" icon={<Plus />} loading={create.isPending} onClick={() => create.mutate({})}>
-          {t("tree.newPage")}
-        </Button>
+      {!!data?.length && (
+        <div className="ml-auto flex items-center gap-0.5">
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/wiki/graph">
+              <Network className="size-3.5" />
+              {t("graph.title")}
+            </Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/wiki/tags">
+              <Hash className="size-3.5" />
+              {t("tags.title")}
+            </Link>
+          </Button>
+          <Tooltip content={t("home.random")}>
+            <Button variant="ghost" size="sm" square aria-label={t("home.random")} onClick={openRandom}>
+              <Shuffle className="size-4" />
+            </Button>
+          </Tooltip>
+          {canEdit && (
+            <Button variant="primary" size="sm" className="ml-1.5" icon={<Plus />} loading={create.isPending} onClick={() => create.mutate({})}>
+              {t("tree.newPage")}
+            </Button>
+          )}
+        </div>
       )}
     </header>
   );

@@ -36,6 +36,7 @@ type WikiNode struct {
 	Version   int        `json:"version" doc:"Moves on every change of title, icon or body"`
 	UpdatedAt time.Time  `json:"updated_at"`
 	CreatedBy *uuid.UUID `json:"created_by_id" doc:"Who created it; null for an API key or a deleted account"`
+	Tags      []string   `json:"tags" doc:"The #tags in its text, lower case"`
 }
 
 // WikiRef names a page: breadcrumbs, subpages, search paths.
@@ -66,6 +67,7 @@ type WikiPage struct {
 	BodyHTML    string          `json:"body_html"`
 	Position    int             `json:"position"`
 	Version     int             `json:"version"`
+	Tags        []string        `json:"tags"`
 	CreatedBy   *domain.UserRef `json:"created_by"`
 	UpdatedBy   *domain.UserRef `json:"updated_by"`
 	CreatedAt   time.Time       `json:"created_at"`
@@ -75,23 +77,23 @@ type WikiPage struct {
 }
 
 func (p WikiPage) node() WikiNode {
-	n := WikiNode{ID: p.ID, ParentID: p.ParentID, Title: p.Title, Icon: p.Icon, Position: p.Position, Version: p.Version, UpdatedAt: p.UpdatedAt}
+	n := WikiNode{ID: p.ID, ParentID: p.ParentID, Title: p.Title, Icon: p.Icon, Position: p.Position, Version: p.Version, UpdatedAt: p.UpdatedAt, Tags: p.Tags}
 	if p.CreatedBy != nil {
 		n.CreatedBy = &p.CreatedBy.ID
 	}
 	return n
 }
 
-const nodeSelect = `SELECT p.id, p.parent_id, p.title, p.icon, p.position, p.version, p.updated_at, p.created_by FROM wiki_pages p`
+const nodeSelect = `SELECT p.id, p.parent_id, p.title, p.icon, p.position, p.version, p.updated_at, p.created_by, p.tags FROM wiki_pages p`
 
 func scanNode(row pgx.Row) (WikiNode, error) {
 	var n WikiNode
-	err := row.Scan(&n.ID, &n.ParentID, &n.Title, &n.Icon, &n.Position, &n.Version, &n.UpdatedAt, &n.CreatedBy)
+	err := row.Scan(&n.ID, &n.ParentID, &n.Title, &n.Icon, &n.Position, &n.Version, &n.UpdatedAt, &n.CreatedBy, &n.Tags)
 	return n, err
 }
 
 const pageSelect = `SELECT p.id, p.parent_id, p.title, p.icon, p.body_html, p.position, p.version, p.created_at, p.updated_at,
-	p.cover, p.cover_y, p.full_width, p.small_text, p.font, p.locked,
+	p.cover, p.cover_y, p.full_width, p.small_text, p.font, p.locked, p.tags,
 	c.id, c.name, c.email, c.avatar_url, u.id, u.name, u.email, u.avatar_url
 FROM wiki_pages p LEFT JOIN users c ON c.id = p.created_by LEFT JOIN users u ON u.id = p.updated_by`
 
@@ -121,7 +123,7 @@ func loadPage(ctx context.Context, q db.Querier, wid, id uuid.UUID) (WikiPage, e
 	var c, u userCols
 	err := q.QueryRow(ctx, pageSelect+` WHERE p.workspace_id = $1 AND p.id = $2`, wid, id).Scan(
 		&p.ID, &p.ParentID, &p.Title, &p.Icon, &p.BodyHTML, &p.Position, &p.Version, &p.CreatedAt, &p.UpdatedAt,
-		&p.Cover, &p.CoverY, &p.FullWidth, &p.SmallText, &p.Font, &p.Locked,
+		&p.Cover, &p.CoverY, &p.FullWidth, &p.SmallText, &p.Font, &p.Locked, &p.Tags,
 		&c.id, &c.name, &c.email, &c.avatar, &u.id, &u.name, &u.email, &u.avatar)
 	if err != nil {
 		return p, err

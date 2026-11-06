@@ -23,6 +23,7 @@ interface WikiNode {           // a page in the tree, without its body
   version: number              // starts at 1, +1 on every change of title, icon or body
   updated_at: string           // the last change of title, icon or body (moves do not count)
   created_by_id: string | null // who created it; null for an API key, or once the person deleted their account
+  tags: string[]               // the #tags in its text, lower case, see "Links and tags"
 }
 
 interface WikiRef { id: string; title: string; icon: string }
@@ -203,6 +204,35 @@ Every change of title, icon or body is kept as a revision:
   what it replaced stays in the history.
 
 Moves are not revisions.
+
+## Links and tags
+
+As a page's body is saved (create, update, restore), the API keeps what it links to and its tags
+(`wiki_links`, `wiki_pages.tags`; migration `000720` read them from pages written before):
+
+- A link is a link to a page (`/wiki/<id>`, the page-link and subpage blocks) of the same workspace;
+  a link to a page that doesn't exist there is left out. Deleting a page removes its links both ways.
+- A tag is `#` and letters, digits, `_`, `/` or `-` with at least one letter (`#42` is a number), after
+  a space or at a line's start, never inside code. Lower case, each once, at most 50 of 64 characters.
+  `/` nests them (`#process/refunds` is under `#process`).
+
+| method | path | | |
+| --- | --- | --- | --- |
+| GET | `/v1/wiki/pages/{id}/backlinks` | `wiki:read` | `Page<WikiMention>`: the pages linking to it, last edited first (at most 200) |
+| GET | `/v1/wiki/pages/{id}/mentions` | `wiki:read` | `Page<WikiMention>`: unlinked mentions, the pages whose text has its title as a phrase and no link to it (at most 100; none for an untitled page) |
+| GET | `/v1/wiki/graph` | `wiki:read` | `Page<{from, to}>`: every link in the workspace (the pages are the tree's) |
+
+```ts
+interface WikiMention { id: string; parent_id: string | null; title: string; icon: string; snippet: string; updated_at: string }
+```
+
+The app shows them as Obsidian does: a page panel beside the page (Mod+Shift+;) with its outline, its
+linked mentions, its unlinked mentions (each with Link, which links the first place that page names
+this one, outside links and code, and saves it with that page's version), the pages it links to, its
+local graph and what it holds (words, reading time, tags, who made and edited it); "N backlinks" under
+the title; a graph of the whole wiki (`/wiki/graph`, `?focus=` a page, `?tag=`); the tags with their
+pages (`/wiki/tags`, `?tag=`); a preview of a page while the pointer rests on a link to it; `#tags`
+drawn as tags in the text; and a random page from the wiki's home.
 
 ## Search
 

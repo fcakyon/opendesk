@@ -7,13 +7,14 @@ import DOMPurify from "dompurify";
 import type { Role, WikiNode, WikiPage, WikiPageSettings, WikiRevision, WikiSearchHit } from "@/lib/api/types";
 import { MAX_DEPTH, ancestorsOf, applyMove, buildTree, canPlace, childrenOf, descendantsOf, ownership, removeSubtree, upsertNode } from "@/lib/wiki/tree";
 import { DEFAULT_LOOK } from "@/lib/wiki/look";
+import { linkedIds, pageTags } from "@/lib/wiki/links";
 import { db, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
 import { del, get, HttpError, invalid, notFound, patch, post, respond, s, type Ctx } from "../router";
 import { roleIn } from "../teams";
 import { ago, DAY, HOUR, MIN, nowIso, stripHtml, uuid } from "../util";
 
-type Row = Omit<WikiNode, "created_by_id"> & WikiPageSettings & { body_html: string; created_by: string | null; updated_by: string | null; created_at: string };
+type Row = Omit<WikiNode, "created_by_id" | "tags"> & WikiPageSettings & { body_html: string; created_by: string | null; updated_by: string | null; created_at: string };
 type Rev = { id: string; page_id: string; title: string; icon: string; body_html: string; author: string | null; created_at: string; updated_at: string };
 type State = { pages: Row[]; revisions: Rev[] };
 
@@ -42,7 +43,7 @@ function requireAgent(ctx: Ctx) {
   if (rank[role(ctx)] < rank.agent) throw new HttpError(403, "forbidden", "You don't have permission to do that");
 }
 
-const node = (r: Row): WikiNode => ({ id: r.id, parent_id: r.parent_id, title: r.title, icon: r.icon, position: r.position, version: r.version, updated_at: r.updated_at, created_by_id: r.created_by });
+const node = (r: Row): WikiNode => ({ id: r.id, parent_id: r.parent_id, title: r.title, icon: r.icon, position: r.position, version: r.version, updated_at: r.updated_at, created_by_id: r.created_by, tags: pageTags(r.body_html, stripHtml) });
 const nodes = (st: State) => st.pages.map(node);
 const refOf = (n: Pick<WikiNode, "id" | "title" | "icon">) => ({ id: n.id, title: n.title, icon: n.icon });
 
@@ -315,6 +316,34 @@ export function registerWiki() {
     return pageOut(st, r);
   });
 
+  // Links and tags (contracts/wiki.md "Links and tags"), read from the bodies as the API indexes them.
+  const linksOf = (st: State) => {
+    const known = new Set(st.pages.map((r) => r.id));
+    return st.pages.flatMap((r) => linkedIds(r.body_html).filter((to) => to !== r.id && known.has(to)).map((to) => ({ from: r.id, to })));
+  };
+  const mentionOut = (r: Row, title: string) => {
+    const text = stripHtml(r.body_html).replace(/\s+/g, " ");
+    const at = title ? text.toLowerCase().indexOf(title.toLowerCase()) : -1;
+    const start = Math.max(0, at - 60);
+    return { id: r.id, parent_id: r.parent_id, title: r.title, icon: r.icon, snippet: (start ? "…" : "") + text.slice(start, start + 180), updated_at: r.updated_at };
+  };
+  get("/v1/wiki/pages/:id/backlinks", (ctx) => {
+    const st = stateOf(ctx.ws);
+    const target = find(ctx, st);
+    const from = new Set(linksOf(st).filter((l) => l.to === target.id).map((l) => l.from));
+    return { data: st.pages.filter((r) => from.has(r.id)).map((r) => mentionOut(r, target.title)), next_cursor: null };
+  });
+  get("/v1/wiki/pages/:id/mentions", (ctx) => {
+    const st = stateOf(ctx.ws);
+    const target = find(ctx, st);
+    const title = target.title.trim().toLowerCase();
+    if (!title) return { data: [], next_cursor: null };
+    const linked = new Set(linksOf(st).filter((l) => l.to === target.id).map((l) => l.from));
+    const out = st.pages.filter((r) => r.id !== target.id && !linked.has(r.id) && stripHtml(r.body_html).toLowerCase().includes(title));
+    return { data: out.map((r) => mentionOut(r, target.title)), next_cursor: null };
+  });
+  get("/v1/wiki/graph", (ctx) => ({ data: linksOf(stateOf(ctx.ws)), next_cursor: null }));
+
   post("/v1/wiki/unfurl", (ctx) => {
     requireAgent(ctx);
     const url = s(ctx, "url")?.trim() ?? "";
@@ -342,14 +371,14 @@ const HANDBOOK: Seed[] = [
     cover: "gradient:ocean",
     days: 40,
     by: 0,
-    body: "<p>How our team works: who answers what, how fast, and what to do when it gets hard. Start with the escalation process if you are new.</p><h2>Our promises</h2><ul><li><p>A first answer within 4 business hours.</p></li><li><p>Every customer gets a name, never a queue.</p></li><li><p>We say when we don't know yet, and when we'll know.</p></li></ul>",
+    body: "<p>How our team works: who answers what, how fast, and what to do when it gets hard. Start with the escalation process if you are new. #handbook #process</p><h2>Our promises</h2><ul><li><p>A first answer within 4 business hours.</p></li><li><p>Every customer gets a name, never a queue.</p></li><li><p>We say when we don't know yet, and when we'll know.</p></li></ul>",
     children: [
       {
         title: "Escalation process",
         icon: "🚨",
         days: 3,
         by: 1,
-        body: "<p>Escalate when a customer is blocked, money is at stake or you have tried twice without progress.</p><h2>Steps</h2><ol><li><p>Set the ticket to <strong>urgent</strong> and add the <code>escalated</code> label.</p></li><li><p>Leave a note with what you tried and what the customer needs.</p></li><li><p>Assign it to the on-call lead (see Business hours and on-call).</p></li><li><p>Tell the customer who has it now and when they will hear back.</p></li></ol><h2>Sev1 outages</h2><p>Page the on-call engineer from the incident channel. Post a status update every 30 minutes until it is resolved.</p>",
+        body: "<p>Escalate when a customer is blocked, money is at stake or you have tried twice without progress.</p><h2>Steps</h2><ol><li><p>Set the ticket to <strong>urgent</strong> and add the <code>escalated</code> label.</p></li><li><p>Leave a note with what you tried and what the customer needs.</p></li><li><p>Assign it to the on-call lead (see Business hours and on-call).</p></li><li><p>Tell the customer who has it now and when they will hear back.</p></li></ol><h2>Sev1 outages</h2><p>Page the on-call engineer from the incident channel. Post a status update every 30 minutes until it is resolved. #process #incidents</p>",
       },
       {
         title: "Refund policy",
@@ -407,4 +436,14 @@ function seedHandbook(ws: WsData, st: State) {
       if (x.children) add(x.children, r.id);
     });
   add(HANDBOOK, null);
+  // Where one page names another, the first mention becomes a link, as a team would write it:
+  // the backlinks, the graph and link previews have something to show.
+  const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  for (const r of st.pages) {
+    for (const other of st.pages) {
+      if (other.id === r.id || !other.title) continue;
+      const re = new RegExp(`(>[^<]*?)\\b(${esc(other.title)})\\b`, "i");
+      r.body_html = r.body_html.replace(re, (_m, before: string, name: string) => `${before}<a data-type="page" data-id="${other.id}" href="/wiki/${other.id}">${name}</a>`);
+    }
+  }
 }

@@ -83,7 +83,9 @@
     "myTeams": "My teams",
     "newTicket": "New ticket",
     "phone": "Phone",
-    "print": "Print"
+    "print": "Print",
+    "wikiGraph": "Graph",
+    "wikiTags": "Tags"
   },
   "folders": {
     "unassigned": "Unassigned",

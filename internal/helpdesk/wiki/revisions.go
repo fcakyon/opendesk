@@ -195,6 +195,9 @@ func registerRevisions(d *deps.Deps, api huma.API) {
 				if err := recordRevision(ctx, tx, p, id, title, icon, body, false); err != nil {
 					return err
 				}
+				if err := indexBody(ctx, tx, p.WorkspaceID, id, body); err != nil {
+					return err
+				}
 				if pg, err = loadPage(ctx, tx, p.WorkspaceID, id); err != nil {
 					return err
 				}

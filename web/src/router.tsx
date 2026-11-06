@@ -554,6 +554,23 @@ const wikiIndexRoute = createRoute({
   staticData: { title: "wiki" },
 });
 
+const wikiGraphRoute = createRoute({
+  getParentRoute: () => wikiLayout,
+  path: "graph",
+  validateSearch: (s: Record<string, unknown>): { focus?: string; tag?: string } => ({ focus: str(s.focus), tag: str(s.tag) }),
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.wikiGraph()),
+  component: page(() => import("./pages/wiki/WikiGraphPage")),
+  staticData: { title: "wikiGraph" },
+});
+
+const wikiTagsRoute = createRoute({
+  getParentRoute: () => wikiLayout,
+  path: "tags",
+  validateSearch: (s: Record<string, unknown>): { tag?: string } => ({ tag: str(s.tag) }),
+  component: page(() => import("./pages/wiki/WikiTagsPage")),
+  staticData: { title: "wikiTags" },
+});
+
 const wikiPageRoute = createRoute({
   getParentRoute: () => wikiLayout,
   path: "$pageId",
@@ -1032,7 +1049,7 @@ const routeTree = rootRoute.addChildren([
     kbArticleRoute,
     changelogRoute,
     changelogEntryRoute,
-    wikiLayout.addChildren([wikiIndexRoute, wikiPageRoute]),
+    wikiLayout.addChildren([wikiIndexRoute, wikiGraphRoute, wikiTagsRoute, wikiPageRoute]),
     reportsRoute,
     settingsLayout.addChildren([
       settingsIndex,

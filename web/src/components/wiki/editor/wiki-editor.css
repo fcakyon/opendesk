@@ -645,3 +645,19 @@ button.wiki-date:hover {
   height: 1px;
   background: var(--line-soft);
 }
+
+/* #tags in the text: the tone of tags everywhere in the wiki. */
+.wiki-tag {
+  color: var(--tone-violet);
+  background: var(--tone-violet-soft);
+  border-radius: 4px;
+  padding: 0 2px;
+  cursor: text;
+}
+.ProseMirror[contenteditable="false"] .wiki-tag {
+  cursor: pointer;
+}
+.ProseMirror[contenteditable="false"] .wiki-tag:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

@@ -680,6 +680,9 @@ export const api = {
     search: (q: string, limit = 20) => http.get<T.Page<T.WikiSearchHit>>("/v1/wiki/search", { query: { q, limit } }),
     /** A link's card for a bookmark block, read by the API (contracts/wiki.md "Bookmarks"). */
     unfurl: (url: string) => http.post<T.LinkCard>("/v1/wiki/unfurl", { url }),
+    backlinks: (id: string) => http.get<T.Page<T.WikiMention>>(`/v1/wiki/pages/${id}/backlinks`),
+    mentions: (id: string) => http.get<T.Page<T.WikiMention>>(`/v1/wiki/pages/${id}/mentions`),
+    graph: () => http.get<T.Page<T.WikiLink>>("/v1/wiki/graph"),
   },
   search: (q: string) => http.get<T.SearchResults>("/v1/search", { query: { q } }),
   reports: {

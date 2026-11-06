@@ -20,6 +20,7 @@ import { moveBlock, blockAt } from "./handle";
 import { emojiItems, linkItems, mentionItems, slashItems, type MenuSources } from "./items";
 import { typedMenu } from "./menu";
 import { isTone } from "./tones";
+import { TagMarks } from "./tags";
 import { embedFor } from "@/lib/wiki/embeds";
 
 /** Blocks that carry an id (data-block-id): links to a block, comments, the outline. */
@@ -156,7 +157,7 @@ export function looksLikeMarkdown(text: string): boolean {
   return /^(#{1,6} |[-*+] |\d+\. |> |```|- \[[ xX]\] |\|.+\|)/m.test(text);
 }
 
-export function wikiExtensions(opts: { placeholder: () => string; sources: MenuSources }): Extensions {
+export function wikiExtensions(opts: { placeholder: () => string; sources: MenuSources; onOpenTag: (tag: string) => void }): Extensions {
   const s = opts.sources;
   return [
     StarterKit.configure({
@@ -212,6 +213,7 @@ export function wikiExtensions(opts: { placeholder: () => string; sources: MenuS
     BlockColor,
     BlockKeys,
     SmartPaste,
+    TagMarks.configure({ onOpen: (tag) => opts.onOpenTag(tag) }),
     Markdown,
     UniqueID.configure({ attributeName: "block-id", types: ID_TYPES }),
     typedMenu({ name: "slash", char: "/", items: (q) => slashItems(q, s), labels: () => ({ title: s.t("editor.menu.blocks"), empty: s.t("editor.menu.noBlocks") }) }),

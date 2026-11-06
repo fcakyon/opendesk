@@ -1602,6 +1602,8 @@ export type WikiNode = {
   updated_at: string;
   /** Who created it; null for an API key or a deleted account. */
   created_by_id: string | null;
+  /** The #tags in its text, lower case (contracts/wiki.md "Links and tags"). */
+  tags: string[];
 };
 
 export type WikiRef = { id: string; title: string; icon: string };
@@ -1643,6 +1645,10 @@ export type WikiRevision = {
 
 /** A link's card, read by the API for a bookmark block (contracts/wiki.md "Bookmarks"). */
 export type LinkCard = { title: string; description: string; image: string; site: string };
+
+/** A page that links to another (a backlink), or names it without a link. */
+export type WikiMention = { id: string; parent_id: string | null; title: string; icon: string; snippet: string; updated_at: string };
+export type WikiLink = { from: string; to: string };
 
 export type WikiSearchHit = {
   id: string;

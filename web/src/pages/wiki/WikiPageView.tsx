@@ -8,7 +8,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/react";
-import { AlertTriangle, Check, CloudOff, FolderInput, History, Link2, MoreHorizontal, Plus, SmilePlus, Type, ImageIcon } from "lucide-react";
+import { AlertTriangle, Check, CloudOff, FolderInput, History, Link2, MoreHorizontal, Plus, SmilePlus, Type, ImageIcon, PanelRight, Link2 as BacklinkIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "@/app/RootLayout";
@@ -16,7 +16,8 @@ import { usePageCrumb } from "@/app/useBreadcrumbs";
 import { Toolbar, type RichEditorHandle } from "@/components/editor/RichEditor";
 import { WikiEditor } from "@/components/wiki/editor/WikiEditor";
 import type { WikiEditorEnv } from "@/components/wiki/editor/context";
-import { useToolbarPref } from "@/components/wiki/editor/prefs";
+import { usePanelPref, useToolbarPref } from "@/components/wiki/editor/prefs";
+import { PagePanel } from "@/components/wiki/PagePanel";
 import { Morph } from "@/components/motion";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -156,6 +157,19 @@ export function PageScreen({ page }: { page: WikiPage }) {
     };
   }, [editor]);
   const [showToolbar, setShowToolbar] = useToolbarPref();
+  const [panel, setPanel] = usePanelPref();
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
+  // Mod+Shift+; opens and closes the page panel.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === "Semicolon") {
+        e.preventDefault();
+        setPanel(panel ? null : "outline");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [panel, setPanel]);
   const env = useMemo<WikiEditorEnv>(
     () => ({ pageId: page.id, canEdit: canWrite, upload: (f) => api.attachments.upload(f), unfurl: (url) => api.wiki.unfurl(url) }),
     [page.id, canWrite],
@@ -320,6 +334,11 @@ export function PageScreen({ page }: { page: WikiPage }) {
               <Link2 className="size-4" />
             </Button>
           </Tooltip>
+          <Tooltip content={t("panel.open")} shortcut="mod shift ;">
+            <Button square variant="ghost" size="sm" aria-label={t("panel.open")} aria-pressed={!!panel} onClick={() => setPanel(panel ? null : "outline")} className={cn("hidden lg:inline-flex", panel && "bg-hover text-fg")}>
+              <PanelRight className="size-4" />
+            </Button>
+          </Tooltip>
           <Tooltip content={t("history.open")}>
             <Button square variant="ghost" size="sm" aria-label={t("history.open")} onClick={() => setHistory(true)}>
               <History className="size-4" />
@@ -390,128 +409,138 @@ export function PageScreen({ page }: { page: WikiPage }) {
         </div>
       )}
 
-      <div className={cn("min-h-0 flex-1 overflow-y-auto", live.font !== "default" && `wiki-font-${live.font}`, live.small_text && "wiki-small")}>
-        <PageCover cover={live.cover} coverY={live.cover_y} canEdit={canWrite} onChange={look.set} />
-        <article className={cn("mx-auto w-full px-6 pb-32 md:px-10", live.full_width ? "max-w-none md:px-24" : "max-w-[760px]", live.cover ? "pt-6" : "pt-10 md:pt-14")}>
-          <div className="group/head">
-            {draft.icon && (
-              <div className={cn("relative -ml-2 mb-2", live.cover && "-mt-[60px]")}>
-                {canWrite ? (
-                  <IconPicker value={draft.icon} onChange={(icon) => saver.edit({ icon })} trigger={iconTrigger} open={iconOpen} onOpenChange={setIconOpen} />
-                ) : (
-                  <span className="flex size-14 items-center justify-center text-[40px] leading-none" aria-hidden>
-                    {draft.icon}
-                  </span>
-                )}
+      <div className="flex min-h-0 flex-1">
+        <div ref={setScrollEl} className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto", live.font !== "default" && `wiki-font-${live.font}`, live.small_text && "wiki-small")}>
+          <PageCover cover={live.cover} coverY={live.cover_y} canEdit={canWrite} onChange={look.set} />
+          <article className={cn("mx-auto w-full px-6 pb-32 md:px-10", live.full_width ? "max-w-none md:px-24" : "max-w-[760px]", live.cover ? "pt-6" : "pt-10 md:pt-14")}>
+            <div className="group/head">
+              {draft.icon && (
+                <div className={cn("relative -ml-2 mb-2", live.cover && "-mt-[60px]")}>
+                  {canWrite ? (
+                    <IconPicker value={draft.icon} onChange={(icon) => saver.edit({ icon })} trigger={iconTrigger} open={iconOpen} onOpenChange={setIconOpen} />
+                  ) : (
+                    <span className="flex size-14 items-center justify-center text-[40px] leading-none" aria-hidden>
+                      {draft.icon}
+                    </span>
+                  )}
+                </div>
+              )}
+              {canWrite && (!draft.icon || !live.cover) && (
+                <div
+                  className={cn(
+                    "-ml-2 mb-1 flex h-7 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/head:opacity-100 [@media(hover:none)]:opacity-100",
+                    (coverOpen || iconOpen) && "opacity-100",
+                  )}
+                >
+                  {!draft.icon && <IconPicker value="" onChange={(icon) => saver.edit({ icon })} trigger={iconTrigger} open={iconOpen} onOpenChange={setIconOpen} />}
+                  {!live.cover && (
+                    <CoverPicker
+                      value=""
+                      onChange={(c) => look.set({ cover: c, cover_y: 50 })}
+                      open={coverOpen}
+                      onOpenChange={setCoverOpen}
+                      trigger={
+                        <button type="button" className="flex h-7 items-center gap-1.5 rounded-lg px-2 text-[12.5px] text-fg-3 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)]">
+                          <ImageIcon className="size-3.5" />
+                          {t("cover.add")}
+                        </button>
+                      }
+                    />
+                  )}
+                </div>
+              )}
+              <textarea
+                ref={titleRef}
+                value={draft.title}
+                onChange={(e) => saver.edit({ title: e.target.value.replace(/\n/g, " ") })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || (e.key === "ArrowDown" && e.currentTarget.selectionStart === e.currentTarget.value.length)) {
+                    e.preventDefault();
+                    editorRef.current?.editor?.commands.focus("start");
+                  }
+                }}
+                readOnly={!canWrite}
+                rows={1}
+                maxLength={MAX_TITLE}
+                placeholder={t("untitled")}
+                aria-label={ui("title")}
+                className="wiki-title field-sizing-content w-full resize-none bg-transparent text-[30px] font-semibold leading-[36px] tracking-[-0.03em] text-fg outline-none placeholder:text-fg-4 focus-visible:shadow-none"
+              />
+              <div className="flex flex-wrap items-center gap-x-3">
+                <EditedLine page={current} />
+                <BacklinkCount pageId={page.id} onOpen={() => setPanel("links")} />
               </div>
-            )}
-            {canWrite && (!draft.icon || !live.cover) && (
-              <div
-                className={cn(
-                  "-ml-2 mb-1 flex h-7 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/head:opacity-100 [@media(hover:none)]:opacity-100",
-                  (coverOpen || iconOpen) && "opacity-100",
-                )}
-              >
-                {!draft.icon && <IconPicker value="" onChange={(icon) => saver.edit({ icon })} trigger={iconTrigger} open={iconOpen} onOpenChange={setIconOpen} />}
-                {!live.cover && (
-                  <CoverPicker
-                    value=""
-                    onChange={(c) => look.set({ cover: c, cover_y: 50 })}
-                    open={coverOpen}
-                    onOpenChange={setCoverOpen}
-                    trigger={
-                      <button type="button" className="flex h-7 items-center gap-1.5 rounded-lg px-2 text-[12.5px] text-fg-3 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)]">
-                        <ImageIcon className="size-3.5" />
-                        {t("cover.add")}
-                      </button>
-                    }
-                  />
-                )}
-              </div>
-            )}
-            <textarea
-              ref={titleRef}
-              value={draft.title}
-              onChange={(e) => saver.edit({ title: e.target.value.replace(/\n/g, " ") })}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || (e.key === "ArrowDown" && e.currentTarget.selectionStart === e.currentTarget.value.length)) {
-                  e.preventDefault();
-                  editorRef.current?.editor?.commands.focus("start");
-                }
-              }}
-              readOnly={!canWrite}
-              rows={1}
-              maxLength={MAX_TITLE}
-              placeholder={t("untitled")}
-              aria-label={ui("title")}
-              className="wiki-title field-sizing-content w-full resize-none bg-transparent text-[30px] font-semibold leading-[36px] tracking-[-0.03em] text-fg outline-none placeholder:text-fg-4 focus-visible:shadow-none"
-            />
-            <EditedLine page={current} />
-          </div>
-
-          {canWrite && editor && showToolbar && (
-            <div className="sticky top-3 z-10 -mx-3 mt-6 rounded-lg border border-line bg-surface/95 pt-1.5 shadow-xs backdrop-blur">
-              <Toolbar editor={editor} full onImage={() => fileRef.current?.click()} end={uploading ? <span className="pr-2 text-xs text-fg-4">{t("page.uploading")}</span> : undefined} />
             </div>
-          )}
-          <WikiEditor
-            ref={editorRef}
-            value={draft.body_html}
-            onChange={canWrite ? (html) => saver.edit({ body_html: html }) : undefined}
-            editable={canWrite}
-            placeholder={canWrite ? t("editor.placeholder.empty") : t("page.bodyEmpty")}
-            ariaLabel={t("page.body")}
-            env={env}
-            createSubpage={createSubpage}
-            onCopyBlockLink={copyBlockLink}
-            className="mt-5"
-            contentClassName="prose-lg"
-            onReady={setEditor}
-          />
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void upload(f);
-              e.target.value = "";
-            }}
-          />
 
-          {(kids.length > 0 || canEdit) && (
-            <section className="mt-14 border-t border-line-soft pt-6" aria-labelledby="wiki-subpages">
-              <h2 id="wiki-subpages" className="label-caps mb-2">
-                {t("page.subpages")}
-              </h2>
-              <div className="flex flex-col gap-px">
-                {kids.map((k) => (
-                  <Link
-                    key={k.id}
-                    to="/wiki/$pageId"
-                    params={{ pageId: k.id }}
-                    className="-mx-2 flex h-8 items-center gap-2 rounded-md px-2 text-[13px] text-fg-2 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:bg-hover"
-                  >
-                    <PageIcon icon={k.icon} />
-                    <span className={cn("truncate", !k.title.trim() && "text-fg-3")}>{title(k.title)}</span>
-                  </Link>
-                ))}
-                {canEdit && (
-                  <button
-                    type="button"
-                    disabled={create.isPending}
-                    onClick={() => create.mutate({ parent_id: page.id })}
-                    className="-mx-2 flex h-8 items-center gap-2 rounded-md px-2 text-[13px] text-fg-3 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:bg-hover disabled:opacity-60"
-                  >
-                    <Plus className="size-[14px]" />
-                    {t("page.addSubpage")}
-                  </button>
-                )}
+            {canWrite && editor && showToolbar && (
+              <div className="sticky top-3 z-10 -mx-3 mt-6 rounded-lg border border-line bg-surface/95 pt-1.5 shadow-xs backdrop-blur">
+                <Toolbar editor={editor} full onImage={() => fileRef.current?.click()} end={uploading ? <span className="pr-2 text-xs text-fg-4">{t("page.uploading")}</span> : undefined} />
               </div>
-            </section>
-          )}
-        </article>
+            )}
+            <WikiEditor
+              ref={editorRef}
+              value={draft.body_html}
+              onChange={canWrite ? (html) => saver.edit({ body_html: html }) : undefined}
+              editable={canWrite}
+              placeholder={canWrite ? t("editor.placeholder.empty") : t("page.bodyEmpty")}
+              ariaLabel={t("page.body")}
+              env={env}
+              createSubpage={createSubpage}
+              onCopyBlockLink={copyBlockLink}
+              className="mt-5"
+              contentClassName="prose-lg"
+              onReady={setEditor}
+            />
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void upload(f);
+                e.target.value = "";
+              }}
+            />
+
+            {(kids.length > 0 || canEdit) && (
+              <section className="mt-14 border-t border-line-soft pt-6" aria-labelledby="wiki-subpages">
+                <h2 id="wiki-subpages" className="label-caps mb-2">
+                  {t("page.subpages")}
+                </h2>
+                <div className="flex flex-col gap-px">
+                  {kids.map((k) => (
+                    <Link
+                      key={k.id}
+                      to="/wiki/$pageId"
+                      params={{ pageId: k.id }}
+                      className="-mx-2 flex h-8 items-center gap-2 rounded-md px-2 text-[13px] text-fg-2 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:bg-hover"
+                    >
+                      <PageIcon icon={k.icon} />
+                      <span className={cn("truncate", !k.title.trim() && "text-fg-3")}>{title(k.title)}</span>
+                    </Link>
+                  ))}
+                  {canEdit && (
+                    <button
+                      type="button"
+                      disabled={create.isPending}
+                      onClick={() => create.mutate({ parent_id: page.id })}
+                      className="-mx-2 flex h-8 items-center gap-2 rounded-md px-2 text-[13px] text-fg-3 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:bg-hover disabled:opacity-60"
+                    >
+                      <Plus className="size-[14px]" />
+                      {t("page.addSubpage")}
+                    </button>
+                  )}
+                </div>
+              </section>
+            )}
+          </article>
+        </div>
+        {panel && (
+          <div className="hidden lg:flex">
+            <PagePanel page={live} editor={editor} scrollEl={scrollEl} tab={panel} onTab={setPanel} onClose={() => setPanel(null)} canEdit={canWrite} />
+          </div>
+        )}
       </div>
 
       <HistoryDrawer
@@ -579,5 +608,18 @@ function EditedLine({ page }: { page: WikiPage }) {
       {who && <Avatar name={who.name} src={who.avatar_url} size="xs" />}
       {who ? t("page.editedBy", { name: who.name, when }) : t("page.edited", { when })}
     </p>
+  );
+}
+
+/** "3 backlinks" under the title, as Notion shows them: opens the panel's links. */
+function BacklinkCount({ pageId, onOpen }: { pageId: string; onOpen: () => void }) {
+  const { t } = useTranslation("wiki");
+  const { data } = useQuery(q.wikiBacklinks(pageId));
+  if (!data?.length) return null;
+  return (
+    <button type="button" onClick={onOpen} className="mt-2 flex items-center gap-1 rounded-md px-1 text-[12.5px] text-fg-3 transition-colors hover:bg-hover hover:text-fg">
+      <BacklinkIcon className="size-3.5" />
+      {t("panel.backlinkCount", { count: data.length })}
+    </button>
   );
 }

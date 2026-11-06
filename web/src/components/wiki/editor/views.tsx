@@ -22,6 +22,7 @@ import { IconPicker } from "../IconPicker";
 import { PageIcon } from "../WikiTree";
 import { useTitle, useWikiTree } from "../hooks";
 import { useWikiEditorEnv } from "./context";
+import { PagePreview } from "../PagePreview";
 import { type Tone } from "./tones";
 
 const blockCard = "group/card relative my-1 flex w-full items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2.5 text-left transition-colors";
@@ -470,18 +471,20 @@ export function PageLinkView({ node }: NodeViewProps) {
   const gone = !isLoading && !live;
   return (
     <NodeViewWrapper as="span" className="wiki-pagelink-wrap">
-      <Link
-        to="/wiki/$pageId"
-        params={{ pageId: id }}
-        hash={(node.attrs.block as string) || undefined}
-        contentEditable={false}
-        draggable={false}
-        className={cn("wiki-pagelink", gone && "wiki-pagelink-gone")}
-        title={gone ? t("editor.pageGone") : undefined}
-      >
-        <PageIcon icon={live?.icon ?? ""} className="wiki-pagelink-icon" />
-        <span>{live ? title(live.title) : (node.attrs.label as string) || t("untitled")}</span>
-      </Link>
+      <PagePreview id={id}>
+        <Link
+          to="/wiki/$pageId"
+          params={{ pageId: id }}
+          hash={(node.attrs.block as string) || undefined}
+          contentEditable={false}
+          draggable={false}
+          className={cn("wiki-pagelink", gone && "wiki-pagelink-gone")}
+          title={gone ? t("editor.pageGone") : undefined}
+        >
+          <PageIcon icon={live?.icon ?? ""} className="wiki-pagelink-icon" />
+          <span>{live ? title(live.title) : (node.attrs.label as string) || t("untitled")}</span>
+        </Link>
+      </PagePreview>
     </NodeViewWrapper>
   );
 }

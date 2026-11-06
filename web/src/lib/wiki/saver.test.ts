@@ -7,6 +7,7 @@ import { DEFAULT_LOOK } from "./look";
 
 const page = (over: Partial<WikiPage> = {}): WikiPage => ({
   ...DEFAULT_LOOK,
+  tags: [],
   id: "p1",
   parent_id: null,
   title: "Refunds",
