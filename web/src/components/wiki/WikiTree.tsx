@@ -51,6 +51,7 @@ import { MoveDialog, TrashItem } from "./PageMenu";
 import { useOpenToday } from "./journal";
 import { arrange, useSidebarLayout, type SectionKey } from "./sidebarLayout";
 import { CustomizeSidebar } from "./CustomizeSidebar";
+import { AddToSpace } from "./AddToSpace";
 
 export function pageUrl(id: string) {
   return `${location.origin}/wiki/${id}`;
@@ -833,6 +834,7 @@ function TreeRow({
             >
               {t("page.copyLink")}
             </MenuItem>
+            <AddToSpace pageId={n.id} />
             <MenuSeparator />
             <TrashItem node={n} />
           </MenuContent>

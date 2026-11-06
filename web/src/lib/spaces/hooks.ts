@@ -8,7 +8,7 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { inWorkspace } from "../api/client";
 import { api } from "../api/endpoints";
-import type { CollabStatus, MailAccount, MailCounts, MailFolder, Role, SidebarPrefs, Space, SpacesResponse, Team, TicketCounts, View, WorkspaceOverview } from "../api/types";
+import type { CollabStatus, MailAccount, MailCounts, MailFolder, Role, SidebarPrefs, Space, SpacesResponse, Team, TicketCounts, View, WikiNode, WorkspaceOverview } from "../api/types";
 import { normalizePrefs } from "../collab/sidebarPrefs";
 import { productsOf } from "../products";
 import { q, qk } from "../queries";
@@ -124,6 +124,8 @@ export type WorkspaceData = {
   accounts: MailAccount[] | undefined;
   mailCounts: MailCounts | undefined;
   folders: Record<string, MailFolder[] | undefined>;
+  /** Its wiki's pages, read when a row names one (or the editor offers them). */
+  wiki: WikiNode[] | undefined;
 };
 
 export const canSeeTeam = (d: Pick<WorkspaceData, "myTeams">, t: Team) => !t.private || d.myTeams.has(t.id);
@@ -140,7 +142,7 @@ export function useOverview(enabled = true): Map<string, WorkspaceOverview> {
  * numbers are its own live counts (the overview's until they load), the others' the overview's.
  * `folders`: the workspaces whose accounts' folders are needed (folder rows).
  */
-export function useWorkspacesData(wids: string[], opts: { folders?: (wid: string) => boolean; enabled?: boolean } = {}): Map<string, WorkspaceData> {
+export function useWorkspacesData(wids: string[], opts: { folders?: (wid: string) => boolean; wiki?: (wid: string) => boolean; enabled?: boolean } = {}): Map<string, WorkspaceData> {
   const uid = useSession((s) => s.user?.id ?? "");
   const focus = useSession((s) => s.workspaceId);
   const memberships = useSession((s) => s.memberships);
@@ -161,6 +163,7 @@ export function useWorkspacesData(wids: string[], opts: { folders?: (wid: string
   const accounts = useQueries({ queries: wids.map((w, i) => inWorkspace(w, () => ({ ...q.mailAccounts(), enabled: on && collabOf(i) === true }))) });
   const mailCounts = useQueries({ queries: wids.map((w, i) => inWorkspace(w, () => ({ ...q.mailCounts(), enabled: on && w === focus && collabOf(i) === true }))) });
   const sidebar = useQueries({ queries: wids.map((w) => inWorkspace(w, () => ({ ...q.mailSidebar(), enabled: on }))) });
+  const wiki = useQueries({ queries: wids.map((w) => inWorkspace(w, () => ({ ...q.wikiTree(), enabled: on && opts.wiki?.(w) === true }))) });
   const pairs = wids.flatMap((w, i) => (collabOf(i) && opts.folders?.(w) ? (accounts[i]?.data ?? []).map((a) => [w, a.id] as const) : []));
   const folders = useQueries({ queries: pairs.map(([w, a]) => inWorkspace(w, () => ({ ...q.mailFolders(a), enabled: on }))) });
   const out = new Map<string, WorkspaceData>();
@@ -191,6 +194,7 @@ export function useWorkspacesData(wids: string[], opts: { folders?: (wid: string
       accounts: collab ? accounts[i]?.data : undefined,
       mailCounts: collab ? ((open ? mailCounts[i]?.data : undefined) ?? o?.mail_counts ?? undefined) : undefined,
       folders: fs,
+      wiki: wiki[i]?.data,
     });
   });
   return out;

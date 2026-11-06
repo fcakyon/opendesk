@@ -121,7 +121,8 @@
       "views": "Views",
       "mail": "Mail",
       "pages": "Pages",
-      "everywhere": "Across your workspaces"
+      "everywhere": "Across your workspaces",
+      "wiki": "Wiki pages"
     },
     "wholeHint": "Kept up to date",
     "noCollab": "Collab is off in {{workspace}}, so its mail can't be added.",

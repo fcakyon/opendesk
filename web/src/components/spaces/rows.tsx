@@ -6,7 +6,7 @@
 // everywhere row (assigned to me, all mail) spans every workspace and opens its list.
 
 import { Link, useRouterState, type NavigateOptions } from "@tanstack/react-router";
-import { BarChart3, BookOpen, CircleCheck, CircleDashed, Clock, Inbox, Layers, Lock, Mails, NotebookText, ShieldAlert, User, UserCheck, Users } from "lucide-react";
+import { BarChart3, BookOpen, CircleCheck, CircleDashed, Clock, FileText, Inbox, Layers, Lock, Mails, NotebookText, ShieldAlert, User, UserCheck, Users } from "lucide-react";
 import { forwardRef, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivePill, Count, Label, NavTip, rowActive, rowBase, rowIdle, rowShape, WaitingBadge } from "@/app/sidebarParts";
@@ -34,6 +34,7 @@ export type RowLink =
   | { kind: "view"; viewId: string }
   | { kind: "mail"; box: MailBox | "folder"; account?: string; folder?: string }
   | { kind: "page"; page: SpacePage }
+  | { kind: "wiki"; pageId: string }
   | { kind: "everywhere"; list: EverywhereList };
 
 const pagePaths: Record<SpacePage, string> = { contacts: "/contacts", knowledge: "/kb", wiki: "/wiki", reports: "/reports" };
@@ -61,6 +62,9 @@ export function rowHref(l: RowLink, ws?: string): string {
     case "page":
       path = pagePaths[l.page];
       break;
+    case "wiki":
+      path = `/wiki/${encodeURIComponent(l.pageId)}`;
+      break;
     case "everywhere":
       path = `/everywhere/${l.list}`;
       break;
@@ -83,6 +87,8 @@ export function rowNavigate(l: RowLink): NavigateOptions {
       return { to: "/mail/$box/{-$threadId}", params: { box: l.box, threadId: undefined }, search: { account: l.account, folder: l.folder } } as NavigateOptions;
     case "page":
       return (l.page === "contacts" ? { to: "/contacts/{-$contactId}", params: { contactId: undefined } } : { to: pagePaths[l.page] }) as NavigateOptions;
+    case "wiki":
+      return { to: "/wiki/$pageId", params: { pageId: l.pageId } } as NavigateOptions;
     case "everywhere":
       return { to: "/everywhere/$list", params: { list: l.list } } as NavigateOptions;
   }
@@ -129,6 +135,8 @@ export type RowLabels = {
   allInboxes: string;
   myTeams: string;
   page: (p: SpacePage) => string;
+  /** A wiki page without a title. */
+  untitled: string;
   section: (id: SidebarSectionId, collabEnabled?: boolean) => string;
   everywhere: (list: EverywhereList) => string;
 };
@@ -138,6 +146,7 @@ export function useRowLabels(): RowLabels {
   const { t: tShell } = useTranslation("shell");
   const { t: tc } = useTranslation("collab");
   const { t: tw } = useTranslation("workspaces");
+  const { t: tWiki } = useTranslation("wiki");
   const collab = useCollab();
   return {
     everywhere: (l) => (l === "mine" ? tw("everywhere.mineTitle") : tw("everywhere.mailTitle")),
@@ -149,6 +158,7 @@ export function useRowLabels(): RowLabels {
     allInboxes: tc("nav.allInboxes"),
     myTeams: tShell("nav.myTeams"),
     page: (p) => tShell(pageLabels[p]),
+    untitled: tWiki("untitled"),
     section: (id, collabEnabled = collab.enabled) =>
       id === "favorites" ? tc("nav.favorites") : id === "mail" ? tc("nav.mail") : id === "inbox" ? tShell(collabEnabled ? "nav.tickets" : "nav.inbox") : id === "teams" ? tShell("nav.teams") : id === "views" ? tShell("nav.views") : tShell("nav.workspace"),
   };
@@ -263,6 +273,12 @@ export function buildRow(item: { kind: string; id: string }, d: WorkspaceData, c
     case "page": {
       if (!isSpacePage(item.id)) return null;
       return { key: `page:${item.id}`, label: ctx.labels.page(item.id), icon: pageIcons[item.id], link: { kind: "page", page: item.id } };
+    }
+    case "wiki_page": {
+      // A page in the trash, deleted or out of the person's sight is skipped.
+      const n = d.wiki?.find((x) => x.id === item.id);
+      if (!n) return null;
+      return { key: `wiki_page:${n.id}`, label: n.title.trim() || ctx.labels.untitled, icon: <WikiPageGlyph icon={n.icon} />, link: { kind: "wiki", pageId: n.id } };
     }
     case "box": {
       if (!d.collab || !isMailBox(item.id)) return null;
@@ -388,7 +404,13 @@ const RowAnchor = forwardRef<HTMLAnchorElement, AnchorProps>(function RowAnchor(
           {fn}
         </Link>
       ) : (
-        <Link to={link.page === "knowledge" ? "/kb" : "/reports"} activeProps={activeLink} {...common}>
+        <Link to={pagePaths[link.page] as "/kb" | "/wiki" | "/reports"} activeProps={activeLink} {...common}>
+          {fn}
+        </Link>
+      );
+    case "wiki":
+      return (
+        <Link to="/wiki/$pageId" params={{ pageId: link.pageId }} activeProps={activeLink} {...common}>
           {fn}
         </Link>
       );
@@ -490,5 +512,16 @@ export function NavItemRow({
     <NavTip rail={rail} label={name}>
       {menu ? menu(link) : link}
     </NavTip>
+  );
+}
+
+/** A wiki page's emoji where the other rows have an icon, or the page glyph. */
+function WikiPageGlyph({ icon }: { icon: string }) {
+  return icon ? (
+    <span className="flex size-[15px] items-center justify-center text-[13px] leading-none" aria-hidden>
+      {icon}
+    </span>
+  ) : (
+    <FileText />
   );
 }

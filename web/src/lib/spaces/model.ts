@@ -39,7 +39,7 @@ export const SPACE_COLORS: readonly SpaceColor[] = ["grey", "blue", "violet", "t
 /** The colours new Spaces take, in turn. */
 export const NEW_COLORS: readonly SpaceColor[] = ["blue", "violet", "teal", "green", "amber", "red", "pink", "grey"];
 
-export const SPACE_KINDS: readonly SpaceItemKind[] = ["section", "ticket_folder", "team", "view", "box", "account", "folder", "page", "everywhere"];
+export const SPACE_KINDS: readonly SpaceItemKind[] = ["section", "ticket_folder", "team", "view", "box", "account", "folder", "page", "wiki_page", "everywhere"];
 /** The pages a Space row can open. */
 export const SPACE_PAGES = ["contacts", "knowledge", "wiki", "reports"] as const;
 export type SpacePage = (typeof SPACE_PAGES)[number];

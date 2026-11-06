@@ -11,6 +11,7 @@ const labels: RowLabels = {
   myTeams: "My teams",
   page: (p) => `page ${p}`,
   section: (id) => `section ${id}`,
+  untitled: "Untitled",
   everywhere: (l) => `everywhere ${l}`,
 };
 
@@ -34,6 +35,7 @@ function data(p: Partial<WorkspaceData> = {}): WorkspaceData {
     accounts: [{ id: "a1", name: "Work", email: "[EMAIL]", color: "blue", unread: 2 } as MailAccount],
     mailCounts: { boxes: { inbox: 6, unread: 6, shared: 1, assigned: 0, drafts: 0, needs_action: 0 }, assigned: {}, accounts: { a1: 5 }, folders: {} },
     folders: {},
+    wiki: [{ id: "w1", parent_id: null, title: "Runbook", icon: "📘", position: 0, version: 1, updated_at: "", created_by_id: null, tags: [] }],
     ...p,
   };
 }
@@ -56,6 +58,14 @@ describe("Space rows", () => {
     expect(rowHref({ kind: "page", page: "knowledge" }, "w1")).toBe("/kb?ws=w1");
     expect(rowHref({ kind: "page", page: "contacts" })).toBe("/contacts");
     expect(rowHref({ kind: "page", page: "wiki" }, "w1")).toBe("/wiki?ws=w1");
+    expect(rowHref({ kind: "wiki", pageId: "p1" }, "w1")).toBe("/wiki/p1?ws=w1");
+  });
+
+  it("names a wiki page by its live title and skips one out of sight", () => {
+    const d = data();
+    expect(buildRow({ kind: "wiki_page", id: "w1" }, d, { labels })).toMatchObject({ key: "wiki_page:w1", label: "Runbook", link: { kind: "wiki", pageId: "w1" } });
+    expect(buildRow({ kind: "wiki_page", id: "gone" }, d, { labels })).toBeNull();
+    expect(buildRow({ kind: "wiki_page", id: "w1" }, data({ wiki: undefined }), { labels })).toBeNull();
   });
 
   it("names and numbers each kind from the workspace's data", () => {

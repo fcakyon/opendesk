@@ -64,6 +64,8 @@ import {
 import { spaceUi, useSpaceUi, type EditorTarget } from "@/lib/spaces/store";
 import { tone } from "@/lib/tones";
 import { buildRow, everywhereIcons, InWorkspace, useRowLabels, type RowLabels } from "./rows";
+import { PageIcon } from "@/components/wiki/WikiTree";
+import { buildTree, childrenOf } from "@/lib/wiki/tree";
 import { SpaceGlyph, spaceIcons, spaceTone } from "./icons";
 import { sameJSON } from "@/lib/sameJSON";
 
@@ -97,7 +99,7 @@ function everywhereOffers(labels: RowLabels): Offer[] {
 }
 
 /** What a workspace offers a Space, in groups: whole sections, inbox folders, teams, views, mail (with Collab), pages. */
-function offersOf(d: WorkspaceData, labels: RowLabels, wholeHint: string): { id: "sections" | "inbox" | "teams" | "views" | "mail" | "pages"; offers: Offer[] }[] {
+function offersOf(d: WorkspaceData, labels: RowLabels, wholeHint: string): { id: "sections" | "inbox" | "teams" | "views" | "mail" | "pages" | "wiki"; offers: Offer[] }[] {
   const it = (kind: SpaceItem["kind"], id: string): SpaceItem => ({ workspace_id: d.id, kind, id });
   const sections = (["favorites", "inbox", "mail", "teams", "views", "workspace"] as SidebarSectionId[])
     .filter((id) => d.collab || id !== "mail")
@@ -127,6 +129,16 @@ function offersOf(d: WorkspaceData, labels: RowLabels, wholeHint: string): { id:
     }
   }
   const pages = SPACE_PAGES.map((p) => ({ item: it("page", p), label: labels.page(p), icon: buildRow(it("page", p), d, { labels })?.icon }));
+  // Wiki pages, in the tree's order: any page can be a row of its own (a runbook, a journal).
+  const wiki: Offer[] = [];
+  const wtree = buildTree(d.wiki ?? []);
+  const walk = (parent: string | null, depth: number) => {
+    for (const n of childrenOf(wtree, parent)) {
+      wiki.push({ item: it("wiki_page", n.id), label: n.title.trim() || labels.untitled, icon: <PageIcon icon={n.icon} />, depth });
+      if (depth < 2) walk(n.id, depth + 1);
+    }
+  };
+  walk(null, 0);
   return [
     { id: "sections" as const, offers: sections },
     { id: "inbox" as const, offers: inbox },
@@ -134,6 +146,7 @@ function offersOf(d: WorkspaceData, labels: RowLabels, wholeHint: string): { id:
     { id: "views" as const, offers: views },
     { id: "mail" as const, offers: mail },
     { id: "pages" as const, offers: pages },
+    { id: "wiki" as const, offers: wiki },
   ].filter((g) => g.offers.length);
 }
 
@@ -446,7 +459,8 @@ function SpaceEditor({ target, make }: { target: EditorTarget; make: () => Space
     for (const sec of draft.sections) for (const i of sec.items) if (!out.includes(i.workspace_id) && members.has(i.workspace_id)) out.push(i.workspace_id);
     return out.filter((w) => w && w !== EVERY);
   }, [draft.sections, tab, members]);
-  const data = useWorkspacesData(wids, { folders: (w) => w === tab || draft.sections.some((sec) => sec.items.some((i) => i.workspace_id === w && i.kind === "folder")) });
+  const names = (w: string, kind: string) => draft.sections.some((sec) => sec.items.some((i) => i.workspace_id === w && i.kind === kind));
+  const data = useWorkspacesData(wids, { folders: (w) => w === tab || names(w, "folder"), wiki: (w) => w === tab || names(w, "wiki_page") });
   const sections = useMemo(() => draft.sections.map((s) => ({ ...s })), [draft.sections]);
 
   const problems = spaceProblems(draft, members);

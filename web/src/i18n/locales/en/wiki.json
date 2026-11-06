@@ -517,5 +517,8 @@
     "forGood": "Until someone changes it",
     "remove": "Remove verification",
     "failed": "Couldn't change the verification."
+  },
+  "spaces": {
+    "addTo": "Add to Space"
   }
 }

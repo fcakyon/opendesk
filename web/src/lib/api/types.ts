@@ -3187,7 +3187,7 @@ export type WorkspaceOverview = {
 export type SpaceColor = "grey" | "blue" | "violet" | "teal" | "green" | "amber" | "red" | "pink";
 
 /** What a Space row names: a whole built-in section, or one row of a workspace. */
-export type SpaceItemKind = "section" | "ticket_folder" | "team" | "view" | "box" | "account" | "folder" | "page" | "everywhere";
+export type SpaceItemKind = "section" | "ticket_folder" | "team" | "view" | "box" | "account" | "folder" | "page" | "wiki_page" | "everywhere";
 
 export type SpaceItem = {
   /** A workspace the user is a member of; "" for an everywhere row (it spans them all). */

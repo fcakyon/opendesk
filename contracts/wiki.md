@@ -69,6 +69,82 @@ interface WikiSearchHit {
 }
 ```
 
+## Private pages and teamspaces
+
+A top-level page lives in a **space**, and every page under it lives there too:
+
+- **workspace** (the default): every member sees it, as before.
+- **private**: one member's own (`private_to`). Nobody else sees it, admins and owners included, nor an
+  API key; the member's AI client and Ollie, who read as them, do. Deleting their account deletes their
+  private pages.
+- **team** (a teamspace, `team_id`): a team's pages. A private team's teamspace is its members' alone
+  (the same rule as its tickets, contracts/teams.md "Visibility"); a public team's every member sees.
+  A team that is deleted leaves its pages in the workspace.
+
+`WikiNode` and `WikiPage` carry `private` and `team_id`. Create and move take `space`
+(`workspace | private | team`) and `team_id` for a top-level page; a subpage always lives where its
+parent does, and moving a page to another space takes its subpages along. Only its member moves a
+private page out of their own. A page out of the caller's sight is `404` everywhere and never shows in
+the tree, search, links, the graph, favorites or recent pages; its events go only to its member
+(`Users`) or its private team (`TeamID`), else to the workspace. Workspace-wide readers (procedures,
+`wiki.WorkspaceViewer`) see neither private pages nor a private team's.
+
+## Trash
+
+`POST /v1/wiki/pages/{id}/trash` moves a page and its subpages to the trash (the same people may as may
+delete it; audit `wiki_page.trashed`); they leave the tree, search, links, the graph and favorites, and
+`wiki_page.deleted` carries `trashed: true`. A page in the trash still reads, with `deleted_at`,
+`deleted_by`; changing, moving or adding under it is `422 page_in_trash`. `GET /v1/wiki/trash` lists the
+pages trashed (not those that went with a parent), last first, each with `subpages`, `path` and
+`purge_at`. `POST /v1/wiki/pages/{id}/restore` puts it back with what went with it: under its parent
+when that is in the tree (and deep enough room), else at the top of its space, last; `422 not_in_trash`,
+`422 trashed_with_parent` (restore the page above it); event `wiki_page.restored` `{wiki_page,
+wiki_page_ids}`, audit `wiki_page.restored`. After 30 days an hourly job (`wiki.trash_purge`) deletes
+them for good. `DELETE /v1/wiki/pages/{id}` still deletes for good, from the tree or the trash, with
+everything under it. The app's Delete is Move to trash, with Undo; Delete for good is in the trash.
+
+## Templates
+
+A template is a page (with its subpages) copied into new pages; it stays out of the tree, search, links
+and the graph. `GET /v1/wiki/templates` lists those the caller may see. A page is made a template with
+`POST /v1/wiki/pages` `{template: true}` (top level) or by copying one.
+`POST /v1/wiki/pages/{id}/duplicate` `{parent_id?, space?, team_id?, template?, title?, position?}` copies a
+page and its subpages (text, icons, look; links between the copies point at the copies; `201`):
+Duplicate, Save as template and Use a template are all this. The app also offers starter templates of
+its own (escalation, refunds, onboarding, meeting notes, incident review, how-to, project brief,
+decision record, customer call notes, FAQ, weekly sync), made in the reader's language.
+
+## Favorites, recent pages and readers
+
+People only (an API key is `403`): `GET`/`PUT /v1/wiki/favorites` `{page_ids}` (at most 100, in order;
+pages out of sight or in the trash are left out); `GET /v1/wiki/recent?limit=` (the pages they opened
+lately: each read of a page in the tree by a person counts a visit); `GET /v1/wiki/pages/{id}/views`
+`{views, people, readers: [{user, visits, last_at}]}` (the latest 20).
+
+## Journal
+
+`POST /v1/wiki/daily` `{date, title, journal_title?, body_html?}` opens the caller's note of that day,
+making it (and, the first time, their journal: a private top-level page, `journal`, 📓) when there is
+none. Daily notes are private pages under the journal with `daily_date`, newest first; one per day.
+`GET /v1/wiki/daily?from=&to=` lists the days that have one. The journal stays at the top of their
+private pages (`422 journal_fixed` on a move); a note moved out of it is a page.
+
+## Verified pages
+
+`PATCH` `{verified: true, verified_days?}` verifies a page as the caller (a person; an API key is `403`),
+for that many days or until someone changes it; `{verified: false}` takes it away. Like the page's look,
+it keeps the version and adds no revision; `wiki_page.updated` carries `verification`. `WikiPage.verification`
+is `{by, at, until, expired}` or null, and nodes carry `verified` while it holds. The app shows a check
+beside verified pages in the sidebar and "Verified by Maya until 3 March" under the title.
+
+## Sidebar
+
+The wiki's sidebar has sections each member arranges (order, hidden, folded; kept per workspace in the
+browser): Favorites, a section per teamspace they see, the workspace's pages, their private pages and
+Recent; then today's note, templates, the graph, tags and the trash. Pages drag between sections (a
+page dropped at the top level of another space moves to it). A page can also be a row of a Space
+(contracts/spaces.md, `wiki_page`).
+
 ## Access
 
 | who | reads | creates, edits, moves, restores | deletes |
@@ -262,7 +338,7 @@ The web app patches the tree in place on `created`, `updated` and `deleted`, and
 
 | | |
 | --- | --- |
-| pages per workspace | 5,000 (`422 wiki_full`) |
+| pages per workspace | 5,000, the trash and templates included (`422 wiki_full`) |
 | depth | 10 levels (`422 page_too_deep`, counting the subpages a move takes along) |
 | body | 512 KB (`422 page_too_large`) |
 | title | 200 characters (`422`; the app's title field stops at 200) |

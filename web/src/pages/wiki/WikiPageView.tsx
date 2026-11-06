@@ -33,6 +33,7 @@ import { IconPicker } from "@/components/wiki/IconPicker";
 import { MoveDialog, TrashItem } from "@/components/wiki/PageMenu";
 import { DayNav, TemplateBanner, TrashBanner, Verification } from "@/components/wiki/PageBanners";
 import { useUseTemplate } from "./WikiTemplatesPage";
+import { AddToSpace } from "@/components/wiki/AddToSpace";
 import { UnsentBanner } from "@/components/wiki/Unsent";
 import { PageIcon, pageUrl } from "@/components/wiki/WikiTree";
 import { freshPages, nodeOf, patchTree, useCreatePage, useDeleteRule, useFavorites, useTitle, useWikiTree } from "@/components/wiki/hooks";
@@ -416,6 +417,7 @@ export function PageScreen({ page }: { page: WikiPage }) {
                 <MenuItem icon={<Link2 />} onSelect={copyLink}>
                   {t("page.copyLink")}
                 </MenuItem>
+                {!live.template && <AddToSpace pageId={page.id} />}
                 <MenuItem icon={<History />} onSelect={() => setHistory(true)}>
                   {t("history.open")}
                 </MenuItem>

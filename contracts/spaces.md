@@ -52,6 +52,8 @@ type SpaceItemKind =
   | "account"        // a Collab account's inbox: id: account uuid
   | "folder"         // a Collab folder or label: id: folder uuid
   | "page"           // a workspace page: id "contacts" | "knowledge" | "wiki" | "reports"
+  | "wiki_page"      // a wiki page (contracts/wiki.md): id: page uuid; shows its live title and icon, skipped
+                     // while the page is in the trash, gone or out of the person's sight
   | "everywhere"     // an Everywhere list across every workspace: id "mine" (assigned to me) | "mail" (all mail);
                      // workspace_id "" (the one kind of no workspace); never in a starter Space
 

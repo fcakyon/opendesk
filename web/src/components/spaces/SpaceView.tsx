@@ -135,7 +135,8 @@ export function SpaceView({
     for (const sec of space.sections) for (const i of sec.items) if (members.has(i.workspace_id) && !out.includes(i.workspace_id)) out.push(i.workspace_id);
     return out;
   }, [space, members]);
-  const data = useWorkspacesData(wids, { folders: (w) => space.sections.some((sec) => sec.items.some((i) => i.workspace_id === w && i.kind === "folder")) });
+  const names = (w: string, kind: string) => space.sections.some((sec) => sec.items.some((i) => i.workspace_id === w && i.kind === kind));
+  const data = useWorkspacesData(wids, { folders: (w) => names(w, "folder"), wiki: (w) => names(w, "wiki_page") });
   const everywhere = space.sections.some((sec) => sec.items.some(isEverywhere));
   const overview = useOverview(everywhere);
   const shown = showSpace(space, { members, collab: (w) => data.get(w)?.collab });
