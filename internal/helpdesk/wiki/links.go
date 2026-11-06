@@ -123,24 +123,29 @@ func registerLinks(d *deps.Deps, api huma.API) {
 	type mentionsOut struct {
 		Body httpx.Page[WikiMention]
 	}
-	page := func(ctx context.Context, raw string) (*auth.Principal, uuid.UUID, string, error) {
+	page := func(ctx context.Context, raw string) (*auth.Principal, Viewer, uuid.UUID, string, error) {
 		p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeWikiRead)
 		if err != nil {
-			return nil, uuid.Nil, "", httpx.Wrap(err)
+			return nil, Viewer{}, uuid.Nil, "", httpx.Wrap(err)
 		}
 		id, err := hd.ParseID(raw, "Page")
 		if err != nil {
-			return nil, uuid.Nil, "", err
+			return nil, Viewer{}, uuid.Nil, "", err
 		}
+		v, err := viewerFor(ctx, d, p)
+		if err != nil {
+			return nil, Viewer{}, uuid.Nil, "", httpx.Wrap(err)
+		}
+		me, hidden := v.args()
 		var title string
-		err = d.DB.Pool.QueryRow(ctx, `SELECT title FROM wiki_pages WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, id).Scan(&title)
+		err = d.DB.Pool.QueryRow(ctx, `SELECT p.title FROM wiki_pages p WHERE p.workspace_id = $1 AND p.id = $2 AND `+seesSQL("p", 3, 4), p.WorkspaceID, id, me, hidden).Scan(&title)
 		if db.IsNotFound(err) {
-			return nil, uuid.Nil, "", httpx.NotFound("Page")
+			return nil, Viewer{}, uuid.Nil, "", httpx.NotFound("Page")
 		}
 		if err != nil {
-			return nil, uuid.Nil, "", httpx.Wrap(err)
+			return nil, Viewer{}, uuid.Nil, "", httpx.Wrap(err)
 		}
-		return p, id, title, nil
+		return p, v, id, title, nil
 	}
 	collect := func(rows pgx.Rows, title string) ([]WikiMention, error) {
 		out := []WikiMention{}
@@ -162,13 +167,14 @@ func registerLinks(d *deps.Deps, api huma.API) {
 		func(ctx context.Context, in *struct {
 			ID string `path:"id"`
 		}) (*mentionsOut, error) {
-			p, id, title, err := page(ctx, in.ID)
+			p, v, id, title, err := page(ctx, in.ID)
 			if err != nil {
 				return nil, err
 			}
+			me, hidden := v.args()
 			rows, err := d.DB.Pool.Query(ctx, `SELECT s.id, s.parent_id, s.title, s.icon, s.body_html, s.updated_at
 				FROM wiki_links l JOIN wiki_pages s ON s.workspace_id = l.workspace_id AND s.id = l.from_id
-				WHERE l.workspace_id = $1 AND l.to_id = $2 ORDER BY s.updated_at DESC LIMIT 200`, p.WorkspaceID, id)
+				WHERE l.workspace_id = $1 AND l.to_id = $2 AND `+liveSQL("s", 3, 4)+` ORDER BY s.updated_at DESC LIMIT 200`, p.WorkspaceID, id, me, hidden)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -185,18 +191,19 @@ func registerLinks(d *deps.Deps, api huma.API) {
 		func(ctx context.Context, in *struct {
 			ID string `path:"id"`
 		}) (*mentionsOut, error) {
-			p, id, title, err := page(ctx, in.ID)
+			p, v, id, title, err := page(ctx, in.ID)
 			if err != nil {
 				return nil, err
 			}
+			me, hidden := v.args()
 			if strings.TrimSpace(title) == "" {
 				return &mentionsOut{httpx.Page[WikiMention]{Data: []WikiMention{}}}, nil
 			}
 			rows, err := d.DB.Pool.Query(ctx, `SELECT s.id, s.parent_id, s.title, s.icon, s.body_html, s.updated_at
 				FROM wiki_pages s
-				WHERE s.workspace_id = $1 AND s.id <> $2 AND s.search @@ phraseto_tsquery('simple', $3)
+				WHERE s.workspace_id = $1 AND s.id <> $2 AND s.search @@ phraseto_tsquery('simple', $3) AND `+liveSQL("s", 4, 5)+`
 				  AND NOT EXISTS (SELECT 1 FROM wiki_links l WHERE l.workspace_id = $1 AND l.from_id = s.id AND l.to_id = $2)
-				ORDER BY s.updated_at DESC LIMIT 100`, p.WorkspaceID, id, title)
+				ORDER BY s.updated_at DESC LIMIT 100`, p.WorkspaceID, id, title, me, hidden)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -222,7 +229,15 @@ func registerLinks(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			rows, err := d.DB.Pool.Query(ctx, `SELECT from_id, to_id FROM wiki_links WHERE workspace_id = $1`, p.WorkspaceID)
+			v, err := viewerFor(ctx, d, p)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			me, hidden := v.args()
+			rows, err := d.DB.Pool.Query(ctx, `SELECT l.from_id, l.to_id FROM wiki_links l
+				JOIN wiki_pages a ON a.workspace_id = l.workspace_id AND a.id = l.from_id
+				JOIN wiki_pages b ON b.workspace_id = l.workspace_id AND b.id = l.to_id
+				WHERE l.workspace_id = $1 AND `+liveSQL("a", 2, 3)+` AND `+liveSQL("b", 2, 3), p.WorkspaceID, me, hidden)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}

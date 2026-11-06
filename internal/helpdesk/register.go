@@ -58,12 +58,13 @@ func RegisterWorkers(d *deps.Deps, w *river.Workers) {
 	images.RegisterWorkers(d, w)
 	helpdomains.RegisterWorkers(d, w)
 	imports.RegisterWorkers(d, w)
+	wiki.RegisterWorkers(d, w)
 	contacts.InstallImageHooks()
 }
 
 // Periodic returns this area's scheduled jobs.
 func Periodic(d *deps.Deps) []*river.PeriodicJob {
-	return slices.Concat(customerportal.Periodic(d), tickets.Periodic(d), images.Periodic(), helpdomains.Periodic(d), imports.Periodic(d))
+	return slices.Concat(customerportal.Periodic(d), tickets.Periodic(d), images.Periodic(), helpdomains.Periodic(d), imports.Periodic(d), wiki.Periodic())
 }
 
 // Background runs until ctx is done, in the worker role only. The helpdesk has no

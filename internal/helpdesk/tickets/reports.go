@@ -415,7 +415,11 @@ func search(ctx context.Context, q db.Querier, p *auth.Principal, query string, 
 		res.Articles = arts
 	}
 	if allowed(auth.ScopeWikiRead) {
-		pages, err := wiki.Search(ctx, q, p.WorkspaceID, query, 5)
+		v, err := wiki.ViewerOf(ctx, q, p)
+		if err != nil {
+			return res, err
+		}
+		pages, err := wiki.Search(ctx, q, v, p.WorkspaceID, query, 5)
 		if err != nil {
 			return res, err
 		}

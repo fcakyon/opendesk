@@ -45,8 +45,8 @@ func prefixQuery(q string) string {
 
 const tsq = `(websearch_to_tsquery('simple', $2) || to_tsquery('simple', $3))`
 
-// Search returns the workspace's best matching pages, title matches first.
-func Search(ctx context.Context, q db.Querier, wid uuid.UUID, query string, limit int) ([]WikiSearchHit, error) {
+// Search returns the best matching pages of the tree the viewer may see, title matches first.
+func Search(ctx context.Context, q db.Querier, v Viewer, wid uuid.UUID, query string, limit int) ([]WikiSearchHit, error) {
 	query = strings.TrimSpace(query)
 	pq := prefixQuery(query)
 	if pq == "" {
@@ -55,8 +55,8 @@ func Search(ctx context.Context, q db.Querier, wid uuid.UUID, query string, limi
 	rows, err := q.Query(ctx, `SELECT p.id, p.parent_id, p.title, p.icon, p.updated_at,
 			ts_headline('simple', regexp_replace(p.body_html, '<[^>]+>', ' ', 'g'), `+tsq+`,
 				'MaxFragments=1, MaxWords=28, MinWords=10, ShortWord=2, StartSel="", StopSel=""')
-		FROM wiki_pages p WHERE p.workspace_id = $1 AND p.search @@ `+tsq+`
-		ORDER BY ts_rank(p.search, `+tsq+`) DESC, p.updated_at DESC, p.id LIMIT $4`, wid, query, pq, limit)
+		FROM wiki_pages p WHERE p.workspace_id = $1 AND p.search @@ `+tsq+` AND `+liveSQL("p", 5, 6)+`
+		ORDER BY ts_rank(p.search, `+tsq+`) DESC, p.updated_at DESC, p.id LIMIT $4`, wid, query, pq, limit, v.Me, v.Hidden)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,11 @@ func registerSearch(d *deps.Deps, api huma.API) {
 			if limit <= 0 {
 				limit = 20
 			}
-			out, err := Search(ctx, d.DB.Pool, p.WorkspaceID, in.Q, limit)
+			v, err := viewerFor(ctx, d, p)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			out, err := Search(ctx, d.DB.Pool, v, p.WorkspaceID, in.Q, limit)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}

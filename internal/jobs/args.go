@@ -517,3 +517,9 @@ func (CustomerPortalForgotArgs) Kind() string { return "helpdesk.customer_portal
 type CustomerPortalCleanupArgs struct{}
 
 func (CustomerPortalCleanupArgs) Kind() string { return "helpdesk.customer_portal_cleanup" }
+
+// WikiTrashPurgeArgs deletes for good the wiki pages that have been in the trash for 30
+// days (contracts/wiki.md "Trash"). Owner: helpdesk.
+type WikiTrashPurgeArgs struct{}
+
+func (WikiTrashPurgeArgs) Kind() string { return "wiki.trash_purge" }

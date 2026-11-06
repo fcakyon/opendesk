@@ -17,4 +17,7 @@ func Register(d *deps.Deps, api huma.API, _ chi.Router) {
 	registerSearch(d, api)
 	registerUnfurl(d, api)
 	registerLinks(d, api)
+	registerTrash(d, api)
+	registerTemplates(d, api)
+	registerPersonal(d, api)
 }
