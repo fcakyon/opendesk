@@ -71,7 +71,7 @@ interface WikiSearchHit {
 
 ## Databases
 
-A page can be a **database** (`kind: "database"`, migration `000722`): it keeps `database` (its properties
+A page can be a **database** (`kind: "database"`, migration `000723`): it keeps `database` (its properties
 and views) and its subpages are its **rows**, each a page with `props`, its values by property id.
 Rows open as pages (title, text, history, links) and are left out of the sidebar; the database's views
 show them. Create one with `POST /v1/wiki/pages` `{kind: "database", database?}` (left out: a title and
@@ -355,7 +355,7 @@ Members discuss a page in threads beside it. A thread is its first comment and t
 oldest first; it is either on the page as a whole or **inline**, on a run of the text: the app marks
 that run in the body with `<span data-comment="<thread id>">` and keeps the text it was made on as
 `quote`. A mark whose thread was deleted is harmless; the app highlights only open threads. Schema:
-`migrations/000723_wiki_collab.up.sql`.
+`migrations/000724_wiki_collab.up.sql`.
 
 ```ts
 type WikiReaction = { emoji: string; users: string[] }                // user ids, oldest first
@@ -426,7 +426,7 @@ it and the pages under it are removed (`notification.deleted`), as tickets do. T
 ## Links and tags
 
 As a page's body is saved (create, update, restore), the API keeps what it links to and its tags
-(`wiki_links`, `wiki_pages.tags`; migration `000720` read them from pages written before):
+(`wiki_links`, `wiki_pages.tags`; migration `000721` read them from pages written before):
 
 - A link is a link to a page (`/wiki/<id>`, the page-link and subpage blocks) of the same workspace;
   a link to a page that doesn't exist there is left out. Deleting a page removes its links both ways.
@@ -521,7 +521,7 @@ with the view, as the reader: they see the tickets they may see, or the block's 
 ### Ticket backlinks
 
 As a page's body is saved (create, update, restore, a copy of a template), the API keeps the tickets
-it mentions in `wiki_ticket_links` beside its links ("Links and tags"; migration `000724` read them
+it mentions in `wiki_ticket_links` beside its links ("Links and tags"; migration `000725` read them
 from pages written before). Only tickets of the page's workspace count; an id that names none is left
 out. The link goes with the page or the ticket when either is removed for good.
 
