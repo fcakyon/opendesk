@@ -214,13 +214,14 @@ interface AIModel {
 | POST | `/v1/tickets/{id}/ai/triage` | agent | $0.01 | `{apply: boolean}` → `Triage`; `apply` sets tags/priority/severity with `automation`-style activities attributed to `ai` |
 | DELETE | `/v1/tickets/{id}/ai/suggestions/{field}` | agent | $0 | → 204; dismisses Ollie's suggestion for `field` (`priority`, `severity`, `labels`, `team`, `spam`). Accepting is setting the field (PATCH the ticket), which removes the suggestion |
 | POST | `/v1/ai/rewrite` | agent | $0.01 | `{html: string, mode: "friendlier"\|"more_formal"\|"shorter"\|"longer"\|"fix_grammar"\|"simplify", instructions?: string}` → `{html}` |
+| POST | `/v1/wiki/ai/write` | agent | $0.01 (selection), $0.03 (from the page) | `{mode: "improve"\|"fix_grammar"\|"shorter"\|"longer"\|"simplify"\|"more_formal"\|"friendlier"\|"summarize"\|"action_items"\|"explain"\|"continue"\|"custom", html?: string /* the selection */, context_html?: string /* the page around it */, title?: string, instructions?: string}` → `{html}` (not saved); Ollie writing in the wiki (`contracts/wiki.md` "AI"). Edits of a selection take the fast model; `summarize`, `continue` and `custom` the default one. The output is sanitized as wiki HTML |
 | POST | `/v1/ai/translate` | agent | $0.01 | `{html?: string, text?: string, target: string /* BCP 47 */}` → `{html?, text?, source_language}` |
 | POST | `/v1/kb/articles/ai/draft` | agent | $0.05 | `{ticket_ids?: string[] /* at most 10 */, topic?: string /* up to 300 chars */}` → `{title, body_html, excerpt}` (not saved) |
 | GET | `/v1/ai/search` | viewer | $0 | `?q` semantic search over tickets and articles (embeddings), FTS fallback → same shape as `/v1/search` |
 
 `{id}` is a ticket uuid, `#123` (URL-encoded `%23123`) or `123`. API keys need the scope
 of the data the route reads or writes: `tickets:read` (summary, ask, search),
-`tickets:write` (draft, triage, rewrite, translate), `kb:write` (KB draft),
+`tickets:write` (draft, triage, rewrite, translate), `kb:write` (KB draft), `wiki:write` (wiki writing),
 `settings:read` / `settings:write` (config, settings). `/v1/ai/search` returns only the
 sections the key can read.
 
@@ -244,7 +245,7 @@ usage rows are still written; there is no balance. Each successful call also sen
 analytics event `ai_feature_used {feature, own_key}`. It records the feature category and
 whether the workspace's own provider key was used; it does not include model names or content.
 
-Streaming: `draft`, `ask` and `rewrite` also accept `Accept: text/event-stream` and stream
+Streaming: `draft`, `ask`, `rewrite` and wiki writing also accept `Accept: text/event-stream` and stream
 `event: delta` `{text}` chunks, then `event: done` with the full JSON response. The call is
 charged once, at `done`. Delta text is the raw model text (markdown for draft and ask, HTML
 for rewrite) for a live preview only; render and insert the sanitized `done` payload. An

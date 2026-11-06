@@ -278,6 +278,8 @@ func (s *Service) register(api huma.API) {
 			return &struct{ Body RewriteOutput }{*out}, nil
 		})
 
+	s.registerWiki(api, tags, streamDoc)
+
 	huma.Register(api, huma.Operation{OperationID: "ai-translate", Method: http.MethodPost, Path: "/v1/ai/translate",
 		Summary: "Translate text", Description: "Translates html or text into a BCP 47 target language.", Tags: tags},
 		func(ctx context.Context, in *struct{ Body TranslateInput }) (*struct{ Body TranslateOutput }, error) {

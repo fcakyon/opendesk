@@ -281,7 +281,9 @@ var typicalTokens = map[string]tokenCount{
 	"answer_email": {5000, 500},
 	"playground":   {5000, 400},
 	"kb_draft":     {8000, 1500},
-	"assistant":    {6000, 400},
+	// Ollie writing in the wiki from a page: the page in, a few paragraphs out.
+	"wiki_write": {6000, 600},
+	"assistant":  {6000, 400},
 	// One model turn of a procedure an automation runs: the ticket, its thread and the instructions in.
 	"procedure": {6000, 400},
 	// One answer of a teammate's Ollie: mail excerpts in, a short answer out.
