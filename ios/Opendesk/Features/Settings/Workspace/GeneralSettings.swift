@@ -702,7 +702,7 @@ struct WSSnoozeEditor: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    SheetButton(.confirm, "Done") { dismiss() }
                         .disabled(presets.isEmpty)
                 }
             }
@@ -826,7 +826,7 @@ struct WSDisplayEditor: View {
             .navigationTitle("Statuses and priorities")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { SheetButton(.confirm, "Done") { dismiss() } }
             }
         }
     }

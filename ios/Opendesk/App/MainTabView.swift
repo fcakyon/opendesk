@@ -71,14 +71,8 @@ struct MainTabView: View {
         .overlay(alignment: .bottomLeading) {
             if !tabBar.isHidden, router.columns { bar().frame(width: router.listWidth) }
         }
-        .overlay {
-            if !tabBar.isHidden, let column {
-                bar(.vertical)
-                    .frame(width: column.width)
-                    .padding(.bottom, max(insets.bottom, 12))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: column.edge == .trailing ? .bottomTrailing : .bottomLeading)
-                    .ignoresSafeArea()
-            }
+        .sideColumnFoot {
+            if !tabBar.isHidden { bar(.vertical) }
         }
         .environment(\.sideColumn, column)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
