@@ -419,7 +419,9 @@
     "hint": "Scroll to zoom, drag to move, double-click to fit",
     "emptyTitle": "No pages to draw yet",
     "emptyBody": "Pages and the links between them show here as your team writes them.",
-    "open": "Graph view"
+    "open": "Graph view",
+    "canvas_one": "Graph of {{count}} page. Arrow keys move it, plus and minus zoom, 0 fits it.",
+    "canvas_other": "Graph of {{count}} pages. Arrow keys move it, plus and minus zoom, 0 fits it."
   },
   "tags": {
     "title": "Tags",

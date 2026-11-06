@@ -1,6 +1,7 @@
 // The team wiki as a graph of pages and the links between them, drawn on a canvas.
 // The layout is graphLayout.ts; this file draws it and handles pointer and keys.
 import { useEffect, useMemo, useRef, type KeyboardEvent } from "react";
+import { useTranslation } from "react-i18next";
 import type { WikiLink, WikiNode } from "@/lib/api/types";
 import { ALPHA_MIN, buildGraph, clampZoom, cool, fitView, radius, settle, step, type GNode, type Graph, type View } from "./graphLayout";
 
@@ -64,6 +65,7 @@ type Sim = {
 const reducedMotion = () => typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export function WikiGraph({ nodes, links, focus, depth, subpageLinks = true, orphans = true, tag, query, height = "100%", compact = false, onOpen }: Props) {
+  const { t } = useTranslation("wiki");
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const onOpenRef = useRef(onOpen);
@@ -342,7 +344,7 @@ export function WikiGraph({ nodes, links, focus, depth, subpageLinks = true, orp
         ref={canvasRef}
         tabIndex={0}
         role="img"
-        aria-label={`Graph of ${graph.nodes.length} wiki ${graph.nodes.length === 1 ? "page" : "pages"}. Arrow keys pan, plus and minus zoom, 0 fits the graph.`}
+        aria-label={t("graph.canvas", { count: graph.nodes.length })}
         onKeyDown={keyDown}
         className="absolute inset-0 size-full touch-none select-none rounded-[inherit] outline-none focus-visible:shadow-[0_0_0_2px_var(--focus)]"
       />
