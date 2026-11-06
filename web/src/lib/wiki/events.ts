@@ -5,7 +5,7 @@
 // tells this tab's own saves apart is the version its saver already holds.
 
 import type { QueryClient } from "@tanstack/react-query";
-import type { WikiNode, WikiPage } from "../api/types";
+import type { WikiNode, WikiPage, WikiPageSettings } from "../api/types";
 import { qk } from "../queries";
 import { openSaver } from "./saver";
 import { removeSubtree, upsertNode } from "./tree";
@@ -28,6 +28,9 @@ export function applyWikiEvent(qc: QueryClient, verb: string, d: Record<string, 
     return;
   }
   patch((nodes) => upsertNode(nodes, node));
+  // A new look (contracts/wiki.md "Page settings") has no version: it is taken as it comes.
+  const settings = d.settings as WikiPageSettings | undefined;
+  if (settings) qc.setQueryData<WikiPage>(qk.wikiPage(node.id), (old) => (old ? { ...old, ...settings } : old));
   const page = qc.getQueryData<WikiPage>(qk.wikiPage(node.id));
   // This tab's own saves come back with their answer (the saver has the version already).
   const known = Math.max(page?.version ?? Infinity, openSaver(node.id)?.version ?? 0);

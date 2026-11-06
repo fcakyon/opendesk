@@ -678,6 +678,8 @@ export const api = {
     revision: (id: string, rid: string) => http.get<T.WikiRevision>(`/v1/wiki/pages/${id}/revisions/${rid}`),
     restore: (id: string, rid: string) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/revisions/${rid}/restore`, {}),
     search: (q: string, limit = 20) => http.get<T.Page<T.WikiSearchHit>>("/v1/wiki/search", { query: { q, limit } }),
+    /** A link's card for a bookmark block, read by the API (contracts/wiki.md "Bookmarks"). */
+    unfurl: (url: string) => http.post<T.LinkCard>("/v1/wiki/unfurl", { url }),
   },
   search: (q: string) => http.get<T.SearchResults>("/v1/search", { query: { q } }),
   reports: {

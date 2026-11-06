@@ -45,8 +45,20 @@ type WikiRef struct {
 	Icon  string    `json:"icon"`
 }
 
+// PageSettings is a page's own look (contracts/wiki.md "Page settings"): never part of its
+// text, so changing one keeps the version and adds no revision.
+type PageSettings struct {
+	Cover     string `json:"cover" doc:"\"\" (none), gradient:<name>, or an image: https or one of our attachments"`
+	CoverY    int    `json:"cover_y" minimum:"0" maximum:"100" doc:"Which part of the cover shows, from the top (0) to the bottom (100)"`
+	FullWidth bool   `json:"full_width"`
+	SmallText bool   `json:"small_text"`
+	Font      string `json:"font" enum:"default,serif,mono"`
+	Locked    bool   `json:"locked" doc:"The app keeps the page read-only until someone unlocks it"`
+}
+
 // WikiPage is one page with its body, from contracts/wiki.md.
 type WikiPage struct {
+	PageSettings
 	ID          uuid.UUID       `json:"id"`
 	ParentID    *uuid.UUID      `json:"parent_id"`
 	Title       string          `json:"title"`
@@ -79,6 +91,7 @@ func scanNode(row pgx.Row) (WikiNode, error) {
 }
 
 const pageSelect = `SELECT p.id, p.parent_id, p.title, p.icon, p.body_html, p.position, p.version, p.created_at, p.updated_at,
+	p.cover, p.cover_y, p.full_width, p.small_text, p.font, p.locked,
 	c.id, c.name, c.email, c.avatar_url, u.id, u.name, u.email, u.avatar_url
 FROM wiki_pages p LEFT JOIN users c ON c.id = p.created_by LEFT JOIN users u ON u.id = p.updated_by`
 
@@ -108,6 +121,7 @@ func loadPage(ctx context.Context, q db.Querier, wid, id uuid.UUID) (WikiPage, e
 	var c, u userCols
 	err := q.QueryRow(ctx, pageSelect+` WHERE p.workspace_id = $1 AND p.id = $2`, wid, id).Scan(
 		&p.ID, &p.ParentID, &p.Title, &p.Icon, &p.BodyHTML, &p.Position, &p.Version, &p.CreatedAt, &p.UpdatedAt,
+		&p.Cover, &p.CoverY, &p.FullWidth, &p.SmallText, &p.Font, &p.Locked,
 		&c.id, &c.name, &c.email, &c.avatar, &u.id, &u.name, &u.email, &u.avatar)
 	if err != nil {
 		return p, err
@@ -252,10 +266,28 @@ func cleanIcon(s string) (string, error) {
 	return s, nil
 }
 
-// cleanBody sanitizes a page body like an article's (contracts/wiki.md "Body").
+// coverGradients are the covers the app paints itself (web/src/components/wiki/covers.ts).
+var coverGradients = map[string]bool{"dawn": true, "ocean": true, "forest": true, "dusk": true, "sand": true, "slate": true, "rose": true, "lagoon": true, "aurora": true, "ember": true}
+
+// cleanCover accepts no cover, one of the app's gradients, or an image the wiki may show.
+func cleanCover(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", nil
+	}
+	if name, ok := strings.CutPrefix(s, "gradient:"); ok && coverGradients[name] {
+		return s, nil
+	}
+	if len(s) <= 2000 && hd.WikiSrc(s) {
+		return s, nil
+	}
+	return "", httpx.Validation("cover must be a gradient, an https image or an uploaded image")
+}
+
+// cleanBody sanitizes a page body: the rich-text allowlist and the wiki's blocks (contracts/wiki.md "Body").
 func cleanBody(raw string) (string, error) {
 	if len(raw) > maxBodyBytes {
 		return "", httpx.E(422, "page_too_large", "A page can hold up to 512 KB of text and formatting. Split it into subpages.")
 	}
-	return hd.SanitizeRich(raw), nil
+	return hd.SanitizeWiki(raw), nil
 }

@@ -3,8 +3,10 @@ import { ApiError } from "../api/client";
 import { api } from "../api/endpoints";
 import type { WikiPage, WikiPagePatch } from "../api/types";
 import { PageSaver, SAVE_DELAY, flushAll, resetSavers, saverFor } from "./saver";
+import { DEFAULT_LOOK } from "./look";
 
 const page = (over: Partial<WikiPage> = {}): WikiPage => ({
+  ...DEFAULT_LOOK,
   id: "p1",
   parent_id: null,
   title: "Refunds",

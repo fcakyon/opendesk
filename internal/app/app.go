@@ -255,6 +255,27 @@ const uploadMemory = 64 << 20
 // the API runs on a read-only root filesystem.
 func keepUploadsInMemory() { humachi.MultipartMaxMemory = uploadMemory }
 
+// embedFrameSources are the players and documents a wiki embed block loads in its
+// sandboxed frame (web/src/lib/wiki/embeds.ts EMBED_ORIGINS; csp_test.go keeps the two,
+// and deploy/cloudflare/pages/app/_headers, the same).
+var embedFrameSources = []string{
+	"https://www.youtube-nocookie.com",
+	"https://player.vimeo.com",
+	"https://www.loom.com",
+	"https://embed.figma.com",
+	"https://docs.google.com",
+	"https://drive.google.com",
+	"https://www.google.com",
+	"https://miro.com",
+	"https://codepen.io",
+	"https://codesandbox.io",
+	"https://open.spotify.com",
+	"https://excalidraw.com",
+	"https://airtable.com",
+	"https://*.typeform.com",
+	"https://calendly.com",
+}
+
 func webCSP(cfg *config.Config) string {
 	connect := []string{"'self'"}
 	for _, u := range []string{cfg.APIURL, cfg.GatewayURL} {
@@ -270,7 +291,7 @@ func webCSP(cfg *config.Config) string {
 		"img-src 'self' data: blob: https:",
 		"font-src 'self' data:",
 		"connect-src " + strings.Join(connect, " "),
-		"frame-src https://challenges.cloudflare.com",
+		"frame-src https://challenges.cloudflare.com " + strings.Join(embedFrameSources, " "),
 		"frame-ancestors 'none'",
 		"base-uri 'self'",
 		"form-action 'self'",

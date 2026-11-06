@@ -33,6 +33,41 @@ type pagePatch struct {
 	Icon     *string `json:"icon,omitempty" maxLength:"64" doc:"One emoji; empty removes it"`
 	BodyHTML *string `json:"body_html,omitempty" doc:"Replaces the body; up to 512 KB"`
 	Version  *int    `json:"version,omitempty" minimum:"1" doc:"The version this edit started from; a page changed since answers 409 page_changed"`
+	// The page's look (contracts/wiki.md "Page settings"): never needs the version.
+	Cover     *string `json:"cover,omitempty" maxLength:"2000" doc:"\"\" removes it"`
+	CoverY    *int    `json:"cover_y,omitempty" minimum:"0" maximum:"100"`
+	FullWidth *bool   `json:"full_width,omitempty"`
+	SmallText *bool   `json:"small_text,omitempty"`
+	Font      *string `json:"font,omitempty" enum:"default,serif,mono"`
+	Locked    *bool   `json:"locked,omitempty"`
+}
+
+// settings applies the patch's look to cur.
+func (b pagePatch) settings(cur PageSettings) (PageSettings, error) {
+	next := cur
+	if b.Cover != nil {
+		c, err := cleanCover(*b.Cover)
+		if err != nil {
+			return cur, err
+		}
+		next.Cover = c
+	}
+	if b.CoverY != nil {
+		next.CoverY = *b.CoverY
+	}
+	if b.FullWidth != nil {
+		next.FullWidth = *b.FullWidth
+	}
+	if b.SmallText != nil {
+		next.SmallText = *b.SmallText
+	}
+	if b.Font != nil {
+		next.Font = *b.Font
+	}
+	if b.Locked != nil {
+		next.Locked = *b.Locked
+	}
+	return next, nil
 }
 
 type pageMove struct {
@@ -175,8 +210,10 @@ func registerPages(d *deps.Deps, api huma.API) {
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
 				var title, icon, body string
 				var version int
-				err := tx.QueryRow(ctx, `SELECT title, icon, body_html, version FROM wiki_pages WHERE workspace_id = $1 AND id = $2 FOR UPDATE`,
-					p.WorkspaceID, id).Scan(&title, &icon, &body, &version)
+				var cur PageSettings
+				err := tx.QueryRow(ctx, `SELECT title, icon, body_html, version, cover, cover_y, full_width, small_text, font, locked
+					FROM wiki_pages WHERE workspace_id = $1 AND id = $2 FOR UPDATE`,
+					p.WorkspaceID, id).Scan(&title, &icon, &body, &version, &cur.Cover, &cur.CoverY, &cur.FullWidth, &cur.SmallText, &cur.Font, &cur.Locked)
 				if db.IsNotFound(err) {
 					return httpx.NotFound("Page")
 				}
@@ -210,13 +247,28 @@ func registerPages(d *deps.Deps, api huma.API) {
 						return err
 					}
 				}
+				settings, err := b.settings(cur)
+				if err != nil {
+					return err
+				}
+				if settings != cur {
+					if _, err := tx.Exec(ctx, `UPDATE wiki_pages SET cover = $3, cover_y = $4, full_width = $5, small_text = $6, font = $7, locked = $8
+						WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, id, settings.Cover, settings.CoverY, settings.FullWidth, settings.SmallText, settings.Font, settings.Locked); err != nil {
+						return err
+					}
+				}
 				if pg, err = loadPage(ctx, tx, p.WorkspaceID, id); err != nil {
 					return err
 				}
-				if pg.Version == version {
+				if pg.Version == version && settings == cur {
 					return nil
 				}
-				_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "wiki_page.updated", Data: eventPage(pg)})
+				data := eventPage(pg)
+				if settings != cur {
+					// Readers of the page take the new look as it comes: it has no version to compare.
+					data["settings"] = pg.PageSettings
+				}
+				_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "wiki_page.updated", Data: data})
 				return err
 			})
 			if err != nil {

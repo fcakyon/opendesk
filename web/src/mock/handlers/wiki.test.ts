@@ -7,6 +7,7 @@ import { resetSavers, saverFor } from "@/lib/wiki/saver";
 import { installMock } from "../index";
 import { dispatch } from "../router";
 import { db } from "../db";
+import { DEFAULT_LOOK } from "@/lib/wiki/look";
 
 async function call(method: string, path: string, body?: unknown, wid?: string) {
   const ws = wid ?? db.workspaces[0]?.workspace.id;
@@ -98,7 +99,7 @@ describe("wiki events on the cache", () => {
 
   it("refetches the person's own change made elsewhere, not the save this tab made", () => {
     const qc = new QueryClient();
-    const page = { ...node("a", null, 0), body_html: "", breadcrumbs: [], children: [], created_at: "", created_by: null, updated_by: null } as WikiPage;
+    const page = { ...DEFAULT_LOOK, ...node("a", null, 0), body_html: "", breadcrumbs: [], children: [], created_at: "", created_by: null, updated_by: null } as WikiPage;
     qc.setQueryData(qk.wikiPage("a"), page);
     const saver = saverFor(page);
     // This tab saved version 2: the saver knows it, nothing to refetch.

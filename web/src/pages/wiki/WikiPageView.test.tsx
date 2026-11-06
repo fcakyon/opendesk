@@ -12,6 +12,7 @@ import { qk } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { flushAll, openSaver, resetSavers, SAVE_DELAY } from "@/lib/wiki/saver";
 import { PageScreen } from "./WikiPageView";
+import { DEFAULT_LOOK } from "@/lib/wiki/look";
 
 vi.mock("@tanstack/react-router", () => ({
   getRouteApi: () => ({ useParams: () => ({ pageId: "p1" }) }),
@@ -32,6 +33,7 @@ vi.mock("@/components/wiki/HistoryDrawer", () => ({
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const page = (over: Partial<WikiPage> = {}): WikiPage => ({
+  ...DEFAULT_LOOK,
   id: "p1",
   parent_id: null,
   title: "Refunds",

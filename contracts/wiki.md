@@ -27,7 +27,7 @@ interface WikiNode {           // a page in the tree, without its body
 
 interface WikiRef { id: string; title: string; icon: string }
 
-interface WikiPage extends WikiNode {
+interface WikiPage extends WikiNode, PageSettings {
   body_html: string            // rich text, see "Body"
   created_by: UserRef | null   // null for an API key, or once the person deleted their account
   updated_by: UserRef | null
@@ -35,6 +35,17 @@ interface WikiPage extends WikiNode {
   breadcrumbs: WikiRef[]       // its ancestors, the top-level page first
   children: WikiRef[]          // its subpages, in order
 }
+
+interface PageSettings {       // see "Page settings"
+  cover: string                // "" (none), "gradient:<name>", or an image: https or /v1/attachments/<id>
+  cover_y: number              // 0..100: which part of an image cover shows, top to bottom; default 50
+  full_width: boolean
+  small_text: boolean
+  font: "default" | "serif" | "mono"
+  locked: boolean              // the app keeps the page read-only until someone unlocks it
+}
+
+interface LinkCard { title: string; description: string; image: string; site: string }
 
 interface WikiRevision {
   id: string
@@ -94,10 +105,74 @@ scopes do not reach the wiki, nor `wiki:*` the knowledge base.
 
 ## Body
 
-`body_html` is sanitized with the rich-text allowlist the knowledge base uses (`hd.SanitizeRich`:
-paragraphs, headings, lists, quotes, code, links, images from https or our attachments, mentions)
-before it is stored. The app edits it with the same editor as articles. Images are uploaded as
-attachments (`POST /v1/attachments`).
+`body_html` is sanitized before it is stored with `hd.SanitizeWiki`: the rich-text allowlist the
+knowledge base uses (`hd.SanitizeRich`: paragraphs, headings, lists, quotes, code, links, images from
+https or our attachments, mentions) and the wiki's blocks below. Pages written before the blocks
+existed are valid as they are. The knowledge base keeps its own allowlist: no block reaches an article.
+Images and files are uploaded as attachments (`POST /v1/attachments`).
+
+## Blocks
+
+The app writes pages with a block editor (`web/src/components/wiki/editor`): "/" offers every block,
+"[[" links a page, "@" mentions a person, a page or a date, ":" an emoji; a handle beside each block
+drags it or opens its menu (turn into, colour, duplicate, copy a link to it, move, delete), and a
+toolbar shows over selected text. The page's formatting bar stays available (page menu, "Formatting
+bar", kept per browser). Every block is a plain element with data attributes, each value checked:
+
+| block | HTML |
+| --- | --- |
+| headings 1 to 3, paragraph | `h1`..`h3`, `p`; `style="text-align: left\|center\|right\|justify"` |
+| block colour | `data-color` (text) and `data-bg` (background) on `p`, `h1`..`h3`, `li`, lists, `blockquote`, `details`: `gray`, `brown`, `orange`, `yellow`, `green`, `blue`, `purple`, `pink`, `red` |
+| inline colour | `<span data-color>`, `<mark data-bg>` (same tones) |
+| to-do list | `<ul data-type="taskList"><li data-type="taskItem" data-checked="true\|false">`; the checkbox is the app's to draw, never stored |
+| toggle | `<details><summary>…</summary><div data-type="detailsContent">…</div></details>` |
+| callout | `<div data-type="callout" data-icon="<emoji>" data-tone="<tone>">blocks</div>` |
+| columns | `<div data-type="columns">` holding 2 to 5 `<div data-type="column">` |
+| code | `<pre><code class="language-<name>">`; the app highlights it |
+| equation | `<div data-type="block-math" data-latex>`, `<span data-type="inline-math" data-latex>`; KaTeX in the app |
+| image | `<img src alt data-width="1..100" data-align="left\|right" data-caption>` (width in percent of the column) |
+| file, video, audio | `<div data-type="file\|video\|audio" data-src data-name data-size data-mime>`; `data-src` is https or one of our attachments |
+| bookmark | `<div data-type="bookmark" data-url data-title data-description data-image>` (https links), see "Bookmarks" |
+| embed | `<div data-type="embed" data-url>`, see "Embeds" |
+| table of contents | `<div data-type="toc">`: the app lists the page's headings |
+| subpage | `<div data-type="subpage" data-id="<page id>">`: the page shows where it sits in the text |
+| link to a page | `<a data-type="page" data-id="<page id>" data-block="<block id>" href="/wiki/<id>">title when linked</a>`; the app shows the page's live title and icon |
+| date | `<time data-type="date" datetime="YYYY-MM-DD">` |
+| table | `table`, `colgroup`/`col` (`style` width or min-width in px), `th`/`td` (`colspan`, `rowspan`, `colwidth`) |
+| divider | `hr` |
+
+Blocks carry `data-block-id` (a uuid) so a link can point at one (`/wiki/<id>#<block id>`). The app adds
+ids as a page loads without saving them: loading is never an edit, and the next save carries them.
+"Copy link to block" saves first. Nothing runs, loads a frame or styles freely: no `iframe`, `script`,
+`style` element or event handler survives, and a value that doesn't match is dropped.
+
+## Embeds
+
+An embed keeps only the link that was pasted. The app maps it to the provider's own player
+(`web/src/lib/wiki/embeds.ts`: YouTube, Vimeo, Loom, Figma, Google Docs, Sheets, Slides, Forms and
+Drive, Google Maps, Miro, CodePen, CodeSandbox, Spotify, Excalidraw, Airtable, Typeform, Calendly) and
+loads it in a sandboxed frame. Those players' origins are the only frames the app's
+Content-Security-Policy allows besides Turnstile (`internal/app/app.go`, `deploy/cloudflare/pages/app/_headers`;
+`TestEmbedFrameSourcesAgree` keeps the three lists equal). A link no provider plays shows as a link.
+
+## Bookmarks
+
+`POST /v1/wiki/unfurl` `{url}` (agent, `wiki:write`; 120 a minute per workspace) reads an https page
+once, through the outbound guard (no private, loopback or link-local targets; redirects re-checked; 512 KB
+of HTML at most), and answers a `LinkCard` from its Open Graph tags, else its `<title>` and description.
+A page it can't read is `422 unreachable`; the app then keeps the bookmark with its address alone. The
+card is stored in the block: nothing is fetched when the page is read later.
+
+## Page settings
+
+A page's cover, width, text size, font and lock are its look, not its text. `PATCH` takes any of
+`cover`, `cover_y`, `full_width`, `small_text`, `font`, `locked` without a `version`: changing them keeps
+the version (a tab typing on the page never conflicts with it) and adds no revision. A cover is ""
+(none), one of the app's gradients (`gradient:` `dawn`, `ocean`, `forest`, `dusk`, `sand`, `slate`, `rose`,
+`lagoon`, `aurora`, `ember`; `web/src/components/wiki/covers.ts`), or an image: https or an attachment.
+Anything else is `422`. A locked page opens read-only in the app for everyone, with Unlock for people
+who may edit; the API does not refuse edits to it (it guards against accidents, not people). Viewers
+change nothing.
 
 ## Editing together
 
@@ -145,7 +220,9 @@ is `422`. Every emoji the app's picker offers passes (`TestPickerEmoji`).
 
 ## Events
 
-`wiki_page.created`, `wiki_page.updated`, `wiki_page.moved`: `{ wiki_page: WikiNode, updated_by }`.
+`wiki_page.created`, `wiki_page.updated`, `wiki_page.moved`: `{ wiki_page: WikiNode, updated_by }`;
+`wiki_page.updated` also carries `settings: PageSettings` when the page's look changed (it has no
+version to compare, so a client takes it as it comes).
 `wiki_page.deleted`: `{ wiki_page_id, wiki_page_ids }` (the page and every subpage removed with it).
 Bodies are left out, as they are large and saved often: a client showing the page refetches it.
 The web app patches the tree in place on `created`, `updated` and `deleted`, and refetches it on

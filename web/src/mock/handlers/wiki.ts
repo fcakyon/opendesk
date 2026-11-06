@@ -3,16 +3,17 @@
 // and search. Checked as the API checks them. The first workspace starts with a small
 // support handbook; the others start empty, to show the first-run state.
 
-import { sanitizeHtml } from "@/lib/sanitize";
-import type { Role, WikiNode, WikiPage, WikiRevision, WikiSearchHit } from "@/lib/api/types";
+import DOMPurify from "dompurify";
+import type { Role, WikiNode, WikiPage, WikiPageSettings, WikiRevision, WikiSearchHit } from "@/lib/api/types";
 import { MAX_DEPTH, ancestorsOf, applyMove, buildTree, canPlace, childrenOf, descendantsOf, ownership, removeSubtree, upsertNode } from "@/lib/wiki/tree";
+import { DEFAULT_LOOK } from "@/lib/wiki/look";
 import { db, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
 import { del, get, HttpError, invalid, notFound, patch, post, respond, s, type Ctx } from "../router";
 import { roleIn } from "../teams";
 import { ago, DAY, HOUR, MIN, nowIso, stripHtml, uuid } from "../util";
 
-type Row = Omit<WikiNode, "created_by_id"> & { body_html: string; created_by: string | null; updated_by: string | null; created_at: string };
+type Row = Omit<WikiNode, "created_by_id"> & WikiPageSettings & { body_html: string; created_by: string | null; updated_by: string | null; created_at: string };
 type Rev = { id: string; page_id: string; title: string; icon: string; body_html: string; author: string | null; created_at: string; updated_at: string };
 type State = { pages: Row[]; revisions: Rev[] };
 
@@ -49,6 +50,7 @@ function pageOut(st: State, r: Row): WikiPage {
   const tree = buildTree(nodes(st));
   return {
     ...node(r),
+    ...settingsOf(r),
     body_html: r.body_html,
     created_at: r.created_at,
     created_by: userRef(r.created_by),
@@ -99,8 +101,9 @@ function cleanIcon(v: unknown): string {
 function cleanBody(v: unknown): string {
   const html = typeof v === "string" ? v : "";
   if (new TextEncoder().encode(html).length > MAX_BODY) throw new HttpError(422, "page_too_large", "A page can hold up to 512 KB of text and formatting. Split it into subpages.");
-  // The server sanitizes with its rich-text allowlist; the mock uses the app's own allowlist.
-  return sanitizeHtml(html);
+  // The server keeps the rich-text allowlist and the wiki's blocks (hd.SanitizeWiki); the
+  // mock drops what can run and the to-do checkboxes the app draws itself.
+  return DOMPurify.sanitize(html, { FORBID_TAGS: ["input", "label", "iframe", "form", "style", "script"], ADD_ATTR: ["datetime", "colwidth"] });
 }
 
 function record(st: State, r: Row, merge: boolean) {
@@ -115,6 +118,29 @@ function record(st: State, r: Row, merge: boolean) {
   // The newest 100 stay: this one and the 99 before it.
   const keep = new Set([fresh.id, ...mine.slice(0, MAX_REVISIONS - 1).map((x) => x.id)]);
   st.revisions = [...st.revisions, fresh].filter((x) => x.page_id !== r.id || keep.has(x.id));
+}
+
+const GRADIENTS = new Set(["dawn", "ocean", "forest", "dusk", "sand", "slate", "rose", "lagoon", "aurora", "ember"]);
+const settingsOf = (r: Row): WikiPageSettings => ({ cover: r.cover, cover_y: r.cover_y, full_width: r.full_width, small_text: r.small_text, font: r.font, locked: r.locked });
+
+/** The look a PATCH asks for, checked as the API checks it. */
+function settingsPatch(body: Record<string, unknown>, cur: WikiPageSettings): WikiPageSettings {
+  const next = { ...cur };
+  if ("cover" in body) {
+    const c = String(body.cover ?? "").trim();
+    const ok = c === "" || (c.startsWith("gradient:") && GRADIENTS.has(c.slice(9))) || /^(https:\/\/\S+|\/v1\/attachments\/[0-9a-f-]{36}(\?\S*)?)$/i.test(c);
+    if (!ok) throw invalid("cover must be a gradient, an https image or an uploaded image");
+    next.cover = c;
+  }
+  if ("cover_y" in body) next.cover_y = Math.max(0, Math.min(100, Number(body.cover_y) || 0));
+  if ("full_width" in body) next.full_width = !!body.full_width;
+  if ("small_text" in body) next.small_text = !!body.small_text;
+  if ("font" in body) {
+    if (!["default", "serif", "mono"].includes(String(body.font))) throw invalid("font must be default, serif or mono");
+    next.font = body.font as WikiPageSettings["font"];
+  }
+  if ("locked" in body) next.locked = !!body.locked;
+  return next;
 }
 
 const revOut = (x: Rev, body: boolean): WikiRevision => ({
@@ -194,6 +220,7 @@ export function registerWiki() {
       updated_by: db.meId,
       created_at: now,
       updated_at: now,
+      ...DEFAULT_LOOK,
     };
     const next = upsertNode(nodes(st), node(r));
     st.pages.push(r);
@@ -214,11 +241,15 @@ export function registerWiki() {
       icon: "icon" in ctx.body ? cleanIcon(ctx.body.icon) : r.icon,
       body_html: "body_html" in ctx.body ? cleanBody(ctx.body.body_html) : r.body_html,
     };
-    if (next.title !== r.title || next.icon !== r.icon || next.body_html !== r.body_html) {
+    const look = settingsPatch(ctx.body, settingsOf(r));
+    const lookChanged = JSON.stringify(look) !== JSON.stringify(settingsOf(r));
+    const textChanged = next.title !== r.title || next.icon !== r.icon || next.body_html !== r.body_html;
+    if (textChanged) {
       Object.assign(r, next, { version: r.version + 1, updated_by: db.meId, updated_at: nowIso() });
       record(st, r, true);
-      announce(ctx.ws, "wiki_page.updated", r);
     }
+    if (lookChanged) Object.assign(r, look);
+    if (textChanged || lookChanged) publish(ctx.ws, "wiki_page.updated", { wiki_page: node(r), updated_by: userRef(r.updated_by), ...(lookChanged ? { settings: look } : {}) });
     return pageOut(st, r);
   });
 
@@ -284,6 +315,15 @@ export function registerWiki() {
     return pageOut(st, r);
   });
 
+  post("/v1/wiki/unfurl", (ctx) => {
+    requireAgent(ctx);
+    const url = s(ctx, "url")?.trim() ?? "";
+    if (!/^https:\/\//i.test(url)) throw invalid("url must start with https://");
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    const name = host.split(".")[0] ?? host;
+    return { title: `${name.charAt(0).toUpperCase()}${name.slice(1)}: ${decodeURIComponent(new URL(url).pathname.split("/").filter(Boolean).pop() ?? "home").replace(/[-_]/g, " ")}`, description: `A page on ${host}.`, image: "", site: host };
+  });
+
   get("/v1/wiki/search", (ctx) => {
     const q = ctx.query.get("q") ?? "";
     const limit = Math.min(Number(ctx.query.get("limit") ?? 20) || 20, 50);
@@ -293,12 +333,13 @@ export function registerWiki() {
 
 // ─── The starter handbook ──────────────────────────────────────────────────
 
-type Seed = { title: string; icon: string; body: string; days: number; by: number; children?: Seed[] };
+type Seed = { title: string; icon: string; body: string; days: number; by: number; cover?: string; children?: Seed[] };
 
 const HANDBOOK: Seed[] = [
   {
     title: "Support handbook",
     icon: "📘",
+    cover: "gradient:ocean",
     days: 40,
     by: 0,
     body: "<p>How our team works: who answers what, how fast, and what to do when it gets hard. Start with the escalation process if you are new.</p><h2>Our promises</h2><ul><li><p>A first answer within 4 business hours.</p></li><li><p>Every customer gets a name, never a queue.</p></li><li><p>We say when we don't know yet, and when we'll know.</p></li></ul>",
@@ -357,7 +398,7 @@ function seedHandbook(ws: WsData, st: State) {
     list.forEach((x, i) => {
       const at = ago(x.days * DAY);
       const by = people[x.by % Math.max(people.length, 1)] ?? null;
-      const r: Row = { id: uuid(), parent_id: parent, title: x.title, icon: x.icon, body_html: x.body, position: i, version: 3, created_by: by, updated_by: by, created_at: ago((x.days + 30) * DAY), updated_at: at };
+      const r: Row = { id: uuid(), parent_id: parent, title: x.title, icon: x.icon, body_html: x.body, position: i, version: 3, created_by: by, updated_by: by, created_at: ago((x.days + 30) * DAY), updated_at: at, ...DEFAULT_LOOK, ...(x.cover ? { cover: x.cover } : {}) };
       st.pages.push(r);
       st.revisions.push(
         { id: uuid(), page_id: r.id, title: r.title, icon: r.icon, body_html: x.body.replace(/<h2>[\s\S]*$/, ""), author: by, created_at: r.created_at, updated_at: ago((x.days + 29) * DAY) },

@@ -8,18 +8,21 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/react";
-import { AlertTriangle, Check, CloudOff, FolderInput, History, Link2, MoreHorizontal, Plus, SmilePlus } from "lucide-react";
+import { AlertTriangle, Check, CloudOff, FolderInput, History, Link2, MoreHorizontal, Plus, SmilePlus, Type, ImageIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "@/app/RootLayout";
 import { usePageCrumb } from "@/app/useBreadcrumbs";
-import { RichEditor, Toolbar, type RichEditorHandle } from "@/components/editor/RichEditor";
+import { Toolbar, type RichEditorHandle } from "@/components/editor/RichEditor";
+import { WikiEditor } from "@/components/wiki/editor/WikiEditor";
+import type { WikiEditorEnv } from "@/components/wiki/editor/context";
+import { useToolbarPref } from "@/components/wiki/editor/prefs";
 import { Morph } from "@/components/motion";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { copyText } from "@/components/ui/copy-button";
 import { EmptyState } from "@/components/ui/empty";
-import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
+import { Menu, MenuCheckItem, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
@@ -41,6 +44,8 @@ import { useNow } from "@/lib/useNow";
 import { forgetSaver, openSaver, saverFor, type PageSaver } from "@/lib/wiki/saver";
 import { ancestorsOf, childrenOf, MAX_TITLE } from "@/lib/wiki/tree";
 import { PagesButton } from "./WikiLayout";
+import { CoverPicker, PageCover } from "@/components/wiki/PageCover";
+import { PageStyleItems, useLook, LockedBar } from "@/components/wiki/PageStyle";
 
 const route = getRouteApi("/app/wiki/$pageId");
 
@@ -131,6 +136,10 @@ export function PageScreen({ page }: { page: WikiPage }) {
   );
   useSaver(saver);
   const draft = saver.draft;
+  const { data: live = page } = useQuery(q.wikiPage(page.id));
+  const look = useLook(live);
+  // A locked page reads like a viewer's until someone unlocks it (contracts/wiki.md "Page settings").
+  const canWrite = canEdit && !live.locked;
   const shown = title(draft.title);
   useDocumentTitle(shown);
   usePageCrumb(shown);
@@ -140,14 +149,39 @@ export function PageScreen({ page }: { page: WikiPage }) {
   const [editor, setEditor] = useState<Editor | null>(null);
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   useEffect(() => {
-    const ed = editorRef.current?.editor ?? null;
-    setEditor(ed);
-    if (!ed) return;
-    ed.on("transaction", rerender);
+    if (!editor) return;
+    editor.on("transaction", rerender);
     return () => {
-      ed.off("transaction", rerender);
+      editor.off("transaction", rerender);
     };
-  }, []);
+  }, [editor]);
+  const [showToolbar, setShowToolbar] = useToolbarPref();
+  const env = useMemo<WikiEditorEnv>(
+    () => ({ pageId: page.id, canEdit: canWrite, upload: (f) => api.attachments.upload(f), unfurl: (url) => api.wiki.unfurl(url) }),
+    [page.id, canWrite],
+  );
+  const createSubpage = useCallback(
+    async (title?: string) => {
+      try {
+        const p = await create.mutateAsync({ parent_id: page.id, title, navigate: false });
+        return p.id;
+      } catch {
+        return null;
+      }
+    },
+    [create, page.id],
+  );
+  const copyBlockLink = useCallback(
+    (blockId: string) => {
+      // The block's id must be stored before anyone opens the link: save now.
+      const html = editorRef.current?.editor?.getHTML();
+      if (html && html !== saver.draft.body_html) saver.edit({ body_html: html });
+      void saver.flush();
+      void copyText(`${pageUrl(page.id)}#${blockId}`);
+      toast.success(t("editor.blockLinkCopied"));
+    },
+    [page.id, saver, t],
+  );
 
   // A page made a moment ago starts with its title focused.
   useEffect(() => {
@@ -159,7 +193,7 @@ export function PageScreen({ page }: { page: WikiPage }) {
 
   // A newer version from someone else (realtime refetches the page): taken in place when
   // nothing here is unsaved; with unsaved typing, the banner asks whose version stays.
-  const { data: latest = page } = useQuery(q.wikiPage(page.id));
+  const latest = live;
   const take = useCallback(
     (p: WikiPage) => {
       saver.rebase(p);
@@ -222,6 +256,7 @@ export function PageScreen({ page }: { page: WikiPage }) {
   };
 
   const [iconOpen, setIconOpen] = useState(false);
+  const [coverOpen, setCoverOpen] = useState(false);
   const [history, setHistory] = useState(false);
   const [moving, setMoving] = useState(false);
   const crumbs = tree.byId.has(page.id) ? ancestorsOf(tree, page.id) : page.breadcrumbs;
@@ -237,12 +272,11 @@ export function PageScreen({ page }: { page: WikiPage }) {
   const iconTrigger = (
     <button
       type="button"
-      disabled={!canEdit}
+      disabled={!canWrite}
       aria-label={draft.icon ? t("icon.change") : t("icon.add")}
       className={cn(
         "flex items-center justify-center rounded-lg outline-none transition-colors focus-visible:shadow-[0_0_0_2px_var(--focus)] disabled:pointer-events-none",
-        draft.icon ? "size-14 text-[40px] leading-none hover:bg-hover" : "h-7 gap-1.5 px-2 text-[12.5px] text-fg-3 opacity-0 hover:bg-hover hover:text-fg group-hover/head:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100",
-        !draft.icon && iconOpen && "opacity-100",
+        draft.icon ? "size-14 text-[40px] leading-none hover:bg-hover" : "h-7 gap-1.5 px-2 text-[12.5px] text-fg-3 hover:bg-hover hover:text-fg",
       )}
     >
       {draft.icon ? (
@@ -311,12 +345,20 @@ export function PageScreen({ page }: { page: WikiPage }) {
                 <MenuItem icon={<History />} onSelect={() => setHistory(true)}>
                   {t("history.open")}
                 </MenuItem>
+                <MenuSeparator />
+                <PageStyleItems page={live} onChange={look.set} />
+                <MenuCheckItem icon={<Type />} checked={showToolbar} onSelect={() => setShowToolbar(!showToolbar)}>
+                  {t("page.formattingBar")}
+                </MenuCheckItem>
+                <MenuSeparator />
                 <DeleteItem node={node} />
               </MenuContent>
             </Menu>
           )}
         </div>
       </header>
+
+      {canEdit && live.locked && <LockedBar onUnlock={() => look.set({ locked: false })} />}
 
       {saver.final && saver.pending && (
         <UnsentBanner
@@ -348,18 +390,45 @@ export function PageScreen({ page }: { page: WikiPage }) {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <article className="mx-auto w-full max-w-[760px] px-6 pb-32 pt-10 md:px-10 md:pt-14">
+      <div className={cn("min-h-0 flex-1 overflow-y-auto", live.font !== "default" && `wiki-font-${live.font}`, live.small_text && "wiki-small")}>
+        <PageCover cover={live.cover} coverY={live.cover_y} canEdit={canWrite} onChange={look.set} />
+        <article className={cn("mx-auto w-full px-6 pb-32 md:px-10", live.full_width ? "max-w-none md:px-24" : "max-w-[760px]", live.cover ? "pt-6" : "pt-10 md:pt-14")}>
           <div className="group/head">
-            <div className={cn("-ml-2", draft.icon ? "mb-2" : "mb-1 min-h-7")}>
-              {canEdit ? (
-                <IconPicker value={draft.icon} onChange={(icon) => saver.edit({ icon })} trigger={iconTrigger} open={iconOpen} onOpenChange={setIconOpen} />
-              ) : draft.icon ? (
-                <span className="flex size-14 items-center justify-center text-[40px] leading-none" aria-hidden>
-                  {draft.icon}
-                </span>
-              ) : null}
-            </div>
+            {draft.icon && (
+              <div className={cn("relative -ml-2 mb-2", live.cover && "-mt-[60px]")}>
+                {canWrite ? (
+                  <IconPicker value={draft.icon} onChange={(icon) => saver.edit({ icon })} trigger={iconTrigger} open={iconOpen} onOpenChange={setIconOpen} />
+                ) : (
+                  <span className="flex size-14 items-center justify-center text-[40px] leading-none" aria-hidden>
+                    {draft.icon}
+                  </span>
+                )}
+              </div>
+            )}
+            {canWrite && (!draft.icon || !live.cover) && (
+              <div
+                className={cn(
+                  "-ml-2 mb-1 flex h-7 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/head:opacity-100 [@media(hover:none)]:opacity-100",
+                  (coverOpen || iconOpen) && "opacity-100",
+                )}
+              >
+                {!draft.icon && <IconPicker value="" onChange={(icon) => saver.edit({ icon })} trigger={iconTrigger} open={iconOpen} onOpenChange={setIconOpen} />}
+                {!live.cover && (
+                  <CoverPicker
+                    value=""
+                    onChange={(c) => look.set({ cover: c, cover_y: 50 })}
+                    open={coverOpen}
+                    onOpenChange={setCoverOpen}
+                    trigger={
+                      <button type="button" className="flex h-7 items-center gap-1.5 rounded-lg px-2 text-[12.5px] text-fg-3 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)]">
+                        <ImageIcon className="size-3.5" />
+                        {t("cover.add")}
+                      </button>
+                    }
+                  />
+                )}
+              </div>
+            )}
             <textarea
               ref={titleRef}
               value={draft.title}
@@ -370,31 +439,34 @@ export function PageScreen({ page }: { page: WikiPage }) {
                   editorRef.current?.editor?.commands.focus("start");
                 }
               }}
-              readOnly={!canEdit}
+              readOnly={!canWrite}
               rows={1}
               maxLength={MAX_TITLE}
               placeholder={t("untitled")}
               aria-label={ui("title")}
-              className="field-sizing-content w-full resize-none bg-transparent text-[30px] font-semibold leading-[36px] tracking-[-0.03em] text-fg outline-none placeholder:text-fg-4 focus-visible:shadow-none"
+              className="wiki-title field-sizing-content w-full resize-none bg-transparent text-[30px] font-semibold leading-[36px] tracking-[-0.03em] text-fg outline-none placeholder:text-fg-4 focus-visible:shadow-none"
             />
             <EditedLine page={current} />
           </div>
 
-          {canEdit && editor && (
+          {canWrite && editor && showToolbar && (
             <div className="sticky top-3 z-10 -mx-3 mt-6 rounded-lg border border-line bg-surface/95 pt-1.5 shadow-xs backdrop-blur">
               <Toolbar editor={editor} full onImage={() => fileRef.current?.click()} end={uploading ? <span className="pr-2 text-xs text-fg-4">{t("page.uploading")}</span> : undefined} />
             </div>
           )}
-          <RichEditor
+          <WikiEditor
             ref={editorRef}
             value={draft.body_html}
-            onChange={canEdit ? (html) => saver.edit({ body_html: html }) : undefined}
-            toolbar="none"
-            editable={canEdit}
-            placeholder={canEdit ? t("page.bodyPlaceholder") : t("page.bodyEmpty")}
+            onChange={canWrite ? (html) => saver.edit({ body_html: html }) : undefined}
+            editable={canWrite}
+            placeholder={canWrite ? t("editor.placeholder.empty") : t("page.bodyEmpty")}
             ariaLabel={t("page.body")}
+            env={env}
+            createSubpage={createSubpage}
+            onCopyBlockLink={copyBlockLink}
             className="mt-5"
-            contentClassName="prose-lg min-h-[280px] px-0"
+            contentClassName="prose-lg"
+            onReady={setEditor}
           />
           <input
             ref={fileRef}

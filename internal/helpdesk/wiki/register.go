@@ -15,4 +15,5 @@ func Register(d *deps.Deps, api huma.API, _ chi.Router) {
 	registerPages(d, api)
 	registerRevisions(d, api)
 	registerSearch(d, api)
+	registerUnfurl(d, api)
 }

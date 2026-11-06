@@ -1,0 +1,647 @@
+/*
+ * The wiki editor's blocks (components/wiki/editor). Built on .prose-od, the type the
+ * rest of the app writes in, and only the app's tokens: light and dark follow on their own.
+ * Tones map to the --tone-* palette; text tones use the readable --tone-<x>, backgrounds
+ * the soft tint.
+ */
+
+.wiki-editor {
+  --wiki-brown-solid: #9c6b3f;
+  --wiki-block-gap: 0.15em;
+}
+
+/* ─── Rhythm ──────────────────────────────────────────────────────────────── */
+
+.wiki-prose > * + * {
+  margin-top: var(--wiki-block-gap);
+}
+.wiki-prose p {
+  min-height: 1.7em;
+  padding: 1px 0;
+  border-radius: 4px;
+}
+.wiki-prose h1 {
+  font-size: 1.85em;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+  margin-top: 1.1em;
+  margin-bottom: 0.15em;
+}
+.wiki-prose h2 {
+  font-size: 1.45em;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  margin-top: 1em;
+  margin-bottom: 0.1em;
+}
+.wiki-prose h3 {
+  font-size: 1.18em;
+  line-height: 1.35;
+  margin-top: 0.85em;
+}
+.wiki-prose > :first-child {
+  margin-top: 0;
+}
+.wiki-prose ul,
+.wiki-prose ol {
+  padding-left: 1.55em;
+}
+.wiki-prose ul ul {
+  list-style: circle;
+}
+.wiki-prose ul ul ul {
+  list-style: square;
+}
+.wiki-prose ol ol {
+  list-style: lower-alpha;
+}
+.wiki-prose ol ol ol {
+  list-style: lower-roman;
+}
+.wiki-prose li > p {
+  min-height: 0;
+}
+.wiki-prose blockquote {
+  border-left: 3px solid var(--fg);
+  padding: 2px 0 2px 0.95em;
+  color: var(--fg);
+}
+.wiki-prose hr {
+  margin: 0.9em 0;
+}
+.wiki-prose a:not(.wiki-pagelink) {
+  color: inherit;
+}
+
+/* Empty lines show their hint only where the cursor is (Placeholder). */
+.wiki-prose .is-empty:not(.is-editor-empty)::before,
+.wiki-prose .is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--fg-4);
+}
+
+/* A block someone jumped to (a link with #block, the outline) flashes once. */
+.wiki-flash {
+  animation: wiki-flash 1.6s var(--ease-out-soft);
+}
+@keyframes wiki-flash {
+  0%,
+  30% {
+    background: var(--tone-yellow-soft);
+    box-shadow: 0 0 0 4px var(--tone-yellow-soft);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+
+/* A selected atom (image, file, embed) and a selected block. */
+.wiki-prose .ProseMirror-selectednode:not(figure, [data-node-view-wrapper]) {
+  outline: none;
+  background: var(--tone-blue-soft);
+  border-radius: 4px;
+}
+.wiki-prose ::selection {
+  background: color-mix(in oklab, var(--tone-blue-solid) 22%, transparent);
+}
+
+/* ─── To-do ──────────────────────────────────────────────────────────────── */
+
+.wiki-prose ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.1em;
+}
+.wiki-prose ul[data-type="taskList"] > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+.wiki-prose ul[data-type="taskList"] > li > label {
+  flex: none;
+  margin-top: 0.32em;
+  user-select: none;
+}
+.wiki-prose ul[data-type="taskList"] > li > label input {
+  appearance: none;
+  display: grid;
+  place-content: center;
+  width: 1.05em;
+  height: 1.05em;
+  margin: 0;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    background 120ms,
+    border-color 120ms;
+}
+.wiki-prose ul[data-type="taskList"] > li > label input:hover {
+  border-color: var(--fg-3);
+}
+.wiki-prose ul[data-type="taskList"] > li > label input:checked {
+  background: var(--tone-blue-solid);
+  border-color: var(--tone-blue-solid);
+}
+.wiki-prose ul[data-type="taskList"] > li > label input:checked::after {
+  content: "";
+  width: 0.55em;
+  height: 0.3em;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: translateY(-0.06em) rotate(-45deg);
+  animation: check-pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.wiki-prose ul[data-type="taskList"] > li > div {
+  flex: 1;
+  min-width: 0;
+}
+.wiki-prose ul[data-type="taskList"] > li[data-checked="true"] > div > p {
+  color: var(--fg-4);
+  text-decoration: line-through;
+  text-decoration-color: var(--fg-4);
+  transition: color 160ms;
+}
+
+/* ─── Toggles ────────────────────────────────────────────────────────────── */
+
+.wiki-prose .wiki-toggle {
+  display: flex;
+  gap: 0.2em;
+  align-items: flex-start;
+}
+.wiki-prose .wiki-toggle > button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.45em;
+  height: 1.45em;
+  margin-top: 0.14em;
+  border-radius: 4px;
+  color: var(--fg-3);
+  transition: background 120ms;
+}
+.wiki-prose .wiki-toggle > button:hover {
+  background: var(--hover);
+}
+.wiki-prose .wiki-toggle > button::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 0.36em solid currentColor;
+  border-top: 0.26em solid transparent;
+  border-bottom: 0.26em solid transparent;
+  transition: transform 160ms var(--ease-out-soft);
+}
+.wiki-prose .wiki-toggle.is-open > button::before {
+  transform: rotate(90deg);
+}
+.wiki-prose .wiki-toggle > div {
+  flex: 1;
+  min-width: 0;
+}
+.wiki-prose .wiki-toggle summary {
+  list-style: none;
+  font-weight: 500;
+}
+.wiki-prose .wiki-toggle summary::-webkit-details-marker {
+  display: none;
+}
+.wiki-prose .wiki-toggle [data-type="detailsContent"] {
+  margin-top: 0.15em;
+}
+.wiki-prose .wiki-toggle:not(.is-open) [data-type="detailsContent"] {
+  display: none;
+}
+.wiki-prose .wiki-toggle [data-type="detailsContent"] > p.is-empty::before {
+  content: attr(data-placeholder);
+}
+
+/* ─── Callouts ───────────────────────────────────────────────────────────── */
+
+.wiki-callout {
+  display: flex;
+  gap: 0.55em;
+  margin: 0.35em 0;
+  padding: 0.75em 0.9em 0.75em 0.7em;
+  border-radius: 8px;
+  background: var(--tone-gray-soft);
+}
+.wiki-callout-icon {
+  flex: none;
+  padding-top: 0.06em;
+}
+.wiki-callout-body {
+  flex: 1;
+  min-width: 0;
+}
+.wiki-callout-body > div > * + * {
+  margin-top: var(--wiki-block-gap);
+}
+
+/* ─── Columns ────────────────────────────────────────────────────────────── */
+
+.wiki-columns-inner,
+.wiki-prose div[data-type="columns"]:not([data-node-view-wrapper]) {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 1.6em;
+}
+.wiki-prose div[data-type="column"] {
+  min-width: 0;
+}
+.wiki-prose div[data-type="column"] > * + * {
+  margin-top: var(--wiki-block-gap);
+}
+.wiki-editor:has(.ProseMirror[contenteditable="true"]) .wiki-prose div[data-type="column"] {
+  border-radius: 6px;
+  outline: 1px dashed transparent;
+  outline-offset: 4px;
+  transition: outline-color 160ms;
+}
+.wiki-editor:has(.ProseMirror[contenteditable="true"]) .wiki-columns:hover div[data-type="column"] {
+  outline-color: var(--line);
+}
+@media (max-width: 640px) {
+  .wiki-columns-inner,
+  .wiki-prose div[data-type="columns"]:not([data-node-view-wrapper]) {
+    grid-auto-flow: row;
+  }
+}
+
+/* ─── Tables ─────────────────────────────────────────────────────────────── */
+
+.wiki-prose .tableWrapper {
+  overflow-x: auto;
+  margin: 0.5em 0;
+  padding-bottom: 2px;
+}
+.wiki-prose table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  min-width: 100%;
+  font-size: 0.94em;
+}
+.wiki-prose th,
+.wiki-prose td {
+  position: relative;
+  border: 1px solid var(--line);
+  padding: 6px 9px;
+  vertical-align: top;
+  min-width: 80px;
+}
+.wiki-prose th {
+  background: var(--sunken);
+  font-weight: 600;
+  text-align: left;
+  color: var(--fg-2);
+}
+.wiki-prose th > p,
+.wiki-prose td > p {
+  min-height: 1.4em;
+}
+.wiki-prose .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--tone-blue-solid) 12%, transparent);
+  pointer-events: none;
+}
+.wiki-prose .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  background: var(--tone-blue-solid);
+  pointer-events: none;
+}
+.wiki-prose.resize-cursor,
+.resize-cursor .wiki-prose {
+  cursor: col-resize;
+}
+
+/* ─── Code ───────────────────────────────────────────────────────────────── */
+
+.wiki-code pre {
+  font-size: 12.5px;
+  line-height: 1.6;
+  padding: 14px 16px;
+  margin: 0.35em 0;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  tab-size: 2;
+}
+.wiki-code .hljs-comment,
+.wiki-code .hljs-quote {
+  color: var(--fg-4);
+  font-style: italic;
+}
+.wiki-code .hljs-keyword,
+.wiki-code .hljs-selector-tag,
+.wiki-code .hljs-literal,
+.wiki-code .hljs-doctag {
+  color: var(--tone-violet);
+}
+.wiki-code .hljs-string,
+.wiki-code .hljs-regexp,
+.wiki-code .hljs-addition,
+.wiki-code .hljs-attribute {
+  color: var(--tone-green);
+}
+.wiki-code .hljs-number,
+.wiki-code .hljs-symbol,
+.wiki-code .hljs-bullet,
+.wiki-code .hljs-variable,
+.wiki-code .hljs-template-variable {
+  color: var(--tone-orange);
+}
+.wiki-code .hljs-title,
+.wiki-code .hljs-section,
+.wiki-code .hljs-name,
+.wiki-code .hljs-selector-id,
+.wiki-code .hljs-selector-class {
+  color: var(--tone-blue);
+}
+.wiki-code .hljs-type,
+.wiki-code .hljs-built_in,
+.wiki-code .hljs-class .hljs-title,
+.wiki-code .hljs-meta {
+  color: var(--tone-teal);
+}
+.wiki-code .hljs-deletion {
+  color: var(--tone-red);
+}
+.wiki-code .hljs-attr,
+.wiki-code .hljs-property {
+  color: var(--tone-cyan);
+}
+.wiki-code .hljs-emphasis {
+  font-style: italic;
+}
+.wiki-code .hljs-strong {
+  font-weight: 600;
+}
+
+/* ─── Math ───────────────────────────────────────────────────────────────── */
+
+.wiki-prose [data-type="block-math"] {
+  margin: 0.5em 0;
+  padding: 0.8em;
+  border-radius: 8px;
+  text-align: center;
+  overflow-x: auto;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.wiki-prose [data-type="inline-math"] {
+  padding: 0 2px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.wiki-prose [data-type="block-math"]:hover,
+.wiki-prose [data-type="inline-math"]:hover {
+  background: var(--hover);
+}
+.wiki-prose .tiptap-mathematics-render--editable:empty::before,
+.wiki-prose [data-type="block-math"]:empty::before {
+  content: "E = mc²";
+  color: var(--fg-4);
+}
+
+/* ─── Images ─────────────────────────────────────────────────────────────── */
+
+.wiki-figure {
+  margin: 0.6em 0;
+  display: flex;
+  flex-direction: column;
+}
+.wiki-figure-center {
+  align-items: center;
+}
+.wiki-figure-left {
+  align-items: flex-start;
+}
+.wiki-figure-right {
+  align-items: flex-end;
+}
+.wiki-figure img {
+  border: 0 !important;
+}
+.wiki-figure figcaption {
+  margin-top: 6px;
+  width: 100%;
+  font-size: 0.85em;
+  color: var(--fg-3);
+  text-align: center;
+}
+.wiki-prose img[data-align="left"] {
+  margin-right: auto;
+}
+.wiki-prose img[data-align="right"] {
+  margin-left: auto;
+}
+
+/* ─── Inline: links to pages, dates, people, colours ─────────────────────── */
+
+.wiki-pagelink {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25em;
+  padding: 0 0.2em;
+  border-radius: 4px;
+  text-decoration: none !important;
+  font-weight: 500;
+  color: var(--fg);
+  transition: background 120ms;
+}
+.wiki-pagelink > span:last-child {
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+.wiki-pagelink:hover {
+  background: var(--hover);
+}
+.wiki-pagelink-icon {
+  align-self: center;
+  width: 1em !important;
+  height: 1em !important;
+  font-size: 0.95em !important;
+}
+.wiki-pagelink-gone {
+  color: var(--fg-4);
+}
+.wiki-pagelink-gone > span:last-child {
+  text-decoration-style: dashed;
+}
+.wiki-date {
+  display: inline;
+  padding: 0 0.15em;
+  border-radius: 4px;
+  color: var(--fg-2);
+  font-weight: 450;
+  transition: background 120ms;
+}
+.wiki-date > span {
+  color: var(--fg-4);
+  margin-right: 1px;
+}
+button.wiki-date:hover {
+  background: var(--hover);
+}
+.wiki-prose .mention {
+  color: var(--tone-blue);
+  background: var(--tone-blue-soft);
+}
+
+/* Tones, on inline text (span/mark) and on whole blocks. */
+.wiki-editor [data-color="gray"] { color: var(--tone-gray); }
+.wiki-editor [data-color="brown"] { color: color-mix(in oklab, var(--wiki-brown-solid) 82%, var(--fg)); }
+.wiki-editor [data-color="orange"] { color: var(--tone-orange); }
+.wiki-editor [data-color="yellow"] { color: var(--tone-amber); }
+.wiki-editor [data-color="green"] { color: var(--tone-green); }
+.wiki-editor [data-color="blue"] { color: var(--tone-blue); }
+.wiki-editor [data-color="purple"] { color: var(--tone-violet); }
+.wiki-editor [data-color="pink"] { color: var(--tone-pink); }
+.wiki-editor [data-color="red"] { color: var(--tone-red); }
+
+.wiki-editor [data-bg="gray"] { background: var(--tone-gray-soft); }
+.wiki-editor [data-bg="brown"] { background: color-mix(in oklab, var(--wiki-brown-solid) 12%, transparent); }
+.wiki-editor [data-bg="orange"] { background: var(--tone-orange-soft); }
+.wiki-editor [data-bg="yellow"] { background: color-mix(in oklab, var(--tone-yellow-solid) 18%, transparent); }
+.wiki-editor [data-bg="green"] { background: var(--tone-green-soft); }
+.wiki-editor [data-bg="blue"] { background: var(--tone-blue-soft); }
+.wiki-editor [data-bg="purple"] { background: var(--tone-violet-soft); }
+.wiki-editor [data-bg="pink"] { background: var(--tone-pink-soft); }
+.wiki-editor [data-bg="red"] { background: var(--tone-red-soft); }
+.wiki-editor mark {
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+  box-decoration-break: clone;
+}
+.wiki-callout[data-tone="gray"] { background: var(--tone-gray-soft); }
+.wiki-callout[data-tone="brown"] { background: color-mix(in oklab, var(--wiki-brown-solid) 10%, transparent); }
+.wiki-callout[data-tone="orange"] { background: var(--tone-orange-soft); }
+.wiki-callout[data-tone="yellow"] { background: color-mix(in oklab, var(--tone-yellow-solid) 14%, transparent); }
+.wiki-callout[data-tone="green"] { background: var(--tone-green-soft); }
+.wiki-callout[data-tone="blue"] { background: var(--tone-blue-soft); }
+.wiki-callout[data-tone="purple"] { background: var(--tone-violet-soft); }
+.wiki-callout[data-tone="pink"] { background: var(--tone-pink-soft); }
+.wiki-callout[data-tone="red"] { background: var(--tone-red-soft); }
+.wiki-prose :is(p, h1, h2, h3, li, blockquote)[data-bg] {
+  padding-left: 4px;
+  padding-right: 4px;
+  border-radius: 4px;
+}
+
+/* Swatches in the colour menus: an "A" in the tone, or on its tint. */
+.wiki-swatch-text,
+.wiki-swatch-bg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--fg-2);
+}
+.wiki-swatch-text {
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/* ─── The block handle ───────────────────────────────────────────────────── */
+
+.wiki-handle {
+  animation: fade-in 120ms ease-out;
+}
+.wiki-handle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 24px;
+  border-radius: 4px;
+  color: var(--fg-4);
+  transition:
+    background 100ms,
+    color 100ms;
+}
+.wiki-handle-btn:hover,
+.wiki-handle-btn[data-state="open"] {
+  background: var(--hover);
+  color: var(--fg-2);
+}
+.wiki-handle-btn svg {
+  width: 16px;
+  height: 16px;
+}
+@media (hover: none) {
+  .wiki-handle {
+    display: none;
+  }
+}
+
+/* ─── Page settings: font, size, width ───────────────────────────────────── */
+
+.wiki-font-serif .wiki-prose,
+.wiki-font-serif .wiki-title {
+  font-family: ui-serif, "Iowan Old Style", "Charter", Georgia, Cambria, "Times New Roman", serif;
+}
+.wiki-font-mono .wiki-prose,
+.wiki-font-mono .wiki-title {
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+}
+.wiki-small .wiki-prose.prose-lg {
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+/* ─── Covers ─────────────────────────────────────────────────────────────── */
+
+.wiki-cover-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-2);
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+  box-shadow: 0 0 0 1px var(--line), var(--shadow-xs);
+  backdrop-filter: blur(8px);
+  transition: background 120ms, color 120ms;
+}
+.wiki-cover-btn:hover {
+  background: var(--surface);
+  color: var(--fg);
+}
+.wiki-cover-btn svg {
+  width: 13px;
+  height: 13px;
+}
+/* The painted covers are light: in the dark theme they sit back. */
+.dark .wiki-cover-gradient,
+.dark .wiki-cover-swatch {
+  filter: brightness(0.5) saturate(1.15);
+}
+.wiki-cover::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 1px;
+  background: var(--line-soft);
+}

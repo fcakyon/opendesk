@@ -1606,7 +1606,21 @@ export type WikiNode = {
 
 export type WikiRef = { id: string; title: string; icon: string };
 
-export type WikiPage = WikiNode & {
+/** A page's look (contracts/wiki.md "Page settings"): not part of its text, no version. */
+export type WikiPageSettings = {
+  /** "" (none), "gradient:<name>" (components/wiki/covers.ts), or an image: https or an attachment. */
+  cover: string;
+  /** Which part of the cover shows, 0 (top) to 100 (bottom). */
+  cover_y: number;
+  full_width: boolean;
+  small_text: boolean;
+  font: "default" | "serif" | "mono";
+  /** The app keeps the page read-only until someone unlocks it. */
+  locked: boolean;
+};
+
+export type WikiPage = WikiNode &
+  WikiPageSettings & {
   body_html: string;
   created_by: UserRef | null;
   updated_by: UserRef | null;
@@ -1627,6 +1641,9 @@ export type WikiRevision = {
   updated_at: string;
 };
 
+/** A link's card, read by the API for a bookmark block (contracts/wiki.md "Bookmarks"). */
+export type LinkCard = { title: string; description: string; image: string; site: string };
+
 export type WikiSearchHit = {
   id: string;
   parent_id: string | null;
@@ -1638,7 +1655,7 @@ export type WikiSearchHit = {
   updated_at: string;
 };
 
-export type WikiPagePatch = { title?: string; icon?: string; body_html?: string; version?: number };
+export type WikiPagePatch = Partial<WikiPageSettings> & { title?: string; icon?: string; body_html?: string; version?: number };
 
 export type ReportsOverview = {
   created: number;

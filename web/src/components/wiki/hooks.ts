@@ -108,11 +108,13 @@ export function useCreatePage() {
   const { open } = useExpanded();
   const { t } = useTranslation("wiki");
   return useMutation({
-    mutationFn: (b: NewPage) => api.wiki.create(b),
-    onSuccess: (page) => {
+    // `navigate: false` stays on the page: a subpage made from the editor ("/page", "[[new").
+    mutationFn: ({ navigate: _stay, ...b }: NewPage & { navigate?: boolean }) => api.wiki.create(b),
+    onSuccess: (page, vars) => {
       qc.setQueryData(qk.wikiPage(page.id), page);
       patchTree(qc, (nodes) => upsertNode(nodes, nodeOf(page)));
       if (page.parent_id) open([page.parent_id]);
+      if (vars.navigate === false) return;
       freshPages.add(page.id);
       void navigate({ to: "/wiki/$pageId", params: { pageId: page.id } });
     },
