@@ -4,7 +4,7 @@
 // keeps RichEditor's handle (focus, setHtml) so the page's saver works with either.
 
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -13,7 +13,9 @@ import { toast } from "@/components/ui/toast";
 import type { RichEditorHandle } from "@/components/editor/RichEditor";
 import type { Member, WikiNode } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
-import { q } from "@/lib/queries";
+import { q, qk } from "@/lib/queries";
+import { api } from "@/lib/api/endpoints";
+import { starterDatabase } from "../database/starter";
 import { useWikiTree } from "../hooks";
 import { BubbleToolbar } from "./bubble";
 import { WikiEditorContext, type WikiEditorEnv } from "./context";
@@ -43,6 +45,7 @@ export const WikiEditor = forwardRef<RichEditorHandle, WikiEditorProps>(function
   const { tree } = useWikiTree();
   const members = useQuery(q.members());
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
   // The menus read these when they open, so they never go stale.
   const live = useRef({ props, pages: [] as WikiNode[], members: [] as Member[] });
@@ -64,6 +67,17 @@ export const WikiEditor = forwardRef<RichEditorHandle, WikiEditorProps>(function
           pageId: () => live.current.props.env.pageId,
           createSubpage: (title) => live.current.props.createSubpage(title),
           pickImage: () => fileRef.current?.click(),
+          createDatabase: async (type) => {
+            try {
+              const db = starterDatabase(type, t);
+              const page = await api.wiki.create({ parent_id: live.current.props.env.pageId, kind: "database", title: "", database: db });
+              void qc.invalidateQueries({ queryKey: qk.wikiTree });
+              return { id: page.id, view: db.views[0].id };
+            } catch (e) {
+              toast.error(e, t("db.createFailed"));
+              return null;
+            }
+          },
         },
       }),
     // The extension set is made once per editor; everything it reads is in `live`.

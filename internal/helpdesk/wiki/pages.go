@@ -29,7 +29,7 @@ type pageCreate struct {
 	Icon     string  `json:"icon,omitempty" maxLength:"64" doc:"One emoji, or empty"`
 	BodyHTML string  `json:"body_html,omitempty" doc:"Rich text, sanitized like an article's; up to 512 KB"`
 	Position *int    `json:"position,omitempty" minimum:"0" doc:"Where among its siblings, from 0; the end when left out"`
-	Template bool    `json:"template,omitempty" doc:"A new template at the top level of space (contracts/wiki.md \"Templates\"); a subpage is a template when its parent is"`
+	Template bool    `json:"template,omitempty" doc:"A new template at the top level of space, or a database's own template under it (contracts/wiki.md \"Templates\"); a subpage is a template when its parent is"`
 	Kind     string  `json:"kind,omitempty" enum:"page,database" doc:"database makes a database (contracts/wiki.md \"Databases\"); default page"`
 	// A database's properties and views; left out, a title and tags in a table.
 	Database json.RawMessage `json:"database,omitempty"`
@@ -193,7 +193,8 @@ func registerPages(d *deps.Deps, api huma.API) {
 					if len(par.up)+2 > maxDepth {
 						return tooDeep()
 					}
-					owner, team, template = par.owner, par.team, par.template
+					// A template under a database is that database's own (a new row starts as a copy).
+					owner, team, template = par.owner, par.team, par.template || (b.Template && par.database != nil)
 				} else {
 					if owner, team, err = spaceRef(ctx, tx, v, p.WorkspaceID, b.Space, b.TeamID); err != nil {
 						return err

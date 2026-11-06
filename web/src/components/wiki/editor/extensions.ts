@@ -14,7 +14,7 @@ import UniqueID from "@tiptap/extension-unique-id";
 import { Markdown } from "@tiptap/markdown";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
-import { AudioBlock, Bookmark, PersonMention, Callout, Column, Columns, DateMention, Embed, FileBlock, HighlightTone, imageAttributes, imageView, PageLink, SubpageBlock, TableOfContents, TextTone, VideoBlock } from "./blocks";
+import { AudioBlock, Bookmark, DatabaseBlock, PersonMention, Callout, Column, Columns, DateMention, Embed, FileBlock, HighlightTone, imageAttributes, imageView, PageLink, SubpageBlock, TableOfContents, TextTone, VideoBlock } from "./blocks";
 import { WikiCodeBlock } from "./code";
 import { moveBlock, blockAt } from "./handle";
 import { emojiItems, linkItems, mentionItems, slashItems, type MenuSources } from "./items";
@@ -48,6 +48,7 @@ export const ID_TYPES = [
   "horizontalRule",
   "blockMath",
   "subpage",
+  "database",
 ];
 
 const LINE_HINT_PARENTS = new Set(["doc", "column", "callout", "detailsContent"]);
@@ -206,6 +207,7 @@ export function wikiExtensions(opts: { placeholder: () => string; sources: MenuS
     Embed,
     TableOfContents,
     SubpageBlock,
+    DatabaseBlock,
     PageLink,
     DateMention,
     TextTone,

@@ -34,6 +34,8 @@ import { MoveDialog, TrashItem } from "@/components/wiki/PageMenu";
 import { DayNav, TemplateBanner, TrashBanner, Verification } from "@/components/wiki/PageBanners";
 import { useUseTemplate } from "./WikiTemplatesPage";
 import { AddToSpace } from "@/components/wiki/AddToSpace";
+import { DatabaseView } from "@/components/wiki/database/DatabaseView";
+import { RowProperties } from "@/components/wiki/database/RowProperties";
 import { UnsentBanner } from "@/components/wiki/Unsent";
 import { PageIcon, pageUrl } from "@/components/wiki/WikiTree";
 import { freshPages, nodeOf, patchTree, useCreatePage, useDeleteRule, useFavorites, useTitle, useWikiTree } from "@/components/wiki/hooks";
@@ -116,7 +118,7 @@ function useSaver(saver: PageSaver) {
   }, [saver]);
 }
 
-export function PageScreen({ page }: { page: WikiPage }) {
+export function PageScreen({ page, peek }: { page: WikiPage; peek?: boolean }) {
   const { t } = useTranslation("wiki");
   const { t: ui } = useTranslation("ui");
   const qc = useQueryClient();
@@ -144,13 +146,18 @@ export function PageScreen({ page }: { page: WikiPage }) {
   const look = useLook(live);
   // A locked page reads like a viewer's until someone unlocks it (contracts/wiki.md "Page settings").
   const canWrite = canEdit && !live.locked && !live.deleted_at;
+  // A row of a database shows its values under its title.
+  const isRow = !!live.parent_id && tree.byId.get(live.parent_id)?.kind === "database";
+  // A database's page is its views: full width, with a short description over them.
+  const isDb = live.kind === "database";
   const fav = useFavorites();
   const startFromTemplate = useUseTemplate();
   const [usingTemplate, setUsingTemplate] = useState(false);
   const deleteRule = useDeleteRule()(page.id);
   const shown = title(draft.title);
-  useDocumentTitle(shown);
-  usePageCrumb(shown);
+  // In a peek the page beneath keeps the window's title and the breadcrumb.
+  useDocumentTitle(peek ? null : shown);
+  usePageCrumb(peek ? null : shown);
 
   const editorRef = useRef<RichEditorHandle>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
@@ -334,105 +341,107 @@ export function PageScreen({ page }: { page: WikiPage }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-line px-3 sm:px-4">
-        <PagesButton />
-        <nav aria-label={t("page.breadcrumbs")} className="flex min-w-0 flex-1 items-center gap-1 text-[12.5px]">
-          <Link to="/wiki" className="hidden shrink-0 rounded-md px-1.5 py-0.5 text-fg-3 transition-colors hover:bg-hover hover:text-fg sm:inline">
-            {t("title")}
-          </Link>
-          {live.private && (
-            <span className="hidden shrink-0 items-center gap-1 sm:flex">
-              <span className="text-fg-4">/</span>
-              <span className="flex items-center gap-1 px-1.5 text-fg-3">
-                <Lock className="size-3" />
-                {t("sidebar.private")}
+      {!peek && (
+        <header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-line px-3 sm:px-4">
+          <PagesButton />
+          <nav aria-label={t("page.breadcrumbs")} className="flex min-w-0 flex-1 items-center gap-1 text-[12.5px]">
+            <Link to="/wiki" className="hidden shrink-0 rounded-md px-1.5 py-0.5 text-fg-3 transition-colors hover:bg-hover hover:text-fg sm:inline">
+              {t("title")}
+            </Link>
+            {live.private && (
+              <span className="hidden shrink-0 items-center gap-1 sm:flex">
+                <span className="text-fg-4">/</span>
+                <span className="flex items-center gap-1 px-1.5 text-fg-3">
+                  <Lock className="size-3" />
+                  {t("sidebar.private")}
+                </span>
               </span>
+            )}
+            {crumbs.map((c) => (
+              <span key={c.id} className="hidden min-w-0 items-center gap-1 sm:flex">
+                <span className="text-fg-4">/</span>
+                <Link to="/wiki/$pageId" params={{ pageId: c.id }} className="flex min-w-0 max-w-[180px] items-center gap-1 rounded-md px-1.5 py-0.5 text-fg-3 transition-colors hover:bg-hover hover:text-fg">
+                  {c.icon && <span aria-hidden>{c.icon}</span>}
+                  <span className="truncate">{title(c.title)}</span>
+                </Link>
+              </span>
+            ))}
+            <span className="hidden text-fg-4 sm:inline">/</span>
+            <span className="flex min-w-0 items-center gap-1 px-1.5 font-medium text-fg" aria-current="page">
+              <PageIcon icon={draft.icon} />
+              <span className="truncate">{shown}</span>
             </span>
-          )}
-          {crumbs.map((c) => (
-            <span key={c.id} className="hidden min-w-0 items-center gap-1 sm:flex">
-              <span className="text-fg-4">/</span>
-              <Link to="/wiki/$pageId" params={{ pageId: c.id }} className="flex min-w-0 max-w-[180px] items-center gap-1 rounded-md px-1.5 py-0.5 text-fg-3 transition-colors hover:bg-hover hover:text-fg">
-                {c.icon && <span aria-hidden>{c.icon}</span>}
-                <span className="truncate">{title(c.title)}</span>
-              </Link>
-            </span>
-          ))}
-          <span className="hidden text-fg-4 sm:inline">/</span>
-          <span className="flex min-w-0 items-center gap-1 px-1.5 font-medium text-fg" aria-current="page">
-            <PageIcon icon={draft.icon} />
-            <span className="truncate">{shown}</span>
-          </span>
-          {canEdit && <SaveState saver={saver} />}
-        </nav>
-        <div className="flex shrink-0 items-center gap-0.5">
-          {!live.deleted_at && !live.template && (
-            <Tooltip content={fav.has(page.id) ? t("favorites.remove") : t("favorites.add")}>
-              <Button square variant="ghost" size="sm" aria-label={fav.has(page.id) ? t("favorites.remove") : t("favorites.add")} aria-pressed={fav.has(page.id)} onClick={() => fav.toggle(node)}>
-                <Star className={cn("size-4", fav.has(page.id) && "fill-tone-amber-solid text-tone-amber-solid")} />
+            {canEdit && <SaveState saver={saver} />}
+          </nav>
+          <div className="flex shrink-0 items-center gap-0.5">
+            {!live.deleted_at && !live.template && (
+              <Tooltip content={fav.has(page.id) ? t("favorites.remove") : t("favorites.add")}>
+                <Button square variant="ghost" size="sm" aria-label={fav.has(page.id) ? t("favorites.remove") : t("favorites.add")} aria-pressed={fav.has(page.id)} onClick={() => fav.toggle(node)}>
+                  <Star className={cn("size-4", fav.has(page.id) && "fill-tone-amber-solid text-tone-amber-solid")} />
+                </Button>
+              </Tooltip>
+            )}
+            <Tooltip content={t("page.copyLink")}>
+              <Button square variant="ghost" size="sm" aria-label={t("page.copyLink")} onClick={copyLink}>
+                <Link2 className="size-4" />
               </Button>
             </Tooltip>
-          )}
-          <Tooltip content={t("page.copyLink")}>
-            <Button square variant="ghost" size="sm" aria-label={t("page.copyLink")} onClick={copyLink}>
-              <Link2 className="size-4" />
-            </Button>
-          </Tooltip>
-          <Tooltip content={t("panel.open")} shortcut="mod shift ;">
-            <Button square variant="ghost" size="sm" aria-label={t("panel.open")} aria-pressed={!!panel} onClick={() => setPanel(panel ? null : "outline")} className={cn("hidden lg:inline-flex", panel && "bg-hover text-fg")}>
-              <PanelRight className="size-4" />
-            </Button>
-          </Tooltip>
-          <Tooltip content={t("history.open")}>
-            <Button square variant="ghost" size="sm" aria-label={t("history.open")} onClick={() => setHistory(true)}>
-              <History className="size-4" />
-            </Button>
-          </Tooltip>
-          {canEdit && !live.deleted_at && (
-            <Menu>
-              <MenuTrigger asChild>
-                <Button square variant="ghost" size="sm" aria-label={t("page.more")}>
-                  <MoreHorizontal className="size-4" />
-                </Button>
-              </MenuTrigger>
-              <MenuContent align="end">
-                <MenuItem icon={<Plus />} onSelect={() => create.mutate({ parent_id: page.id })}>
-                  {t("tree.addSubpage")}
-                </MenuItem>
-                {!live.journal && (
-                  <MenuItem icon={<FolderInput />} onSelect={() => setMoving(true)}>
-                    {t("tree.moveTo")}
+            <Tooltip content={t("panel.open")} shortcut="mod shift ;">
+              <Button square variant="ghost" size="sm" aria-label={t("panel.open")} aria-pressed={!!panel} onClick={() => setPanel(panel ? null : "outline")} className={cn("hidden lg:inline-flex", panel && "bg-hover text-fg")}>
+                <PanelRight className="size-4" />
+              </Button>
+            </Tooltip>
+            <Tooltip content={t("history.open")}>
+              <Button square variant="ghost" size="sm" aria-label={t("history.open")} onClick={() => setHistory(true)}>
+                <History className="size-4" />
+              </Button>
+            </Tooltip>
+            {canEdit && !live.deleted_at && (
+              <Menu>
+                <MenuTrigger asChild>
+                  <Button square variant="ghost" size="sm" aria-label={t("page.more")}>
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </MenuTrigger>
+                <MenuContent align="end">
+                  <MenuItem icon={<Plus />} onSelect={() => create.mutate({ parent_id: page.id })}>
+                    {t("tree.addSubpage")}
                   </MenuItem>
-                )}
-                {!live.journal && (
-                  <MenuItem icon={<Copy />} onSelect={() => void duplicatePage(false)}>
-                    {t("duplicate.action")}
+                  {!live.journal && (
+                    <MenuItem icon={<FolderInput />} onSelect={() => setMoving(true)}>
+                      {t("tree.moveTo")}
+                    </MenuItem>
+                  )}
+                  {!live.journal && (
+                    <MenuItem icon={<Copy />} onSelect={() => void duplicatePage(false)}>
+                      {t("duplicate.action")}
+                    </MenuItem>
+                  )}
+                  {!live.template && !live.journal && (
+                    <MenuItem icon={<LayoutTemplate />} onSelect={() => void duplicatePage(true)}>
+                      {t("templatesPage.saveAs")}
+                    </MenuItem>
+                  )}
+                  <MenuItem icon={<Link2 />} onSelect={copyLink}>
+                    {t("page.copyLink")}
                   </MenuItem>
-                )}
-                {!live.template && !live.journal && (
-                  <MenuItem icon={<LayoutTemplate />} onSelect={() => void duplicatePage(true)}>
-                    {t("templatesPage.saveAs")}
+                  {!live.template && <AddToSpace pageId={page.id} />}
+                  <MenuItem icon={<History />} onSelect={() => setHistory(true)}>
+                    {t("history.open")}
                   </MenuItem>
-                )}
-                <MenuItem icon={<Link2 />} onSelect={copyLink}>
-                  {t("page.copyLink")}
-                </MenuItem>
-                {!live.template && <AddToSpace pageId={page.id} />}
-                <MenuItem icon={<History />} onSelect={() => setHistory(true)}>
-                  {t("history.open")}
-                </MenuItem>
-                <MenuSeparator />
-                <PageStyleItems page={live} onChange={look.set} />
-                <MenuCheckItem icon={<Type />} checked={showToolbar} onSelect={() => setShowToolbar(!showToolbar)}>
-                  {t("page.formattingBar")}
-                </MenuCheckItem>
-                <MenuSeparator />
-                <TrashItem node={node} />
-              </MenuContent>
-            </Menu>
-          )}
-        </div>
-      </header>
+                  <MenuSeparator />
+                  <PageStyleItems page={live} onChange={look.set} />
+                  <MenuCheckItem icon={<Type />} checked={showToolbar} onSelect={() => setShowToolbar(!showToolbar)}>
+                    {t("page.formattingBar")}
+                  </MenuCheckItem>
+                  <MenuSeparator />
+                  <TrashItem node={node} />
+                </MenuContent>
+              </Menu>
+            )}
+          </div>
+        </header>
+      )}
 
       <TrashBanner page={live} canEdit={canEdit} canDelete={deleteRule === "yes"} />
       <TemplateBanner
@@ -483,7 +492,7 @@ export function PageScreen({ page }: { page: WikiPage }) {
       <div className="flex min-h-0 flex-1">
         <div ref={setScrollEl} className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto", live.font !== "default" && `wiki-font-${live.font}`, live.small_text && "wiki-small")}>
           <PageCover cover={live.cover} coverY={live.cover_y} canEdit={canWrite} onChange={look.set} />
-          <article className={cn("mx-auto w-full px-6 pb-32 md:px-10", live.full_width ? "max-w-none md:px-24" : "max-w-[760px]", live.cover ? "pt-6" : "pt-10 md:pt-14")}>
+          <article className={cn("mx-auto w-full px-6 pb-32 md:px-10", isDb ? "max-w-none md:px-16" : live.full_width ? "max-w-none md:px-24" : "max-w-[760px]", live.cover ? "pt-6" : "pt-10 md:pt-14")}>
             {live.daily_date && <DayNav page={live} />}
           <div className="group/head">
               {draft.icon && (
@@ -545,7 +554,8 @@ export function PageScreen({ page }: { page: WikiPage }) {
               </div>
             </div>
 
-            {canWrite && editor && showToolbar && (
+            {isRow && <RowProperties page={live} canEdit={canWrite} />}
+          {canWrite && editor && showToolbar && !isDb && (
               <div className="sticky top-3 z-10 -mx-3 mt-6 rounded-lg border border-line bg-surface/95 pt-1.5 shadow-xs backdrop-blur">
                 <Toolbar editor={editor} full onImage={() => fileRef.current?.click()} end={uploading ? <span className="pr-2 text-xs text-fg-4">{t("page.uploading")}</span> : undefined} />
               </div>
@@ -555,15 +565,20 @@ export function PageScreen({ page }: { page: WikiPage }) {
               value={draft.body_html}
               onChange={canWrite ? (html) => saver.edit({ body_html: html }) : undefined}
               editable={canWrite}
-              placeholder={canWrite ? t("editor.placeholder.empty") : t("page.bodyEmpty")}
+              placeholder={isDb ? (canWrite ? t("db.description") : "") : canWrite ? t("editor.placeholder.empty") : t("page.bodyEmpty")}
               ariaLabel={t("page.body")}
               env={env}
               createSubpage={createSubpage}
               onCopyBlockLink={copyBlockLink}
-              className="mt-5"
-              contentClassName="prose-lg"
+              className={isDb ? "mt-2 text-fg-2" : "mt-5"}
+              contentClassName={isDb ? "min-h-0" : "prose-lg"}
               onReady={setEditor}
             />
+            {live.kind === "database" && (
+              <div className="mt-6">
+                <DatabaseView databaseId={live.id} />
+              </div>
+            )}
             <input
               ref={fileRef}
               type="file"
@@ -576,7 +591,7 @@ export function PageScreen({ page }: { page: WikiPage }) {
               }}
             />
 
-            {(kids.length > 0 || canEdit) && (
+            {!isDb && (kids.length > 0 || canEdit) && (
               <section className="mt-14 border-t border-line-soft pt-6" aria-labelledby="wiki-subpages">
                 <h2 id="wiki-subpages" className="label-caps mb-2">
                   {t("page.subpages")}
@@ -609,7 +624,7 @@ export function PageScreen({ page }: { page: WikiPage }) {
             )}
           </article>
         </div>
-        {panel && (
+        {panel && !peek && (
           <div className="hidden lg:flex">
             <PagePanel page={live} editor={editor} scrollEl={scrollEl} tab={panel} onTab={setPanel} onClose={() => setPanel(null)} canEdit={canWrite} />
           </div>

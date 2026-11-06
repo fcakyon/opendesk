@@ -35,8 +35,13 @@ import {
   Sigma,
   Smile,
   Table,
+  Table2,
+  KanbanSquare,
+  LayoutGrid,
+  GanttChart,
+  Database as DatabaseIcon,
 } from "lucide-react";
-import type { Member, WikiNode } from "@/lib/api/types";
+import type { DbViewType, Member, WikiNode } from "@/lib/api/types";
 import { Avatar } from "@/components/ui/avatar";
 import { EMOJI, searchEmoji } from "../emoji";
 import { rank, type MenuItem } from "./menu";
@@ -52,6 +57,8 @@ export type MenuSources = {
   createSubpage: (title?: string) => Promise<string | null>;
   /** Asks for an image file and inserts it at the cursor. */
   pickImage: () => void;
+  /** Makes a database inside the page, shown as a layout, and resolves to it. */
+  createDatabase: (type: DbViewType) => Promise<{ id: string; view: string } | null>;
   untitled: string;
 };
 
@@ -177,6 +184,12 @@ export function slashItems(query: string, s: MenuSources): MenuItem[] {
   const advanced = t("editor.menu.advanced");
   const inline = t("editor.menu.inline");
   const colors = t("editor.menu.colors");
+  const databases = t("editor.menu.databases");
+  const database = (type: DbViewType) => async (e: Editor, r: Range) => {
+    e.chain().focus().deleteRange(r).run();
+    const made = await s.createDatabase(type);
+    if (made) e.chain().focus().insertContent({ type: "database", attrs: { id: made.id, view: made.view } }).run();
+  };
   type Def = Omit<MenuItem, "id"> & { id: string; words?: string };
   const defs: Def[] = [
     { id: "text", group: basic, label: t("editor.block.text"), icon: <Pilcrow />, words: "paragraph plain", run: (e, r) => clear(e, r).setParagraph().run() },
@@ -224,6 +237,13 @@ export function slashItems(query: string, s: MenuSources): MenuItem[] {
       words: "youtube figma loom vimeo google docs sheets slides miro maps codepen spotify iframe",
       run: (e, r) => clear(e, r).insertContent({ type: "embed" }).run(),
     },
+    { id: "dbTable", group: databases, label: t("editor.block.dbTable"), icon: <Table2 />, words: "database table spreadsheet rows inline", run: database("table") },
+    { id: "dbBoard", group: databases, label: t("editor.block.dbBoard"), icon: <KanbanSquare />, words: "database board kanban columns status", run: database("board") },
+    { id: "dbList", group: databases, label: t("editor.block.dbList"), icon: <List />, words: "database list", run: database("list") },
+    { id: "dbGallery", group: databases, label: t("editor.block.dbGallery"), icon: <LayoutGrid />, words: "database gallery cards grid", run: database("gallery") },
+    { id: "dbCalendar", group: databases, label: t("editor.block.dbCalendar"), icon: <CalendarDays />, words: "database calendar month dates", run: database("calendar") },
+    { id: "dbTimeline", group: databases, label: t("editor.block.dbTimeline"), icon: <GanttChart />, words: "database timeline gantt roadmap", run: database("timeline") },
+    { id: "dbLinked", group: databases, label: t("editor.block.dbLinked"), icon: <DatabaseIcon />, words: "linked database view existing", run: (e, r) => clear(e, r).insertContent({ type: "database" }).run() },
     { id: "table", group: advanced, label: t("editor.block.table"), icon: <Table />, words: "grid rows columns spreadsheet", run: (e, r) => clear(e, r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
     { id: "col2", group: advanced, label: t("editor.block.columns", { count: 2 }), icon: <Columns2 />, words: "layout side by side columns", run: (e, r) => clear(e, r).setColumns(2).run() },
     { id: "col3", group: advanced, label: t("editor.block.columns", { count: 3 }), icon: <Columns3 />, words: "layout columns", run: (e, r) => clear(e, r).setColumns(3).run() },

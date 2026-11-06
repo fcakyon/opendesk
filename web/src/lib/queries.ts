@@ -255,6 +255,7 @@ export const qk = {
     return w(["wiki", "recent"] as const);
   },
   wikiViews: (id: string) => w(["wiki", "views", id] as const),
+  wikiRows: (id: string) => w(["wiki", "rows", id] as const),
   wikiDaily: (from: string, to: string) => w(["wiki", "daily", from, to] as const),
   reports: (r: ReportsQuery) => w(["reports", r] as const),
   reportAgents: (r: ReportsQuery) => w(["reports", "agents", r] as const),
@@ -519,6 +520,7 @@ export const q = {
   wikiFavorites: () => list(qk.wikiFavorites, () => api.wiki.favorites()),
   wikiRecent: () => list(qk.wikiRecent, () => api.wiki.recent()),
   wikiViews: (id: string) => queryOptions({ queryKey: qk.wikiViews(id), queryFn: () => api.wiki.views(id) }),
+  wikiRows: (id: string) => queryOptions({ queryKey: qk.wikiRows(id), queryFn: () => api.wiki.rows(id) }),
   wikiDaily: (from: string, to: string) => list(qk.wikiDaily(from, to), () => api.wiki.dailyNotes(from, to)),
   wikiSearch: (term: string) =>
     queryOptions({ queryKey: qk.wikiSearch(term), queryFn: async () => (await api.wiki.search(term)).data, enabled: term.trim().length > 0, staleTime: 5_000 }),

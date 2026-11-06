@@ -2,12 +2,35 @@
 // the tree with its spaces (the workspace's, a member's private pages, teamspaces), pages
 // with versions, history with coalesced revisions, moves that refuse cycles, the trash,
 // templates and copies, favorites, recent pages and readers, the journal, verification,
-// links and search. The mock's person is db.meId. The first workspace starts with a
-// small support handbook and two templates; the others start empty, to show the
-// first-run state.
+// links and search, and databases (properties, views and rows with checked values). The
+// mock's person is db.meId. The first workspace starts with a small support handbook, two
+// templates and two linked databases (known issues and key accounts); the others start
+// empty, to show the first-run state.
 
 import DOMPurify from "dompurify";
-import type { Role, WikiDailyNote, WikiNode, WikiPage, WikiPageSettings, WikiPageViews, WikiRef, WikiRevision, WikiSearchHit, WikiTrashed } from "@/lib/api/types";
+import type {
+  Database,
+  DbDate,
+  DbFile,
+  DbOption,
+  DbProperty,
+  DbPropType,
+  DbRow,
+  DbRows,
+  DbStatusGroup,
+  DbValue,
+  DbView,
+  Role,
+  WikiDailyNote,
+  WikiNode,
+  WikiPage,
+  WikiPageSettings,
+  WikiPageViews,
+  WikiRef,
+  WikiRevision,
+  WikiSearchHit,
+  WikiTrashed,
+} from "@/lib/api/types";
 import { MAX_DEPTH, buildTree, childrenOf } from "@/lib/wiki/tree";
 import { DEFAULT_LOOK } from "@/lib/wiki/look";
 import { linkedIds, pageTags } from "@/lib/wiki/links";
@@ -42,6 +65,14 @@ type Row = WikiPageSettings & {
   verified_by: string | null;
   verified_at: string | null;
   verified_until: string | null;
+  /** "database": its subpages are its rows. */
+  kind: "page" | "database";
+  /** A database's properties and views; null for a page. */
+  database: Database | null;
+  /** A row's values, by property id. */
+  props: Record<string, DbValue>;
+  /** Creation order, for rows made in the same millisecond (numberRows: oldest first). */
+  seq: number;
 };
 type Rev = { id: string; page_id: string; title: string; icon: string; body_html: string; author: string | null; created_at: string; updated_at: string };
 type Visit = { user_id: string; page_id: string; visits: number; last_at: string; seq: number };
@@ -57,6 +88,7 @@ const TRASH_KEEP = 30 * DAY;
 
 const states = new WeakMap<WsData, State>();
 let visitSeq = 0;
+let rowSeq = 0;
 
 function stateOf(ws: WsData): State {
   let st = states.get(ws);
@@ -115,6 +147,7 @@ const node = (r: Row): WikiNode => ({
   ...(r.daily_date ? { daily_date: r.daily_date } : {}),
   ...(r.template ? { template: true } : {}),
   ...(verifiedNow(r) ? { verified: true } : {}),
+  kind: r.kind,
 });
 const refOf = (r: Pick<Row, "id" | "title" | "icon">): WikiRef => ({ id: r.id, title: r.title, icon: r.icon });
 const settingsOf = (r: Row): WikiPageSettings => ({ cover: r.cover, cover_y: r.cover_y, full_width: r.full_width, small_text: r.small_text, font: r.font, locked: r.locked });
@@ -185,6 +218,9 @@ function pageOut(st: State, r: Row): WikiPage {
     body_html: r.body_html,
     template: r.template,
     journal: r.journal,
+    kind: r.kind,
+    database: r.database ? structuredClone(r.database) : null,
+    props: structuredClone(r.props),
     verification: r.verified_at
       ? { by: userRef(r.verified_by), at: r.verified_at, until: r.verified_until, expired: !!r.verified_until && Date.parse(r.verified_until) < Date.now() }
       : null,
@@ -405,6 +441,10 @@ function newRow(fields: Partial<Row> & Pick<Row, "id" | "parent_id" | "title" | 
     verified_by: null,
     verified_at: null,
     verified_until: null,
+    kind: "page",
+    database: null,
+    props: {},
+    seq: ++rowSeq,
     ...DEFAULT_LOOK,
     ...fields,
   };
@@ -442,6 +482,7 @@ export function registerWiki() {
   registerTemplates();
   registerPersonal();
   registerLinks();
+  registerDatabases();
 }
 
 function registerPages() {
@@ -475,12 +516,38 @@ function registerPages() {
     if (par) {
       if (par.up.length + 2 > MAX_DEPTH) throw tooDeep();
       space = { owner: par.row.private_to, team: par.row.team_id };
-      template = par.row.template;
+      // A template under a database is that database's own.
+      template = par.row.template || (ctx.body.template === true && par.row.kind === "database");
     } else {
       space = spaceRef(ctx, ctx.body.space, ctx.body.team_id);
       template = ctx.body.template === true;
     }
-    const r = newRow({ id: uuid(), parent_id: par?.row.id ?? null, title, icon, body_html: body, private_to: space.owner, team_id: space.team, template });
+    const kind = ctx.body.kind ?? "";
+    if (kind !== "" && kind !== "page" && kind !== "database") throw invalid("kind must be page or database");
+    let database: Database | null = null;
+    if (kind === "database") database = ctx.body.database !== undefined ? cleanDatabase(ctx.body.database, null) : defaultDatabase();
+    else if (ctx.body.database !== undefined) throw dbInvalid("database goes with kind database.");
+    let props: Record<string, DbValue> = {};
+    const parDb = par?.row.database;
+    if (par && parDb) {
+      let refs = noRefs();
+      if (ctx.body.props !== undefined) ({ props, refs } = cleanProps(ctx.body.props, parDb, props));
+      checkRefs(ctx, st, refs);
+      if (!template) nextRowNumbers(parDb, props);
+    } else if (ctx.body.props !== undefined) throw dbInvalid("props go with a page in a database.");
+    const r = newRow({
+      id: uuid(),
+      parent_id: par?.row.id ?? null,
+      title,
+      icon,
+      body_html: body,
+      private_to: space.owner,
+      team_id: space.team,
+      template,
+      kind: kind === "database" ? "database" : "page",
+      database,
+      props,
+    });
     st.pages.push(r);
     place(st, r.parent_id, r.private_to, r.team_id, r.template, r.id, typeof ctx.body.position === "number" ? ctx.body.position : undefined);
     record(st, r, false);
@@ -504,18 +571,25 @@ function registerPages() {
     const lookChanged = JSON.stringify(look) !== JSON.stringify(settingsOf(r));
     const textChanged = next.title !== r.title || next.icon !== r.icon || next.body_html !== r.body_html;
     const verify = verificationPatch(ctx.body);
+    const data = dataPatch(ctx, st, r);
     if (textChanged) {
       Object.assign(r, next, { version: r.version + 1, updated_by: db.meId, updated_at: nowIso() });
       record(st, r, true);
     }
     if (lookChanged) Object.assign(r, look);
     const verifyChanged = applyVerification(r, verify);
-    if (textChanged || lookChanged || verifyChanged) {
-      const data = eventPage(r);
+    const dataChanged = applyData(st, r, data);
+    if (textChanged || lookChanged || verifyChanged || dataChanged) {
+      const ev = eventPage(r);
       // Readers of the page take the new look as it comes: it has no version to compare.
-      if (lookChanged) data.settings = look;
-      if (verifyChanged) data.verification = pageOut(st, r).verification;
-      pageEvent(ctx.ws, r, "wiki_page.updated", data);
+      if (lookChanged) ev.settings = look;
+      if (verifyChanged) ev.verification = pageOut(st, r).verification;
+      // A row's values and a database's schema have no version either: taken as they come.
+      if (dataChanged) {
+        if (r.database) ev.database = structuredClone(r.database);
+        else ev.props = structuredClone(r.props);
+      }
+      pageEvent(ctx.ws, r, "wiki_page.updated", ev);
     }
     return pageOut(st, r);
   });
@@ -612,6 +686,478 @@ function registerPages() {
     const q = ctx.query.get("q") ?? "";
     const limit = Math.min(Number(ctx.query.get("limit") ?? 20) || 20, 50);
     return pageOf(searchWiki(ctx.ws, q, limit));
+  });
+}
+
+// ─── Databases (database.go, rows.go) ──────────────────────────────────────
+// A page that is a database keeps its properties and views; its rows are its subpages, each
+// holding values of the properties. Filters, sorts, groups, formulas and rollups are the
+// app's to compute: the API keeps the schema and the values, each checked against its type.
+
+const PROP_TYPES: readonly DbPropType[] = [
+  "title",
+  "text",
+  "number",
+  "select",
+  "multi_select",
+  "status",
+  "date",
+  "person",
+  "checkbox",
+  "url",
+  "email",
+  "phone",
+  "files",
+  "relation",
+  "rollup",
+  "formula",
+  "created_time",
+  "created_by",
+  "edited_time",
+  "edited_by",
+  "unique_id",
+  "ticket",
+];
+/** Types whose value is computed, never stored on a row. */
+const COMPUTED_TYPES: readonly DbPropType[] = ["title", "rollup", "formula", "created_time", "created_by", "edited_time", "edited_by", "unique_id"];
+const VIEW_TYPES: readonly string[] = ["table", "board", "list", "gallery", "calendar", "timeline", "chart"];
+const TONES: readonly string[] = ["gray", "brown", "orange", "yellow", "green", "blue", "purple", "pink", "red"];
+const ROLLUP_FNS: readonly string[] = [
+  "show_original",
+  "count",
+  "count_values",
+  "count_unique",
+  "count_empty",
+  "count_not_empty",
+  "percent_empty",
+  "percent_not_empty",
+  "sum",
+  "avg",
+  "median",
+  "min",
+  "max",
+  "range",
+  "earliest",
+  "latest",
+  "checked",
+  "unchecked",
+  "percent_checked",
+];
+const NUMBER_FORMATS: readonly string[] = ["number", "comma", "percent", "usd", "eur", "gbp", "jpy", "chf", "cad", "aud", "inr", "brl", "huf", "pln"];
+const PROP_ID = /^[a-z0-9_]{1,24}$/;
+const MAX_DATABASE_BYTES = 128 << 10;
+const MAX_PROPS_BYTES = 64 << 10;
+const MAX_PROPERTIES = 100;
+const MAX_VIEWS = 50;
+const MAX_OPTIONS = 200;
+const MAX_REFS = 100;
+
+/** A new database: a title and tags, seen as a table. */
+const defaultDatabase = (): Database => ({
+  properties: [
+    { id: "title", name: "Name", type: "title" },
+    { id: "tags", name: "Tags", type: "multi_select" },
+  ],
+  views: [{ id: "table", name: "Table", type: "table" }],
+  next_id: 1,
+});
+
+const dbInvalid = (detail: string) => new HttpError(422, "invalid_database", detail);
+const runes = (s: string) => [...s].length;
+const shortText = (s: string, max: number) => runes(s) <= max && !s.includes("\0");
+const fields = (s: string) => s.split(/\s+/).filter(Boolean).join(" ");
+const jsonBytes = (v: unknown) => new TextEncoder().encode(JSON.stringify(v) ?? "").length;
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+// Reading a schema as Go's json.Unmarshal reads it into the API's types: null is the zero
+// value, a value of the wrong JSON type is refused, unknown fields are dropped.
+const shapeError = (at: string) => dbInvalid(`The database isn't valid: ${at} has the wrong type.`);
+const readStr = (v: unknown, at: string): string => {
+  if (v === undefined || v === null) return "";
+  if (typeof v !== "string") throw shapeError(at);
+  return v;
+};
+const readObj = (v: unknown, at: string): Record<string, unknown> => {
+  if (v === undefined || v === null) return {};
+  if (!isObject(v)) throw shapeError(at);
+  return v;
+};
+const readList = <T>(v: unknown, at: string, each: (x: unknown, at: string) => T): T[] => {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v)) throw shapeError(at);
+  return v.map((x, i) => each(x, `${at}[${i}]`));
+};
+
+function readProperty(v: unknown, at: string): DbProperty {
+  const o = readObj(v, at);
+  const p: DbProperty = { id: readStr(o.id, `${at}.id`), name: readStr(o.name, `${at}.name`), type: readStr(o.type, `${at}.type`) as DbPropType };
+  const options = readList(o.options, `${at}.options`, (x, a): DbOption => {
+    const opt = readObj(x, a);
+    return { id: readStr(opt.id, `${a}.id`), name: readStr(opt.name, `${a}.name`), color: readStr(opt.color, `${a}.color`) as DbOption["color"] };
+  });
+  if (options.length) p.options = options;
+  const groups = readList(o.groups, `${at}.groups`, (x, a): DbStatusGroup => {
+    const g = readObj(x, a);
+    return { id: readStr(g.id, `${a}.id`) as DbStatusGroup["id"], option_ids: readList(g.option_ids, `${a}.option_ids`, readStr) };
+  });
+  if (groups.length) p.groups = groups;
+  const format = readStr(o.number_format, `${at}.number_format`);
+  if (format) p.number_format = format as DbProperty["number_format"];
+  if (o.date_time !== undefined && o.date_time !== null && typeof o.date_time !== "boolean") throw shapeError(`${at}.date_time`);
+  if (o.date_time) p.date_time = true;
+  if (o.database_id !== undefined && o.database_id !== null) {
+    const id = typeof o.database_id === "string" ? parseUUID(o.database_id) : undefined;
+    if (!id) throw shapeError(`${at}.database_id`);
+    p.database_id = id;
+  }
+  if (o.rollup !== undefined && o.rollup !== null) {
+    const r = readObj(o.rollup, `${at}.rollup`);
+    p.rollup = { relation: readStr(r.relation, `${at}.rollup.relation`), property: readStr(r.property, `${at}.rollup.property`), fn: readStr(r.fn, `${at}.rollup.fn`) as NonNullable<DbProperty["rollup"]>["fn"] };
+  }
+  for (const k of ["formula", "prefix", "description"] as const) {
+    const t = readStr(o[k], `${at}.${k}`);
+    if (t) p[k] = t;
+  }
+  return p;
+}
+
+function readView(v: unknown, at: string): DbView {
+  const o = readObj(v, at);
+  const view: DbView = { id: readStr(o.id, `${at}.id`), name: readStr(o.name, `${at}.name`), type: readStr(o.type, `${at}.type`) as DbView["type"] };
+  const settings = readObj(o.settings, `${at}.settings`);
+  if (Object.keys(settings).length) view.settings = structuredClone(settings) as DbView["settings"];
+  return view;
+}
+
+/** cleanDatabase: checks a database's schema. prev keeps the unique-id counter, which only the API moves. */
+function cleanDatabase(raw: unknown, prev: Database | null): Database {
+  if (jsonBytes(raw) > MAX_DATABASE_BYTES) throw dbInvalid("A database's properties and views hold up to 128 KB.");
+  const o = readObj(raw, "database");
+  if (o.next_id !== undefined && o.next_id !== null && !Number.isInteger(o.next_id)) throw shapeError("next_id");
+  const db: Database = { properties: readList(o.properties, "properties", readProperty), views: readList(o.views, "views", readView), next_id: 1 };
+  if (db.properties.length === 0 || db.properties.length > MAX_PROPERTIES) throw dbInvalid("A database has 1 to 100 properties.");
+  if (db.views.length === 0 || db.views.length > MAX_VIEWS) throw dbInvalid("A database has 1 to 50 views.");
+  const seen = new Set<string>();
+  let titles = 0;
+  for (const p of db.properties) {
+    p.name = fields(p.name);
+    if (!PROP_ID.test(p.id) || seen.has(p.id)) throw dbInvalid("Each property needs its own id of 1 to 24 lowercase letters, digits or _.");
+    seen.add(p.id);
+    if (p.name === "" || !shortText(p.name, 100)) throw dbInvalid("Each property needs a name of 1 to 100 characters.");
+    if (!PROP_TYPES.includes(p.type)) throw dbInvalid(`${JSON.stringify(p.type)} isn't a property type.`);
+    if (p.type === "title") titles++;
+    if (!shortText(p.description ?? "", 500) || !shortText(p.prefix ?? "", 10) || !shortText(p.formula ?? "", 4000))
+      throw dbInvalid("A property's description, prefix or formula is too long.");
+    switch (p.type) {
+      case "select":
+      case "multi_select":
+      case "status": {
+        const options = p.options ?? [];
+        if (options.length > MAX_OPTIONS) throw dbInvalid("A property has up to 200 options.");
+        const ids = new Set<string>();
+        for (const o of options) {
+          o.name = fields(o.name);
+          if (!PROP_ID.test(o.id) || ids.has(o.id) || o.name === "" || !shortText(o.name, 100) || !TONES.includes(o.color))
+            throw dbInvalid("Each option needs its own id, a name of 1 to 100 characters and a colour.");
+          ids.add(o.id);
+        }
+        if (p.type === "status") {
+          for (const g of p.groups ?? []) {
+            if (!["todo", "doing", "done"].includes(g.id)) throw dbInvalid("A status group is todo, doing or done.");
+            if (g.option_ids.some((id) => !ids.has(id))) throw dbInvalid("A status group names an option the property doesn't have.");
+          }
+        }
+        break;
+      }
+      case "number":
+        if (p.number_format && !NUMBER_FORMATS.includes(p.number_format)) throw dbInvalid(`${JSON.stringify(p.number_format)} isn't a number format.`);
+        break;
+      case "relation":
+        if (!p.database_id) throw dbInvalid("A relation names the database it relates to.");
+        break;
+      case "rollup":
+        if (!p.rollup || !ROLLUP_FNS.includes(p.rollup.fn) || !PROP_ID.test(p.rollup.relation) || !PROP_ID.test(p.rollup.property))
+          throw dbInvalid("A rollup names a relation, a property of the related pages and how to sum them up.");
+        break;
+    }
+  }
+  if (titles !== 1 || db.properties[0]?.type !== "title") throw dbInvalid("A database's first property is its title, and it has only one.");
+  for (const p of db.properties) {
+    if (p.type !== "rollup") continue;
+    const rel = db.properties.find((x) => x.id === p.rollup?.relation);
+    if (rel?.type !== "relation") throw dbInvalid("A rollup's relation is a relation property of the database.");
+  }
+  const views = new Set<string>();
+  for (const v of db.views) {
+    v.name = fields(v.name);
+    if (!PROP_ID.test(v.id) || views.has(v.id) || v.name === "" || !shortText(v.name, 100) || !VIEW_TYPES.includes(v.type))
+      throw dbInvalid("Each view needs its own id, a name of 1 to 100 characters and a type.");
+    views.add(v.id);
+  }
+  db.next_id = prev ? Math.max(prev.next_id, 1) : 1;
+  return db;
+}
+
+/** The people, related pages (by the database they must be rows of) and tickets a row's values name. */
+type PropRefs = { users: string[]; tickets: string[]; pages: Map<string, string[]> };
+const noRefs = (): PropRefs => ({ users: [], tickets: [], pages: new Map() });
+
+/**
+ * cleanProps: checks a row's values against its database's properties and merges them into
+ * cur: a value of null takes it away; values of computed or unknown properties are refused.
+ */
+function cleanProps(raw: unknown, database: Database, cur: Record<string, DbValue>): { props: Record<string, DbValue>; refs: PropRefs } {
+  const refs = noRefs();
+  if (jsonBytes(raw) > MAX_PROPS_BYTES) throw dbInvalid("A row's values hold up to 64 KB.");
+  if (raw !== null && !isObject(raw)) throw dbInvalid("props is an object of property ids to values.");
+  const out: Record<string, DbValue> = { ...cur };
+  const byId = new Map(database.properties.map((p) => [p.id, p]));
+  for (const [id, v] of Object.entries(raw ?? {})) {
+    const p = byId.get(id);
+    if (!p) throw dbInvalid(`The database has no property ${JSON.stringify(id)}.`);
+    if (COMPUTED_TYPES.includes(p.type)) throw dbInvalid(`${p.name} is worked out by the database, not set.`);
+    if (v === null || v === undefined) {
+      delete out[id];
+      continue;
+    }
+    out[id] = cleanValue(p, v, refs);
+  }
+  // Values of properties the database no longer has are dropped.
+  for (const k of Object.keys(out)) if (!byId.has(k)) delete out[k];
+  return { props: out, refs };
+}
+
+// Go's RE2 \s is [\t\n\f\r ].
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const RFC3339 = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-](\d{2}):(\d{2}))$/;
+const EMAILISH = /^[^\t\n\f\r @]{1,64}@[^\t\n\f\r @]{1,255}$/u;
+const PHONEISH = /^[0-9+()./\t\n\f\r -]{1,40}$/;
+const WIKI_SRC = /^(https:\/\/[^\s"'<>]+|\/v1\/attachments\/[0-9a-f-]{36}(\?[^\s"'<>]*)?)$/i;
+const TEXT_LIMITS: Record<string, number> = { text: 10000, url: 2000, email: 320, phone: 40 };
+
+function validDate(s: string): boolean {
+  if (ISO_DAY.test(s)) return isDate(s);
+  const m = RFC3339.exec(s);
+  if (!m || !isDate(m[1])) return false;
+  const [h, min, sec] = [Number(m[2]), Number(m[3]), Number(m[4])];
+  const zone = m[7] === undefined || (Number(m[7]) < 24 && Number(m[8]) < 60);
+  return h < 24 && min < 60 && sec < 60 && zone;
+}
+
+function cleanValue(p: DbProperty, v: unknown, refs: PropRefs): DbValue {
+  const bad = () => dbInvalid(`${p.name} doesn't take that value.`);
+  const optionIds = (p.options ?? []).map((o) => o.id);
+  const ids = (): string[] => {
+    if (!Array.isArray(v) || v.length > MAX_REFS) throw bad();
+    const out: string[] = [];
+    for (const x of v) {
+      const id = typeof x === "string" ? parseUUID(x) : undefined;
+      if (!id) throw bad();
+      if (!out.includes(id)) out.push(id);
+    }
+    return out;
+  };
+  switch (p.type) {
+    case "text":
+    case "url":
+    case "email":
+    case "phone": {
+      if (typeof v !== "string") throw bad();
+      const s = v.trim();
+      const limit = TEXT_LIMITS[p.type]!;
+      if (!shortText(s, limit)) throw dbInvalid(`${p.name} holds up to ${limit} characters.`);
+      if (s === "") return null;
+      if (p.type === "url") {
+        let u: URL | undefined;
+        try {
+          u = new URL(s);
+        } catch {
+          u = undefined;
+        }
+        if (!u || (u.protocol !== "https:" && u.protocol !== "http:") || !u.host) throw dbInvalid(`${p.name} takes a web address.`);
+      }
+      if (p.type === "email" && !EMAILISH.test(s)) throw dbInvalid(`${p.name} takes an email address.`);
+      if (p.type === "phone" && !PHONEISH.test(s)) throw dbInvalid(`${p.name} takes a phone number.`);
+      return s;
+    }
+    case "number":
+      if (typeof v !== "number" || !Number.isFinite(v)) throw bad();
+      return v;
+    case "checkbox":
+      if (typeof v !== "boolean") throw bad();
+      return v;
+    case "select":
+    case "status":
+      if (typeof v !== "string" || !optionIds.includes(v)) throw bad();
+      return v;
+    case "multi_select": {
+      if (!Array.isArray(v) || v.length > MAX_OPTIONS) throw bad();
+      const out: string[] = [];
+      for (const x of v) {
+        if (typeof x !== "string" || !optionIds.includes(x)) throw bad();
+        if (!out.includes(x)) out.push(x);
+      }
+      return out;
+    }
+    case "date": {
+      const wrong = () => dbInvalid(`${p.name} takes a day (YYYY-MM-DD) or a moment (RFC 3339), and an end.`);
+      if (!isObject(v)) throw wrong();
+      const start = v.start ?? "";
+      const end = v.end ?? undefined;
+      if (typeof start !== "string" || !validDate(start) || (end !== undefined && (typeof end !== "string" || !validDate(end)))) throw wrong();
+      const d: DbDate = { start };
+      if (end !== undefined) d.end = end;
+      return d;
+    }
+    case "files": {
+      if (!Array.isArray(v) || v.length > 50) throw bad();
+      return v.map((x): DbFile => {
+        if (x !== null && !isObject(x)) throw bad();
+        const url = x?.url ?? "";
+        const name = x?.name ?? "";
+        if (typeof url !== "string" || typeof name !== "string") throw bad();
+        if (!WIKI_SRC.test(url) || !shortText(name, 255)) throw dbInvalid(`${p.name} takes uploaded files or https links.`);
+        return { url, name };
+      });
+    }
+    case "person": {
+      const list = ids();
+      refs.users.push(...list);
+      return list;
+    }
+    case "relation": {
+      const list = ids();
+      const dbId = p.database_id!;
+      refs.pages.set(dbId, [...(refs.pages.get(dbId) ?? []), ...list]);
+      return list;
+    }
+    case "ticket": {
+      const list = ids();
+      refs.tickets.push(...list);
+      return list;
+    }
+  }
+  throw bad();
+}
+
+/**
+ * checkRefs: a row's values name only the workspace's members, rows of the related
+ * databases the viewer may see, and tickets the viewer may see.
+ */
+function checkRefs(ctx: Ctx, st: State, refs: PropRefs) {
+  const uniq = (list: string[]) => [...new Set(list)];
+  const users = uniq(refs.users);
+  if (users.some((u) => !ctx.ws.members.some((m) => m.user_id === u))) throw dbInvalid("A person property names someone who isn't a member of this workspace.");
+  const v = viewerOf(ctx.ws);
+  for (const [database, pages] of refs.pages) {
+    const ok = (id: string) => st.pages.some((r) => r.id === id && r.parent_id === database && !r.deleted_at && !r.template && sees(v, r));
+    if (!uniq(pages).every(ok)) throw dbInvalid("A relation names a page that isn't a row of its database.");
+  }
+  const ticketOk = (id: string) => ctx.ws.tickets.some((t) => t.id === id && (!t.team_id || !v.hidden.has(t.team_id)));
+  if (!uniq(refs.tickets).every(ticketOk)) throw dbInvalid("A ticket property names a ticket that isn't in this workspace.");
+}
+
+/** nextRowNumbers: a new row of the database gets its unique ids (one per unique id property), and the counter moves. */
+function nextRowNumbers(database: Database, props: Record<string, DbValue>) {
+  const uniqueIds = database.properties.filter((p) => p.type === "unique_id");
+  if (!uniqueIds.length) return;
+  for (const p of uniqueIds) props[p.id] = database.next_id;
+  database.next_id++;
+}
+
+/** numberRows: every row of a database gets a unique id it lacks for the unique id properties ids (added after the rows were), oldest first. */
+function numberRows(st: State, dbId: string, database: Database, ids: string[]) {
+  if (!ids.length) return;
+  const rows = st.pages.filter((r) => r.parent_id === dbId && !r.template).sort((a, b) => a.created_at.localeCompare(b.created_at) || a.seq - b.seq);
+  for (const r of rows) {
+    for (const id of ids) if (!(id in r.props)) r.props[id] = database.next_id;
+    database.next_id++;
+  }
+}
+
+/** JSON with every object's keys sorted, as Go marshals a map: equal values compare equal. */
+const canonical = (v: unknown) => JSON.stringify(v, (_k, x: unknown) => (isObject(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x));
+
+type DataPatch = { database?: Database; props?: Record<string, DbValue> };
+
+/** The schema or values a PATCH asks for, checked before anything changes (applyData's checks). */
+function dataPatch(ctx: Ctx, st: State, r: Row): DataPatch {
+  const out: DataPatch = {};
+  if (ctx.body.database !== undefined) {
+    if (r.kind !== "database" || !r.database) throw dbInvalid("Only a database has properties and views.");
+    out.database = cleanDatabase(ctx.body.database, r.database);
+  }
+  if (ctx.body.props !== undefined) {
+    const parentDb = r.parent_id ? st.pages.find((p) => p.id === r.parent_id)?.database : null;
+    if (!parentDb) throw dbInvalid("Only a database's rows have values.");
+    const { props, refs } = cleanProps(ctx.body.props, parentDb, r.props);
+    checkRefs(ctx, st, refs);
+    out.props = props;
+  }
+  return out;
+}
+
+/**
+ * applyData: replaces a database's schema or changes a row's values; whether anything
+ * changed. Neither moves the version nor adds a revision; a row's values do move its last edit.
+ */
+function applyData(st: State, r: Row, data: DataPatch): boolean {
+  let changed = false;
+  if (data.database && r.database) {
+    const prev = r.database;
+    // A unique id property added now numbers the rows already there.
+    const added = data.database.properties.filter((np) => np.type === "unique_id" && !prev.properties.some((x) => x.id === np.id && x.type === "unique_id")).map((p) => p.id);
+    numberRows(st, r.id, data.database, added);
+    r.database = data.database;
+    changed = true;
+  }
+  if (data.props && canonical(data.props) !== canonical(r.props)) {
+    Object.assign(r, { props: data.props, updated_by: db.meId, updated_at: nowIso() });
+    changed = true;
+  }
+  return changed;
+}
+
+const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+const unescapeHtml = (s: string) =>
+  s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+    if (e[0] !== "#") return ENTITIES[e.toLowerCase()] ?? m;
+    const n = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+    return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : m;
+  });
+
+/** hd.Excerpt: the text's first n characters, cut at a word when one ends past the middle. */
+function excerpt(text: string, n: number): string {
+  const s = fields(text);
+  const chars = [...s];
+  if (chars.length <= n) return s;
+  let out = chars.slice(0, n).join("");
+  const i = out.lastIndexOf(" ");
+  if (i > n / 2) out = out.slice(0, i);
+  return `${out.replace(/[ ,.;:]+$/, "")}…`;
+}
+
+function registerDatabases() {
+  get("/v1/wiki/databases/:id/rows", (ctx): DbRows => {
+    const st = stateOf(ctx.ws);
+    const d = find(ctx, st);
+    if (d.kind !== "database") throw notFound("Database");
+    const under = st.pages.filter((r) => r.parent_id === d.id && !r.deleted_at).sort(byPosition);
+    const data = under
+      .filter((r) => !r.template)
+      .map(
+        (r): DbRow => ({
+          ...node(r),
+          props: structuredClone(r.props),
+          cover: r.cover,
+          cover_y: r.cover_y,
+          excerpt: excerpt(unescapeHtml(fields(r.body_html.replace(/<[^>]+>/g, " ")).slice(0, 400)), 280),
+          created_at: r.created_at,
+          created_by: userRef(r.created_by),
+          updated_by: userRef(r.updated_by),
+        }),
+      );
+    return { data, templates: under.filter((r) => r.template).map(node) };
   });
 }
 
@@ -720,8 +1266,14 @@ function registerTemplates() {
     // Copies of the pages, ids mapped so links inside the copy point at the copy.
     const fresh = new Map(pages.map((id) => [id, uuid()]));
     const remap = (body: string) => [...fresh].reduce((b, [old, now]) => b.replaceAll(old, now), body);
+    const remapJSON = <T>(v: T): T => JSON.parse(remap(JSON.stringify(v))) as T;
+    const parDb = par?.row.database;
     for (const id of pages) {
       const x = st.pages.find((p) => p.id === id)!;
+      // A row copied into a database keeps its values; one copied anywhere else is a page and leaves them behind.
+      const props = id === src.id && !parDb ? {} : remapJSON(x.props);
+      // A row copied into a database is a new row: it gets its own unique id.
+      if (id === src.id && parDb && !template) nextRowNumbers(parDb, props);
       const copy = newRow({
         ...settingsOf(x),
         id: fresh.get(id)!,
@@ -733,6 +1285,9 @@ function registerTemplates() {
         private_to: owner,
         team_id: team,
         template,
+        kind: x.kind,
+        database: x.database ? remapJSON(x.database) : null,
+        props,
       });
       st.pages.push(copy);
       record(st, copy, false);
@@ -903,7 +1458,7 @@ const HANDBOOK: Seed[] = [
     cover: "gradient:ocean",
     days: 40,
     by: 0,
-    body: "<p>How our team works: who answers what, how fast, and what to do when it gets hard. Start with the escalation process if you are new. #handbook #process</p><h2>Our promises</h2><ul><li><p>A first answer within 4 business hours.</p></li><li><p>Every customer gets a name, never a queue.</p></li><li><p>We say when we don't know yet, and when we'll know.</p></li></ul>",
+    body: "<p>How our team works: who answers what, how fast, and what to do when it gets hard. Start with the escalation process if you are new. #handbook #process</p><h2>Our promises</h2><ul><li><p>A first answer within 4 business hours.</p></li><li><p>Every customer gets a name, never a queue.</p></li><li><p>We say when we don't know yet, and when we'll know.</p></li></ul><h2>Bugs</h2><p>Before you escalate a bug, look it up in Known issues: it may have a workaround to send already. Add a row when it is new, with the ticket and the accounts it hits.</p>",
     children: [
       {
         title: "Escalation process",
@@ -1013,6 +1568,7 @@ function seedHandbook(ws: WsData, st: State) {
       if (x.children) add(x.children, r.id, template);
     });
   add(HANDBOOK, null, false);
+  seedDatabases(ws, st, person, HANDBOOK.length);
   // Where one page names another, the first mention becomes a link, as a team would write it:
   // the backlinks, the graph and link previews have something to show.
   const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -1037,4 +1593,427 @@ function seedHandbook(ws: WsData, st: State) {
       st.visits.push({ user_id: u, page_id: p.id, visits, last_at: ago(((i + 1) * (j + 2) * 5 * HOUR) % (20 * DAY)), seq: ++visitSeq });
     });
   });
+}
+
+// ─── The starter databases ─────────────────────────────────────────────────
+
+type SeedRow = { title: string; icon?: string; days: number; by: number; body?: string; props: Record<string, DbValue> };
+
+const day = (offset: number) => new Date(NOW + offset * DAY).toISOString().slice(0, 10);
+
+/**
+ * Two linked databases a support team keeps: the known issues customers write in about
+ * (with a workaround, the ticket and the accounts hit) and the key accounts they belong
+ * to. The handbook links to the known issues, so its backlinks show it.
+ */
+function seedDatabases(ws: WsData, st: State, person: (i: number) => string | null, position: number) {
+  const people = (...i: number[]) => i.map(person).filter((x): x is string => !!x);
+  const hidden = viewerOf(ws).hidden;
+  const ticket = (subject: string): Record<string, DbValue> => {
+    const t = ws.tickets.find((x) => x.subject === subject && (!x.team_id || !hidden.has(x.team_id)));
+    return t ? { ticket: [t.id] } : {};
+  };
+  const accountsId = uuid();
+  const issuesId = uuid();
+
+  const accounts: Database = {
+    properties: [
+      { id: "title", name: "Name", type: "title" },
+      {
+        id: "plan",
+        name: "Plan",
+        type: "select",
+        options: [
+          { id: "team", name: "Team", color: "blue" },
+          { id: "business", name: "Business", color: "purple" },
+          { id: "enterprise", name: "Enterprise", color: "orange" },
+        ],
+      },
+      { id: "mrr", name: "MRR", type: "number", number_format: "usd" },
+      { id: "owner", name: "Account owner", type: "person" },
+      { id: "renewal", name: "Renewal", type: "date" },
+      {
+        id: "health",
+        name: "Health",
+        type: "status",
+        options: [
+          { id: "at_risk", name: "At risk", color: "red" },
+          { id: "attention", name: "Needs attention", color: "yellow" },
+          { id: "healthy", name: "Healthy", color: "green" },
+        ],
+        groups: [
+          { id: "todo", option_ids: ["at_risk"] },
+          { id: "doing", option_ids: ["attention"] },
+          { id: "done", option_ids: ["healthy"] },
+        ],
+      },
+    ],
+    views: [
+      { id: "all", name: "All accounts", type: "table", settings: { sorts: [{ property: "mrr", dir: "desc" }], calculations: { mrr: "sum" }, widths: { title: 220 } } },
+      { id: "health", name: "By health", type: "board", settings: { group_by: "health" } },
+      { id: "renewals", name: "Renewals", type: "calendar", settings: { date_property: "renewal" } },
+    ],
+    next_id: 1,
+  };
+  const ACCOUNTS: SeedRow[] = [
+    {
+      title: "Northwind Traders",
+      days: 120,
+      by: 0,
+      body: "<p>Enterprise plan, 240 seats across sales and operations. Their IT team runs SSO through Azure AD and reviews every incident report.</p>",
+      props: { plan: "enterprise", mrr: 9600, owner: people(0), renewal: { start: day(118) }, health: "attention" },
+    },
+    {
+      title: "Oakridge Health",
+      days: 110,
+      by: 1,
+      body: "<p>Business plan with a HIPAA addendum. Sign-in goes through Okta; any login trouble reaches their clinicians first.</p>",
+      props: { plan: "business", mrr: 4200, owner: people(1), renewal: { start: day(41) }, health: "at_risk" },
+    },
+    {
+      title: "Kestrel Robotics",
+      days: 95,
+      by: 2,
+      body: "<p>Field engineers on phones and tablets, often offline for hours. Mobile stability matters more than anything else to them.</p>",
+      props: { plan: "business", mrr: 3300, owner: people(2), renewal: { start: day(73) }, health: "attention" },
+    },
+    {
+      title: "Copperleaf",
+      days: 80,
+      by: 1,
+      body: "<p>Builds on our API and webhooks; their engineers read the changelog closely.</p>",
+      props: { plan: "business", mrr: 2100, owner: people(1), renewal: { start: day(160) }, health: "healthy" },
+    },
+    {
+      title: "Fjord Analytics",
+      days: 70,
+      by: 0,
+      body: "<p>Team plan. Syncs notes nightly through the API into their warehouse.</p>",
+      props: { plan: "team", mrr: 1450, owner: people(0), renewal: { start: day(205) }, health: "healthy" },
+    },
+  ];
+
+  const issues: Database = {
+    properties: [
+      { id: "title", name: "Name", type: "title" },
+      {
+        id: "status",
+        name: "Status",
+        type: "status",
+        options: [
+          { id: "investigating", name: "Investigating", color: "orange" },
+          { id: "fixing", name: "Fix in progress", color: "blue" },
+          { id: "fixed", name: "Fixed", color: "green" },
+        ],
+        groups: [
+          { id: "todo", option_ids: ["investigating"] },
+          { id: "doing", option_ids: ["fixing"] },
+          { id: "done", option_ids: ["fixed"] },
+        ],
+      },
+      {
+        id: "severity",
+        name: "Severity",
+        type: "select",
+        options: [
+          { id: "low", name: "Low", color: "gray" },
+          { id: "medium", name: "Medium", color: "yellow" },
+          { id: "high", name: "High", color: "orange" },
+          { id: "critical", name: "Critical", color: "red" },
+        ],
+      },
+      {
+        id: "area",
+        name: "Area",
+        type: "multi_select",
+        options: [
+          { id: "billing", name: "Billing", color: "green" },
+          { id: "login", name: "Login", color: "blue" },
+          { id: "mobile", name: "Mobile", color: "pink" },
+          { id: "email", name: "Email", color: "yellow" },
+          { id: "integrations", name: "Integrations", color: "purple" },
+        ],
+      },
+      { id: "owner", name: "Owner", type: "person" },
+      { id: "reported", name: "Reported", type: "date" },
+      { id: "affected", name: "Customers affected", type: "number", number_format: "number" },
+      { id: "workaround", name: "Workaround", type: "text" },
+      { id: "ticket", name: "Ticket", type: "ticket" },
+      { id: "issue_id", name: "Issue ID", type: "unique_id", prefix: "ISS" },
+      { id: "published", name: "Workaround published", type: "checkbox" },
+      { id: "docs", name: "Docs", type: "url" },
+      { id: "weight", name: "Weight", type: "formula", formula: 'prop("Customers affected") * if(prop("Severity") == "Critical", 3, 1)', description: "Customers affected, tripled for critical issues" },
+      { id: "customer", name: "Customer", type: "relation", database_id: accountsId },
+      { id: "mrr_at_risk", name: "MRR at risk", type: "rollup", rollup: { relation: "customer", property: "mrr", fn: "sum" } },
+    ],
+    views: [
+      {
+        id: "all",
+        name: "All issues",
+        type: "table",
+        settings: {
+          sorts: [{ property: "reported", dir: "desc" }],
+          order: ["title", "issue_id", "status", "severity", "area", "owner", "affected", "customer", "mrr_at_risk", "reported", "ticket", "workaround", "published", "docs", "weight"],
+          hidden: ["docs", "weight", "published"],
+          widths: { title: 320, workaround: 280 },
+          calculations: { affected: "sum", mrr_at_risk: "sum" },
+        },
+      },
+      { id: "board", name: "By status", type: "board", settings: { group_by: "status", hidden: ["workaround", "docs", "ticket", "published", "weight", "mrr_at_risk"] } },
+      { id: "timeline", name: "Timeline", type: "timeline", settings: { date_property: "reported", timeline_scale: "week" } },
+      { id: "calendar", name: "Calendar", type: "calendar", settings: { date_property: "reported" } },
+      { id: "gallery", name: "Gallery", type: "gallery", settings: { card_preview: "content", card_size: "medium" } },
+      { id: "chart", name: "Severity chart", type: "chart", settings: { chart: { kind: "bar", x: "severity" } } },
+    ],
+    next_id: 1,
+  };
+  const ISSUES: SeedRow[] = [
+    {
+      title: "SSO sign-in loops back to the login page",
+      icon: "🔁",
+      days: 9,
+      by: 1,
+      body: "<h2>Symptoms</h2><p>After a successful Okta or Azure AD sign-in, the browser lands on the login page again. It happens when a stale session cookie from before the SSO switch is still around.</p><h2>Status</h2><p>The fix that clears the old cookie ships with the next release. Oakridge Health is the hardest hit: follow the Escalation process for any new report from them.</p>",
+      props: {
+        status: "fixing",
+        severity: "critical",
+        area: ["login"],
+        owner: people(1),
+        reported: { start: day(-9) },
+        affected: 14,
+        workaround: "Sign out everywhere from Settings, clear cookies for margin.app, then sign in with SSO again.",
+        ...ticket("SSO login loops back to sign-in page"),
+        published: true,
+        docs: "https://docs.margin.app/sso/troubleshooting",
+      },
+    },
+    {
+      title: "Mobile app crashes opening shared notebooks",
+      icon: "📱",
+      days: 6,
+      by: 2,
+      body: "<h2>Symptoms</h2><p>The iOS app closes as soon as someone opens a notebook another workspace shared with them. Android is not affected.</p><h2>What we know</h2><p>Only notebooks with more than 500 pages crash. Engineering has a crash log and is reproducing it.</p>",
+      props: {
+        status: "investigating",
+        severity: "high",
+        area: ["mobile"],
+        owner: people(2),
+        reported: { start: day(-6) },
+        affected: 23,
+        workaround: "Open the notebook on the web once and pin it for offline use; the app then opens it.",
+        ...ticket("Mobile app crashes when opening shared notebook"),
+        published: false,
+      },
+    },
+    {
+      title: "Offline notes lost when Android reconnects",
+      icon: "📵",
+      days: 3,
+      by: 0,
+      body: "<p>Notes written offline on Android disappear when the phone reconnects, if the same notebook changed on the web in the meantime. Kestrel Robotics has reported it three times.</p>",
+      props: {
+        status: "investigating",
+        severity: "critical",
+        area: ["mobile"],
+        owner: people(0),
+        reported: { start: day(-3) },
+        affected: 7,
+        workaround: "Copy the note's text before reconnecting, or stay online while writing.",
+        ...ticket("Offline mode on Android"),
+        published: false,
+      },
+    },
+    {
+      title: "Webhook signatures fail after rotating the secret",
+      icon: "🪝",
+      days: 24,
+      by: 1,
+      body: "<p>For ten minutes after a rotation we kept signing with the old secret. Fixed on the 14th; deliveries now switch to the new secret at once.</p>",
+      props: {
+        status: "fixed",
+        severity: "high",
+        area: ["integrations"],
+        owner: people(1),
+        reported: { start: day(-24), end: day(-17) },
+        affected: 6,
+        workaround: "Accept both the old and the new secret for a few minutes after rotating.",
+        ...ticket("Webhook signature doesn't validate"),
+        published: true,
+        docs: "https://docs.margin.app/api/webhooks#signatures",
+      },
+    },
+    {
+      title: "Invoices show the old VAT number",
+      icon: "🧾",
+      days: 30,
+      by: 2,
+      body: "<p>Invoices issued before a VAT number change kept showing the old one when downloaded again. Corrected invoices can be sent from the billing tool.</p>",
+      props: {
+        status: "fixed",
+        severity: "medium",
+        area: ["billing"],
+        owner: people(2),
+        reported: { start: day(-30), end: day(-21) },
+        affected: 9,
+        ...ticket("Invoice shows wrong VAT number"),
+        published: true,
+        docs: "https://docs.margin.app/billing/invoices",
+      },
+    },
+    {
+      title: "API rate limit too strict for nightly syncs",
+      icon: "🚦",
+      days: 12,
+      by: 0,
+      body: "<p>Syncs of more than 10,000 notes hit 429 responses after the limit change. A higher limit for bulk sync tokens is being rolled out.</p>",
+      props: {
+        status: "fixing",
+        severity: "medium",
+        area: ["integrations"],
+        owner: people(0),
+        reported: { start: day(-12) },
+        affected: 4,
+        workaround: "Back off on 429 using the Retry-After header, and sync in pages of 500.",
+        ...ticket("API returns 429 when syncing notes"),
+        published: true,
+        docs: "https://docs.margin.app/api/rate-limits",
+      },
+    },
+    {
+      title: "Two-factor codes rejected after a phone transfer",
+      icon: "🔐",
+      days: 5,
+      by: 1,
+      props: {
+        status: "investigating",
+        severity: "high",
+        area: ["login", "mobile"],
+        owner: people(1),
+        reported: { start: day(-5) },
+        affected: 11,
+        workaround: "Sign in with a recovery code, then set up two-factor again on the new phone.",
+        ...ticket("Two-factor codes not accepted"),
+        published: true,
+      },
+    },
+    {
+      title: "Calendar notes stop syncing with Google Calendar",
+      icon: "📅",
+      days: 15,
+      by: 2,
+      body: "<p>Meeting notes stop appearing for new events when the Google token expires silently. We now refresh it before it expires; affected workspaces need to reconnect once.</p>",
+      props: {
+        status: "fixing",
+        severity: "medium",
+        area: ["integrations", "email"],
+        owner: people(2),
+        reported: { start: day(-15) },
+        affected: 31,
+        workaround: "Disconnect and reconnect Google Calendar in Settings > Integrations.",
+        ...ticket("Calendar integration stopped syncing"),
+        published: true,
+      },
+    },
+    {
+      title: "Reminder emails arrive an hour late after the clock change",
+      icon: "⏰",
+      days: 20,
+      by: 0,
+      props: {
+        status: "fixed",
+        severity: "low",
+        area: ["email"],
+        owner: people(0),
+        reported: { start: day(-20), end: day(-16) },
+        affected: 18,
+        ...ticket("Wrong timezone on reminders"),
+        published: false,
+      },
+    },
+    {
+      title: "Text pasted from Google Docs gets extra spacing",
+      icon: "📋",
+      days: 2,
+      by: 1,
+      body: "<p>Every paragraph pasted from Google Docs gets an empty line after it. Plain-text paste (Ctrl+Shift+V) avoids it.</p>",
+      props: {
+        status: "investigating",
+        severity: "low",
+        area: [],
+        owner: people(1),
+        reported: { start: day(-2) },
+        affected: 5,
+        workaround: "Paste as plain text with Ctrl+Shift+V (Cmd+Shift+V on a Mac).",
+        ...ticket("Pasting from Google Docs adds extra spacing"),
+        published: false,
+      },
+    },
+  ];
+  // Which accounts each issue hits, by the issue's index.
+  const HITS: Record<number, string[]> = {
+    0: ["Oakridge Health", "Northwind Traders"],
+    1: ["Kestrel Robotics"],
+    2: ["Kestrel Robotics"],
+    3: ["Copperleaf"],
+    4: ["Northwind Traders"],
+    5: ["Fjord Analytics", "Copperleaf"],
+    7: ["Northwind Traders", "Oakridge Health"],
+  };
+
+  const add = (fields: Parameters<typeof newRow>[0], days: number, by: string | null) => {
+    const at = ago(days * DAY);
+    const r = newRow({ version: 2, created_by: by, updated_by: by, created_at: ago((days + 1) * DAY), updated_at: at, ...fields });
+    st.pages.push(r);
+    st.revisions.push({ id: uuid(), page_id: r.id, title: r.title, icon: r.icon, body_html: r.body_html, author: by, created_at: at, updated_at: at });
+    return r;
+  };
+  const accountsPage = add(
+    { id: accountsId, parent_id: null, title: "Key accounts", icon: "🏢", body_html: "<p>The customers we look after most closely: their plan, who owns them and how they are doing.</p>", position: position + 1, kind: "database", database: accounts },
+    130,
+    person(0),
+  );
+  const accountIds = new Map<string, string>();
+  ACCOUNTS.forEach((x, i) => {
+    const props = { ...x.props };
+    nextRowNumbers(accounts, props);
+    accountIds.set(x.title, add({ id: uuid(), parent_id: accountsPage.id, title: x.title, icon: x.icon ?? "", body_html: x.body ?? "", position: i, props }, x.days, person(x.by)).id);
+  });
+  const issuesPage = add(
+    {
+      id: issuesId,
+      parent_id: null,
+      title: "Known issues",
+      icon: "🐞",
+      cover: "gradient:dusk",
+      body_html: "<p>Bugs customers write in about, with the workaround to send them and the accounts they hit. Link the ticket, and mark the workaround published once the help center has it.</p>",
+      position,
+      kind: "database",
+      database: issues,
+    },
+    40,
+    person(1),
+  );
+  // Oldest first, so the issue ids count up with the dates.
+  const order = ISSUES.map((x, i) => ({ x, i })).sort((a, b) => b.x.days - a.x.days);
+  for (const { x, i } of order) {
+    const customer = (HITS[i] ?? []).map((n) => accountIds.get(n)).filter((id): id is string => !!id);
+    const props: Record<string, DbValue> = { ...x.props, ...(customer.length ? { customer } : {}) };
+    nextRowNumbers(issues, props);
+    add({ id: uuid(), parent_id: issuesPage.id, title: x.title, icon: x.icon ?? "", body_html: x.body ?? "", position: i, props }, x.days, person(x.by));
+  }
+  // A new issue starts from the database's own template.
+  add(
+    {
+      id: uuid(),
+      parent_id: issuesPage.id,
+      title: "New issue",
+      icon: "🐞",
+      body_html: "<h2>Symptoms</h2><p></p><h2>Steps to reproduce</h2><ol><li><p></p></li></ol><h2>Workaround</h2><p></p>",
+      position: 0,
+      template: true,
+      props: { status: "investigating", severity: "medium" },
+    },
+    40,
+    person(1),
+  );
 }

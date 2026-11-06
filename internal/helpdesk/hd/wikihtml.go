@@ -13,7 +13,7 @@ import (
 // https, colours only the named tones.
 var (
 	wikiTone     = regexp.MustCompile(`^(gray|brown|orange|yellow|green|blue|purple|pink|red)$`)
-	wikiDivTypes = regexp.MustCompile(`^(callout|columns|column|file|video|audio|bookmark|embed|toc|subpage|block-math|detailsContent)$`)
+	wikiDivTypes = regexp.MustCompile(`^(callout|columns|column|file|video|audio|bookmark|embed|toc|subpage|database|block-math|detailsContent)$`)
 	wikiSpanType = regexp.MustCompile(`^(mention|inline-math)$`)
 	wikiSrc      = regexp.MustCompile(`^(?i:https://[^\s"'<>]+|/v1/attachments/[0-9a-fA-F-]{36}(\?[^\s"'<>]*)?)$`)
 	httpsURL     = regexp.MustCompile(`^(?i:https://[^\s"'<>]+)$`)
@@ -59,6 +59,8 @@ func newWikiPolicy() *bluemonday.Policy {
 	p.AllowAttrs("data-mime").Matching(mimeType).OnElements("div")
 	p.AllowAttrs("data-url", "data-image").Matching(httpsURL).OnElements("div")
 	p.AllowAttrs("data-id").Matching(uuidAttr).OnElements("div")
+	// A database inside a page: which database, and which of its views shows.
+	p.AllowAttrs("data-view").Matching(regexp.MustCompile(`^[a-z0-9_]{1,24}$`)).OnElements("div")
 	p.AllowAttrs("data-latex").Matching(latexText).OnElements("div", "span")
 
 	// Inline: people (the rich policy's), equations, links to pages, dates, highlights.

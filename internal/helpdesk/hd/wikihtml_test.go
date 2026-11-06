@@ -40,6 +40,7 @@ func TestSanitizeWikiKeepsEditorBlocks(t *testing.T) {
 		`data-url="https://www.youtube.com/watch?v=dQw4w9WgXcQ" data-type="embed"`,
 		`data-type="toc"`,
 		`data-id="3dcb61fa-abc6-47ac-9916-06acf5b7fdf7" data-type="subpage"`,
+		`data-id="3dcb61fa-abc6-47ac-9916-06acf5b7fdf7" data-view="board" data-type="database"`,
 		`<hr data-block-id="b37d5388-87d5-44c1-a276-3283de343057">`,
 		`<table data-block-id="e6b6142d-fc10-455d-9034-f78c32cda801" style="min-width: 160px">`,
 		`<col style="min-width: 80px">`,

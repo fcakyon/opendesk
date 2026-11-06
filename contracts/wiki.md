@@ -69,6 +69,67 @@ interface WikiSearchHit {
 }
 ```
 
+## Databases
+
+A page can be a **database** (`kind: "database"`, migration `000722`): it keeps `database` (its properties
+and views) and its subpages are its **rows**, each a page with `props`, its values by property id.
+Rows open as pages (title, text, history, links) and are left out of the sidebar; the database's views
+show them. Create one with `POST /v1/wiki/pages` `{kind: "database", database?}` (left out: a title and
+tags in a table); a row with `{parent_id: <database>, title, props}`. `PATCH` takes `database` (replaced
+whole, a database only) and `props` (merged; `null` takes a value away; a row only); neither moves the
+version or adds a revision, and `wiki_page.updated` carries `database` or `props`. A row's values move
+its last edit. `GET /v1/wiki/databases/{id}/rows` answers `{data: DbRow[], templates: WikiNode[]}`:
+every row in the tree, in order, with `props`, `cover`, `excerpt` (how its text starts), who made and
+last edited it; and the database's own templates (pages made with `{parent_id: <database>, template:
+true}`), which a new row can start as a copy of. Wrong shapes are `422 invalid_database`.
+
+```ts
+interface Database { properties: DbProperty[]; views: DbView[]; next_id: number }
+interface DbProperty {
+  id: string            // [a-z0-9_]{1,24}; the first property is the title ("title"), the only one
+  name: string          // 1..100
+  type: "title" | "text" | "number" | "select" | "multi_select" | "status" | "date" | "person" | "checkbox"
+      | "url" | "email" | "phone" | "files" | "relation" | "rollup" | "formula" | "created_time"
+      | "created_by" | "edited_time" | "edited_by" | "unique_id" | "ticket"
+  options?: { id: string; name: string; color: Tone }[]   // select, multi_select, status (200 at most)
+  groups?: { id: "todo" | "doing" | "done"; option_ids: string[] }[]   // status
+  number_format?: "number" | "comma" | "percent" | "usd" | "eur" | "gbp" | "jpy" | "chf" | "cad" | "aud" | "inr" | "brl" | "huf" | "pln"
+  date_time?: boolean   // date values have a time of day
+  database_id?: string  // relation: the related database
+  rollup?: { relation: string; property: string; fn: RollupFn }   // the relation property, a property of the related rows
+  formula?: string      // the app's formula language (prop("Name"), if, concat, dateBetween, ...)
+  prefix?: string       // unique_id: letters before the number
+  description?: string
+}
+interface DbView { id: string; name: string; type: "table" | "board" | "list" | "gallery" | "calendar" | "timeline" | "chart"; settings?: object }
+```
+
+| type | stored value |
+| --- | --- |
+| text, url (http or https), email, phone | string |
+| number | number |
+| checkbox | boolean |
+| select, status | an option id |
+| multi_select | option ids |
+| date | `{start, end?}`: `YYYY-MM-DD` or RFC 3339 |
+| person | user ids of the workspace's members |
+| relation | page ids of live rows of the related database the caller may see |
+| ticket | ticket ids of the workspace the caller may see |
+| files | `[{url, name}]`: https or our attachments |
+| title, rollup, formula, created/edited time and by | computed by the app, never stored |
+| unique_id | numbered by the API: each new row, and the rows there when the property is added (oldest first) |
+
+At most 100 properties, 50 views, 128 KB of schema and 64 KB of values per row. A view's `settings`
+belong to the app (`web/src/lib/api/types.ts` `DbViewSettings`): filters (rules in and/or groups),
+sorts, the property it groups by, the properties shown and their order and widths, the calendar's and
+timeline's date properties, card previews, chart settings and column calculations. Filtering, sorting,
+grouping, formulas, rollups and calculations run in the app (`web/src/lib/wiki/db`).
+
+A page holds a database with the block `<div data-type="database" data-id="<database id>" data-view="<view id>">`:
+the database's view inside the page, with its controls. "/table", "/board", "/list", "/gallery", "/calendar"
+and "/timeline" make a database under the page and show it there; "Linked view of a database" shows one
+that exists. Duplicating a database copies its rows; a row copied into a database gets a new unique id.
+
 ## Private pages and teamspaces
 
 A top-level page lives in a **space**, and every page under it lives there too:

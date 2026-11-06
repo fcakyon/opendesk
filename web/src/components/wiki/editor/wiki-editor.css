@@ -100,7 +100,7 @@
 }
 
 /* A selected atom (image, file, embed) and a selected block. */
-.wiki-prose .ProseMirror-selectednode:not(figure, [data-node-view-wrapper]) {
+.wiki-prose .ProseMirror-selectednode:not(figure, [data-node-view-wrapper], .node-database) {
   outline: none;
   background: var(--tone-blue-soft);
   border-radius: 4px;

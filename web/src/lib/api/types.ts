@@ -1616,7 +1616,152 @@ export type WikiNode = {
   template?: boolean;
   /** Verified, and not past the day it was verified until. */
   verified?: boolean;
+  /** "database": its subpages are its rows (contracts/wiki.md "Databases"). */
+  kind?: "page" | "database";
 };
+
+// ─── Wiki databases (contracts/wiki.md "Databases") ─────────────────────────
+
+export type DbPropType =
+  | "title"
+  | "text"
+  | "number"
+  | "select"
+  | "multi_select"
+  | "status"
+  | "date"
+  | "person"
+  | "checkbox"
+  | "url"
+  | "email"
+  | "phone"
+  | "files"
+  | "relation"
+  | "rollup"
+  | "formula"
+  | "created_time"
+  | "created_by"
+  | "edited_time"
+  | "edited_by"
+  | "unique_id"
+  | "ticket";
+
+export type DbTone = "gray" | "brown" | "orange" | "yellow" | "green" | "blue" | "purple" | "pink" | "red";
+export type DbOption = { id: string; name: string; color: DbTone };
+export type DbStatusGroup = { id: "todo" | "doing" | "done"; option_ids: string[] };
+export type DbRollupFn =
+  | "show_original"
+  | "count"
+  | "count_values"
+  | "count_unique"
+  | "count_empty"
+  | "count_not_empty"
+  | "percent_empty"
+  | "percent_not_empty"
+  | "sum"
+  | "avg"
+  | "median"
+  | "min"
+  | "max"
+  | "range"
+  | "earliest"
+  | "latest"
+  | "checked"
+  | "unchecked"
+  | "percent_checked";
+export type DbNumberFormat = "number" | "comma" | "percent" | "usd" | "eur" | "gbp" | "jpy" | "chf" | "cad" | "aud" | "inr" | "brl" | "huf" | "pln";
+
+export type DbProperty = {
+  /** [a-z0-9_]{1,24}, stable; the first property is the title ("title"). */
+  id: string;
+  name: string;
+  type: DbPropType;
+  options?: DbOption[];
+  groups?: DbStatusGroup[];
+  number_format?: DbNumberFormat;
+  /** A date's values have a time of day. */
+  date_time?: boolean;
+  /** A relation's database. */
+  database_id?: string;
+  rollup?: { relation: string; property: string; fn: DbRollupFn };
+  formula?: string;
+  /** A unique id's letters (TASK-12). */
+  prefix?: string;
+  description?: string;
+};
+
+export type DbViewType = "table" | "board" | "list" | "gallery" | "calendar" | "timeline" | "chart";
+export type DbView = { id: string; name: string; type: DbViewType; settings?: DbViewSettings };
+
+export type DbFilterRule = { property: string; op: string; value?: unknown };
+export type DbFilterGroup = { op: "and" | "or"; rules: (DbFilterRule | DbFilterGroup)[] };
+export type DbSort = { property: string; dir: "asc" | "desc" };
+export type DbCalc =
+  | "none"
+  | "count"
+  | "count_values"
+  | "count_unique"
+  | "count_empty"
+  | "count_not_empty"
+  | "percent_empty"
+  | "percent_not_empty"
+  | "sum"
+  | "avg"
+  | "median"
+  | "min"
+  | "max"
+  | "range"
+  | "earliest"
+  | "latest"
+  | "checked"
+  | "unchecked"
+  | "percent_checked";
+
+/** A view's own way of showing the rows; the API keeps it as written. */
+export type DbViewSettings = {
+  filter?: DbFilterGroup;
+  sorts?: DbSort[];
+  /** Board columns; groups in a table or list. */
+  group_by?: string;
+  hide_empty_groups?: boolean;
+  collapsed_groups?: string[];
+  /** Property ids hidden in this view. */
+  hidden?: string[];
+  /** Property ids in this view's order. */
+  order?: string[];
+  widths?: Record<string, number>;
+  wrap?: boolean;
+  /** Calendar and timeline: the date property, and the timeline's end. */
+  date_property?: string;
+  end_property?: string;
+  timeline_scale?: "day" | "week" | "month" | "quarter";
+  card_preview?: "none" | "cover" | "content";
+  card_size?: "small" | "medium" | "large";
+  card_fit?: boolean;
+  calculations?: Record<string, DbCalc>;
+  chart?: { kind: "bar" | "column" | "donut" | "line"; x: string; y?: { property: string; fn: "count" | "sum" | "avg" } };
+  /** A linked view shows rows of this database but filters on its own (the block's). */
+  open_in?: "peek" | "page";
+};
+
+export type Database = { properties: DbProperty[]; views: DbView[]; next_id: number };
+
+export type DbDate = { start: string; end?: string };
+export type DbFile = { url: string; name: string };
+/** A row's stored value of a property, by its type. */
+export type DbValue = string | number | boolean | string[] | DbDate | DbFile[] | null;
+
+export type DbRow = WikiNode & {
+  props: Record<string, DbValue>;
+  cover: string;
+  cover_y: number;
+  excerpt: string;
+  created_at: string;
+  created_by: UserRef | null;
+  updated_by: UserRef | null;
+};
+
+export type DbRows = { data: DbRow[]; templates: WikiNode[] };
 
 /** Where a top-level page lives. */
 export type WikiSpace = "workspace" | "private" | "team";
@@ -1647,6 +1792,9 @@ export type WikiPageSettings = {
 export type WikiPage = WikiNode &
   WikiPageSettings & {
   body_html: string;
+  kind: "page" | "database";
+  database: Database | null;
+  props: Record<string, DbValue>;
   verification: WikiVerification | null;
   /** In the trash since; null for a page in the tree. */
   deleted_at: string | null;
@@ -1688,7 +1836,7 @@ export type WikiSearchHit = {
   updated_at: string;
 };
 
-export type WikiPagePatch = Partial<WikiPageSettings> & { title?: string; icon?: string; body_html?: string; version?: number; verified?: boolean; verified_days?: number };
+export type WikiPagePatch = Partial<WikiPageSettings> & { title?: string; icon?: string; body_html?: string; version?: number; verified?: boolean; verified_days?: number; database?: Database; props?: Record<string, DbValue> };
 
 export type ReportsOverview = {
   created: number;

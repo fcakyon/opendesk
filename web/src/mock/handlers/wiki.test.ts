@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
-import type { WikiDailyNote, WikiNode, WikiPage, WikiPageViews, WikiRevision, WikiSearchHit, WikiTrashed } from "@/lib/api/types";
+import type { Database, DbProperty, DbRows, WikiDailyNote, WikiNode, WikiPage, WikiPageViews, WikiRevision, WikiSearchHit, WikiTrashed } from "@/lib/api/types";
 import { qk } from "@/lib/queries";
 import { applyWikiEvent } from "@/lib/wiki/events";
 import { resetSavers, saverFor } from "@/lib/wiki/saver";
@@ -237,6 +237,290 @@ describe("mock wiki", () => {
   });
 });
 
+describe("mock wiki databases", () => {
+  installMock();
+
+  const ws = () => db.workspaces[0]!;
+  const create = async (b: Record<string, unknown>) => {
+    const r = await call("POST", "/v1/wiki/pages", b);
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    return r.body as WikiPage;
+  };
+  const rowsOf = async (id: string) => (await call("GET", `/v1/wiki/databases/${id}/rows`)).body as DbRows;
+  const schema = (customers: string, extra: DbProperty[] = []): Database => ({
+    properties: [
+      { id: "title", name: "Name", type: "title" },
+      {
+        id: "status",
+        name: "Status",
+        type: "status",
+        options: [
+          { id: "open", name: "Open", color: "blue" },
+          { id: "done", name: "Done", color: "green" },
+        ],
+        groups: [
+          { id: "todo", option_ids: ["open"] },
+          { id: "done", option_ids: ["done"] },
+        ],
+      },
+      { id: "tags", name: "Tags", type: "multi_select", options: [{ id: "ui", name: "UI", color: "pink" }] },
+      { id: "points", name: "Points", type: "number", number_format: "number" },
+      { id: "due", name: "Due", type: "date" },
+      { id: "owner", name: "Owner", type: "person" },
+      { id: "link", name: "Link", type: "url" },
+      { id: "note", name: "Note", type: "text" },
+      { id: "done", name: "Done", type: "checkbox" },
+      { id: "ticket", name: "Ticket", type: "ticket" },
+      { id: "customer", name: "Customer", type: "relation", database_id: customers },
+      { id: "count", name: "Customers", type: "rollup", rollup: { relation: "customer", property: "title", fn: "count" } },
+      { id: "score", name: "Score", type: "formula", formula: 'prop("Points") * 2' },
+      ...extra,
+    ],
+    views: [
+      { id: "table", name: "All", type: "table" },
+      { id: "board", name: "Board", type: "board", settings: { group_by: "status" } },
+    ],
+    next_id: 1,
+  });
+  /** A ticket of the workspace the person sees, and one of a private team they aren't on. */
+  const tickets = () => {
+    const hidden = new Set(ws().teams.filter((t) => t.private && !t.members.some((m) => m.user_id === db.meId)).map((t) => t.id));
+    return { seen: ws().tickets.find((t) => !t.team_id || !hidden.has(t.team_id))!.id, hidden: ws().tickets.find((t) => t.team_id && hidden.has(t.team_id))?.id };
+  };
+
+  it("creates a database with a title and tags in a table, and only with kind database", async () => {
+    const d = await create({ title: "Bugs", kind: "database" });
+    expect(d).toMatchObject({ kind: "database", props: {} });
+    expect(d.database).toEqual({
+      properties: [
+        { id: "title", name: "Name", type: "title" },
+        { id: "tags", name: "Tags", type: "multi_select" },
+      ],
+      views: [{ id: "table", name: "Table", type: "table" }],
+      next_id: 1,
+    });
+    expect((await tree()).find((n) => n.id === d.id)?.kind).toBe("database");
+    const page = await create({ title: "Plain" });
+    expect(page).toMatchObject({ kind: "page", database: null, props: {} });
+    expect(await call("POST", "/v1/wiki/pages", { title: "x", database: d.database })).toMatchObject({ status: 422, body: { code: "invalid_database" } });
+    expect((await call("POST", "/v1/wiki/pages", { title: "x", kind: "sheet" })).status).toBe(422);
+    expect(await call("POST", "/v1/wiki/pages", { title: "x", props: { tags: [] } })).toMatchObject({ status: 422, body: { code: "invalid_database" } });
+    // A schema given at creation is checked like a PATCH's.
+    const customers = await create({ title: "Customers", kind: "database" });
+    const made = await create({ title: "Bugs 2", kind: "database", database: schema(customers.id) });
+    expect(made.database?.properties).toHaveLength(13);
+    expect((await call("POST", "/v1/wiki/pages", { title: "x", kind: "database", database: { properties: [], views: [] } })).body.code).toBe("invalid_database");
+  });
+
+  it("replaces a schema without a new version and refuses one that breaks the rules", async () => {
+    const customers = await create({ title: "Customers", kind: "database" });
+    const d = await create({ title: "Bugs", kind: "database" });
+    const s = schema(customers.id);
+    const ok = (await call("PATCH", `/v1/wiki/pages/${d.id}`, { database: { ...s, properties: s.properties.map((p) => (p.id === "points" ? { ...p, name: "  Story   points " } : p)) } })).body as WikiPage;
+    expect(ok.version).toBe(d.version);
+    expect(ok.database?.properties.find((p) => p.id === "points")?.name).toBe("Story points");
+    expect(ok.database?.views[1]?.settings).toEqual({ group_by: "status" });
+    const title: DbProperty = { id: "title", name: "N", type: "title" };
+    const views = s.views;
+    const bad: unknown[] = [
+      { properties: [{ id: "x", name: "X", type: "text" }], views },
+      { properties: [title, { id: "t2", name: "N2", type: "title" }], views },
+      { properties: [title, { id: "x", name: "X", type: "magic" }], views },
+      { properties: [title, { id: "r", name: "R", type: "rollup", rollup: { relation: "title", property: "x", fn: "count" } }], views },
+      { properties: [title, { id: "r", name: "R", type: "rollup", rollup: { relation: "title", property: "x", fn: "guess" } }], views },
+      { properties: [title], views: [] },
+      { properties: [title, { id: "Bad id", name: "X", type: "text" }], views },
+      { properties: [title, { id: "x", name: "X", type: "text" }, { id: "x", name: "Y", type: "text" }], views },
+      { properties: [title, { id: "x", name: "   ", type: "text" }], views },
+      { properties: [title, { id: "s", name: "S", type: "select", options: [{ id: "a", name: "A", color: "teal" }] }], views },
+      { properties: [title, { id: "s", name: "S", type: "status", options: [{ id: "a", name: "A", color: "red" }], groups: [{ id: "later", option_ids: ["a"] }] }], views },
+      { properties: [title, { id: "s", name: "S", type: "status", options: [{ id: "a", name: "A", color: "red" }], groups: [{ id: "todo", option_ids: ["b"] }] }], views },
+      { properties: [title, { id: "n", name: "N", type: "number", number_format: "roman" }], views },
+      { properties: [title, { id: "r", name: "R", type: "relation" }], views },
+      { properties: [title, { id: "p", name: "P", type: "unique_id", prefix: "TOOLONGPREFIX" }], views },
+      { properties: [title], views: [{ id: "v", name: "V", type: "kanban" }] },
+      { properties: [title], views: [{ id: "v", name: "V", type: "table" }, { id: "v", name: "W", type: "list" }] },
+      { properties: [{ ...title, name: 5 }], views },
+      { properties: "title", views },
+    ];
+    for (const b of bad) expect(await call("PATCH", `/v1/wiki/pages/${d.id}`, { database: b }), JSON.stringify(b)).toMatchObject({ status: 422, body: { code: "invalid_database" } });
+    // A schema goes with a database only; a viewer reads it and no more.
+    const page = await create({ title: "Plain" });
+    expect((await call("PATCH", `/v1/wiki/pages/${page.id}`, { database: s })).body.code).toBe("invalid_database");
+    const me = ws().members.find((m) => m.user_id === db.meId)!;
+    const role = me.role;
+    me.role = "viewer";
+    try {
+      expect((await call("PATCH", `/v1/wiki/pages/${d.id}`, { database: s })).status).toBe(403);
+      expect((await call("GET", `/v1/wiki/databases/${d.id}/rows`)).status).toBe(200);
+    } finally {
+      me.role = role;
+    }
+  });
+
+  it("checks a row's values against their properties and the workspace", async () => {
+    const customers = await create({ title: "Customers", kind: "database" });
+    const acme = await create({ title: "Acme", parent_id: customers.id });
+    const d = await create({ title: "Bugs", kind: "database", database: schema(customers.id) });
+    const { seen, hidden } = tickets();
+    const row = await create({
+      title: "Login fails",
+      parent_id: d.id,
+      body_html: "<p>Steps to reproduce: open the app.</p>",
+      props: {
+        status: "open",
+        tags: ["ui", "ui"],
+        points: 3,
+        due: { start: "2026-11-10", end: "2026-11-12T09:30:00Z" },
+        owner: [db.meId.toUpperCase()],
+        link: " https://example.com/bug ",
+        done: false,
+        ticket: [seen],
+        customer: [acme.id],
+      },
+    });
+    expect(row.props).toEqual({
+      status: "open",
+      tags: ["ui"],
+      points: 3,
+      due: { start: "2026-11-10", end: "2026-11-12T09:30:00Z" },
+      owner: [db.meId],
+      link: "https://example.com/bug",
+      done: false,
+      ticket: [seen],
+      customer: [acme.id],
+    });
+    const stranger = db.workspaces[1]!.members.find((m) => !ws().members.some((x) => x.user_id === m.user_id))?.user_id ?? "00000000-0000-4000-8000-000000000000";
+    const bad: Record<string, unknown>[] = [
+      { status: "nope" },
+      { tags: ["nope"] },
+      { tags: "ui" },
+      { points: "three" },
+      { due: { start: "tomorrow" } },
+      { due: { start: "2026-02-30" } },
+      { due: "2026-11-10" },
+      { owner: [`${db.meId}x`] },
+      { owner: [stranger] },
+      { link: "javascript:alert(1)" },
+      { note: "x".repeat(10001) },
+      { done: "yes" },
+      { customer: [d.id] },
+      { customer: [row.id] },
+      { ticket: ["00000000-0000-4000-8000-000000000000"] },
+      ...(hidden ? [{ ticket: [hidden] }] : []),
+      { score: 1 },
+      { count: 1 },
+      { title: "x" },
+      { nothing: 1 },
+    ];
+    for (const p of bad) expect(await call("PATCH", `/v1/wiki/pages/${row.id}`, { props: p }), JSON.stringify(p)).toMatchObject({ status: 422, body: { code: "invalid_database" } });
+    expect(await call("POST", "/v1/wiki/pages", { title: "x", parent_id: d.id, props: { status: "nope" } })).toMatchObject({ status: 422, body: { code: "invalid_database" } });
+    // A related page in the trash is no row to name.
+    const gone = await create({ title: "Gone", parent_id: customers.id });
+    await call("POST", `/v1/wiki/pages/${gone.id}/trash`);
+    expect((await call("PATCH", `/v1/wiki/pages/${row.id}`, { props: { customer: [gone.id] } })).status).toBe(422);
+    // Values go with rows only.
+    expect((await call("PATCH", `/v1/wiki/pages/${d.id}`, { props: { status: "open" } })).body.code).toBe("invalid_database");
+  });
+
+  it("merges a change, takes a null value away and moves no version", async () => {
+    const d = await create({ title: "Bugs", kind: "database", database: schema((await create({ title: "C", kind: "database" })).id) });
+    const row = await create({ title: "Row", parent_id: d.id, props: { status: "open", points: 3, link: "https://example.com" } });
+    const merged = (await call("PATCH", `/v1/wiki/pages/${row.id}`, { props: { status: "done", link: null, note: "  " } })).body as WikiPage;
+    expect(merged.props).toEqual({ status: "done", points: 3, note: null });
+    expect(merged.version).toBe(row.version);
+    expect((await call("GET", `/v1/wiki/pages/${row.id}/revisions`)).body.data).toHaveLength(1);
+    // A property the schema no longer has loses its values at the row's next change.
+    await call("PATCH", `/v1/wiki/pages/${d.id}`, { database: { ...d.database!, properties: d.database!.properties.filter((p) => p.id !== "points") } });
+    expect(((await call("PATCH", `/v1/wiki/pages/${row.id}`, { props: { done: true } })).body as WikiPage).props).toEqual({ status: "done", note: null, done: true });
+  });
+
+  it("numbers rows with unique ids on create, when one is added later and when a row is copied in", async () => {
+    const customers = await create({ title: "Customers", kind: "database" });
+    const d = await create({ title: "Bugs", kind: "database", database: schema(customers.id) });
+    const first = await create({ title: "First", parent_id: d.id });
+    await create({ title: "Second", parent_id: d.id });
+    // Rows already there are numbered oldest first, whatever their order; new rows count on.
+    await call("POST", `/v1/wiki/pages/${first.id}/move`, { parent_id: d.id, position: 1 });
+    const s = schema(customers.id, [{ id: "num", name: "ID", type: "unique_id", prefix: "BUG" }]);
+    const patched = (await call("PATCH", `/v1/wiki/pages/${d.id}`, { database: s })).body as WikiPage;
+    expect(patched.database?.next_id).toBe(3);
+    const third = await create({ title: "Third", parent_id: d.id });
+    expect(third.props.num).toBe(3);
+    const rows = await rowsOf(d.id);
+    expect(rows.data.map((r) => [r.title, r.props.num])).toEqual([
+      ["Second", 2],
+      ["First", 1],
+      ["Third", 3],
+    ]);
+    expect((await call("PATCH", `/v1/wiki/pages/${third.id}`, { props: { num: 9 } })).body.code).toBe("invalid_database");
+    // Sending the schema again leaves the numbers and the counter as they are.
+    expect(((await call("PATCH", `/v1/wiki/pages/${d.id}`, { database: { ...s, next_id: 1 } })).body as WikiPage).database?.next_id).toBe(4);
+    // A copy in the database is a new row with its own number; a copy elsewhere is a page without values.
+    await call("PATCH", `/v1/wiki/pages/${third.id}`, { props: { status: "open" } });
+    const again = (await call("POST", `/v1/wiki/pages/${third.id}/duplicate`, { parent_id: d.id, title: "Third again" })).body as WikiPage;
+    expect(again.props).toEqual({ status: "open", num: 4 });
+    const out = (await call("POST", `/v1/wiki/pages/${third.id}/duplicate`, { parent_id: null })).body as WikiPage;
+    expect(out.props).toEqual({});
+  });
+
+  it("lists a database's rows with their values and excerpts, its templates apart", async () => {
+    const issues = (await tree()).find((n) => n.title === "Known issues")!;
+    expect(issues.kind).toBe("database");
+    const rows = await rowsOf(issues.id);
+    expect(rows.data).toHaveLength(10);
+    expect(rows.templates.map((t) => t.title)).toEqual(["New issue"]);
+    expect(rows.data.map((r) => r.position)).toEqual(rows.data.map((_, i) => i));
+    expect(rows.data.map((r) => r.props.issue_id).sort((a, b) => Number(a) - Number(b))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    const sso = rows.data[0]!;
+    expect(sso).toMatchObject({ title: "SSO sign-in loops back to the login page", props: { status: "fixing", severity: "critical" }, cover: "", cover_y: expect.any(Number), created_at: expect.any(String) });
+    expect(sso.created_by?.id).toBeTruthy();
+    expect(sso.excerpt.startsWith("Symptoms After a successful Okta")).toBe(true);
+    expect([...sso.excerpt].length).toBeLessThanOrEqual(281);
+    expect(sso.excerpt.endsWith("…")).toBe(true);
+    expect((sso.props.ticket as string[]).length).toBe(1);
+    expect(rows.data.some((r) => r.excerpt === "")).toBe(true);
+    // The schema shows off every view, a relation to the key accounts and a rollup through it.
+    const page = (await call("GET", `/v1/wiki/pages/${issues.id}`)).body as WikiPage;
+    expect(page.database?.views.map((v) => v.type)).toEqual(["table", "board", "timeline", "calendar", "gallery", "chart"]);
+    const accounts = (await tree()).find((n) => n.title === "Key accounts")!;
+    expect(page.database?.properties.find((p) => p.type === "relation")?.database_id).toBe(accounts.id);
+    expect((await rowsOf(accounts.id)).data).toHaveLength(5);
+    // Every seeded value passes the API's checks.
+    for (const r of [...rows.data, ...(await rowsOf(accounts.id)).data]) {
+      const { issue_id: _n, ...values } = r.props;
+      expect((await call("PATCH", `/v1/wiki/pages/${r.id}`, { props: values })).status, r.title).toBe(200);
+    }
+    // The handbook links to it, so the backlinks show it.
+    const handbook = (await tree()).find((n) => n.title === "Support handbook")!;
+    expect(ids((await call("GET", `/v1/wiki/pages/${issues.id}/backlinks`)).body.data)).toContain(handbook.id);
+    // A page that isn't a database has no rows.
+    expect((await call("GET", `/v1/wiki/databases/${handbook.id}/rows`)).status).toBe(404);
+  });
+
+  it("duplicates a database with its rows, their values pointing at the copies", async () => {
+    const d = await create({ title: "Tasks", kind: "database" });
+    // A relation of the database to itself: the copy relates to its own rows.
+    const s: Database = { ...d.database!, properties: [...d.database!.properties, { id: "blocked", name: "Blocked by", type: "relation", database_id: d.id }, { id: "num", name: "ID", type: "unique_id" }] };
+    await call("PATCH", `/v1/wiki/pages/${d.id}`, { database: s });
+    const a = await create({ title: "A", parent_id: d.id });
+    const b = await create({ title: "B", parent_id: d.id, props: { blocked: [a.id] } });
+    expect(b.props).toEqual({ blocked: [a.id], num: 2 });
+    const copy = await call("POST", `/v1/wiki/pages/${d.id}/duplicate`, { title: "Tasks copy" });
+    expect(copy.status).toBe(201);
+    const c = copy.body as WikiPage;
+    expect(c).toMatchObject({ kind: "database", title: "Tasks copy" });
+    expect(c.database?.next_id).toBe(3);
+    expect(c.database?.properties.find((p) => p.id === "blocked")?.database_id).toBe(c.id);
+    const rows = await rowsOf(c.id);
+    expect(rows.data.map((r) => r.title)).toEqual(["A", "B"]);
+    const [ca, cb] = rows.data;
+    expect(cb!.props).toEqual({ blocked: [ca!.id], num: 2 });
+    expect(ca!.props.num).toBe(1);
+    expect((await rowsOf(d.id)).data.map((r) => r.id)).toEqual([a.id, b.id]);
+  });
+});
+
 const tree = async () => (await call("GET", "/v1/wiki/pages")).body.data as WikiNode[];
 const ids = (list: { id: string }[]) => list.map((n) => n.id);
 
@@ -270,7 +554,7 @@ describe("wiki events on the cache", () => {
 
   it("refetches the person's own change made elsewhere, not the save this tab made", () => {
     const qc = new QueryClient();
-    const page = { ...DEFAULT_LOOK, ...node("a", null, 0), body_html: "", breadcrumbs: [], children: [], created_at: "", created_by: null, updated_by: null, verification: null, deleted_at: null, deleted_by: null } as WikiPage;
+    const page = { ...DEFAULT_LOOK, ...node("a", null, 0), body_html: "", breadcrumbs: [], children: [], created_at: "", created_by: null, updated_by: null, verification: null, deleted_at: null, deleted_by: null, kind: "page", database: null, props: {} } as WikiPage;
     qc.setQueryData(qk.wikiPage("a"), page);
     const saver = saverFor(page);
     // This tab saved version 2: the saver knows it, nothing to refetch.

@@ -27,6 +27,7 @@ import {
   Settings2,
   Star,
   StarOff,
+  Table2,
   Trash2,
 } from "lucide-react";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
@@ -52,19 +53,21 @@ import { useOpenToday } from "./journal";
 import { arrange, useSidebarLayout, type SectionKey } from "./sidebarLayout";
 import { CustomizeSidebar } from "./CustomizeSidebar";
 import { AddToSpace } from "./AddToSpace";
+import { starterDatabase } from "./database/starter";
 
 export function pageUrl(id: string) {
   return `${location.origin}/wiki/${id}`;
 }
 
-export function PageIcon({ icon, className }: { icon: string; className?: string }) {
-  return icon ? (
-    <span className={cn("flex size-4 shrink-0 items-center justify-center text-[13px] leading-none", className)} aria-hidden>
-      {icon}
-    </span>
-  ) : (
-    <FileText className={cn("size-[14px] shrink-0 text-fg-4", className)} aria-hidden />
-  );
+export function PageIcon({ icon, className, kind }: { icon: string; className?: string; kind?: "page" | "database" }) {
+  if (icon)
+    return (
+      <span className={cn("flex size-4 shrink-0 items-center justify-center text-[13px] leading-none", className)} aria-hidden>
+        {icon}
+      </span>
+    );
+  const Glyph = kind === "database" ? Table2 : FileText;
+  return <Glyph className={cn("size-[14px] shrink-0 text-fg-4", className)} aria-hidden />;
 }
 
 /** The sections a member can have, in their default order: teamspaces first, as Notion does. */
@@ -117,11 +120,23 @@ export function WikiTree({ onNavigate, autoFocusSearch }: { onNavigate?: () => v
           }}
         />
         {canEdit && (
-          <Tooltip content={t("tree.newPage")}>
-            <Button square variant="ghost" size="sm" aria-label={t("tree.newPage")} loading={create.isPending && !create.variables?.parent_id} onClick={() => create.mutate({})}>
-              <Plus className="size-4" />
-            </Button>
-          </Tooltip>
+          <Menu>
+            <Tooltip content={t("tree.newPage")}>
+              <MenuTrigger asChild>
+                <Button square variant="ghost" size="sm" aria-label={t("tree.newPage")} loading={create.isPending && !create.variables?.parent_id}>
+                  <Plus className="size-4" />
+                </Button>
+              </MenuTrigger>
+            </Tooltip>
+            <MenuContent align="end">
+              <MenuItem icon={<FileText />} onSelect={() => create.mutate({})}>
+                {t("tree.newPage")}
+              </MenuItem>
+              <MenuItem icon={<Table2 />} onSelect={() => create.mutate({ kind: "database", database: starterDatabase("table", t) })}>
+                {t("tree.newDatabase")}
+              </MenuItem>
+            </MenuContent>
+          </Menu>
         )}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-4" data-wiki-sidebar>
@@ -316,7 +331,14 @@ function SpaceSection({
   const { t } = useTranslation("wiki");
   const { data = [] } = useWikiTree();
   const create = useCreatePage();
-  const view = useMemo(() => spaceTree(data, space), [data, space]);
+  // A database's rows are its own, shown in its views: the sidebar leaves them out.
+  const view = useMemo(() => {
+    const databases = new Set(data.filter((n) => n.kind === "database").map((n) => n.id));
+    return spaceTree(
+      data.filter((n) => !n.parent_id || !databases.has(n.parent_id)),
+      space,
+    );
+  }, [data, space]);
   const empty = childrenOf(view, null).length === 0;
   const label = space === "workspace" ? t("sidebar.workspace") : space === "private" ? t("sidebar.private") : t("sidebar.teamspace");
   const add = canEdit ? (
@@ -793,7 +815,7 @@ function TreeRow({
         <ChevronRight className={cn("size-3 transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")} />
       </button>
       <Link to="/wiki/$pageId" params={{ pageId: n.id }} tabIndex={-1} draggable={false} onClick={onNavigate} className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch outline-none">
-        <PageIcon icon={n.icon} />
+        <PageIcon icon={n.icon} kind={n.kind} />
         <span className={cn("truncate", !n.title.trim() && "text-fg-3")}>{title(n.title)}</span>
         {n.verified && <VerifiedMark />}
       </Link>

@@ -6,6 +6,7 @@
 import { InputRule, Mark, mergeAttributes, Node } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import { isTone, type Tone } from "./tones";
+import { DatabaseBlockView } from "../database/DatabaseBlock";
 import { BookmarkView, CalloutView, DateView, EmbedView, FileView, ImageView, MediaView, PageLinkView, SubpageView, TocView } from "./views";
 
 
@@ -160,6 +161,13 @@ export const Embed = atomBlock(
   "embed",
   { url: { default: "", clean: (v) => (v && HTTPS_URL.test(v) ? v : "") }, height: { default: null, clean: num } },
   EmbedView,
+);
+
+/** A database inside the page, showing one of its views (contracts/wiki.md "Databases"). */
+export const DatabaseBlock = atomBlock(
+  "database",
+  { id: { default: "", clean: (v) => (v && /^[0-9a-f-]{36}$/i.test(v) ? v : "") }, view: { default: "", clean: (v) => (v && /^[a-z0-9_]{1,24}$/.test(v) ? v : "") } },
+  DatabaseBlockView,
 );
 
 /** The page's headings as links, kept up to date. */
