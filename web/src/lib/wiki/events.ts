@@ -16,11 +16,28 @@ export function applyWikiEvent(qc: QueryClient, verb: string, d: Record<string, 
   if (verb === "deleted") {
     const ids = (d.wiki_page_ids as string[] | undefined) ?? [d.wiki_page_id as string];
     patch((nodes) => removeSubtree(nodes, ids));
-    for (const id of ids) qc.removeQueries({ queryKey: qk.wikiPage(id) });
+    // A page moved to the trash still opens (with its banner); one deleted or moved out of sight does not.
+    if (d.trashed) for (const id of ids) void qc.invalidateQueries({ queryKey: qk.wikiPage(id) });
+    else if (!d.moved) for (const id of ids) qc.removeQueries({ queryKey: qk.wikiPage(id) });
+    void qc.invalidateQueries({ queryKey: qk.wikiTrash });
+    void qc.invalidateQueries({ queryKey: qk.wikiFavorites });
+    void qc.invalidateQueries({ queryKey: qk.wikiTemplates });
+    void qc.invalidateQueries({ queryKey: qk.wikiRecent });
     return;
   }
   const node = d.wiki_page as WikiNode | undefined;
   if (!node) return;
+  // A page restored from the trash or copied with its subpages brings a whole branch back.
+  if (verb === "restored" || (verb === "created" && ((d.wiki_page_ids as string[] | undefined)?.length ?? 0) > 1)) {
+    void qc.invalidateQueries({ queryKey: qk.wikiTree });
+    void qc.invalidateQueries({ queryKey: qk.wikiTrash });
+    void qc.invalidateQueries({ queryKey: qk.wikiPage(node.id) });
+    return;
+  }
+  if (node.template) {
+    void qc.invalidateQueries({ queryKey: qk.wikiTemplates });
+    return;
+  }
   if (verb === "moved") {
     // Positions of its old and new siblings moved too, and breadcrumbs below it.
     void qc.invalidateQueries({ queryKey: qk.wikiTree });
@@ -28,9 +45,10 @@ export function applyWikiEvent(qc: QueryClient, verb: string, d: Record<string, 
     return;
   }
   patch((nodes) => upsertNode(nodes, node));
-  // A new look (contracts/wiki.md "Page settings") has no version: it is taken as it comes.
+  // A new look (contracts/wiki.md "Page settings") or verification has no version: it is taken as it comes.
   const settings = d.settings as WikiPageSettings | undefined;
   if (settings) qc.setQueryData<WikiPage>(qk.wikiPage(node.id), (old) => (old ? { ...old, ...settings } : old));
+  if ("verification" in d) qc.setQueryData<WikiPage>(qk.wikiPage(node.id), (old) => (old ? { ...old, verification: d.verification as WikiPage["verification"] } : old));
   const page = qc.getQueryData<WikiPage>(qk.wikiPage(node.id));
   // This tab's own saves come back with their answer (the saver has the version already).
   const known = Math.max(page?.version ?? Infinity, openSaver(node.id)?.version ?? 0);

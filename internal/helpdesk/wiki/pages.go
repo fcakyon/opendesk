@@ -27,6 +27,7 @@ type pageCreate struct {
 	Icon     string  `json:"icon,omitempty" maxLength:"64" doc:"One emoji, or empty"`
 	BodyHTML string  `json:"body_html,omitempty" doc:"Rich text, sanitized like an article's; up to 512 KB"`
 	Position *int    `json:"position,omitempty" minimum:"0" doc:"Where among its siblings, from 0; the end when left out"`
+	Template bool    `json:"template,omitempty" doc:"A new template at the top level of space (contracts/wiki.md \"Templates\"); a subpage is a template when its parent is"`
 }
 
 type pagePatch struct {
@@ -182,8 +183,11 @@ func registerPages(d *deps.Deps, api huma.API) {
 						return tooDeep()
 					}
 					owner, team, template = par.owner, par.team, par.template
-				} else if owner, team, err = spaceRef(ctx, tx, v, p.WorkspaceID, b.Space, b.TeamID); err != nil {
-					return err
+				} else {
+					if owner, team, err = spaceRef(ctx, tx, v, p.WorkspaceID, b.Space, b.TeamID); err != nil {
+						return err
+					}
+					template = b.Template
 				}
 				id := ids.New()
 				if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, team_id, template)

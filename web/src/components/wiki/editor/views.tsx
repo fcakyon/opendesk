@@ -78,16 +78,6 @@ export function CalloutView({ node, updateAttributes, editor }: NodeViewProps) {
 }
 
 
-// ─── Columns ────────────────────────────────────────────────────────────────
-
-export function ColumnsView() {
-  return (
-    <NodeViewWrapper as="div" data-type="columns" className="wiki-columns">
-      <NodeViewContent className="wiki-columns-inner" />
-    </NodeViewWrapper>
-  );
-}
-
 // ─── Image ──────────────────────────────────────────────────────────────────
 
 export function ImageView({ node, updateAttributes, selected, editor }: NodeViewProps) {

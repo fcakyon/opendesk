@@ -8,7 +8,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/react";
-import { AlertTriangle, Check, CloudOff, FolderInput, History, Link2, MoreHorizontal, Plus, SmilePlus, Type, ImageIcon, PanelRight, Link2 as BacklinkIcon } from "lucide-react";
+import { AlertTriangle, Check, CloudOff, FolderInput, History, Link2, MoreHorizontal, Plus, SmilePlus, Type, ImageIcon, PanelRight, Link2 as BacklinkIcon, Star, Copy, LayoutTemplate, Lock } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "@/app/RootLayout";
@@ -30,10 +30,12 @@ import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
 import { HistoryDrawer } from "@/components/wiki/HistoryDrawer";
 import { IconPicker } from "@/components/wiki/IconPicker";
-import { DeleteItem, MoveDialog } from "@/components/wiki/PageMenu";
+import { MoveDialog, TrashItem } from "@/components/wiki/PageMenu";
+import { DayNav, TemplateBanner, TrashBanner, Verification } from "@/components/wiki/PageBanners";
+import { useUseTemplate } from "./WikiTemplatesPage";
 import { UnsentBanner } from "@/components/wiki/Unsent";
 import { PageIcon, pageUrl } from "@/components/wiki/WikiTree";
-import { freshPages, nodeOf, patchTree, useCreatePage, useTitle, useWikiTree } from "@/components/wiki/hooks";
+import { freshPages, nodeOf, patchTree, useCreatePage, useDeleteRule, useFavorites, useTitle, useWikiTree } from "@/components/wiki/hooks";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage, isApiError } from "@/lib/api/client";
 import type { WikiPage } from "@/lib/api/types";
@@ -140,7 +142,11 @@ export function PageScreen({ page }: { page: WikiPage }) {
   const { data: live = page } = useQuery(q.wikiPage(page.id));
   const look = useLook(live);
   // A locked page reads like a viewer's until someone unlocks it (contracts/wiki.md "Page settings").
-  const canWrite = canEdit && !live.locked;
+  const canWrite = canEdit && !live.locked && !live.deleted_at;
+  const fav = useFavorites();
+  const startFromTemplate = useUseTemplate();
+  const [usingTemplate, setUsingTemplate] = useState(false);
+  const deleteRule = useDeleteRule()(page.id);
   const shown = title(draft.title);
   useDocumentTitle(shown);
   usePageCrumb(shown);
@@ -278,6 +284,27 @@ export function PageScreen({ page }: { page: WikiPage }) {
   const current = latest;
   const node = tree.byId.get(page.id) ?? nodeOf(current);
 
+  const duplicatePage = async (asTemplate: boolean) => {
+    try {
+      const copy = await api.wiki.duplicate(page.id, asTemplate ? { template: true, title: title(live.title) } : { parent_id: live.parent_id, title: t("duplicate.title", { title: title(live.title) }), position: live.position + 1 });
+      qc.setQueryData(qk.wikiPage(copy.id), copy);
+      void qc.invalidateQueries({ queryKey: asTemplate ? qk.wikiTemplates : qk.wikiTree });
+      if (asTemplate) toast.success(t("templatesPage.saved", { title: title(live.title) }));
+      void navigate({ to: "/wiki/$pageId", params: { pageId: copy.id } });
+    } catch (e) {
+      toast.error(e, t("duplicate.failed"));
+    }
+  };
+  const verify = async (verified: boolean, days?: number) => {
+    try {
+      const saved = await api.wiki.update(page.id, verified ? { verified: true, ...(days ? { verified_days: days } : {}) } : { verified: false });
+      qc.setQueryData<WikiPage>(qk.wikiPage(page.id), (old) => (old ? { ...old, verification: saved.verification } : old));
+      patchTree(qc, (nodes) => nodes.map((n) => (n.id === page.id ? { ...n, verified: !!saved.verification && !saved.verification.expired } : n)));
+    } catch (e) {
+      toast.error(e, t("verify.failed"));
+    }
+  };
+
   const copyLink = () => {
     void copyText(pageUrl(page.id));
     toast.success(t("toast.linkCopied"));
@@ -312,6 +339,15 @@ export function PageScreen({ page }: { page: WikiPage }) {
           <Link to="/wiki" className="hidden shrink-0 rounded-md px-1.5 py-0.5 text-fg-3 transition-colors hover:bg-hover hover:text-fg sm:inline">
             {t("title")}
           </Link>
+          {live.private && (
+            <span className="hidden shrink-0 items-center gap-1 sm:flex">
+              <span className="text-fg-4">/</span>
+              <span className="flex items-center gap-1 px-1.5 text-fg-3">
+                <Lock className="size-3" />
+                {t("sidebar.private")}
+              </span>
+            </span>
+          )}
           {crumbs.map((c) => (
             <span key={c.id} className="hidden min-w-0 items-center gap-1 sm:flex">
               <span className="text-fg-4">/</span>
@@ -329,6 +365,13 @@ export function PageScreen({ page }: { page: WikiPage }) {
           {canEdit && <SaveState saver={saver} />}
         </nav>
         <div className="flex shrink-0 items-center gap-0.5">
+          {!live.deleted_at && !live.template && (
+            <Tooltip content={fav.has(page.id) ? t("favorites.remove") : t("favorites.add")}>
+              <Button square variant="ghost" size="sm" aria-label={fav.has(page.id) ? t("favorites.remove") : t("favorites.add")} aria-pressed={fav.has(page.id)} onClick={() => fav.toggle(node)}>
+                <Star className={cn("size-4", fav.has(page.id) && "fill-tone-amber-solid text-tone-amber-solid")} />
+              </Button>
+            </Tooltip>
+          )}
           <Tooltip content={t("page.copyLink")}>
             <Button square variant="ghost" size="sm" aria-label={t("page.copyLink")} onClick={copyLink}>
               <Link2 className="size-4" />
@@ -344,7 +387,7 @@ export function PageScreen({ page }: { page: WikiPage }) {
               <History className="size-4" />
             </Button>
           </Tooltip>
-          {canEdit && (
+          {canEdit && !live.deleted_at && (
             <Menu>
               <MenuTrigger asChild>
                 <Button square variant="ghost" size="sm" aria-label={t("page.more")}>
@@ -355,9 +398,21 @@ export function PageScreen({ page }: { page: WikiPage }) {
                 <MenuItem icon={<Plus />} onSelect={() => create.mutate({ parent_id: page.id })}>
                   {t("tree.addSubpage")}
                 </MenuItem>
-                <MenuItem icon={<FolderInput />} onSelect={() => setMoving(true)}>
-                  {t("tree.moveTo")}
-                </MenuItem>
+                {!live.journal && (
+                  <MenuItem icon={<FolderInput />} onSelect={() => setMoving(true)}>
+                    {t("tree.moveTo")}
+                  </MenuItem>
+                )}
+                {!live.journal && (
+                  <MenuItem icon={<Copy />} onSelect={() => void duplicatePage(false)}>
+                    {t("duplicate.action")}
+                  </MenuItem>
+                )}
+                {!live.template && !live.journal && (
+                  <MenuItem icon={<LayoutTemplate />} onSelect={() => void duplicatePage(true)}>
+                    {t("templatesPage.saveAs")}
+                  </MenuItem>
+                )}
                 <MenuItem icon={<Link2 />} onSelect={copyLink}>
                   {t("page.copyLink")}
                 </MenuItem>
@@ -370,14 +425,28 @@ export function PageScreen({ page }: { page: WikiPage }) {
                   {t("page.formattingBar")}
                 </MenuCheckItem>
                 <MenuSeparator />
-                <DeleteItem node={node} />
+                <TrashItem node={node} />
               </MenuContent>
             </Menu>
           )}
         </div>
       </header>
 
-      {canEdit && live.locked && <LockedBar onUnlock={() => look.set({ locked: false })} />}
+      <TrashBanner page={live} canEdit={canEdit} canDelete={deleteRule === "yes"} />
+      <TemplateBanner
+        page={live}
+        busy={usingTemplate}
+        onUse={
+          canEdit
+            ? async () => {
+                setUsingTemplate(true);
+                await startFromTemplate(nodeOf(live));
+                setUsingTemplate(false);
+              }
+            : undefined
+        }
+      />
+      {canEdit && live.locked && !live.deleted_at && <LockedBar onUnlock={() => look.set({ locked: false })} />}
 
       {saver.final && saver.pending && (
         <UnsentBanner
@@ -413,7 +482,8 @@ export function PageScreen({ page }: { page: WikiPage }) {
         <div ref={setScrollEl} className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto", live.font !== "default" && `wiki-font-${live.font}`, live.small_text && "wiki-small")}>
           <PageCover cover={live.cover} coverY={live.cover_y} canEdit={canWrite} onChange={look.set} />
           <article className={cn("mx-auto w-full px-6 pb-32 md:px-10", live.full_width ? "max-w-none md:px-24" : "max-w-[760px]", live.cover ? "pt-6" : "pt-10 md:pt-14")}>
-            <div className="group/head">
+            {live.daily_date && <DayNav page={live} />}
+          <div className="group/head">
               {draft.icon && (
                 <div className={cn("relative -ml-2 mb-2", live.cover && "-mt-[60px]")}>
                   {canWrite ? (
@@ -469,6 +539,7 @@ export function PageScreen({ page }: { page: WikiPage }) {
               <div className="flex flex-wrap items-center gap-x-3">
                 <EditedLine page={current} />
                 <BacklinkCount pageId={page.id} onOpen={() => setPanel("links")} />
+              {!live.template && !live.journal && !live.daily_date && <Verification page={live} canEdit={canEdit && !live.deleted_at} onChange={verify} />}
               </div>
             </div>
 

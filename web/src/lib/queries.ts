@@ -242,6 +242,20 @@ export const qk = {
   get wikiGraph() {
     return w(["wiki", "graph"] as const);
   },
+  get wikiTrash() {
+    return w(["wiki", "trash"] as const);
+  },
+  get wikiTemplates() {
+    return w(["wiki", "templates"] as const);
+  },
+  get wikiFavorites() {
+    return w(["wiki", "favorites"] as const);
+  },
+  get wikiRecent() {
+    return w(["wiki", "recent"] as const);
+  },
+  wikiViews: (id: string) => w(["wiki", "views", id] as const),
+  wikiDaily: (from: string, to: string) => w(["wiki", "daily", from, to] as const),
   reports: (r: ReportsQuery) => w(["reports", r] as const),
   reportAgents: (r: ReportsQuery) => w(["reports", "agents", r] as const),
   get widgetSettings() {
@@ -500,6 +514,12 @@ export const q = {
   wikiBacklinks: (id: string) => list(qk.wikiBacklinks(id), () => api.wiki.backlinks(id)),
   wikiMentions: (id: string) => list(qk.wikiMentions(id), () => api.wiki.mentions(id)),
   wikiGraph: () => list(qk.wikiGraph, () => api.wiki.graph()),
+  wikiTrash: () => list(qk.wikiTrash, () => api.wiki.trashList()),
+  wikiTemplates: () => list(qk.wikiTemplates, () => api.wiki.templates()),
+  wikiFavorites: () => list(qk.wikiFavorites, () => api.wiki.favorites()),
+  wikiRecent: () => list(qk.wikiRecent, () => api.wiki.recent()),
+  wikiViews: (id: string) => queryOptions({ queryKey: qk.wikiViews(id), queryFn: () => api.wiki.views(id) }),
+  wikiDaily: (from: string, to: string) => list(qk.wikiDaily(from, to), () => api.wiki.dailyNotes(from, to)),
   wikiSearch: (term: string) =>
     queryOptions({ queryKey: qk.wikiSearch(term), queryFn: async () => (await api.wiki.search(term)).data, enabled: term.trim().length > 0, staleTime: 5_000 }),
   search: (term: string) =>

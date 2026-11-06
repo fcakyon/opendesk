@@ -245,8 +245,7 @@
 
 /* ─── Columns ────────────────────────────────────────────────────────────── */
 
-.wiki-columns-inner,
-.wiki-prose div[data-type="columns"]:not([data-node-view-wrapper]) {
+.wiki-prose div[data-type="columns"] {
   display: grid;
   grid-auto-columns: minmax(0, 1fr);
   grid-auto-flow: column;
@@ -264,12 +263,11 @@
   outline-offset: 4px;
   transition: outline-color 160ms;
 }
-.wiki-editor:has(.ProseMirror[contenteditable="true"]) .wiki-columns:hover div[data-type="column"] {
+.wiki-editor:has(.ProseMirror[contenteditable="true"]) div[data-type="columns"]:hover > div[data-type="column"] {
   outline-color: var(--line);
 }
 @media (max-width: 640px) {
-  .wiki-columns-inner,
-  .wiki-prose div[data-type="columns"]:not([data-node-view-wrapper]) {
+  .wiki-prose div[data-type="columns"] {
     grid-auto-flow: row;
   }
 }

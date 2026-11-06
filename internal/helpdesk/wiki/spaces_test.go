@@ -206,6 +206,13 @@ func TestTemplatesAndDuplicate(t *testing.T) {
 		t.Fatalf("templates %+v", list.Data)
 	}
 
+	// A blank template is a page made as one.
+	blank := create(t, e, agent, map[string]any{"title": "Weekly sync", "template": true})
+	e.Do("GET", "/v1/wiki/templates", viewer, nil).Want(t, 200).JSON(t, &list)
+	if len(list.Data) != 2 || slices.Contains(treeIDs(t, e, viewer), blank.ID) {
+		t.Fatalf("blank template %+v", list.Data)
+	}
+
 	// A page from the template: its subpage copied, the subpage block pointing at the copy.
 	var made spaced
 	e.Do("POST", "/v1/wiki/pages/"+tpl.ID+"/duplicate", agent, map[string]any{"template": false, "title": "Outage 12 May"}).Want(t, 201).JSON(t, &made)

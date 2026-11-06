@@ -12,7 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { PageIcon } from "@/components/wiki/WikiTree";
 import { useCreatePage, useTitle, useWikiTree } from "@/components/wiki/hooks";
-import { TEMPLATES, templatePage, type TemplateId } from "@/components/wiki/templates";
+import { FIRST_RUN, TEMPLATES, templatePage } from "@/components/wiki/templates";
+import { StarterTemplates } from "@/components/wiki/TemplateCards";
 import { relLong, fullDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { atLeast, useRole } from "@/lib/session";
@@ -99,7 +100,7 @@ export default function WikiHome() {
             }
             tips={canEdit ? [{ label: t("empty.tipNest") }, { label: t("empty.tipOllie") }] : undefined}
           />
-          {canEdit && <Templates onPick={(id) => create.mutate(templatePage(t, id))} busy={create.isPending} />}
+          {canEdit && <StarterTemplates ids={FIRST_RUN} onPick={(id) => create.mutate(templatePage(t, id))} busy={create.isPending} />}
         </div>
       </div>
     );
@@ -156,40 +157,12 @@ export default function WikiHome() {
             })}
           </div>
 
-          {canEdit && <Templates onPick={(id) => create.mutate(templatePage(t, id))} busy={create.isPending} compact />}
+          {canEdit && <StarterTemplates ids={TEMPLATES.slice(0, 6).map((x) => x.id)} onPick={(id) => create.mutate(templatePage(t, id))} busy={create.isPending} compact more />}
           <p className="mt-10 text-xs text-fg-4">
             {t("home.paletteHint")} <Kbd>mod k</Kbd>
           </p>
         </div>
       </div>
     </div>
-  );
-}
-
-function Templates({ onPick, busy, compact }: { onPick: (id: TemplateId) => void; busy: boolean; compact?: boolean }) {
-  const { t } = useTranslation("wiki");
-  return (
-    <section className={cn("w-full", compact ? "mt-10" : "relative z-10 mt-6 max-w-[640px]")} aria-labelledby="wiki-templates">
-      <h2 id="wiki-templates" className={cn("label-caps mb-2", !compact && "text-center")}>
-        {t("templates.heading")}
-      </h2>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        {TEMPLATES.map((tpl) => (
-          <button
-            key={tpl.id}
-            type="button"
-            disabled={busy}
-            onClick={() => onPick(tpl.id)}
-            className="group flex flex-col items-start gap-1.5 rounded-lg border border-line bg-surface p-3 text-left shadow-xs outline-none transition-[border-color,box-shadow,transform] hover:border-line-strong active:scale-[0.99] disabled:opacity-60 focus-visible:shadow-[0_0_0_2px_var(--focus)] motion-reduce:transition-none"
-          >
-            <span className="text-[18px] leading-none" aria-hidden>
-              {tpl.icon}
-            </span>
-            <span className="text-[13px] font-medium text-fg">{t(`templates.${tpl.id}.title`)}</span>
-            <span className="text-xs leading-[17px] text-fg-3">{t(`templates.${tpl.id}.hint`)}</span>
-          </button>
-        ))}
-      </div>
-    </section>
   );
 }

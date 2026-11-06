@@ -8,6 +8,7 @@ import type { Editor } from "@tiptap/react";
 import { ArrowUpRight, Hash, Link2, ListTree, Network, X, Info, CornerDownRight } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -377,6 +378,7 @@ function PageInfo({ page, editor }: { page: WikiPage; editor: Editor | null }) {
           <p className="text-[12px] leading-5 text-fg-4">{t("panel.tagsEmpty")}</p>
         )}
       </div>
+      <Readers pageId={page.id} />
       <div className="mt-4 divide-y divide-line-soft">
         {row(t("panel.created"), page.created_by ? t("panel.by", { name: page.created_by.name, when: relLong(page.created_at, now) }) : relLong(page.created_at, now), fullDate(page.created_at))}
         {row(t("panel.edited"), page.updated_by ? t("panel.by", { name: page.updated_by.name, when: relLong(page.updated_at, now) }) : relLong(page.updated_at, now), fullDate(page.updated_at))}
@@ -384,5 +386,32 @@ function PageInfo({ page, editor }: { page: WikiPage; editor: Editor | null }) {
         {row(t("panel.version"), number(page.version))}
       </div>
     </>
+  );
+}
+
+/** Who reads the page, as Notion's page analytics: views, people, the latest readers. */
+function Readers({ pageId }: { pageId: string }) {
+  const { t } = useTranslation("wiki");
+  const now = useNow();
+  const { data } = useQuery(q.wikiViews(pageId));
+  if (!data) return null;
+  return (
+    <div className="mt-4">
+      <h3 className="label-caps pb-1">{t("panel.readers")}</h3>
+      <p className="text-[12.5px] text-fg-2">{t("panel.viewsLine", { views: number(data.views), count: data.people })}</p>
+      {data.readers.length > 0 && (
+        <ul className="mt-1.5 flex flex-col">
+          {data.readers.slice(0, 6).map((r) => (
+            <li key={r.user.id} className="flex h-7 items-center gap-2 text-[12.5px]">
+              <Avatar name={r.user.name} src={r.user.avatar_url} size="xs" />
+              <span className="min-w-0 flex-1 truncate text-fg">{r.user.name}</span>
+              <span className="shrink-0 text-[11.5px] text-fg-4" title={fullDate(r.last_at)}>
+                {relLong(r.last_at, now)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

@@ -571,6 +571,22 @@ const wikiTagsRoute = createRoute({
   staticData: { title: "wikiTags" },
 });
 
+const wikiTemplatesRoute = createRoute({
+  getParentRoute: () => wikiLayout,
+  path: "templates",
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.wikiTemplates()),
+  component: page(() => import("./pages/wiki/WikiTemplatesPage")),
+  staticData: { title: "wikiTemplates" },
+});
+
+const wikiTrashRoute = createRoute({
+  getParentRoute: () => wikiLayout,
+  path: "trash",
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.wikiTrash()),
+  component: page(() => import("./pages/wiki/WikiTrashPage")),
+  staticData: { title: "wikiTrash" },
+});
+
 const wikiPageRoute = createRoute({
   getParentRoute: () => wikiLayout,
   path: "$pageId",
@@ -1049,7 +1065,7 @@ const routeTree = rootRoute.addChildren([
     kbArticleRoute,
     changelogRoute,
     changelogEntryRoute,
-    wikiLayout.addChildren([wikiIndexRoute, wikiGraphRoute, wikiTagsRoute, wikiPageRoute]),
+    wikiLayout.addChildren([wikiIndexRoute, wikiGraphRoute, wikiTagsRoute, wikiTemplatesRoute, wikiTrashRoute, wikiPageRoute]),
     reportsRoute,
     settingsLayout.addChildren([
       settingsIndex,

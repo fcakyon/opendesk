@@ -1604,7 +1604,30 @@ export type WikiNode = {
   created_by_id: string | null;
   /** The #tags in its text, lower case (contracts/wiki.md "Links and tags"). */
   tags: string[];
+  /** Yours alone (contracts/wiki.md "Private pages and teamspaces"). */
+  private?: boolean;
+  /** The teamspace it is in. */
+  team_id?: string | null;
+  /** Your journal: your daily notes are under it. */
+  journal?: boolean;
+  /** A daily note's day, YYYY-MM-DD. */
+  daily_date?: string;
+  /** A template (or a page of one); only in GET /v1/wiki/templates. */
+  template?: boolean;
+  /** Verified, and not past the day it was verified until. */
+  verified?: boolean;
 };
+
+/** Where a top-level page lives. */
+export type WikiSpace = "workspace" | "private" | "team";
+
+export type WikiVerification = { by: UserRef | null; at: string; until: string | null; expired: boolean };
+
+export type WikiTrashed = WikiNode & { deleted_at: string; deleted_by: UserRef | null; purge_at: string; subpages: number; path: WikiRef[] };
+
+export type WikiPageViews = { views: number; people: number; readers: { user: UserRef; visits: number; last_at: string }[] };
+
+export type WikiDailyNote = { date: string; id: string };
 
 export type WikiRef = { id: string; title: string; icon: string };
 
@@ -1624,6 +1647,10 @@ export type WikiPageSettings = {
 export type WikiPage = WikiNode &
   WikiPageSettings & {
   body_html: string;
+  verification: WikiVerification | null;
+  /** In the trash since; null for a page in the tree. */
+  deleted_at: string | null;
+  deleted_by: UserRef | null;
   created_by: UserRef | null;
   updated_by: UserRef | null;
   created_at: string;
@@ -1661,7 +1688,7 @@ export type WikiSearchHit = {
   updated_at: string;
 };
 
-export type WikiPagePatch = Partial<WikiPageSettings> & { title?: string; icon?: string; body_html?: string; version?: number };
+export type WikiPagePatch = Partial<WikiPageSettings> & { title?: string; icon?: string; body_html?: string; version?: number; verified?: boolean; verified_days?: number };
 
 export type ReportsOverview = {
   created: number;

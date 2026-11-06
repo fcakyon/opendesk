@@ -81,7 +81,8 @@
     "search": "Search pages",
     "top": "Top level",
     "none": "No page matches.",
-    "here": "Here now"
+    "here": "Here now",
+    "topOf": "Top of {{space}}"
   },
   "history": {
     "open": "History",
@@ -149,6 +150,46 @@
       "title": "Onboarding checklist",
       "hint": "A new teammate's first two weeks.",
       "body": "<p>What a new teammate does in their first two weeks.</p><h2>Week one</h2><ul><li><p>Get access to the helpdesk, chat and billing tools.</p></li><li><p>Read the escalation process and the refund policy.</p></li><li><p>Shadow a teammate for two shifts.</p></li></ul><h2>Week two</h2><ul><li><p>Answer tickets with a buddy reviewing your drafts.</p></li><li><p>Take your own queue for half a day.</p></li></ul>"
+    },
+    "meeting": {
+      "title": "Meeting notes",
+      "hint": "Agenda, notes and who does what next.",
+      "body": "<div data-type=\"callout\" data-icon=\"🗓️\" data-tone=\"blue\"><p><strong>When:</strong> <time data-type=\"date\" datetime=\"\"></time> · <strong>Who:</strong> @</p></div><h2>Agenda</h2><ol><li><p></p></li></ol><h2>Notes</h2><p></p><h2>Decisions</h2><ul><li><p></p></li></ul><h2>Next steps</h2><ul data-type=\"taskList\"><li data-type=\"taskItem\" data-checked=\"false\"><p></p></li></ul>"
+    },
+    "postmortem": {
+      "title": "Incident review",
+      "hint": "What happened, why, and what changes now.",
+      "body": "<div data-type=\"callout\" data-icon=\"🧯\" data-tone=\"red\"><p>Blameless: we look at the system, not at people.</p></div><div data-type=\"toc\"></div><h2>Summary</h2><p>What broke, for whom, and for how long.</p><h2>Impact</h2><table><tbody><tr><th><p>Customers affected</p></th><th><p>Tickets</p></th><th><p>Duration</p></th></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table><h2>Timeline</h2><ul><li><p><strong>00:00</strong> First report</p></li></ul><h2>Root cause</h2><p></p><h2>What went well</h2><ul><li><p></p></li></ul><h2>Follow-ups</h2><ul data-type=\"taskList\"><li data-type=\"taskItem\" data-checked=\"false\"><p></p></li></ul>"
+    },
+    "howto": {
+      "title": "How-to guide",
+      "hint": "Steps anyone on the team can follow.",
+      "body": "<p>What this guide helps you do, in one sentence.</p><div data-type=\"callout\" data-icon=\"💡\" data-tone=\"yellow\"><p><strong>Before you start:</strong> what you need to have or know.</p></div><h2>Steps</h2><ol><li><p></p></li><li><p></p></li><li><p></p></li></ol><h2>If something goes wrong</h2><details><summary>The most common problem</summary><div data-type=\"detailsContent\"><p>How to fix it.</p></div></details>"
+    },
+    "project": {
+      "title": "Project brief",
+      "hint": "The why, the what and when it is done.",
+      "body": "<div data-type=\"columns\"><div data-type=\"column\"><p><strong>Owner</strong></p><p>@</p></div><div data-type=\"column\"><p><strong>Target date</strong></p><p></p></div><div data-type=\"column\"><p><strong>Status</strong></p><p>Planning</p></div></div><h2>Problem</h2><p>What hurts today, and for whom.</p><h2>Goal</h2><p>How we will know it worked.</p><h2>Scope</h2><ul><li><p>In: </p></li><li><p>Out: </p></li></ul><h2>Milestones</h2><ul data-type=\"taskList\"><li data-type=\"taskItem\" data-checked=\"false\"><p></p></li></ul>"
+    },
+    "decision": {
+      "title": "Decision record",
+      "hint": "A choice, its options and why we made it.",
+      "body": "<div data-type=\"callout\" data-icon=\"⚖️\" data-tone=\"purple\"><p><strong>Status:</strong> proposed</p></div><h2>Context</h2><p>What made us decide now.</p><h2>Options</h2><table><tbody><tr><th><p>Option</p></th><th><p>For</p></th><th><p>Against</p></th></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr><tr><td><p></p></td><td><p></p></td><td><p></p></td></tr></tbody></table><h2>Decision</h2><p></p><h2>Consequences</h2><p></p>"
+    },
+    "call": {
+      "title": "Customer call notes",
+      "hint": "Who you spoke to, what they need, what's next.",
+      "body": "<div data-type=\"columns\"><div data-type=\"column\"><p><strong>Customer</strong></p><p></p></div><div data-type=\"column\"><p><strong>Ticket</strong></p><p>#</p></div></div><h2>What they need</h2><p></p><h2>What we said</h2><ul><li><p></p></li></ul><h2>Follow-ups</h2><ul data-type=\"taskList\"><li data-type=\"taskItem\" data-checked=\"false\"><p></p></li></ul>"
+    },
+    "faq": {
+      "title": "FAQ",
+      "hint": "Questions the team answers often.",
+      "body": "<p>The answers we give again and again. Open a question to see its answer.</p><details><summary>A question customers ask</summary><div data-type=\"detailsContent\"><p>The answer, and a link to the page with more.</p></div></details><details><summary>Another question</summary><div data-type=\"detailsContent\"><p></p></div></details>"
+    },
+    "weekly": {
+      "title": "Weekly team sync",
+      "hint": "Wins, numbers and what's in the way.",
+      "body": "<h2>Wins</h2><ul><li><p></p></li></ul><h2>Numbers</h2><table><tbody><tr><th><p>Metric</p></th><th><p>This week</p></th><th><p>Last week</p></th></tr><tr><td><p>First reply time</p></td><td><p></p></td><td><p></p></td></tr><tr><td><p>Tickets solved</p></td><td><p></p></td><td><p></p></td></tr></tbody></table><h2>Blockers</h2><ul><li><p></p></li></ul><h2>This week</h2><ul data-type=\"taskList\"><li data-type=\"taskItem\" data-checked=\"false\"><p></p></li></ul>"
     }
   },
   "editor": {
@@ -354,7 +395,10 @@
     "subpages": "Subpages",
     "version": "Version",
     "backlinkCount_one": "{{count}} backlink",
-    "backlinkCount_other": "{{count}} backlinks"
+    "backlinkCount_other": "{{count}} backlinks",
+    "readers": "Readers",
+    "viewsLine_one": "{{views}} views by {{count}} person",
+    "viewsLine_other": "{{views}} views by {{count}} people"
   },
   "graph": {
     "title": "Graph",
@@ -378,5 +422,100 @@
     "pickBody_other": "{{count}} tags in your wiki. Pick one to see its pages.",
     "pages_one": "{{count}} page",
     "pages_other": "{{count}} pages"
+  },
+  "trash": {
+    "title": "Trash",
+    "moveTo": "Move to trash",
+    "moved": "Moved “{{title}}” to the trash",
+    "undo": "Undo",
+    "moveFailed": "Couldn't move the page to the trash.",
+    "restore": "Restore",
+    "restored": "Restored “{{title}}”",
+    "restoreFailed": "Couldn't restore the page.",
+    "deleteForever": "Delete for good",
+    "banner": "This page is in the trash.",
+    "bannerBy": "{{name}} moved this page to the trash {{when}}.",
+    "bannerPurge": "It goes for good on {{date}}.",
+    "empty": "The trash is empty",
+    "emptyBody": "Pages moved to the trash wait here for 30 days, then go for good. Restore one to put it back where it was.",
+    "search": "Search the trash",
+    "subpages_one": "and {{count}} subpage",
+    "subpages_other": "and {{count}} subpages",
+    "purge": "Goes for good {{date}}",
+    "from": "From {{path}}",
+    "noMatch": "No page in the trash matches."
+  },
+  "favorites": {
+    "title": "Favorites",
+    "add": "Add to favorites",
+    "remove": "Remove from favorites",
+    "failed": "Couldn't change your favorites.",
+    "empty": "Star a page to keep it here."
+  },
+  "sidebar": {
+    "workspace": "Workspace",
+    "private": "Private",
+    "teamspace": "Teamspace",
+    "recent": "Recent",
+    "places": "Wiki places",
+    "sectionMenu": "Section options",
+    "hide": "Hide section",
+    "customize": "Customize sidebar",
+    "addIn": "Add a page in {{section}}",
+    "privateEmpty": "Pages only you see.",
+    "spaceEmpty": "No pages yet.",
+    "addFirst": "Add one",
+    "customizeBody": "Put the sections in the order you want and hide the ones you don't use. Only you see this.",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "show": "Show",
+    "reset": "Reset",
+    "done": "Done"
+  },
+  "journal": {
+    "title": "Journal",
+    "today": "Today's note",
+    "failed": "Couldn't open the note.",
+    "previous": "Previous day",
+    "next": "Next day",
+    "pick": "Go to a day",
+    "daily": "Daily note",
+    "notesCount_one": "{{count}} note around this day",
+    "notesCount_other": "{{count}} notes around this day"
+  },
+  "templatesPage": {
+    "title": "Templates",
+    "intro": "Start a page from a template, or keep your team's own here.",
+    "yours": "Your team's templates",
+    "starters": "Starter templates",
+    "new": "New template",
+    "use": "Use",
+    "edit": "Edit",
+    "usedTitle": "{{title}}",
+    "yoursEmpty": "Save any page as a template from its menu, or make a new one.",
+    "banner": "This page is a template. Pages made from it start as a copy of it.",
+    "useThis": "Use this template",
+    "saveAs": "Save as template",
+    "saved": "Saved “{{title}}” as a template",
+    "failed": "Couldn't make the page.",
+    "all": "All templates"
+  },
+  "duplicate": {
+    "action": "Duplicate",
+    "title": "{{title}} (copy)",
+    "failed": "Couldn't duplicate the page."
+  },
+  "verify": {
+    "verified": "Verified",
+    "action": "Verify",
+    "again": "Verify again",
+    "until": "Verified by {{name}} until {{date}}",
+    "byForGood": "Verified by {{name}}",
+    "expired": "Verification expired",
+    "forDays_one": "For {{count}} day",
+    "forDays_other": "For {{count}} days",
+    "forGood": "Until someone changes it",
+    "remove": "Remove verification",
+    "failed": "Couldn't change the verification."
   }
 }

@@ -7,7 +7,18 @@ export const TEMPLATES = [
   { id: "escalation", icon: "🚨" },
   { id: "refunds", icon: "💸" },
   { id: "onboarding", icon: "👋" },
+  { id: "meeting", icon: "🗓️" },
+  { id: "postmortem", icon: "🧯" },
+  { id: "howto", icon: "🛠️" },
+  { id: "project", icon: "🎯" },
+  { id: "decision", icon: "⚖️" },
+  { id: "call", icon: "📞" },
+  { id: "faq", icon: "❓" },
+  { id: "weekly", icon: "🔁" },
 ] as const;
+
+/** The three the wiki's first-run state offers; the templates page has them all. */
+export const FIRST_RUN: TemplateId[] = ["escalation", "refunds", "onboarding"];
 
 export type TemplateId = (typeof TEMPLATES)[number]["id"];
 

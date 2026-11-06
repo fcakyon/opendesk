@@ -85,7 +85,9 @@
     "phone": "Phone",
     "print": "Print",
     "wikiGraph": "Graph",
-    "wikiTags": "Tags"
+    "wikiTags": "Tags",
+    "wikiTemplates": "Templates",
+    "wikiTrash": "Trash"
   },
   "folders": {
     "unassigned": "Unassigned",

@@ -9,11 +9,11 @@ import { useTranslation } from "react-i18next";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api/endpoints";
-import type { WikiNode, WikiPage } from "@/lib/api/types";
+import type { WikiNode, WikiPage, WikiSpace } from "@/lib/api/types";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole, useSession } from "@/lib/session";
 import { forgetSaver } from "@/lib/wiki/saver";
-import { applyMove, buildTree, descendantsOf, ownership, removeSubtree, upsertNode, type Drop, type Ownership } from "@/lib/wiki/tree";
+import { applyMove, buildTree, descendantsOf, ownership, removeSubtree, spaceBody, upsertNode, type Drop, type Ownership } from "@/lib/wiki/tree";
 
 export function useWikiTree() {
   const query = useQuery(q.wikiTree());
@@ -101,7 +101,7 @@ export function patchTree(qc: QueryClient, fn: (nodes: WikiNode[]) => WikiNode[]
 /** Pages just made here: their title takes the focus when they open. */
 export const freshPages = new Set<string>();
 
-export type NewPage = { parent_id?: string | null; title?: string; icon?: string; body_html?: string; position?: number };
+export type NewPage = { parent_id?: string | null; space?: WikiSpace; team_id?: string; template?: boolean; title?: string; icon?: string; body_html?: string; position?: number };
 
 export function useCreatePage() {
   const qc = useQueryClient();
@@ -127,7 +127,7 @@ export function useMovePage() {
   const qc = useQueryClient();
   const { t } = useTranslation("wiki");
   return useMutation({
-    mutationFn: ({ id, drop }: { id: string; drop: Drop }) => api.wiki.move(id, { parent_id: drop.parent, position: drop.position }),
+    mutationFn: ({ id, drop }: { id: string; drop: Drop }) => api.wiki.move(id, { parent_id: drop.parent, position: drop.position, ...(drop.space ? spaceBody(drop.space) : {}) }),
     onMutate: ({ id, drop }) => {
       const before = qc.getQueryData<WikiNode[]>(qk.wikiTree);
       patchTree(qc, (nodes) => applyMove(nodes, id, drop));
@@ -190,5 +190,82 @@ export function useDeleteRule() {
     if (!atLeast(role, "agent")) return "no";
     if (atLeast(role, "admin")) return "yes";
     return ownership(tree, id, me);
+  };
+}
+
+// ─── Trash ──────────────────────────────────────────────────────────────────
+
+/** Moves a page and its subpages to the trash at once, with Undo (contracts/wiki.md "Trash"). */
+export function useTrashPage() {
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const openId = useOpenPageId();
+  const { t } = useTranslation("wiki");
+  const title = useTitle();
+  const restore = useRestorePage();
+  return async (node: WikiNode) => {
+    const before = qc.getQueryData<WikiNode[]>(qk.wikiTree);
+    const tree = buildTree(before ?? [node]);
+    const gone = [node.id, ...descendantsOf(tree, node.id).map((n) => n.id)];
+    patchTree(qc, (nodes) => removeSubtree(nodes, gone));
+    if (openId && gone.includes(openId)) void navigate(node.parent_id ? { to: "/wiki/$pageId", params: { pageId: node.parent_id } } : { to: "/wiki" });
+    try {
+      const page = await api.wiki.trash(node.id);
+      qc.setQueryData(qk.wikiPage(node.id), page);
+      for (const id of gone.slice(1)) qc.removeQueries({ queryKey: qk.wikiPage(id) });
+      void qc.invalidateQueries({ queryKey: qk.wikiTrash });
+      void qc.invalidateQueries({ queryKey: qk.wikiFavorites });
+      void qc.invalidateQueries({ queryKey: qk.wikiRecent });
+      toast.undo(t("trash.moved", { title: title(node.title) }), () => void restore(node.id), t("trash.undo"));
+    } catch (e) {
+      if (before) qc.setQueryData(qk.wikiTree, before);
+      toast.error(e, t("trash.moveFailed"));
+    }
+  };
+}
+
+/** Puts a page back from the trash where it was. */
+export function useRestorePage() {
+  const qc = useQueryClient();
+  const { t } = useTranslation("wiki");
+  const title = useTitle();
+  return async (id: string) => {
+    try {
+      const page = await api.wiki.untrash(id);
+      qc.setQueryData(qk.wikiPage(id), page);
+      await Promise.all([qc.invalidateQueries({ queryKey: qk.wikiTree }), qc.invalidateQueries({ queryKey: qk.wikiTrash }), qc.invalidateQueries({ queryKey: qk.wikiRecent })]);
+      toast.success(t("trash.restored", { title: title(page.title) }));
+      return page;
+    } catch (e) {
+      toast.error(e, t("trash.restoreFailed"));
+      return null;
+    }
+  };
+}
+
+// ─── Favorites ──────────────────────────────────────────────────────────────
+
+/** The person's favorite pages, in their order, changed at once and saved behind. */
+export function useFavorites() {
+  const qc = useQueryClient();
+  const { t } = useTranslation("wiki");
+  const query = useQuery({ ...q.wikiFavorites(), enabled: useSession((s) => !!s.user) });
+  const list = query.data ?? [];
+  const save = async (next: WikiNode[]) => {
+    const before = qc.getQueryData<WikiNode[]>(qk.wikiFavorites);
+    qc.setQueryData(qk.wikiFavorites, next);
+    try {
+      const saved = await api.wiki.setFavorites(next.map((n) => n.id));
+      qc.setQueryData(qk.wikiFavorites, saved.data);
+    } catch (e) {
+      if (before) qc.setQueryData(qk.wikiFavorites, before);
+      toast.error(e, t("favorites.failed"));
+    }
+  };
+  return {
+    list,
+    has: (id: string) => list.some((n) => n.id === id),
+    toggle: (node: WikiNode) => void save(list.some((n) => n.id === node.id) ? list.filter((n) => n.id !== node.id) : [...list, node]),
+    reorder: (ids: string[]) => void save(ids.map((id) => list.find((n) => n.id === id)).filter((n): n is WikiNode => !!n)),
   };
 }

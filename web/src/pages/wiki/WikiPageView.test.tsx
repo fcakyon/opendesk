@@ -35,6 +35,9 @@ vi.mock("@/components/wiki/HistoryDrawer", () => ({
 const page = (over: Partial<WikiPage> = {}): WikiPage => ({
   ...DEFAULT_LOOK,
   tags: [],
+  verification: null,
+  deleted_at: null,
+  deleted_by: null,
   id: "p1",
   parent_id: null,
   title: "Refunds",

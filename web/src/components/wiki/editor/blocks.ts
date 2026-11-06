@@ -6,7 +6,7 @@
 import { InputRule, Mark, mergeAttributes, Node } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import { isTone, type Tone } from "./tones";
-import { BookmarkView, CalloutView, ColumnsView, DateView, EmbedView, FileView, ImageView, MediaView, PageLinkView, SubpageView, TocView } from "./views";
+import { BookmarkView, CalloutView, DateView, EmbedView, FileView, ImageView, MediaView, PageLinkView, SubpageView, TocView } from "./views";
 
 
 /** A link that the editor should open in the app: our own attachments, or https. */
@@ -70,10 +70,8 @@ export const Columns = Node.create({
   content: "column{2,5}",
   isolating: true,
   parseHTML: () => [{ tag: 'div[data-type="columns"]' }],
+  // Plain HTML, no React view: the columns must be the grid's own children.
   renderHTML: ({ HTMLAttributes }) => ["div", mergeAttributes(HTMLAttributes, { "data-type": "columns" }), 0],
-  addNodeView() {
-    return ReactNodeViewRenderer(ColumnsView, { contentDOMElementTag: "div" });
-  },
   addCommands() {
     return {
       setColumns:
