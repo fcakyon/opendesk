@@ -20,4 +20,5 @@ func Register(d *deps.Deps, api huma.API, _ chi.Router) {
 	registerTrash(d, api)
 	registerTemplates(d, api)
 	registerPersonal(d, api)
+	registerRows(d, api)
 }

@@ -2,6 +2,7 @@ package wiki
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -53,6 +54,7 @@ type WikiNode struct {
 	DailyDate *string `json:"daily_date,omitempty" doc:"The day of a daily note, YYYY-MM-DD"`
 	Template  bool    `json:"template,omitempty" doc:"A template (or a page of one): copied into new pages, never in the tree"`
 	Verified  bool    `json:"verified,omitempty" doc:"Verified, and not past the day it was verified until"`
+	Kind      string  `json:"kind" enum:"page,database" doc:"A database's subpages are its rows"`
 }
 
 // WikiRef names a page: breadcrumbs, subpages, search paths.
@@ -94,6 +96,9 @@ type WikiPage struct {
 	Version      int             `json:"version"`
 	Tags         []string        `json:"tags"`
 	Template     bool            `json:"template"`
+	Kind         string          `json:"kind" enum:"page,database"`
+	Database     *Database       `json:"database" doc:"A database's properties and views; null for a page"`
+	Props        map[string]any  `json:"props" doc:"A database row's values, by property id"`
 	Journal      bool            `json:"journal"`
 	DailyDate    *string         `json:"daily_date"`
 	Verification *Verification   `json:"verification"`
@@ -112,7 +117,7 @@ type WikiPage struct {
 
 func (p WikiPage) node() WikiNode {
 	n := WikiNode{ID: p.ID, ParentID: p.ParentID, Title: p.Title, Icon: p.Icon, Position: p.Position, Version: p.Version, UpdatedAt: p.UpdatedAt,
-		Tags: p.Tags, Space: p.Space, Journal: p.Journal, DailyDate: p.DailyDate, Template: p.Template, Verified: p.Verification != nil && !p.Verification.Expired}
+		Tags: p.Tags, Space: p.Space, Journal: p.Journal, DailyDate: p.DailyDate, Template: p.Template, Verified: p.Verification != nil && !p.Verification.Expired, Kind: p.Kind}
 	if p.CreatedBy != nil {
 		n.CreatedBy = &p.CreatedBy.ID
 	}
@@ -122,14 +127,14 @@ func (p WikiPage) node() WikiNode {
 // nodeCols are a node's columns of wiki_pages aliased p; scanNode reads them.
 const nodeCols = `p.id, p.parent_id, p.title, p.icon, p.position, p.version, p.updated_at, p.created_by, p.tags,
 	p.private_to IS NOT NULL, p.team_id, p.journal, to_char(p.daily_date, 'YYYY-MM-DD'), p.template,
-	p.verified_at IS NOT NULL AND (p.verified_until IS NULL OR p.verified_until > now())`
+	p.verified_at IS NOT NULL AND (p.verified_until IS NULL OR p.verified_until > now()), p.kind`
 
 const nodeSelect = `SELECT ` + nodeCols + ` FROM wiki_pages p`
 
 func scanNode(row pgx.Row) (WikiNode, error) {
 	var n WikiNode
 	err := row.Scan(&n.ID, &n.ParentID, &n.Title, &n.Icon, &n.Position, &n.Version, &n.UpdatedAt, &n.CreatedBy, &n.Tags,
-		&n.Private, &n.TeamID, &n.Journal, &n.DailyDate, &n.Template, &n.Verified)
+		&n.Private, &n.TeamID, &n.Journal, &n.DailyDate, &n.Template, &n.Verified, &n.Kind)
 	return n, err
 }
 
@@ -147,7 +152,7 @@ func collectNodes(rows pgx.Rows, err error) ([]WikiNode, error) {
 const pageSelect = `SELECT p.id, p.parent_id, p.title, p.icon, p.body_html, p.position, p.version, p.created_at, p.updated_at,
 	p.cover, p.cover_y, p.full_width, p.small_text, p.font, p.locked, p.tags,
 	p.private_to, p.team_id, p.template, p.journal, to_char(p.daily_date, 'YYYY-MM-DD'), p.deleted_at, p.trashed_with,
-	p.verified_at, p.verified_until,
+	p.verified_at, p.verified_until, p.kind, p.database, p.props,
 	c.id, c.name, c.email, c.avatar_url, u.id, u.name, u.email, u.avatar_url,
 	v.id, v.name, v.email, v.avatar_url, x.id, x.name, x.email, x.avatar_url
 FROM wiki_pages p LEFT JOIN users c ON c.id = p.created_by LEFT JOIN users u ON u.id = p.updated_by
@@ -180,17 +185,27 @@ func loadPage(ctx context.Context, q db.Querier, wid, id uuid.UUID) (WikiPage, e
 	var c, u, v, x userCols
 	var trashedWith *uuid.UUID
 	var verifiedAt, verifiedUntil *time.Time
+	var database []byte
 	err := q.QueryRow(ctx, pageSelect+` WHERE p.workspace_id = $1 AND p.id = $2`, wid, id).Scan(
 		&p.ID, &p.ParentID, &p.Title, &p.Icon, &p.BodyHTML, &p.Position, &p.Version, &p.CreatedAt, &p.UpdatedAt,
 		&p.Cover, &p.CoverY, &p.FullWidth, &p.SmallText, &p.Font, &p.Locked, &p.Tags,
 		&p.owner, &p.TeamID, &p.Template, &p.Journal, &p.DailyDate, &p.DeletedAt, &trashedWith,
-		&verifiedAt, &verifiedUntil,
+		&verifiedAt, &verifiedUntil, &p.Kind, &database, &p.Props,
 		&c.id, &c.name, &c.email, &c.avatar, &u.id, &u.name, &u.email, &u.avatar,
 		&v.id, &v.name, &v.email, &v.avatar, &x.id, &x.name, &x.email, &x.avatar)
 	if err != nil {
 		return p, err
 	}
 	p.Private = p.owner != nil
+	if database != nil {
+		p.Database = new(Database)
+		if err := json.Unmarshal(database, p.Database); err != nil {
+			return p, err
+		}
+	}
+	if p.Props == nil {
+		p.Props = map[string]any{}
+	}
 	p.CreatedBy, p.UpdatedBy, p.DeletedBy = c.ref(), u.ref(), x.ref()
 	if verifiedAt != nil {
 		p.Verification = &Verification{By: v.ref(), At: *verifiedAt, Until: verifiedUntil, Expired: verifiedUntil != nil && verifiedUntil.Before(time.Now())}
@@ -334,6 +349,8 @@ type parent struct {
 	team     *uuid.UUID
 	template bool
 	journal  bool
+	// database: the parent is a database, and a page under it is one of its rows.
+	database *Database
 }
 
 // parentRef resolves a parent page id ("" is the top level): a page of the tree the viewer
@@ -348,13 +365,20 @@ func parentRef(ctx context.Context, q db.Querier, v Viewer, wid uuid.UUID, raw *
 	}
 	me, hidden := v.args()
 	par := parent{id: id}
-	err = q.QueryRow(ctx, `SELECT p.private_to, p.team_id, p.template, p.journal FROM wiki_pages p
-		WHERE p.workspace_id = $1 AND p.id = $2 AND p.deleted_at IS NULL AND `+seesSQL("p", 3, 4), wid, id, me, hidden).Scan(&par.owner, &par.team, &par.template, &par.journal)
+	var database []byte
+	err = q.QueryRow(ctx, `SELECT p.private_to, p.team_id, p.template, p.journal, p.database FROM wiki_pages p
+		WHERE p.workspace_id = $1 AND p.id = $2 AND p.deleted_at IS NULL AND `+seesSQL("p", 3, 4), wid, id, me, hidden).Scan(&par.owner, &par.team, &par.template, &par.journal, &database)
 	if db.IsNotFound(err) {
 		return nil, httpx.Validation("parent page not found in this workspace")
 	}
 	if err != nil {
 		return nil, err
+	}
+	if database != nil {
+		par.database = new(Database)
+		if err := json.Unmarshal(database, par.database); err != nil {
+			return nil, err
+		}
 	}
 	if par.up, err = ancestors(ctx, q, wid, id); err != nil {
 		return nil, err

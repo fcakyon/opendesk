@@ -217,7 +217,7 @@ func registerTrash(d *deps.Deps, api huma.API) {
 				var t TrashedPage
 				var x userCols
 				if err := rows.Scan(&t.ID, &t.ParentID, &t.Title, &t.Icon, &t.Position, &t.Version, &t.UpdatedAt, &t.CreatedBy, &t.Tags,
-					&t.Private, &t.TeamID, &t.Journal, &t.DailyDate, &t.Template, &t.Verified,
+					&t.Private, &t.TeamID, &t.Journal, &t.DailyDate, &t.Template, &t.Verified, &t.Kind,
 					&t.DeletedAt, &x.id, &x.name, &x.email, &x.avatar, &t.Subpages); err != nil {
 					return nil, httpx.Wrap(err)
 				}

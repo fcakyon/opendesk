@@ -2,6 +2,7 @@ package wiki
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -140,14 +141,20 @@ func registerTemplates(d *deps.Deps, api huma.API) {
 						parent                   *uuid.UUID
 						title, icon, body        string
 						position                 int
-						cover, font              string
+						cover, font, kind        string
 						coverY                   int
 						fullWidth, small, locked bool
+						database, props          []byte
 					}
-					if err := tx.QueryRow(ctx, `SELECT parent_id, title, icon, body_html, position, cover, cover_y, full_width, small_text, font, locked
+					if err := tx.QueryRow(ctx, `SELECT parent_id, title, icon, body_html, position, cover, cover_y, full_width, small_text, font, locked, kind, database, props
 						FROM wiki_pages WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, x).Scan(&row.parent, &row.title, &row.icon, &row.body, &row.position,
-						&row.cover, &row.coverY, &row.fullWidth, &row.small, &row.font, &row.locked); err != nil {
+						&row.cover, &row.coverY, &row.fullWidth, &row.small, &row.font, &row.locked, &row.kind, &row.database, &row.props); err != nil {
 						return err
+					}
+					// A row copied into a database keeps its values; one copied anywhere else is
+					// a page and leaves them behind.
+					if x == id && (par == nil || par.database == nil) {
+						row.props = []byte("{}")
 					}
 					newParent := parentID(par)
 					if x != id && row.parent != nil {
@@ -160,12 +167,29 @@ func registerTemplates(d *deps.Deps, api huma.API) {
 					}
 					body := remap(row.body)
 					nid := fresh[x]
+					var database any
+					if row.database != nil {
+						database = json.RawMessage(remap(string(row.database)))
+					}
 					if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by,
-							private_to, team_id, template, cover, cover_y, full_width, small_text, font, locked)
-						VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+							private_to, team_id, template, cover, cover_y, full_width, small_text, font, locked, kind, database, props)
+						VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
 						nid, p.WorkspaceID, newParent, title, row.icon, body, row.position, p.ActorUserID(), owner, team, template,
-						row.cover, row.coverY, row.fullWidth, row.small, row.font, row.locked); err != nil {
+						row.cover, row.coverY, row.fullWidth, row.small, row.font, row.locked, row.kind, database, json.RawMessage(remap(string(row.props)))); err != nil {
 						return err
+					}
+					// A row copied into a database is a new row: it gets its own unique id.
+					if x == id && par != nil && par.database != nil && !template {
+						props := map[string]any{}
+						if err := json.Unmarshal(row.props, &props); err != nil {
+							return err
+						}
+						if err := nextRowNumbers(ctx, tx, p.WorkspaceID, par.id, par.database, props); err != nil {
+							return err
+						}
+						if _, err := tx.Exec(ctx, `UPDATE wiki_pages SET props = $3 WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, nid, props); err != nil {
+							return err
+						}
 					}
 					if err := recordRevision(ctx, tx, p, nid, title, row.icon, body, false); err != nil {
 						return err

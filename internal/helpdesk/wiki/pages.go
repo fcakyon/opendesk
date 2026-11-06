@@ -2,7 +2,9 @@ package wiki
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -28,6 +30,11 @@ type pageCreate struct {
 	BodyHTML string  `json:"body_html,omitempty" doc:"Rich text, sanitized like an article's; up to 512 KB"`
 	Position *int    `json:"position,omitempty" minimum:"0" doc:"Where among its siblings, from 0; the end when left out"`
 	Template bool    `json:"template,omitempty" doc:"A new template at the top level of space (contracts/wiki.md \"Templates\"); a subpage is a template when its parent is"`
+	Kind     string  `json:"kind,omitempty" enum:"page,database" doc:"database makes a database (contracts/wiki.md \"Databases\"); default page"`
+	// A database's properties and views; left out, a title and tags in a table.
+	Database json.RawMessage `json:"database,omitempty"`
+	// A row's values, by property id, when the parent is a database.
+	Props json.RawMessage `json:"props,omitempty"`
 }
 
 type pagePatch struct {
@@ -43,8 +50,12 @@ type pagePatch struct {
 	Font      *string `json:"font,omitempty" enum:"default,serif,mono"`
 	Locked    *bool   `json:"locked,omitempty"`
 	// Verification (contracts/wiki.md "Verified pages"): never needs the version either.
-	Verified     *bool `json:"verified,omitempty" doc:"true verifies the page as you; false takes the verification away"`
-	VerifiedDays *int  `json:"verified_days,omitempty" minimum:"1" maximum:"3650" doc:"With verified: for how many days; left out, until someone changes it"`
+	Verified *bool `json:"verified,omitempty" doc:"true verifies the page as you; false takes the verification away"`
+	// A database's properties and views, replaced whole (a database only).
+	Database json.RawMessage `json:"database,omitempty"`
+	// A row's values to change, by property id; null takes one away (a database row only).
+	Props        json.RawMessage `json:"props,omitempty"`
+	VerifiedDays *int            `json:"verified_days,omitempty" minimum:"1" maximum:"3650" doc:"With verified: for how many days; left out, until someone changes it"`
 }
 
 // settings applies the patch's look to cur.
@@ -190,8 +201,42 @@ func registerPages(d *deps.Deps, api huma.API) {
 					template = b.Template
 				}
 				id := ids.New()
-				if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, team_id, template)
-					VALUES ($1, $2, $3, $4, $5, $6, 2147483647, $7, $7, $8, $9, $10)`, id, p.WorkspaceID, parentID(par), title, icon, body, p.ActorUserID(), owner, team, template); err != nil {
+				kind := "page"
+				var database any
+				if b.Kind == "database" {
+					kind = "database"
+					db := defaultDatabase()
+					if len(b.Database) > 0 {
+						if db, err = cleanDatabase(b.Database, nil); err != nil {
+							return err
+						}
+					}
+					database = db
+				} else if len(b.Database) > 0 {
+					return dbInvalid("database goes with kind database.")
+				}
+				props := map[string]any{}
+				if par != nil && par.database != nil {
+					var refs propRefs
+					if len(b.Props) > 0 {
+						if props, refs, err = cleanProps(b.Props, *par.database, props); err != nil {
+							return err
+						}
+					}
+					if err := checkRefs(ctx, tx, v, p.WorkspaceID, refs); err != nil {
+						return err
+					}
+					if !template {
+						if err := nextRowNumbers(ctx, tx, p.WorkspaceID, par.id, par.database, props); err != nil {
+							return err
+						}
+					}
+				} else if len(b.Props) > 0 {
+					return dbInvalid("props go with a page in a database.")
+				}
+				if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, team_id, template, kind, database, props)
+					VALUES ($1, $2, $3, $4, $5, $6, 2147483647, $7, $7, $8, $9, $10, $11, $12, $13)`, id, p.WorkspaceID, parentID(par), title, icon, body, p.ActorUserID(), owner, team, template,
+					kind, database, props); err != nil {
 					return err
 				}
 				if err := place(ctx, tx, p.WorkspaceID, parentID(par), owner, team, template, &id, b.Position); err != nil {
@@ -301,10 +346,14 @@ func registerPages(d *deps.Deps, api huma.API) {
 				if err != nil {
 					return err
 				}
+				dataChanged, err := applyData(ctx, tx, v, p, id, b)
+				if err != nil {
+					return err
+				}
 				if pg, err = loadPage(ctx, tx, p.WorkspaceID, id); err != nil {
 					return err
 				}
-				if pg.Version == version && settings == cur && !verifyChanged {
+				if pg.Version == version && settings == cur && !verifyChanged && !dataChanged {
 					return nil
 				}
 				data := eventPage(pg)
@@ -314,6 +363,14 @@ func registerPages(d *deps.Deps, api huma.API) {
 				}
 				if verifyChanged {
 					data["verification"] = pg.Verification
+				}
+				if dataChanged {
+					// A row's values and a database's schema have no version either: taken as they come.
+					if pg.Database != nil {
+						data["database"] = pg.Database
+					} else {
+						data["props"] = pg.Props
+					}
 				}
 				return pageEvent(ctx, tx, p.WorkspaceID, pg, "wiki_page.updated", data)
 			})
@@ -592,4 +649,80 @@ func applyVerification(ctx context.Context, tx pgx.Tx, p *auth.Principal, id uui
 	}
 	_, err := tx.Exec(ctx, `UPDATE wiki_pages SET verified_by = $3, verified_at = now(), verified_until = $4 WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, id, me, until)
 	return true, err
+}
+
+// applyData replaces a database's schema or changes a row's values, as the patch asks; it
+// reports whether anything changed. Neither moves the version nor adds a revision; a row's
+// values do move its last edit.
+func applyData(ctx context.Context, tx pgx.Tx, v Viewer, p *auth.Principal, id uuid.UUID, b pagePatch) (bool, error) {
+	if len(b.Database) == 0 && len(b.Props) == 0 {
+		return false, nil
+	}
+	var kind string
+	var raw []byte
+	var parentDB []byte
+	var props map[string]any
+	var parentID *uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT p.kind, p.database, p.props, p.parent_id, a.database FROM wiki_pages p
+		LEFT JOIN wiki_pages a ON a.workspace_id = p.workspace_id AND a.id = p.parent_id
+		WHERE p.workspace_id = $1 AND p.id = $2`, p.WorkspaceID, id).Scan(&kind, &raw, &props, &parentID, &parentDB); err != nil {
+		return false, err
+	}
+	changed := false
+	if len(b.Database) > 0 {
+		if kind != "database" {
+			return false, dbInvalid("Only a database has properties and views.")
+		}
+		var prev Database
+		if err := json.Unmarshal(raw, &prev); err != nil {
+			return false, err
+		}
+		next, err := cleanDatabase(b.Database, &prev)
+		if err != nil {
+			return false, err
+		}
+		// A unique id property added now numbers the rows already there.
+		var added []string
+		for _, np := range next.Properties {
+			if np.Type == "unique_id" && !slices.ContainsFunc(prev.Properties, func(x DbProperty) bool { return x.ID == np.ID && x.Type == "unique_id" }) {
+				added = append(added, np.ID)
+			}
+		}
+		if err := numberRows(ctx, tx, p.WorkspaceID, id, &next, added); err != nil {
+			return false, err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE wiki_pages SET database = $3 WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, id, next); err != nil {
+			return false, err
+		}
+		changed = true
+	}
+	if len(b.Props) > 0 {
+		if parentDB == nil {
+			return false, dbInvalid("Only a database's rows have values.")
+		}
+		var db Database
+		if err := json.Unmarshal(parentDB, &db); err != nil {
+			return false, err
+		}
+		if props == nil {
+			props = map[string]any{}
+		}
+		next, refs, err := cleanProps(b.Props, db, props)
+		if err != nil {
+			return false, err
+		}
+		if err := checkRefs(ctx, tx, v, p.WorkspaceID, refs); err != nil {
+			return false, err
+		}
+		before, _ := json.Marshal(props)
+		after, _ := json.Marshal(next)
+		if string(before) != string(after) {
+			if _, err := tx.Exec(ctx, `UPDATE wiki_pages SET props = $3, updated_by = $4, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
+				p.WorkspaceID, id, next, p.ActorUserID()); err != nil {
+				return false, err
+			}
+			changed = true
+		}
+	}
+	return changed, nil
 }
