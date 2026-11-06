@@ -18,6 +18,15 @@ final class WikiStore {
     var expanded: Set<String> = []
     /// Pages made here a moment ago: they open with the title focused.
     @ObservationIgnored var fresh: Set<String> = []
+    /// The person's favorite pages, in their order (contracts/wiki.md "Favorites").
+    private(set) var favorites: [String] = []
+    /// A comment thread a notification asked to open, by page: the page opens its comments.
+    /// Set before the page (and so the store) may be attached, so `attach` keeps them.
+    var commentRequests: [String: String] = [:]
+    /// Moves on `wiki_comment.changed`, by page: a page showing its comments fetches them again.
+    private(set) var commentChanges: [String: Int] = [:]
+    /// A comment typed and not sent yet, by page: it waits for the page's comments to open again.
+    @ObservationIgnored var unsentComments: [String: String] = [:]
 
     @ObservationIgnored private(set) var api: APIClient?
     @ObservationIgnored private(set) var workspaceID: String?
@@ -34,6 +43,9 @@ final class WikiStore {
         expanded = []
         fresh = []
         savers = [:]
+        favorites = []
+        commentChanges = [:]
+        unsentComments = [:]
         loadedOnce = false
         error = nil
         reload()
@@ -56,9 +68,12 @@ final class WikiStore {
         loading = true
         defer { loading = false }
         do {
+            async let favorite: Page<WikiNode>? = try? api.get("v1/wiki/favorites")
             let page: Page<WikiNode> = try await api.get("v1/wiki/pages")
+            let favored = await favorite
             guard !Task.isCancelled else { return }
             nodes = page.data
+            if let favored { favorites = favored.data.map(\.id) }
             error = nil
             loadedOnce = true
         } catch {
@@ -77,6 +92,34 @@ final class WikiStore {
     /// The pages under `parentID` (nil: the top level), in order.
     func children(of parentID: String?) -> [WikiNode] {
         nodes.filter { $0.parentID == parentID }.sorted { $0.position != $1.position ? $0.position < $1.position : $0.id < $1.id }
+    }
+
+    /// The subpages the tree shows: never templates, and none under a database (its rows
+    /// show in its views, contracts/wiki.md "Databases").
+    func treeChildren(of parentID: String?) -> [WikiNode] {
+        if let parentID, node(parentID)?.isDatabase == true { return [] }
+        return children(of: parentID).filter { !$0.template }
+    }
+
+    /// Where a top-level page lives; its subpages live there too.
+    func section(of node: WikiNode) -> WikiSection {
+        if node.isPrivate { return .personal }
+        if let team = node.teamID { return .team(team) }
+        return .workspace
+    }
+
+    /// The top-level pages of `section`, in order.
+    func roots(of section: WikiSection) -> [WikiNode] {
+        treeChildren(of: nil).filter { self.section(of: $0) == section }
+    }
+
+    /// The teamspaces with pages, in the order their first page sits.
+    var teamspaces: [String] {
+        var out: [String] = []
+        for root in treeChildren(of: nil) {
+            if case let .team(id) = section(of: root), !out.contains(id) { out.append(id) }
+        }
+        return out
     }
 
     /// Its ancestors, the top-level page first.
@@ -117,11 +160,12 @@ final class WikiStore {
     var recent: [WikiNode] { nodes.sorted { $0.updatedAt > $1.updatedAt } }
 
     /// The tree flattened in reading order with each page's level, following `expanded`
-    /// (or every page with `all`).
-    func outline(all: Bool = false) -> [WikiOutlineItem] {
+    /// (or every page with `all`); with `section`, only the pages living there.
+    func outline(all: Bool = false, in section: WikiSection? = nil) -> [WikiOutlineItem] {
         var out: [WikiOutlineItem] = []
         func walk(_ parent: String?, _ level: Int) {
-            for child in children(of: parent) {
+            for child in treeChildren(of: parent) {
+                if level == 0, let section, self.section(of: child) != section { continue }
                 out.append(WikiOutlineItem(node: child, level: level))
                 if all || expanded.contains(child.id) { walk(child.id, level + 1) }
             }
@@ -164,6 +208,15 @@ final class WikiStore {
         }
     }
 
+    /// Deleting a page in the trash for good follows the same rule; the pages that went with
+    /// it are no longer in the tree, so the server checks those.
+    func purgeRule(_ page: WikiTrashedPage, role: Role, me: String?) -> DeleteRule {
+        guard role.canWrite else { return .no }
+        if role.isAdmin { return .yes }
+        guard let me, page.node.createdByID == me else { return .page }
+        return .yes
+    }
+
     /// Admins delete any page; agents a page they created along with every page under it; viewers none.
     func deleteRule(_ id: String, role: Role, me: String?) -> DeleteRule {
         guard role.canWrite else { return .no }
@@ -178,7 +231,8 @@ final class WikiStore {
     func page(_ id: String) async throws -> WikiPage {
         guard let api else { throw APIError.signedOut }
         let page: WikiPage = try await api.get("v1/wiki/pages/\(id)")
-        upsert(page.node)
+        // A page read from the trash stays out of the tree.
+        if !page.inTrash { upsert(page.node) }
         return page
     }
 
@@ -225,6 +279,89 @@ final class WikiStore {
         guard let api else { throw APIError.signedOut }
         try await api.delete("v1/wiki/pages/\(id)")
         remove([id] + descendants(of: id).map(\.id))
+    }
+
+    /// Moves the page and its subpages to the trash; restored with `restoreFromTrash`.
+    func trash(_ id: String) async throws -> WikiPage {
+        guard let api else { throw APIError.signedOut }
+        let page: WikiPage = try await api.post("v1/wiki/pages/\(id)/trash")
+        remove([id] + descendants(of: id).map(\.id))
+        return page
+    }
+
+    /// Puts a page from the trash back with what went with it, then reads the tree again.
+    func restoreFromTrash(_ id: String) async throws -> WikiPage {
+        guard let api else { throw APIError.signedOut }
+        let page: WikiPage = try await api.post("v1/wiki/pages/\(id)/restore")
+        upsert(page.node)
+        reload()
+        return page
+    }
+
+    /// The pages in the trash, last trashed first.
+    func trashed() async throws -> [WikiTrashedPage] {
+        guard let api else { throw APIError.signedOut }
+        let page: Page<WikiTrashedPage> = try await api.get("v1/wiki/trash")
+        return page.data
+    }
+
+    // MARK: Favorites
+
+    func isFavorite(_ id: String) -> Bool { favorites.contains(id) }
+
+    /// The favorite pages in the tree, in order.
+    var favoriteNodes: [WikiNode] { favorites.compactMap { node($0) } }
+
+    /// Adds the page last to the favorites, or takes it out; shown at once.
+    func setFavorite(_ id: String, _ on: Bool) async throws {
+        guard let api else { throw APIError.signedOut }
+        let before = favorites
+        var next = favorites.filter { $0 != id }
+        if on { next.append(id) }
+        favorites = next
+        do {
+            let body = try APICoding.encoder.encode(["page_ids": next])
+            let saved: Page<WikiNode> = try await api.send(APIRequest(method: "PUT", path: "v1/wiki/favorites", body: body))
+            favorites = saved.data.map(\.id)
+        } catch {
+            favorites = before
+            throw error
+        }
+    }
+
+    // MARK: Comments and following
+
+    func comments(_ pageID: String) async throws -> WikiComments {
+        guard let api else { throw APIError.signedOut }
+        return try await api.get("v1/wiki/pages/\(pageID)/comments")
+    }
+
+    /// A new thread on the page, or a reply in `thread`.
+    func comment(on pageID: String, bodyHTML: String, thread: String?) async throws -> WikiThread {
+        guard let api else { throw APIError.signedOut }
+        return try await api.post("v1/wiki/pages/\(pageID)/comments", body: WikiCommentCreate(bodyHTML: bodyHTML, threadID: thread))
+    }
+
+    func resolve(thread: String, _ resolved: Bool) async throws -> WikiThread {
+        guard let api else { throw APIError.signedOut }
+        return try await api.post("v1/wiki/threads/\(thread)/resolve", body: ["resolved": resolved])
+    }
+
+    /// Follows or unfollows the page; answers whether the person follows it now.
+    func follow(_ pageID: String, _ on: Bool) async throws -> Bool {
+        guard let api else { throw APIError.signedOut }
+        let body = try APICoding.encoder.encode(WikiFollowing(following: on))
+        let answer: WikiFollowing = try await api.send(APIRequest(method: "PUT", path: "v1/wiki/pages/\(pageID)/follow", body: body))
+        return answer.following
+    }
+
+    // MARK: Databases
+
+    /// A database's rows, in order, with their values.
+    func rows(of databaseID: String) async throws -> [WikiDbRow] {
+        guard let api else { throw APIError.signedOut }
+        let rows: WikiDbRows = try await api.get("v1/wiki/databases/\(databaseID)/rows")
+        return rows.data
     }
 
     func search(_ text: String) async throws -> [WikiSearchHit] {
@@ -300,6 +437,7 @@ final class WikiStore {
         let parents = Set(nodes.filter { gone.contains($0.id) }.map(\.parentID))
         nodes.removeAll { gone.contains($0.id) }
         expanded.subtract(gone)
+        favorites.removeAll { gone.contains($0) }
         for id in ids { forgetSaver(id) }
         for parent in parents { renumber(parent) }
     }
@@ -322,17 +460,28 @@ final class WikiStore {
             switch envelope.type {
             case "wiki_page.created", "wiki_page.updated":
                 if let node = envelope.member("wiki_page", as: WikiNode.self) { upsert(node) }
-            case "wiki_page.moved":
+            case "wiki_page.moved", "wiki_page.restored":
                 reload()
             case "wiki_page.deleted":
                 var ids = envelope.data["wiki_page_ids"]?.array?.compactMap(\.string) ?? []
                 if let id = envelope.string("wiki_page_id"), !ids.contains(id) { ids.append(id) }
                 remove(ids)
+            case "wiki_comment.changed":
+                if let page = envelope.string("page_id") { commentChanges[page, default: 0] += 1 }
             default:
                 break
             }
         }
     }
+}
+
+/// Where top-level pages live (contracts/wiki.md "Private pages and teamspaces").
+enum WikiSection: Hashable {
+    case workspace
+    /// The person's own pages.
+    case personal
+    /// A team's teamspace.
+    case team(String)
 }
 
 /// A page in the flattened tree, with how deep it sits (0: the top level).
@@ -471,6 +620,7 @@ final class WikiSaver {
                 let api = error as? APIError
                 status = switch (api?.status, api?.code) {
                 case (409, _), (_, "page_changed"?): .conflict
+                case (_, "page_in_trash"?): .deleted
                 case (403, _): .forbidden
                 case (404, _): .deleted
                 default: .error

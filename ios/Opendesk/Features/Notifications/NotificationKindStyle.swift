@@ -44,11 +44,13 @@ enum NotificationStyle {
     }
 
     /// Where a tap goes, as the web's `notificationPath`: the ticket, the mail conversation
-    /// (or Mail when it names none), or the wiki page or settings page it is about on the web.
+    /// (or Mail when it names none), the wiki page (with the comment thread it is about), or
+    /// the settings page it is about on the web.
     enum Target: Equatable {
         case ticket(String)
         case mailThread(String)
         case mail
+        case wikiPage(String, thread: String?)
         case web(String)
         case none
     }
@@ -70,9 +72,9 @@ enum NotificationStyle {
             return .web(id.map { "/settings/import?id=\($0)" } ?? "/settings/import")
         case .supportChannelUnhealthy: return .web("/settings/support-channels")
         case .wikiMention, .wikiComment, .wikiReminder:
-            guard let page = data["page_id"]?.string.flatMap(pathSegment) else { return .web("/wiki") }
-            let thread = data["thread_id"]?.string.flatMap { $0.isEmpty ? nil : $0.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+"))) }
-            return .web(thread.map { "/wiki/\(page)?comment=\($0)" } ?? "/wiki/\(page)")
+            guard let page = data["page_id"]?.string, !page.isEmpty else { return .web("/wiki") }
+            let thread = data["thread_id"]?.string.flatMap { $0.isEmpty ? nil : $0 }
+            return .wikiPage(page, thread: thread)
         default:
             if let id = notification.ticket?.id { return .ticket(id) }
             return .none

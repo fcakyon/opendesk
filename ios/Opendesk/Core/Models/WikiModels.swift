@@ -1,7 +1,8 @@
 import Foundation
 
 // The team's internal wiki (contracts/wiki.md): `WikiNode`, `WikiRef`, `WikiPage`,
-// `WikiRevision` and `WikiSearchHit`. Keys are copied through explicit CodingKeys.
+// `WikiRevision`, `WikiSearchHit`, the trash, database rows and comments. Keys are
+// copied through explicit CodingKeys.
 
 /// A page in the tree, without its body.
 struct WikiNode: Codable, Hashable, Sendable, Identifiable {
@@ -13,15 +14,32 @@ struct WikiNode: Codable, Hashable, Sendable, Identifiable {
     var version: Int
     var updatedAt: Date
     var createdByID: String?
+    /// One member's own page (contracts/wiki.md "Private pages and teamspaces").
+    var isPrivate: Bool
+    /// The teamspace it is in.
+    var teamID: String?
+    /// A template, never in the tree.
+    var template: Bool
+    /// The member's journal: their daily notes are under it.
+    var journal: Bool
+    var dailyDate: String?
+    /// Verified, and not past the day it was verified until.
+    var verified: Bool
+    /// `page`, or `database`: a database's subpages are its rows.
+    var kind: String
 
     enum CodingKeys: String, CodingKey {
-        case id, title, icon, position, version
+        case id, title, icon, position, version, template, journal, verified, kind
         case parentID = "parent_id"
         case updatedAt = "updated_at"
         case createdByID = "created_by_id"
+        case isPrivate = "private"
+        case teamID = "team_id"
+        case dailyDate = "daily_date"
     }
 
-    init(id: String, parentID: String?, title: String, icon: String, position: Int, version: Int, updatedAt: Date, createdByID: String?) {
+    init(id: String, parentID: String?, title: String, icon: String, position: Int, version: Int, updatedAt: Date, createdByID: String?,
+         isPrivate: Bool = false, teamID: String? = nil, template: Bool = false, journal: Bool = false, dailyDate: String? = nil, verified: Bool = false, kind: String = "page") {
         self.id = id
         self.parentID = parentID
         self.title = title
@@ -30,6 +48,13 @@ struct WikiNode: Codable, Hashable, Sendable, Identifiable {
         self.version = version
         self.updatedAt = updatedAt
         self.createdByID = createdByID
+        self.isPrivate = isPrivate
+        self.teamID = teamID
+        self.template = template
+        self.journal = journal
+        self.dailyDate = dailyDate
+        self.verified = verified
+        self.kind = kind
     }
 
     init(from decoder: Decoder) throws {
@@ -42,6 +67,13 @@ struct WikiNode: Codable, Hashable, Sendable, Identifiable {
         version = c.lenient(Int.self, forKey: .version) ?? 1
         updatedAt = c.lenient(Date.self, forKey: .updatedAt) ?? .now
         createdByID = c.lenient(String.self, forKey: .createdByID)
+        isPrivate = c.lenient(Bool.self, forKey: .isPrivate) ?? false
+        teamID = c.lenient(String.self, forKey: .teamID)
+        template = c.lenient(Bool.self, forKey: .template) ?? false
+        journal = c.lenient(Bool.self, forKey: .journal) ?? false
+        dailyDate = c.lenient(String.self, forKey: .dailyDate)
+        verified = c.lenient(Bool.self, forKey: .verified) ?? false
+        kind = c.lenient(String.self, forKey: .kind) ?? "page"
     }
 
     func encode(to encoder: Encoder) throws {
@@ -54,9 +86,17 @@ struct WikiNode: Codable, Hashable, Sendable, Identifiable {
         try c.encode(version, forKey: .version)
         try c.encode(updatedAt, forKey: .updatedAt)
         try c.encode(createdByID, forKey: .createdByID)
+        try c.encode(isPrivate, forKey: .isPrivate)
+        try c.encode(teamID, forKey: .teamID)
+        try c.encode(template, forKey: .template)
+        try c.encode(journal, forKey: .journal)
+        try c.encodeIfPresent(dailyDate, forKey: .dailyDate)
+        try c.encode(verified, forKey: .verified)
+        try c.encode(kind, forKey: .kind)
     }
 
     var displayTitle: String { WikiText.title(title) }
+    var isDatabase: Bool { kind == "database" }
 }
 
 struct WikiRef: Codable, Hashable, Sendable, Identifiable {
@@ -97,15 +137,35 @@ struct WikiPage: Codable, Hashable, Sendable, Identifiable {
     var updatedAt: Date
     var breadcrumbs: [WikiRef]
     var children: [WikiRef]
+    var isPrivate = false
+    var teamID: String?
+    var template = false
+    var journal = false
+    var dailyDate: String?
+    /// `page`, or `database` (its subpages are its rows).
+    var kind = "page"
+    /// The app keeps the page read-only until someone unlocks it (contracts/wiki.md "Page settings").
+    var locked = false
+    var verification: WikiVerification?
+    /// In the trash since; nil for a page in the tree.
+    var deletedAt: Date?
+    var deletedBy: UserRef?
+    /// A database's properties; nil for a page.
+    var database: WikiDatabase?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, icon, position, version, breadcrumbs, children
+        case id, title, icon, position, version, breadcrumbs, children, template, journal, kind, locked, verification, database
         case parentID = "parent_id"
         case bodyHTML = "body_html"
         case createdBy = "created_by"
         case updatedBy = "updated_by"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case isPrivate = "private"
+        case teamID = "team_id"
+        case dailyDate = "daily_date"
+        case deletedAt = "deleted_at"
+        case deletedBy = "deleted_by"
     }
 
     init(id: String, parentID: String?, title: String, icon: String, bodyHTML: String, position: Int, version: Int, createdBy: UserRef?, updatedBy: UserRef?, createdAt: Date, updatedAt: Date, breadcrumbs: [WikiRef], children: [WikiRef]) {
@@ -139,6 +199,17 @@ struct WikiPage: Codable, Hashable, Sendable, Identifiable {
         updatedAt = c.lenient(Date.self, forKey: .updatedAt) ?? createdAt
         breadcrumbs = c.lenient([WikiRef].self, forKey: .breadcrumbs) ?? []
         children = c.lenient([WikiRef].self, forKey: .children) ?? []
+        isPrivate = c.lenient(Bool.self, forKey: .isPrivate) ?? false
+        teamID = c.lenient(String.self, forKey: .teamID)
+        template = c.lenient(Bool.self, forKey: .template) ?? false
+        journal = c.lenient(Bool.self, forKey: .journal) ?? false
+        dailyDate = c.lenient(String.self, forKey: .dailyDate)
+        kind = c.lenient(String.self, forKey: .kind) ?? "page"
+        locked = c.lenient(Bool.self, forKey: .locked) ?? false
+        verification = c.lenient(WikiVerification.self, forKey: .verification)
+        deletedAt = c.lenient(Date.self, forKey: .deletedAt)
+        deletedBy = c.lenient(UserRef.self, forKey: .deletedBy)
+        database = c.lenient(WikiDatabase.self, forKey: .database)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -156,14 +227,259 @@ struct WikiPage: Codable, Hashable, Sendable, Identifiable {
         try c.encode(updatedAt, forKey: .updatedAt)
         try c.encode(breadcrumbs, forKey: .breadcrumbs)
         try c.encode(children, forKey: .children)
+        try c.encode(isPrivate, forKey: .isPrivate)
+        try c.encode(teamID, forKey: .teamID)
+        try c.encode(template, forKey: .template)
+        try c.encode(journal, forKey: .journal)
+        try c.encodeIfPresent(dailyDate, forKey: .dailyDate)
+        try c.encode(kind, forKey: .kind)
+        try c.encode(locked, forKey: .locked)
+        try c.encodeIfPresent(verification, forKey: .verification)
+        try c.encodeIfPresent(deletedAt, forKey: .deletedAt)
+        try c.encodeIfPresent(deletedBy, forKey: .deletedBy)
+        try c.encodeIfPresent(database, forKey: .database)
     }
 
     /// The page as the tree holds it.
     var node: WikiNode {
-        WikiNode(id: id, parentID: parentID, title: title, icon: icon, position: position, version: version, updatedAt: updatedAt, createdByID: createdBy?.id)
+        WikiNode(id: id, parentID: parentID, title: title, icon: icon, position: position, version: version, updatedAt: updatedAt, createdByID: createdBy?.id,
+                 isPrivate: isPrivate, teamID: teamID, template: template, journal: journal, dailyDate: dailyDate,
+                 verified: verification.map { !$0.expired } ?? false, kind: kind)
     }
 
     var displayTitle: String { WikiText.title(title) }
+    var isDatabase: Bool { kind == "database" }
+    var inTrash: Bool { deletedAt != nil }
+}
+
+/// Who vouched for a page and until when (contracts/wiki.md "Verified pages").
+struct WikiVerification: Codable, Hashable, Sendable {
+    var by: UserRef?
+    var at: Date
+    /// Nil: verified until someone changes the page.
+    var until: Date?
+    var expired: Bool
+
+    enum CodingKeys: String, CodingKey { case by, at, until, expired }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        by = c.lenient(UserRef.self, forKey: .by)
+        at = c.lenient(Date.self, forKey: .at) ?? .now
+        until = c.lenient(Date.self, forKey: .until)
+        expired = c.lenient(Bool.self, forKey: .expired) ?? false
+    }
+}
+
+/// A database's properties (contracts/wiki.md "Databases"); its views belong to the web app.
+struct WikiDatabase: Codable, Hashable, Sendable {
+    var properties: [WikiDbProperty]
+
+    enum CodingKeys: String, CodingKey { case properties }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        properties = c.lenient([WikiDbProperty].self, forKey: .properties) ?? []
+    }
+}
+
+struct WikiDbProperty: Codable, Hashable, Sendable, Identifiable {
+    var id: String
+    var name: String
+    /// `title`, `text`, `number`, `select`, `status`, `date`, `person`, `checkbox`, ...
+    var type: String
+    var options: [WikiDbOption]
+    /// unique_id: letters before the number.
+    var prefix: String?
+
+    enum CodingKeys: String, CodingKey { case id, name, type, options, prefix }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = c.lenient(String.self, forKey: .name) ?? ""
+        type = c.lenient(String.self, forKey: .type) ?? "text"
+        options = c.lenient([WikiDbOption].self, forKey: .options) ?? []
+        prefix = c.lenient(String.self, forKey: .prefix)
+    }
+}
+
+struct WikiDbOption: Codable, Hashable, Sendable, Identifiable {
+    var id: String
+    var name: String
+}
+
+/// A database's row as its views read it (`GET /v1/wiki/databases/{id}/rows`).
+struct WikiDbRow: Decodable, Hashable, Sendable, Identifiable {
+    var node: WikiNode
+    /// Its values, by property id.
+    var props: [String: JSONValue]
+    var createdAt: Date
+    var createdBy: UserRef?
+    var updatedBy: UserRef?
+
+    var id: String { node.id }
+
+    enum CodingKeys: String, CodingKey {
+        case props
+        case createdAt = "created_at"
+        case createdBy = "created_by"
+        case updatedBy = "updated_by"
+    }
+
+    init(from decoder: Decoder) throws {
+        node = try WikiNode(from: decoder)
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        props = c.lenient([String: JSONValue].self, forKey: .props) ?? [:]
+        createdAt = c.lenient(Date.self, forKey: .createdAt) ?? node.updatedAt
+        createdBy = c.lenient(UserRef.self, forKey: .createdBy)
+        updatedBy = c.lenient(UserRef.self, forKey: .updatedBy)
+    }
+}
+
+struct WikiDbRows: Decodable, Sendable {
+    var data: [WikiDbRow]
+}
+
+/// A page in the trash, with what went with it (contracts/wiki.md "Trash").
+struct WikiTrashedPage: Decodable, Hashable, Sendable, Identifiable {
+    var node: WikiNode
+    var deletedAt: Date
+    var deletedBy: UserRef?
+    /// When it goes for good.
+    var purgeAt: Date
+    /// How many pages went to the trash with it.
+    var subpages: Int
+    /// Where it was: its ancestors when it was trashed, the top-level page first.
+    var path: [WikiRef]
+
+    var id: String { node.id }
+
+    enum CodingKeys: String, CodingKey {
+        case subpages, path
+        case deletedAt = "deleted_at"
+        case deletedBy = "deleted_by"
+        case purgeAt = "purge_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        node = try WikiNode(from: decoder)
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        deletedAt = c.lenient(Date.self, forKey: .deletedAt) ?? .now
+        deletedBy = c.lenient(UserRef.self, forKey: .deletedBy)
+        purgeAt = c.lenient(Date.self, forKey: .purgeAt) ?? deletedAt.addingTimeInterval(30 * 24 * 3600)
+        subpages = c.lenient(Int.self, forKey: .subpages) ?? 0
+        path = c.lenient([WikiRef].self, forKey: .path) ?? []
+    }
+}
+
+// MARK: - Comments
+
+/// One comment of a thread (contracts/wiki.md "Comments").
+struct WikiComment: Decodable, Hashable, Sendable, Identifiable {
+    var id: String
+    var threadID: String
+    /// Nil for a deleted account.
+    var author: UserRef?
+    var bodyHTML: String
+    var createdAt: Date
+    var editedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id, author
+        case threadID = "thread_id"
+        case bodyHTML = "body_html"
+        case createdAt = "created_at"
+        case editedAt = "edited_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        threadID = c.lenient(String.self, forKey: .threadID) ?? ""
+        author = c.lenient(UserRef.self, forKey: .author)
+        bodyHTML = c.lenient(String.self, forKey: .bodyHTML) ?? ""
+        createdAt = c.lenient(Date.self, forKey: .createdAt) ?? .now
+        editedAt = c.lenient(Date.self, forKey: .editedAt)
+    }
+}
+
+/// A thread on a page: its first comment and the replies, oldest first; inline threads keep
+/// the text they were made on as `quote`.
+struct WikiThread: Decodable, Hashable, Sendable, Identifiable {
+    var id: String
+    var pageID: String
+    var quote: String
+    var inline: Bool
+    var createdAt: Date
+    var resolvedAt: Date?
+    var resolvedBy: UserRef?
+    var comments: [WikiComment]
+
+    enum CodingKeys: String, CodingKey {
+        case id, quote, inline, comments
+        case pageID = "page_id"
+        case createdAt = "created_at"
+        case resolvedAt = "resolved_at"
+        case resolvedBy = "resolved_by"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        pageID = c.lenient(String.self, forKey: .pageID) ?? ""
+        quote = c.lenient(String.self, forKey: .quote) ?? ""
+        inline = c.lenient(Bool.self, forKey: .inline) ?? false
+        createdAt = c.lenient(Date.self, forKey: .createdAt) ?? .now
+        resolvedAt = c.lenient(Date.self, forKey: .resolvedAt)
+        resolvedBy = c.lenient(UserRef.self, forKey: .resolvedBy)
+        comments = c.lenient([WikiComment].self, forKey: .comments) ?? []
+    }
+
+    var resolved: Bool { resolvedAt != nil }
+}
+
+/// A page's threads, open and resolved, and whether the caller follows the page.
+struct WikiComments: Decodable, Sendable {
+    var data: [WikiThread]
+    var following: Bool
+
+    enum CodingKeys: String, CodingKey { case data, following }
+
+    init(data: [WikiThread], following: Bool) {
+        self.data = data
+        self.following = following
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        data = c.lenient([WikiThread].self, forKey: .data) ?? []
+        following = c.lenient(Bool.self, forKey: .following) ?? false
+    }
+
+    var open: [WikiThread] { data.filter { !$0.resolved } }
+}
+
+/// Body of `POST /v1/wiki/pages/{id}/comments`: a new thread, or a reply with `threadID`.
+struct WikiCommentCreate: Encodable, Sendable {
+    var bodyHTML: String
+    var threadID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case bodyHTML = "body_html"
+        case threadID = "thread_id"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(bodyHTML, forKey: .bodyHTML)
+        try c.encodeIfPresent(threadID, forKey: .threadID)
+    }
+}
+
+/// `{following}` of `PUT /v1/wiki/pages/{id}/follow`.
+struct WikiFollowing: Codable, Sendable {
+    var following: Bool
 }
 
 /// A kept version of a page; `bodyHTML` only when one revision is read.
@@ -263,11 +579,15 @@ struct WikiPageCreate: Encodable, Sendable {
     var title: String?
     var icon: String?
     var bodyHTML: String?
+    /// Where a top-level page lives: `workspace` (the default), `private` or `team` with `teamID`.
+    var space: String?
+    var teamID: String?
 
     enum CodingKeys: String, CodingKey {
-        case title, icon
+        case title, icon, space
         case parentID = "parent_id"
         case bodyHTML = "body_html"
+        case teamID = "team_id"
     }
 
     func encode(to encoder: Encoder) throws {
@@ -276,6 +596,8 @@ struct WikiPageCreate: Encodable, Sendable {
         try c.encodeIfPresent(title, forKey: .title)
         try c.encodeIfPresent(icon, forKey: .icon)
         try c.encodeIfPresent(bodyHTML, forKey: .bodyHTML)
+        try c.encodeIfPresent(space, forKey: .space)
+        try c.encodeIfPresent(teamID, forKey: .teamID)
     }
 }
 

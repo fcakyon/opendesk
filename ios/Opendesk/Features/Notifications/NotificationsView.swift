@@ -218,6 +218,10 @@ private struct NotificationsList: View {
             env.router.area = .mail
             env.router.inboxPath = []
             env.router.tab = .inbox
+        case let .wikiPage(page, thread):
+            // A comment's thread opens over the page (WikiPageScreen reads the request).
+            if let thread { WikiStore.shared.commentRequests[page] = thread }
+            env.router.pick(.wikiPage(page))
         case let .web(path): web = env.session.instance.webURL(path: path).map(AccountWebPage.init)
         case .none: break
         }

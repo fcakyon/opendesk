@@ -23,6 +23,8 @@ enum AppRoute: Hashable {
     case changelogEntry(String)
     /// A wiki page.
     case wikiPage(String)
+    /// The wiki's trash.
+    case wikiTrash
     case search
 
     static func ticket(_ ticket: Ticket) -> AppRoute { .ticket(TicketRoute(id: ticket.id, seed: ticket)) }

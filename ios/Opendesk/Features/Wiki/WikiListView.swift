@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// The wiki (contracts/wiki.md): the team's runbooks, policies and how-tos, as a
-/// tree of pages. The pages edited lately, then every page with its subpages
-/// folded under it; search finds words in titles and text. Agents and admins add
-/// pages here and under any page; viewers read.
+/// tree of pages. The pages edited lately, the person's favorites, then the pages
+/// of each teamspace, the workspace and their own private pages, each with its
+/// subpages folded under it, and the trash; search finds words in titles and text.
+/// Agents and admins add pages here and under any page; viewers read.
 struct WikiListView: View {
     @Environment(AppEnvironment.self) private var env
     @State private var query = ""
@@ -14,7 +15,6 @@ struct WikiListView: View {
     @State private var searchError: String?
     @State private var searchTask: Task<Void, Never>?
     @State private var moving: WikiNode?
-    @State private var deleting: WikiNode?
     @State private var creating = false
     @State private var listener: UUID?
 
@@ -62,7 +62,6 @@ struct WikiListView: View {
                 .presentationDetents([.medium, .large])
                 .presentationCornerRadius(Theme.Radius.sheet)
         }
-        .wikiDeleteConfirmation($deleting)
         #if DEBUG
         .onChange(of: env.router.demoAction) { _, action in demo(action) }
         #endif
@@ -99,7 +98,7 @@ struct WikiListView: View {
 
     @ViewBuilder
     private var tree: some View {
-        let recent = Array(store.recent.prefix(5))
+        let recent = Array(store.recent.filter { !$0.template }.prefix(5))
         if store.nodes.count > 3 {
             header("Recently edited")
             ForEach(recent) { node in
@@ -113,9 +112,61 @@ struct WikiListView: View {
                 .contextMenu { menu(node) }
             }
         }
-        header("All pages")
-        ForEach(store.outline()) { item in
-            let subpages = store.children(of: item.node.id).count
+        let favorites = store.favoriteNodes
+        if !favorites.isEmpty {
+            header("Favorites")
+            ForEach(favorites) { node in
+                WikiTreeRow(node: node, level: 0, subpages: 0, expanded: false, onToggle: {}, onOpen: { open(node.id) })
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(rowBackground(node.id))
+                    .contextMenu { menu(node) }
+            }
+        }
+        ForEach(store.teamspaces, id: \.self) { team in
+            header(env.directory.teams.first { $0.id == team }?.name ?? "Teamspace")
+            pages(in: .team(team))
+            if env.session.canWrite {
+                newPageRow("New page") { create(WikiPageCreate(space: "team", teamID: team)) }
+            }
+        }
+        header("Workspace")
+        pages(in: .workspace)
+        if env.session.canWrite {
+            newPageRow("New page") { create(WikiPageCreate()) }
+        }
+        if env.session.canWrite || !store.roots(of: .personal).isEmpty {
+            header("Private")
+            pages(in: .personal)
+            if env.session.canWrite {
+                newPageRow("New private page") { create(WikiPageCreate(space: "private")) }
+            }
+        }
+        Button { env.router.pick(.wikiTrash) } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "trash").font(.system(size: 13, weight: .medium)).frame(width: 28)
+                Text("Trash").font(ODFont.sans(15))
+                Spacer()
+                Chevron()
+            }
+            .foregroundStyle(Theme.fg3)
+            .padding(.leading, 8)
+            .padding(.trailing, 16)
+            .frame(height: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(RowPressStyle())
+        .padding(.top, 12)
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
+        .listRowBackground(env.router.picked == .wikiTrash ? Theme.hover : Theme.surface)
+    }
+
+    /// The pages of one section, each with its subpages folded under it.
+    @ViewBuilder
+    private func pages(in section: WikiSection) -> some View {
+        ForEach(store.outline(in: section)) { item in
+            let subpages = store.treeChildren(of: item.node.id).count
             WikiTreeRow(node: item.node, level: item.level, subpages: subpages, expanded: store.expanded.contains(item.node.id), onToggle: {
                 Haptics.selection()
                 withAnimation(Motion.snappy) { store.toggle(item.node.id) }
@@ -126,32 +177,35 @@ struct WikiListView: View {
             .contextMenu { menu(item.node) }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 if env.session.canWrite {
-                    Button { create(WikiPageCreate(parentID: item.node.id)) } label: { Label("Add a subpage", systemImage: "plus") }
-                        .tint(Tone.blue.solid)
+                    if !item.node.isDatabase {
+                        Button { create(WikiPageCreate(parentID: item.node.id)) } label: { Label("Add a subpage", systemImage: "plus") }
+                            .tint(Tone.blue.solid)
+                    }
                     Button { moving = item.node } label: { Label("Move", systemImage: "folder") }
                         .tint(Tone.violet.solid)
                 }
             }
         }
         .motion(Motion.snappy, value: store.expanded)
-        if env.session.canWrite {
-            Button { create(WikiPageCreate()) } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "plus").font(.system(size: 13, weight: .semibold)).frame(width: 28)
-                    Text("New page").font(ODFont.sans(15))
-                    Spacer()
-                }
-                .foregroundStyle(Theme.fg3)
-                .padding(.leading, 8)
-                .frame(height: 44)
-                .contentShape(Rectangle())
+    }
+
+    private func newPageRow(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: "plus").font(.system(size: 13, weight: .semibold)).frame(width: 28)
+                Text(title).font(ODFont.sans(15))
+                Spacer()
             }
-            .buttonStyle(RowPressStyle())
-            .disabled(creating)
-            .listRowInsets(EdgeInsets())
-            .listRowSeparator(.hidden)
-            .listRowBackground(Theme.surface)
+            .foregroundStyle(Theme.fg3)
+            .padding(.leading, 8)
+            .frame(height: 44)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(RowPressStyle())
+        .disabled(creating)
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
+        .listRowBackground(Theme.surface)
     }
 
     @ViewBuilder
@@ -234,6 +288,14 @@ struct WikiListView: View {
                 }
                 .padding(.horizontal, 20)
             }
+            Button { env.router.pick(.wikiTrash) } label: {
+                Label("Open the trash", systemImage: "trash")
+                    .font(ODFont.sans(14, weight: .medium))
+                    .foregroundStyle(Theme.fg3)
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 8)
         }
         .padding(.bottom, 90)
     }
@@ -245,7 +307,7 @@ struct WikiListView: View {
             node: node,
             onAddSubpage: { create(WikiPageCreate(parentID: node.id)) },
             onMove: { moving = node },
-            onDelete: { deleting = node }
+            onDelete: { WikiTrash.move(node, env: env) }
         )
     }
 
@@ -303,7 +365,7 @@ struct WikiListView: View {
     }
 
     #if DEBUG
-    /// QA states: `/demo/wiki-expand`, `/demo/wiki-move`, `/demo/wiki-delete`.
+    /// QA states: `/demo/wiki-expand`, `/demo/wiki-move`, `/demo/wiki-trash`.
     private func demo(_ action: String?) {
         guard let action, action.hasPrefix("wiki-") else { return }
         switch action {
@@ -311,8 +373,8 @@ struct WikiListView: View {
             store.expand(store.nodes.map(\.id))
         case "wiki-move":
             moving = store.children(of: nil).last
-        case "wiki-delete":
-            deleting = store.children(of: nil).first
+        case "wiki-trash":
+            env.router.pick(.wikiTrash)
         default:
             return
         }

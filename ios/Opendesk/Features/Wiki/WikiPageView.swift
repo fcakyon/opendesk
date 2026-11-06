@@ -5,6 +5,8 @@ import SwiftUI
 /// editor as articles), saved as they type. When someone else saves first, what was
 /// typed stays and the page asks whose version to keep. A version loaded from the
 /// server (theirs, a restored one) is never an edit: only typing is ever sent.
+/// The web's blocks read as links and cards (`WikiBody`); a page holding them edits as
+/// HTML, so nothing is lost. A database lists its rows; comments open in a sheet.
 struct WikiPageView: View {
     let id: String
 
@@ -21,6 +23,7 @@ struct WikiPageScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
 
     @State private var saver: WikiSaver?
     @State private var loadError: String?
@@ -34,14 +37,19 @@ struct WikiPageScreen: View {
     @State private var showIcon = false
     @State private var showHistory = false
     @State private var moving: WikiNode?
-    @State private var deleting: WikiNode?
     @State private var listener: UUID?
     @State private var started = false
+    /// The page's threads and whether the person follows it.
+    @State private var comments: WikiComments?
+    @State private var showComments = false
+    @State private var focusThread: String?
+    @State private var restoring = false
     @FocusState private var titleFocused: Bool
     @FocusState private var bodyFocused: Bool
 
     private var store: WikiStore { WikiStore.shared }
-    private var canEdit: Bool { env.session.canWrite }
+    /// Agents and admins edit, unless the page is in the trash or locked (unlocked on the web).
+    private var canEdit: Bool { env.session.canWrite && saver?.page.inTrash != true && saver?.page.locked != true }
 
     var body: some View {
         screen
@@ -50,7 +58,12 @@ struct WikiPageScreen: View {
                 if listener == nil {
                     listener = env.realtime.subscribe { update in WikiStore.shared.handle(update) }
                 }
-                if started { Task { await load() } }
+                if started {
+                    Task {
+                        await load()
+                        await loadComments()
+                    }
+                }
             }
             .task { await start() }
             .onDisappear {
@@ -69,6 +82,10 @@ struct WikiPageScreen: View {
                 guard editing else { return }
                 saver?.edit(body: value.bodyHTML)
             }
+            .onChange(of: store.commentChanges[id]) { _, _ in Task { await loadComments() } }
+            .onChange(of: store.commentRequests[id]) { _, thread in
+                if thread != nil, saver != nil { openRequestedComments() }
+            }
             .sheet(isPresented: $showIcon) {
                 WikiIconSheet(current: saver?.draft.icon ?? "") { saver?.edit(icon: $0) }
                     .presentationDetents([.medium, .large])
@@ -86,7 +103,11 @@ struct WikiPageScreen: View {
                     .presentationDetents([.medium, .large])
                     .presentationCornerRadius(Theme.Radius.sheet)
             }
-            .wikiDeleteConfirmation($deleting) { _ in dismiss() }
+            .sheet(isPresented: $showComments) {
+                WikiCommentsSheet(pageID: id, comments: $comments, focus: focusThread, canWrite: env.session.canWrite && saver?.page.inTrash != true)
+                    .presentationDetents([.medium, .large])
+                    .presentationCornerRadius(Theme.Radius.sheet)
+            }
         #if DEBUG
             .onChange(of: env.router.demoAction) { _, action in demo(action) }
         #endif
@@ -133,6 +154,10 @@ struct WikiPageScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 banners(saver)
+                if saver.page.inTrash {
+                    trashNotice(saver)
+                        .padding(.bottom, 14)
+                }
                 breadcrumbs
                     .padding(.bottom, 14)
                 head(saver)
@@ -145,8 +170,17 @@ struct WikiPageScreen: View {
                     reader(saver)
                         .padding(.top, 20)
                 }
-                subpages
-                    .padding(.top, 36)
+                if saver.page.isDatabase {
+                    WikiDatabaseRows(databaseID: id, database: saver.page.database)
+                        .padding(.top, 28)
+                } else {
+                    ForEach(WikiBody.databaseIDs(in: saver.draft.body).filter { $0 != id }, id: \.self) { database in
+                        WikiDatabaseRows(databaseID: database, title: store.node(database)?.displayTitle ?? "Database")
+                            .padding(.top, 28)
+                    }
+                    subpages
+                        .padding(.top, 36)
+                }
             }
             .padding(.horizontal, editing ? 16 : 20)
             .padding(.top, 8)
@@ -248,6 +282,35 @@ struct WikiPageScreen: View {
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous).strokeBorder(Tone.amber.line, lineWidth: 1))
     }
 
+    /// A page read from the trash: who moved it there, and Restore.
+    private func trashNotice(_ saver: WikiSaver) -> some View {
+        let who = saver.page.deletedBy.map { "\($0.displayName) moved it there" } ?? "It was moved there"
+        let when = saver.page.deletedAt.map { " \(Format.relLong($0))" } ?? ""
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "trash").font(.system(size: 13)).foregroundStyle(Tone.red.solid)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("This page is in the trash.").font(ODFont.sans(14, weight: .semibold)).foregroundStyle(Theme.fg)
+                    Text("\(who)\(when). It is deleted for good 30 days after that.")
+                        .font(ODFont.footnote)
+                        .foregroundStyle(Theme.fg2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if env.session.canWrite {
+                Button { Task { await restoreFromTrash() } } label: {
+                    if restoring { ProgressView().controlSize(.small) } else { Text("Restore") }
+                }
+                .buttonStyle(InkButtonStyle(fullWidth: false, height: 34))
+                .disabled(restoring)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Tone.red.soft, in: RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous).strokeBorder(Tone.red.line, lineWidth: 1))
+    }
+
     @ViewBuilder
     private var breadcrumbs: some View {
         let crumbs: [WikiRef] = store.node(id) != nil
@@ -312,6 +375,14 @@ struct WikiPageScreen: View {
                     .foregroundStyle(saver.draft.title.trimmingCharacters(in: .whitespaces).isEmpty ? Theme.fg3 : Theme.fg)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if let verification = saver.page.verification {
+                WikiVerifiedLine(verification: verification)
+            }
+            if saver.page.locked, env.session.canWrite, !saver.page.inTrash {
+                Label("This page is locked. Unlock it on the web to edit it.", systemImage: "lock.fill")
+                    .font(ODFont.sans(12.5, weight: .medium))
+                    .foregroundStyle(Theme.fg3)
+            }
             WikiEditedLine(page: saver.page)
         }
         .padding(.horizontal, editing ? 4 : 0)
@@ -319,8 +390,10 @@ struct WikiPageScreen: View {
 
     @ViewBuilder
     private func reader(_ saver: WikiSaver) -> some View {
-        if HTMLText.plain(from: saver.draft.body).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            if canEdit, !saver.final {
+        if WikiBody.isBlank(saver.draft.body) {
+            if saver.page.isDatabase {
+                EmptyView()
+            } else if canEdit, !saver.final {
                 Button { startEditing(focusBody: true) } label: {
                     Text("Write something, or paste it in.")
                         .font(ODFont.sans(15))
@@ -335,8 +408,13 @@ struct WikiPageScreen: View {
                     .foregroundStyle(Theme.fg4)
             }
         } else {
-            KBArticleWebView(html: saver.draft.body, height: $bodyHeight)
-                .frame(height: bodyHeight)
+            KBArticleWebView(
+                html: WikiBody.readable(saver.draft.body, apiBase: env.session.instance.apiURL, title: { store.node($0)?.displayTitle }),
+                height: $bodyHeight,
+                extraCSS: WikiBody.css(dark: scheme == .dark),
+                onLink: { handle($0) }
+            )
+            .frame(height: bodyHeight)
         }
     }
 
@@ -417,22 +495,42 @@ struct WikiPageScreen: View {
                             .fontWeight(.semibold)
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        WikiPageMenu(
-                            node: store.node(id) ?? saver.page.node,
-                            onAddSubpage: addSubpage,
-                            onMove: { moving = store.node(id) ?? saver.page.node },
-                            onDelete: { deleting = store.node(id) ?? saver.page.node },
-                            onHistory: { showHistory = true }
-                        )
-                    } label: {
-                        Image(systemName: "ellipsis")
+                ToolbarItem(placement: .topBarTrailing) { commentsButton }
+                if !saver.page.inTrash {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            WikiPageMenu(
+                                node: store.node(id) ?? saver.page.node,
+                                onAddSubpage: addSubpage,
+                                onMove: { moving = store.node(id) ?? saver.page.node },
+                                onDelete: { trash(store.node(id) ?? saver.page.node) },
+                                onHistory: { showHistory = true },
+                                following: comments?.following,
+                                onFollow: toggleFollow
+                            )
+                        } label: {
+                            Image(systemName: "ellipsis")
+                        }
+                        .accessibilityLabel("More actions")
                     }
-                    .accessibilityLabel("More actions")
                 }
             }
         }
+    }
+
+    /// The page's comments, with how many threads are open.
+    private var commentsButton: some View {
+        let count = comments?.open.count ?? 0
+        return Button {
+            focusThread = nil
+            showComments = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: count > 0 ? "text.bubble.fill" : "text.bubble")
+                if count > 0 { Text("\(count)").monospacedDigit() }
+            }
+        }
+        .accessibilityLabel(count == 0 ? "Comments" : "Comments, \(count) open")
     }
 
     /// Saving, Saved, or what went wrong, where the title would be.
@@ -471,6 +569,10 @@ struct WikiPageScreen: View {
         started = true
         store.attach(env)
         await load()
+        if saver != nil {
+            Task { await loadComments() }
+            openRequestedComments()
+        }
         // A page made a moment ago opens with its title ready to type.
         if canEdit, saver != nil, store.fresh.remove(id) != nil {
             startEditing()
@@ -576,8 +678,87 @@ struct WikiPageScreen: View {
         }
     }
 
+    /// Sends what was typed, then moves the page to the trash, with Undo.
+    private func trash(_ node: WikiNode) {
+        Task {
+            if let saver { await saver.flush() }
+            WikiTrash.move(node, env: env) { dismiss() }
+        }
+    }
+
+    private func restoreFromTrash() async {
+        guard let saver else { return }
+        restoring = true
+        defer { restoring = false }
+        if let page = await WikiTrash.restore(saver.page.node, env: env) { take(page) }
+    }
+
+    // MARK: Comments and following
+
+    /// The count and Follow wait for the next try when this fails; the sheet says what went wrong.
+    private func loadComments() async {
+        guard let fresh = try? await store.comments(id) else { return }
+        comments = fresh
+    }
+
+    /// A notification asked for one of this page's threads.
+    private func openRequestedComments() {
+        guard let thread = store.commentRequests.removeValue(forKey: id) else { return }
+        focusThread = thread
+        showComments = true
+    }
+
+    private func toggleFollow() {
+        guard let current = comments?.following else { return }
+        Haptics.selection()
+        comments?.following = !current
+        Task {
+            do {
+                let now = try await store.follow(id, !current)
+                comments?.following = now
+                env.toasts.show(now ? "You'll hear about new comments on this page" : "You'll hear about this page only when someone mentions you", kind: .success)
+            } catch {
+                comments?.following = current
+                env.toasts.error(error)
+            }
+        }
+    }
+
+    // MARK: Links
+
+    /// A link tapped in the text: pages, tickets, contacts and other app pages open here.
+    private func handle(_ url: URL) -> Bool {
+        if let link = WikiBody.link(url) {
+            switch link {
+            case let .page(page): env.router.push(.wikiPage(page))
+            case let .ticket(ticket): env.router.push(.ticket(TicketRoute(id: ticket)))
+            case let .contact(contact): env.router.push(.contact(contact))
+            case let .path(path):
+                if let deep = DeepLink.parse(path: path) { go(deep) }
+            }
+            return true
+        }
+        // A link to a page of this instance's web app.
+        if let target = DeepLink.parse(url: url, instance: env.session.instance) {
+            go(target.link)
+            return true
+        }
+        return false
+    }
+
+    private func go(_ link: DeepLink) {
+        switch link {
+        case let .wiki(page?): env.router.push(.wikiPage(page))
+        case let .ticket(ticket, _): env.router.push(.ticket(TicketRoute(id: ticket)))
+        case let .contact(contact?): env.router.push(.contact(contact))
+        case let .company(company?): env.router.push(.company(company))
+        case let .article(article?): env.router.push(.article(article))
+        default: env.router.open(DeepLink.Target(link: link, server: nil, workspaceID: nil))
+        }
+    }
+
     #if DEBUG
-    /// QA states: `/demo/wiki-edit`, `/demo/wiki-icon`, `/demo/wiki-history`, `/demo/wiki-move-page`.
+    /// QA states: `/demo/wiki-edit`, `/demo/wiki-icon`, `/demo/wiki-history`, `/demo/wiki-move-page`, `/demo/wiki-comments`.
     private func demo(_ action: String?) {
         guard let action, action.hasPrefix("wiki-"), saver != nil else { return }
         switch action {
@@ -587,6 +768,7 @@ struct WikiPageScreen: View {
             showIcon = true
         case "wiki-history": showHistory = true
         case "wiki-move-page": moving = store.node(id) ?? saver?.page.node
+        case "wiki-comments": showComments = true
         default:
             return
         }

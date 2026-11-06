@@ -14,6 +14,14 @@ struct DemoWiki: Sendable {
     var pages: [WikiPage] = []
     /// Each page's kept versions, newest first, with their bodies.
     var revisions: [String: [WikiRevision]] = [:]
+    /// Pages in the trash, and the pages that went with each one trashed.
+    var trash: [WikiPage] = []
+    var trashedWith: [String: [String]] = [:]
+    /// The demo person's favorites, in order.
+    var favorites: [String] = []
+    /// Comment threads by page, as the API answers them, and whether the demo person follows.
+    var threads: [String: [JSONValue]] = [:]
+    var following: [String: Bool] = [:]
 
     static func pageID(_ n: Int) -> String { demoKBID(0x23, n) }
     static func revisionID(_ n: Int, _ r: Int) -> String { demoKBID(0x24, n * 100 + r) }
@@ -233,6 +241,7 @@ struct DemoWiki: Sendable {
 
 extension DemoBackend {
     func wikiRoutes(_ call: Call, in ws: inout DemoWorkspace) throws -> Data?? {
+        if let answer = try wikiPersonalRoutes(call, in: &ws) { return answer }
         if call.match("GET", "wiki/pages") != nil {
             return .some(encode(ListBody(data: ws.kb.wiki.pages.map(\.node))))
         }
@@ -345,6 +354,153 @@ extension DemoBackend {
             ws.kb.wiki.revisions[page.id, default: []].insert(WikiRevision(id: made(), title: page.title, icon: page.icon, bodyHTML: page.bodyHTML, author: me, createdAt: page.updatedAt, updatedAt: page.updatedAt), at: 0)
             publish("wiki_page.updated", ["wiki_page": DemoSeed.json(page.node), "updated_by": DemoSeed.json(me)], in: &ws)
             return .some(encode(ws.kb.wiki.full(page.id)))
+        }
+        return nil
+    }
+
+    /// The trash, favorites, comments and following (contracts/wiki.md).
+    private func wikiPersonalRoutes(_ call: Call, in ws: inout DemoWorkspace) throws -> Data?? {
+        if let id = call.match("GET", "wiki/pages/*")?.first, let page = ws.kb.wiki.trash.first(where: { $0.id == id }) {
+            return .some(encode(page))
+        }
+        if let id = call.match("POST", "wiki/pages/*/trash")?.first {
+            guard var page = ws.kb.wiki.full(id) else { throw notFound("page") }
+            let gone = [id] + ws.kb.wiki.descendants(of: id)
+            let at = now()
+            for goneID in gone {
+                guard var moved = ws.kb.wiki.page(goneID) else { continue }
+                moved.deletedAt = at
+                moved.deletedBy = me
+                ws.kb.wiki.trash.append(moved)
+            }
+            ws.kb.wiki.pages.removeAll { gone.contains($0.id) }
+            ws.kb.wiki.trashedWith[id] = gone
+            ws.kb.wiki.favorites.removeAll { gone.contains($0) }
+            ws.kb.wiki.renumber(page.parentID)
+            page.deletedAt = at
+            page.deletedBy = me
+            publish("wiki_page.deleted", ["wiki_page_id": .string(id), "wiki_page_ids": .array(gone.map(JSONValue.string)), "trashed": .bool(true)], in: &ws)
+            return .some(encode(page))
+        }
+        if let id = call.match("POST", "wiki/pages/*/restore")?.first {
+            guard let gone = ws.kb.wiki.trashedWith[id] else {
+                if ws.kb.wiki.trash.contains(where: { $0.id == id }) {
+                    throw Failure(status: 422, code: "trashed_with_parent", detail: "This page went to the trash with a page above it. Restore that one.")
+                }
+                throw Failure(status: 422, code: "not_in_trash", detail: "This page isn't in the trash.")
+            }
+            var back = ws.kb.wiki.trash.filter { gone.contains($0.id) }
+            ws.kb.wiki.trash.removeAll { gone.contains($0.id) }
+            ws.kb.wiki.trashedWith[id] = nil
+            for index in back.indices {
+                back[index].deletedAt = nil
+                back[index].deletedBy = nil
+            }
+            if let root = back.firstIndex(where: { $0.id == id }) {
+                if let parent = back[root].parentID, ws.kb.wiki.page(parent) == nil { back[root].parentID = nil }
+                back[root].position = ws.kb.wiki.children(of: back[root].parentID).count
+            }
+            ws.kb.wiki.pages.append(contentsOf: back)
+            guard let page = ws.kb.wiki.full(id) else { throw notFound("page") }
+            publish("wiki_page.restored", ["wiki_page": DemoSeed.json(page.node), "wiki_page_ids": .array(gone.map(JSONValue.string))], in: &ws)
+            return .some(encode(page))
+        }
+        if call.match("GET", "wiki/trash") != nil {
+            let wiki = ws.kb.wiki
+            let roots = wiki.trash.filter { wiki.trashedWith[$0.id] != nil }.sorted { ($0.deletedAt ?? .distantPast) > ($1.deletedAt ?? .distantPast) }
+            let list: [JSONValue] = roots.map { page in
+                var object = DemoSeed.json(page.node).object ?? [:]
+                let at = page.deletedAt ?? DemoMode.anchor
+                var above: [WikiPage] = []
+                if let parent = page.parentID, let found = wiki.page(parent) { above = wiki.ancestors(of: parent) + [found] }
+                let path = above.map { WikiRef(id: $0.id, title: $0.title, icon: $0.icon) }
+                object["deleted_at"] = .string(DemoSeed.stamp(at))
+                object["deleted_by"] = DemoSeed.json(page.deletedBy)
+                object["purge_at"] = .string(DemoSeed.stamp(at.addingTimeInterval(30 * 24 * 3600)))
+                object["subpages"] = .number(Double(max(0, (wiki.trashedWith[page.id]?.count ?? 1) - 1)))
+                object["path"] = DemoSeed.json(path)
+                return .object(object)
+            }
+            return .some(encode(ListBody(data: list)))
+        }
+        if let id = call.match("DELETE", "wiki/pages/*")?.first, let gone = ws.kb.wiki.trashedWith[id] {
+            ws.kb.wiki.trash.removeAll { gone.contains($0.id) }
+            ws.kb.wiki.trashedWith[id] = nil
+            for page in gone { ws.kb.wiki.revisions[page] = nil }
+            return .some(nil)
+        }
+        if call.match("GET", "wiki/favorites") != nil {
+            let wiki = ws.kb.wiki
+            return .some(encode(ListBody(data: wiki.favorites.compactMap { wiki.page($0)?.node })))
+        }
+        if call.match("PUT", "wiki/favorites") != nil {
+            let wiki = ws.kb.wiki
+            var kept: [String] = []
+            for id in (call.body["page_ids"]?.array ?? []).compactMap(\.string) where wiki.page(id) != nil && !kept.contains(id) {
+                kept.append(id)
+            }
+            ws.kb.wiki.favorites = Array(kept.prefix(100))
+            return .some(encode(ListBody(data: ws.kb.wiki.favorites.compactMap { wiki.page($0)?.node })))
+        }
+        if let id = call.match("PUT", "wiki/pages/*/follow")?.first {
+            let on = call.body["following"]?.bool ?? true
+            ws.kb.wiki.following[id] = on
+            return .some(encode(WikiFollowing(following: on)))
+        }
+        if let id = call.match("GET", "wiki/pages/*/comments")?.first {
+            guard ws.kb.wiki.page(id) != nil || ws.kb.wiki.trash.contains(where: { $0.id == id }) else { throw notFound("page") }
+            return .some(encode(JSONValue.object(["data": .array(ws.kb.wiki.threads[id] ?? []), "following": .bool(ws.kb.wiki.following[id] ?? true)])))
+        }
+        if let id = call.match("POST", "wiki/pages/*/comments")?.first {
+            guard ws.kb.wiki.page(id) != nil else { throw notFound("page") }
+            let body = call.string("body_html") ?? ""
+            guard !HTMLText.plain(from: body).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw Failure(status: 422, code: "invalid", detail: "Write something first.")
+            }
+            let at = JSONValue.string(DemoSeed.stamp(now()))
+            var comment: [String: JSONValue] = [
+                "id": .string(made()), "author": DemoSeed.json(me), "body_html": .string(body), "mentions": .array([]),
+                "created_at": at, "edited_at": .null, "reactions": .array([]),
+            ]
+            var threads = ws.kb.wiki.threads[id] ?? []
+            let thread: JSONValue
+            if let threadID = call.string("thread_id") {
+                guard let index = threads.firstIndex(where: { $0["id"]?.string == threadID }) else {
+                    throw Failure(status: 422, code: "invalid", detail: "That thread isn't on this page.")
+                }
+                comment["thread_id"] = .string(threadID)
+                var object = threads[index].object ?? [:]
+                object["comments"] = .array((object["comments"]?.array ?? []) + [.object(comment)])
+                object["resolved_at"] = .null
+                object["resolved_by"] = .null
+                thread = .object(object)
+                threads[index] = thread
+            } else {
+                let threadID = comment["id"]?.string ?? made()
+                comment["thread_id"] = .string(threadID)
+                thread = .object([
+                    "id": .string(threadID), "page_id": .string(id), "quote": .string(""), "inline": .bool(false), "created_at": at,
+                    "resolved_at": .null, "resolved_by": .null, "comments": .array([.object(comment)]),
+                ])
+                threads.append(thread)
+            }
+            ws.kb.wiki.threads[id] = threads
+            if ws.kb.wiki.following[id] == nil { ws.kb.wiki.following[id] = true }
+            publish("wiki_comment.changed", ["page_id": .string(id), "thread_id": thread["id"] ?? .null], in: &ws)
+            return .some(encode(thread))
+        }
+        if let threadID = call.match("POST", "wiki/threads/*/resolve")?.first {
+            for (page, list) in ws.kb.wiki.threads {
+                guard let index = list.firstIndex(where: { $0["id"]?.string == threadID }) else { continue }
+                let resolved = call.body["resolved"]?.bool ?? true
+                var object = list[index].object ?? [:]
+                object["resolved_at"] = resolved ? .string(DemoSeed.stamp(now())) : .null
+                object["resolved_by"] = resolved ? DemoSeed.json(me) : .null
+                ws.kb.wiki.threads[page]?[index] = .object(object)
+                publish("wiki_comment.changed", ["page_id": .string(page), "thread_id": .string(threadID)], in: &ws)
+                return .some(encode(JSONValue.object(object)))
+            }
+            throw notFound("thread")
         }
         return nil
     }

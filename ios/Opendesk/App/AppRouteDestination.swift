@@ -13,6 +13,7 @@ struct AppRouteDestination: View {
         case let .article(id): ArticleView(id: id)
         case let .changelogEntry(id): ChangelogEntryView(id: id)
         case let .wikiPage(id): WikiPageView(id: id)
+        case .wikiTrash: WikiTrashView()
         case .search: SearchView()
         }
     }
