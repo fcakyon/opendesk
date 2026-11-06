@@ -199,57 +199,7 @@ func registerArticles(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			b := in.Body
-			title, err := cleanTitle(b.Title)
-			if err != nil {
-				return nil, err
-			}
-			status := b.Status
-			if status == "" {
-				status = "draft"
-			}
-			body := hd.SanitizeRich(b.BodyHTML)
-			excerpt := ""
-			if b.Excerpt != nil {
-				excerpt = cleanExcerpt(*b.Excerpt)
-			}
-			if excerpt == "" {
-				excerpt = deriveExcerpt(body)
-			}
-			var a KbArticle
-			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				var cid, brand *uuid.UUID
-				if b.CollectionID != nil {
-					if cid, err = collectionRef(ctx, tx, p.WorkspaceID, *b.CollectionID); err != nil {
-						return err
-					}
-				}
-				if b.BrandID != nil {
-					if brand, err = brandRef(ctx, tx, p.WorkspaceID, *b.BrandID); err != nil {
-						return err
-					}
-				}
-				slug, err := pickSlug(ctx, tx, "kb_articles", p.WorkspaceID, &b.Slug, title, nil)
-				if err != nil {
-					return err
-				}
-				id := ids.New()
-				if _, err := tx.Exec(ctx, `INSERT INTO kb_articles (id, workspace_id, collection_id, title, slug, excerpt, body_html,
-					status, author_id, published_at, brand_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, CASE WHEN $8 = 'published' THEN now() END, $10)`,
-					id, p.WorkspaceID, cid, title, slug, excerpt, body, status, p.ActorUserID(), brand); err != nil {
-					return slugConflict(err)
-				}
-				if a, err = loadArticle(ctx, tx, p.WorkspaceID, id); err != nil {
-					return err
-				}
-				if status == "published" {
-					if err := hd.EnqueueAIEmbed(ctx, tx, d.Jobs, d.Cfg, p.WorkspaceID, "article", id); err != nil {
-						return err
-					}
-				}
-				_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "kb_article.created", Data: map[string]any{"kb_article": a}})
-				return err
-			})
+			a, err := createArticle(ctx, d, p, in.Body)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -374,4 +324,60 @@ func registerArticles(d *deps.Deps, api huma.API) {
 			}
 			return nil, nil
 		})
+}
+
+// createArticle adds an article as an agent writes it (POST /v1/kb/articles, and a wiki
+// page published as a draft).
+func createArticle(ctx context.Context, d *deps.Deps, p *auth.Principal, b kbArticleCreate) (KbArticle, error) {
+	title, err := cleanTitle(b.Title)
+	if err != nil {
+		return KbArticle{}, err
+	}
+	status := b.Status
+	if status == "" {
+		status = "draft"
+	}
+	body := hd.SanitizeRich(b.BodyHTML)
+	excerpt := ""
+	if b.Excerpt != nil {
+		excerpt = cleanExcerpt(*b.Excerpt)
+	}
+	if excerpt == "" {
+		excerpt = deriveExcerpt(body)
+	}
+	var a KbArticle
+	err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
+		var cid, brand *uuid.UUID
+		if b.CollectionID != nil {
+			if cid, err = collectionRef(ctx, tx, p.WorkspaceID, *b.CollectionID); err != nil {
+				return err
+			}
+		}
+		if b.BrandID != nil {
+			if brand, err = brandRef(ctx, tx, p.WorkspaceID, *b.BrandID); err != nil {
+				return err
+			}
+		}
+		slug, err := pickSlug(ctx, tx, "kb_articles", p.WorkspaceID, &b.Slug, title, nil)
+		if err != nil {
+			return err
+		}
+		id := ids.New()
+		if _, err := tx.Exec(ctx, `INSERT INTO kb_articles (id, workspace_id, collection_id, title, slug, excerpt, body_html,
+			status, author_id, published_at, brand_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, CASE WHEN $8 = 'published' THEN now() END, $10)`,
+			id, p.WorkspaceID, cid, title, slug, excerpt, body, status, p.ActorUserID(), brand); err != nil {
+			return slugConflict(err)
+		}
+		if a, err = loadArticle(ctx, tx, p.WorkspaceID, id); err != nil {
+			return err
+		}
+		if status == "published" {
+			if err := hd.EnqueueAIEmbed(ctx, tx, d.Jobs, d.Cfg, p.WorkspaceID, "article", id); err != nil {
+				return err
+			}
+		}
+		_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "kb_article.created", Data: map[string]any{"kb_article": a}})
+		return err
+	})
+	return a, err
 }
