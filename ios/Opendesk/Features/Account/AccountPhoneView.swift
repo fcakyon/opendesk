@@ -30,7 +30,7 @@ struct AccountPhoneView: View {
         let admin = env.session.isAdmin
         let order: [NotificationKind] = [
             .assigned, .newTicket, .mentioned, .customerReplied, .threadReplied, .slaBreached, .aiHandoff,
-            .collabAssigned, .collabMention, .teamJoined,
+            .collabAssigned, .collabMention, .wikiMention, .wikiComment, .wikiReminder, .teamJoined,
             .aiCapReached, .aiKeyFailed, .aiBalanceLow, .aiBalanceOut, .autoRechargeFailed, .importFinished, .supportChannelUnhealthy,
         ]
         return order.filter { !$0.isAdminAlert || admin }

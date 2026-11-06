@@ -6,12 +6,12 @@ enum NotificationStyle {
         switch type {
         case "assigned", "collab_assigned": .blue
         case "new_ticket", "import_finished": .green
-        case "mentioned", "collab_mention": .indigo
-        case "customer_replied": .teal
+        case "mentioned", "collab_mention", "wiki_mention": .indigo
+        case "customer_replied", "wiki_comment": .teal
         case "thread_replied", "team_joined": .cyan
         case "sla_breached", "ai_balance_out", "auto_recharge_failed", "ai_key_failed", "support_channel_unhealthy": .red
         case "ai_handoff", "ai_cap_reached": .violet
-        case "ai_balance_low": .amber
+        case "ai_balance_low", "wiki_reminder": .amber
         default: .gray
         }
     }
@@ -44,7 +44,7 @@ enum NotificationStyle {
     }
 
     /// Where a tap goes, as the web's `notificationPath`: the ticket, the mail conversation
-    /// (or Mail when it names none), or the settings page it is about on the web.
+    /// (or Mail when it names none), or the wiki page or settings page it is about on the web.
     enum Target: Equatable {
         case ticket(String)
         case mailThread(String)
@@ -69,6 +69,10 @@ enum NotificationStyle {
             let id = data["import_id"]?.string.flatMap { $0.isEmpty ? nil : $0.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+"))) }
             return .web(id.map { "/settings/import?id=\($0)" } ?? "/settings/import")
         case .supportChannelUnhealthy: return .web("/settings/support-channels")
+        case .wikiMention, .wikiComment, .wikiReminder:
+            guard let page = data["page_id"]?.string.flatMap(pathSegment) else { return .web("/wiki") }
+            let thread = data["thread_id"]?.string.flatMap { $0.isEmpty ? nil : $0.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+"))) }
+            return .web(thread.map { "/wiki/\(page)?comment=\($0)" } ?? "/wiki/\(page)")
         default:
             if let id = notification.ticket?.id { return .ticket(id) }
             return .none
@@ -79,10 +83,11 @@ enum NotificationStyle {
         id.isEmpty ? nil : id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/")))
     }
 
-    /// The line under the title: the ticket or conversation it's about, then a preview.
+    /// The line under the title: the ticket, conversation or wiki page it's about, then a preview.
     static func context(of notification: AppNotification) -> String? {
         if let ticket = notification.ticket { return "#\(ticket.number) \(ticket.subject)" }
         if let subject = notification.data["subject"]?.string, !subject.isEmpty { return subject }
+        if let page = notification.data["page_title"]?.string, !page.isEmpty { return page }
         return nil
     }
 }

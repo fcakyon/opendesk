@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/db"
@@ -55,3 +56,27 @@ func liveSQL(alias string, me, hidden int) string {
 
 // args are the values seesSQL and liveSQL bind.
 func (v Viewer) args() (any, any) { return v.Me, v.Hidden }
+
+// seenBySQL is the predicate for a page aliased alias that the person whose id is the SQL
+// expression user may see in the tree or among templates: not in the trash, not someone
+// else's private page, not a page of a private team they are not on. It is how the wiki
+// decides who hears about a page (notifications), where Viewer is the caller.
+func seenBySQL(alias, user string) string {
+	return fmt.Sprintf(`(%[1]s.deleted_at IS NULL AND (%[1]s.private_to IS NULL OR %[1]s.private_to = %[2]s)
+		AND (%[1]s.team_id IS NULL OR NOT EXISTS (SELECT 1 FROM teams st WHERE st.id = %[1]s.team_id AND st.private
+			AND NOT EXISTS (SELECT 1 FROM team_members stm WHERE stm.team_id = st.id AND stm.user_id = %[2]s))))`, alias, user)
+}
+
+// audience keeps the people of users who may see the page now (seenBySQL), in order.
+func audience(ctx context.Context, q db.Querier, wid, page uuid.UUID, users []uuid.UUID) ([]uuid.UUID, error) {
+	if len(users) == 0 {
+		return nil, nil
+	}
+	rows, err := q.Query(ctx, `SELECT x.u FROM unnest($3::uuid[]) WITH ORDINALITY AS x(u, n)
+		JOIN wiki_pages p ON p.workspace_id = $1 AND p.id = $2
+		WHERE `+seenBySQL("p", "x.u")+` ORDER BY x.n`, wid, page, users)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+}

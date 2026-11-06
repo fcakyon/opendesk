@@ -38,7 +38,7 @@ defmodule RealtimeWeb.TicketChannel do
 
   alias Realtime.Auth
   alias Realtime.Ids
-  alias RealtimeWeb.Channels.Guard
+  alias RealtimeWeb.Channels.{Guard, TeamScope}
   alias RealtimeWeb.Presence
 
   @states ~w(viewing replying idle)
@@ -51,7 +51,7 @@ defmodule RealtimeWeb.TicketChannel do
          # This channel acts in the topic's workspace: the role and private teams the
          # token gives there, whichever workspace the token was issued in.
          socket = socket |> assign(:wid, wid) |> assign(:role, role) |> assign(:teams, teams),
-         {:ok, team_id} <- join_team(payload, socket) do
+         {:ok, team_id} <- TeamScope.join_team(payload, socket) do
       if Guard.join_allowed?(socket) do
         send(self(), :after_join)
 
@@ -80,14 +80,14 @@ defmodule RealtimeWeb.TicketChannel do
         Presence.track(socket, socket.assigns.sub, meta(socket, socket.assigns.initial_state))
     end
 
-    push(socket, "presence_state", visible_presences(Presence.list(socket), socket))
+    push(socket, "presence_state", TeamScope.visible_presences(Presence.list(socket), socket))
     {:noreply, socket}
   end
 
   @impl true
   def handle_out("presence_diff", %{joins: joins, leaves: leaves}, socket) do
-    joins = visible_presences(joins, socket)
-    leaves = visible_presences(leaves, socket)
+    joins = TeamScope.visible_presences(joins, socket)
+    leaves = TeamScope.visible_presences(leaves, socket)
 
     if joins != %{} or leaves != %{},
       do: push(socket, "presence_diff", %{joins: joins, leaves: leaves})
@@ -97,44 +97,15 @@ defmodule RealtimeWeb.TicketChannel do
 
   def handle_out(event, payload, socket) when event in ["live", "typing", "customer_typing"] do
     {team_id, payload} = pop_team(payload)
-    if visible?(team_id, socket), do: push(socket, event, payload)
+    if TeamScope.visible?(team_id, socket), do: push(socket, event, payload)
     {:noreply, socket}
   end
-
-  # No team_id: the ticket is not in a private team. A team_id must be one of the
-  # token's private teams.
-  defp join_team(payload, socket) when is_map(payload) do
-    case Map.get(payload, "team_id") do
-      nil ->
-        {:ok, nil}
-
-      team_id ->
-        if Ids.uuid?(team_id) and Ids.normalize(team_id) in Map.get(socket.assigns, :teams, []),
-          do: {:ok, Ids.normalize(team_id)},
-          else: :error
-    end
-  end
-
-  defp join_team(_payload, _socket), do: {:ok, nil}
-
-  defp visible?(nil, _socket), do: true
-  defp visible?(team_id, socket), do: team_id in Map.get(socket.assigns, :teams, [])
 
   defp pop_team(payload) do
     case Map.pop(payload, :team_id) do
       {nil, payload} -> Map.pop(payload, "team_id")
       found -> found
     end
-  end
-
-  # Keeps the metas the socket may see, without their team_id.
-  defp visible_presences(presences, socket) do
-    for {key, %{metas: metas} = entry} <- presences,
-        metas =
-          for(meta <- metas, visible?(meta[:team_id], socket), do: Map.delete(meta, :team_id)),
-        metas != [],
-        into: %{},
-        do: {key, %{entry | metas: metas}}
   end
 
   defp watch?(%{"watch" => true}), do: true

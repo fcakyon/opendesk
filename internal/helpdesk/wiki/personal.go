@@ -341,6 +341,12 @@ func registerPersonal(d *deps.Deps, api huma.API) {
 				if err := indexBody(ctx, tx, p.WorkspaceID, id, body); err != nil {
 					return err
 				}
+				if err := autoFollow(ctx, tx, p, id); err != nil {
+					return err
+				}
+				if err := bodySaved(ctx, tx, p, id, "", body); err != nil {
+					return err
+				}
 				if pg, err = loadPage(ctx, tx, p.WorkspaceID, id); err != nil {
 					return err
 				}

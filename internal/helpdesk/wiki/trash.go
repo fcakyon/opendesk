@@ -74,8 +74,11 @@ func registerTrash(d *deps.Deps, api huma.API) {
 					WHERE workspace_id = $1 AND id = ANY($2)`, p.WorkspaceID, gone, p.ActorUserID(), id); err != nil {
 					return err
 				}
-				// Favorites of pages in the trash would point nowhere.
+				// Favorites of pages in the trash would point nowhere; nobody hears about them.
 				if _, err := tx.Exec(ctx, `DELETE FROM wiki_favorites WHERE workspace_id = $1 AND page_id = ANY($2)`, p.WorkspaceID, gone); err != nil {
+					return err
+				}
+				if err := dropHiddenNotifications(ctx, tx, p.WorkspaceID, gone); err != nil {
 					return err
 				}
 				if err := place(ctx, tx, p.WorkspaceID, before.ParentID, before.owner, before.TeamID, before.Template, nil, nil); err != nil {
@@ -237,15 +240,23 @@ func registerTrash(d *deps.Deps, api huma.API) {
 		})
 }
 
-// Periodic empties pages that have been in the trash for 30 days.
+// Periodic empties pages that have been in the trash for 30 days and sends the reminders
+// that are due.
 func Periodic() []*river.PeriodicJob {
-	return []*river.PeriodicJob{river.NewPeriodicJob(river.PeriodicInterval(time.Hour),
-		func() (river.JobArgs, *river.InsertOpts) { return jobs.WikiTrashPurgeArgs{}, nil }, &river.PeriodicJobOpts{RunOnStart: true})}
+	return []*river.PeriodicJob{
+		river.NewPeriodicJob(river.PeriodicInterval(time.Hour),
+			func() (river.JobArgs, *river.InsertOpts) { return jobs.WikiTrashPurgeArgs{}, nil }, &river.PeriodicJobOpts{RunOnStart: true}),
+		river.NewPeriodicJob(river.PeriodicInterval(time.Minute),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return jobs.WikiRemindersArgs{}, &river.InsertOpts{MaxAttempts: 3, UniqueOpts: river.UniqueOpts{ByPeriod: time.Minute}}
+			}, &river.PeriodicJobOpts{RunOnStart: true}),
+	}
 }
 
-// RegisterWorkers adds the trash's purge.
+// RegisterWorkers adds the trash's purge and the reminders.
 func RegisterWorkers(d *deps.Deps, w *river.Workers) {
 	river.AddWorker(w, &purgeWorker{d: d})
+	river.AddWorker(w, &reminderWorker{d: d})
 }
 
 type purgeWorker struct {

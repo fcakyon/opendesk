@@ -104,6 +104,7 @@ view to its owner.
 | `billing.updated`        | agents     | —                                     | `Billing` (`contracts/billing.md`): plan, status, seats, limits, usage, AI balance, prices. Sent on subscription changes, seat syncs, AI top-ups and recharges |
 | `saved_reply.*`, `view.*`, `automation.*`, `sla_policy.*`, `kb_article.*`, `kb_collection.*`, `changelog_entry.*`, `team.*` | agents | — (a personal `view.*`: its owner, `private`) | `{ "<resource>": Obj }` / `{ "<resource>_id" }` |
 | `wiki_page.created` / `wiki_page.updated` / `wiki_page.moved` / `wiki_page.deleted` | agents | — | `{ "wiki_page": WikiNode, "updated_by": UserRef \| null }` (no body: refetch the page) / `{ "wiki_page_id", "wiki_page_ids": [...] }` (the page and its subpages, all removed) (`contracts/wiki.md`) |
+| `wiki_comment.changed` | agents | the page's readers, like `wiki_page.*` (a private page's member: `private`, `user:<uid>`; a private team's page: `team:<wid>:<tid>`) | `{ "page_id", "thread_id" }`: a thread of the page changed; refetch its comments (`contracts/wiki.md` "Comments") |
 | `webhook.*` | agents | admins (`private`, `user:<uid>`) | `{ "webhook": Webhook }` / `{ "webhook_id" }` |
 | `brand.created` / `brand.updated` / `brand.deleted` | agents | — | `{ "brand": Brand }` / `{ "brand_id" }` |
 | `routing_rule.created` / `routing_rule.updated` / `routing_rule.deleted` | agents | — | `{ "routing_rule": RoutingRule }` / `{ "routing_rule_id" }` |

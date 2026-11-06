@@ -281,6 +281,9 @@ struct NotificationTypePrefs: Codable, Hashable, Sendable, Identifiable {
         "ai_handoff": ("Handoffs to a person", "Ollie hands a conversation to the team"),
         "collab_assigned": ("Mail assigned to you", "A teammate assigns you a conversation from a mail account"),
         "collab_mention": ("Mail comment mentions", "Someone mentions you in a comment on a mail conversation"),
+        "wiki_mention": ("Wiki mentions", "Someone mentions you on a wiki page or in a comment on one"),
+        "wiki_comment": ("Wiki comments", "New comments on pages you follow and in threads you wrote in"),
+        "wiki_reminder": ("Wiki reminders", "A reminder you set in a wiki page is due"),
         "team_joined": ("Team changes", "An admin joins a team you lead"),
         "ai_cap_reached": ("AI agent cap reached", "Ollie reached this month's spending cap"),
         "ai_key_failed": ("AI key problems", "The workspace's own AI key stopped working"),
@@ -345,7 +348,7 @@ struct NotificationPreferences: Codable, Hashable, Sendable {
 
     /// The types in the web's group order, each group once.
     var groups: [(group: String, types: [NotificationTypePrefs])] {
-        let order = ["tickets", "mail", "team", "ai_billing", "workspace"]
+        let order = ["tickets", "mail", "wiki", "team", "ai_billing", "workspace"]
         let known = Set(order)
         let extra = types.map(\.group).filter { !known.contains($0) }
         var seen = Set<String>()
@@ -361,6 +364,7 @@ struct NotificationPreferences: Codable, Hashable, Sendable {
         case "tickets": "Tickets"
         case "team": "Team"
         case "mail": "Mail"
+        case "wiki": "Wiki"
         case "ai_billing": "AI and billing"
         case "workspace": "Workspace"
         default: group.replacingOccurrences(of: "_", with: " ").capitalized

@@ -24,6 +24,9 @@ func TestSanitizeWikiKeepsEditorBlocks(t *testing.T) {
 		`<span data-type="mention" data-id="3dcb61fa-abc6-47ac-9916-06acf5b7fdf7" class="mention">@Maya Chen</span>`,
 		`data-type="page" data-id="3dcb61fa-abc6-47ac-9916-06acf5b7fdf7"`,
 		`<time data-type="date" datetime="2026-11-06">2026-11-06</time>`,
+		`<span data-comment="5b0f6f8e-2f0b-4f55-9d0a-6d2f0c1c9a11">commented text</span>`,
+		`<time data-type="date" datetime="2026-11-07T09:30" data-reminder="0d6c2f8a-7b1e-4c3d-8f5a-2e9b4a6c1d70">2026-11-07T09:30</time>`,
+		`<time data-type="date" datetime="2026-11-08T09:30:00Z">2026-11-08T09:30:00Z</time>`,
 		`<span data-latex="a^2+b^2" data-type="inline-math"></span>`,
 		`<ul data-block-id="2be0deff-de52-4bf9-9dc2-b8979223096e" data-type="taskList">`,
 		`data-checked="true" data-type="taskItem"`,
@@ -76,10 +79,13 @@ func TestSanitizeWikiRefuses(t *testing.T) {
 		"table style":       `<table style="position: fixed">a</table>`,
 		"page link non-id":  `<a data-type="page" data-id="../../x" href="/wiki/x">x</a>`,
 		"time not a day":    `<time data-type="date" datetime="tomorrow">x</time>`,
+		"comment non-id":    `<span data-comment="tomorrow">x</span>`,
+		"reminder non-id":   `<time data-type="date" datetime="2026-11-06" data-reminder="tomorrow">x</time>`,
+		"comment on a div":  `<div data-comment="5b0f6f8e-2f0b-4f55-9d0a-6d2f0c1c9a11">x</div>`,
 		"img width huge":    `<img src="https://x.example/a.png" data-width="1e9">`,
 		"callout icon html": `<div data-type="callout" data-icon="<b>">x</div>`,
 	}
-	bad := regexp.MustCompile(`(?i)script|onclick|iframe|javascript:|http://|data:text|data-type="script"|background|url\(|evil|position|\.\./|tomorrow|1e9|&lt;b&gt;`)
+	bad := regexp.MustCompile(`(?i)script|onclick|iframe|javascript:|http://|data:text|data-type="script"|background|url\(|evil|position|\.\./|tomorrow|1e9|&lt;b&gt;|<div data-comment`)
 	for name, in := range cases {
 		if out := SanitizeWiki(in); bad.MatchString(out) {
 			t.Errorf("%s: kept %q", name, out)

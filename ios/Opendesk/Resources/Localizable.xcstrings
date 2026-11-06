@@ -468,6 +468,78 @@
           }
         }
       }
+    },
+    "push.wiki_comment.body": {
+      "comment": "Push notification body for wiki_comment.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On a wiki page"
+          }
+        }
+      }
+    },
+    "push.wiki_comment.title": {
+      "comment": "Push notification title for wiki_comment.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New comment"
+          }
+        }
+      }
+    },
+    "push.wiki_mention.body": {
+      "comment": "Push notification body for wiki_mention.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On a wiki page"
+          }
+        }
+      }
+    },
+    "push.wiki_mention.title": {
+      "comment": "Push notification title for wiki_mention.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You were mentioned"
+          }
+        }
+      }
+    },
+    "push.wiki_reminder.body": {
+      "comment": "Push notification body for wiki_reminder.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In a wiki page"
+          }
+        }
+      }
+    },
+    "push.wiki_reminder.title": {
+      "comment": "Push notification title for wiki_reminder.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your reminder is due"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

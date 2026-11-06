@@ -248,6 +248,9 @@ knowledge base uses (`hd.SanitizeRich`: paragraphs, headings, lists, quotes, cod
 https or our attachments, mentions) and the wiki's blocks below. Pages written before the blocks
 existed are valid as they are. The knowledge base keeps its own allowlist: no block reaches an article.
 Images and files are uploaded as attachments (`POST /v1/attachments`).
+People are mentioned with `<span data-type="mention" data-id="<user id>">`; a run of text an inline
+comment is on is `<span data-comment="<thread id>">`, and a date that reminds someone carries
+`data-reminder="<uuid>"` (see "Comments", "Reminders").
 
 ## Blocks
 
@@ -275,7 +278,8 @@ bar", kept per browser). Every block is a plain element with data attributes, ea
 | table of contents | `<div data-type="toc">`: the app lists the page's headings |
 | subpage | `<div data-type="subpage" data-id="<page id>">`: the page shows where it sits in the text |
 | link to a page | `<a data-type="page" data-id="<page id>" data-block="<block id>" href="/wiki/<id>">title when linked</a>`; the app shows the page's live title and icon |
-| date | `<time data-type="date" datetime="YYYY-MM-DD">` |
+| date | `<time data-type="date" datetime="YYYY-MM-DD">`, or with a time `YYYY-MM-DDTHH:MM` (the writer's clock) or RFC 3339; `data-reminder="<uuid>"` makes it a reminder (see "Reminders") |
+| inline comment | `<span data-comment="<thread id>">commented text</span>`: the run of text a thread is on (see "Comments") |
 | table | `table`, `colgroup`/`col` (`style` width or min-width in px), `th`/`td` (`colspan`, `rowspan`, `colwidth`) |
 | divider | `hr` |
 
@@ -342,6 +346,80 @@ Every change of title, icon or body is kept as a revision:
 
 Moves are not revisions.
 
+## Comments
+
+Members discuss a page in threads beside it. A thread is its first comment and the replies under it,
+oldest first; it is either on the page as a whole or **inline**, on a run of the text: the app marks
+that run in the body with `<span data-comment="<thread id>">` and keeps the text it was made on as
+`quote`. A mark whose thread was deleted is harmless; the app highlights only open threads. Schema:
+`migrations/000723_wiki_collab.up.sql`.
+
+```ts
+type WikiReaction = { emoji: string; users: string[] }                // user ids, oldest first
+type WikiComment = { id: string; thread_id: string; author: UserRef | null; body_html: string; mentions: string[];
+  created_at: string; edited_at: string | null; reactions: WikiReaction[] }
+type WikiThread = { id: string; page_id: string; quote: string; inline: boolean; created_at: string;
+  resolved_at: string | null; resolved_by: UserRef | null; comments: WikiComment[] }   // comments oldest first
+type WikiComments = { data: WikiThread[]; following: boolean }        // threads oldest first
+```
+
+| method | path | | |
+| --- | --- | --- | --- |
+| GET | `/v1/wiki/pages/{id}/comments` | `wiki:read` | `WikiComments`: open and resolved threads (the app filters), and whether the caller follows the page |
+| POST | `/v1/wiki/pages/{id}/comments` | `wiki:write` | `{body_html, mentions?, thread_id?, quote?, inline?}` → `201 WikiThread`: a new thread, or a reply with `thread_id` (a thread of this page, else `422`); a reply reopens a resolved thread |
+| PATCH | `/v1/wiki/comments/{id}` | `wiki:write` | `{body_html, mentions?}` → `WikiThread`; its author only (`403`), sets `edited_at` |
+| DELETE | `/v1/wiki/comments/{id}` | `wiki:write` | `204`; its author or an admin (`403`). Deleting a thread's first comment deletes the thread; notifications about what was deleted go with it |
+| POST | `/v1/wiki/threads/{id}/resolve` | `wiki:write` | `{resolved}` → `WikiThread` (`resolved_by` is who resolved it) |
+| POST | `/v1/wiki/comments/{id}/reactions` | `wiki:write` | `{emoji, on}` → `WikiThread`: one emoji (as page icons, `422` otherwise), once per person |
+
+- A comment's body is sanitized like a note (`hd.SanitizeRich`, up to 20,000 characters); one with no
+  text and no mention is `422`. `mentions` are the members it mentions: the ids sent and the body's
+  mention marks, members of the workspace only, never its author, at most 50. `quote` is folded to one
+  line of up to 500 characters; a reply's `quote` and `inline` are ignored.
+- Reading needs what reading the page needs; writing is for agents and up (viewers `403`) and people
+  only: an API key reads comments but is `403` on every write except resolving. A page out of the
+  caller's sight is `404`, and so are its comments and threads. A page in the trash keeps its comments
+  to read; writing there is `422 page_in_trash`.
+- Every change publishes `wiki_comment.changed` `{page_id, thread_id}` to the page's readers (scoped
+  like the page's own events); the app refetches the page's comments.
+
+## Following
+
+Followers hear about every new comment on a page (`wiki_comment`). The page's creator follows it, and
+so does everyone who comments on it. `PUT /v1/wiki/pages/{id}/follow` `{following}` → `{following}`
+(people only, viewers included) follows or unfollows it; an unfollow is kept, so commenting again does
+not follow the page back. Whoever wrote in a thread hears about its replies even after unfollowing the
+page, and mentions reach people either way.
+
+## Reminders
+
+A date in a page's text with `data-reminder="<uuid>"` reminds someone (`wiki_reminder`). On every save
+of a body (create, update, a daily note, a restored revision, a copy) the API makes the page's
+reminders match it: an id new to the page belongs to the person saving; an id already there keeps its
+owner; the time is the `datetime` read in the owner's notification timezone (`notifyprefs`, the email
+schedule's), a bare date at 09:00 there; a changed time reminds again; an id gone from the body is
+removed. A copy (Duplicate, a template, Save as template) gets new reminder ids, owned by whoever made
+it; a template reminds nobody. At most 100 reminders per page. A job every minute (`wiki.reminders`,
+`FOR UPDATE SKIP LOCKED` batches) sends each due reminder once, to its owner while they may see the
+page; one more than a day late (a date already past when written) is dropped unsent. The notification's
+`label` is the text of the block the date is in.
+
+## Mentions and notifications
+
+Notifications of the wiki are the `wiki` group (contracts/api.md "Notifications"); `ticket` is null:
+
+| type | when | `data` |
+| --- | --- | --- |
+| `wiki_mention` | someone mentions you in a page's body (only people the save newly mentions: the body before and after are compared, a new page or a copy against nothing) or in a comment (new, or edited to mention you) | `{page_id, page_title, by, preview, thread_id?, comment_id?}` |
+| `wiki_comment` | a new comment or reply on a page you follow, or in a thread you wrote in; never its author, nor someone it mentions (they get `wiki_mention`) | `{page_id, page_title, by, preview, thread_id, comment_id}` |
+| `wiki_reminder` | a reminder you set is due | `{page_id, page_title, reminder_id, remind_at, label}` |
+
+Only people who may see the page hear about it: a private page's member, a private team's members,
+nobody about a page in the trash or a template's text. When a page leaves someone's sight (moved to
+private pages or into a private team they are not on, trashed, deleted) their wiki notifications about
+it and the pages under it are removed (`notification.deleted`), as tickets do. The app opens them at
+`/wiki/<page id>`, with `?comment=<thread id>` for a comment's thread.
+
 ## Links and tags
 
 As a page's body is saved (create, update, restore), the API keeps what it links to and its tags
@@ -391,6 +469,8 @@ is `422`. Every emoji the app's picker offers passes (`TestPickerEmoji`).
 `wiki_page.updated` also carries `settings: PageSettings` when the page's look changed (it has no
 version to compare, so a client takes it as it comes).
 `wiki_page.deleted`: `{ wiki_page_id, wiki_page_ids }` (the page and every subpage removed with it).
+`wiki_comment.changed`: `{ page_id, thread_id }`: a thread of the page changed (a comment added,
+edited or deleted, a reaction, resolved or reopened); refetch the page's comments.
 Bodies are left out, as they are large and saved often: a client showing the page refetches it.
 The web app patches the tree in place on `created`, `updated` and `deleted`, and refetches it on
 `moved`. Audit: `wiki_page.created` `{title, parent_id}`, `wiki_page.deleted` `{title, subpages}`.
@@ -404,6 +484,8 @@ The web app patches the tree in place on `created`, `updated` and `deleted`, and
 | body | 512 KB (`422 page_too_large`) |
 | title | 200 characters (`422`; the app's title field stops at 200) |
 | revisions per page | 100 |
+| comment | 20,000 characters of HTML, 50 mentions, 20 different reactions; an inline thread's quote 500 characters |
+| reminders per page | 100 (more are not kept) |
 
 ## AI
 

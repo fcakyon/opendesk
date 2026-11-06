@@ -523,3 +523,9 @@ func (CustomerPortalCleanupArgs) Kind() string { return "helpdesk.customer_porta
 type WikiTrashPurgeArgs struct{}
 
 func (WikiTrashPurgeArgs) Kind() string { return "wiki.trash_purge" }
+
+// WikiRemindersArgs sends the wiki reminders that are due (contracts/wiki.md "Reminders").
+// Owner: helpdesk.
+type WikiRemindersArgs struct{}
+
+func (WikiRemindersArgs) Kind() string { return "wiki.reminders" }

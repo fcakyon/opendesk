@@ -23,9 +23,11 @@ var (
 	integer      = regexp.MustCompile(`^[0-9]{1,9}$`)
 	mimeType     = regexp.MustCompile(`^[\w.+-]{1,60}/[\w.+-]{1,60}$`)
 	isoDay       = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
-	codeLang     = regexp.MustCompile(`^language-[a-z0-9+#-]{1,30}$`)
-	colWidths    = regexp.MustCompile(`^\d{1,5}(,\d{1,5}){0,63}$`)
-	pixels       = regexp.MustCompile(`^\d{1,5}px$`)
+	// A date mention: a day, a day and a time on the writer's clock, or an instant.
+	isoWhen   = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:\d{2})?)?$`)
+	codeLang  = regexp.MustCompile(`^language-[a-z0-9+#-]{1,30}$`)
+	colWidths = regexp.MustCompile(`^\d{1,5}(,\d{1,5}){0,63}$`)
+	pixels    = regexp.MustCompile(`^\d{1,5}px$`)
 
 	wikiPolicy = newWikiPolicy()
 )
@@ -68,7 +70,11 @@ func newWikiPolicy() *bluemonday.Policy {
 	p.AllowAttrs("data-type").Matching(regexp.MustCompile(`^page$`)).OnElements("a")
 	p.AllowAttrs("data-id", "data-block").Matching(uuidAttr).OnElements("a")
 	p.AllowAttrs("data-type").Matching(regexp.MustCompile(`^date$`)).OnElements("time")
-	p.AllowAttrs("datetime").Matching(isoDay).OnElements("time")
+	p.AllowAttrs("datetime").Matching(isoWhen).OnElements("time")
+	// Collaboration (contracts/wiki.md "Comments", "Reminders"): a run of text an inline
+	// comment thread is on, and a date that reminds someone.
+	p.AllowAttrs("data-comment").Matching(uuidAttr).OnElements("span")
+	p.AllowAttrs("data-reminder").Matching(uuidAttr).OnElements("time")
 
 	// Images: width (percent of the column), alignment, caption.
 	p.AllowAttrs("data-width").Matching(integer).OnElements("img")

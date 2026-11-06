@@ -249,6 +249,12 @@ func registerPages(d *deps.Deps, api huma.API) {
 				if err := indexBody(ctx, tx, p.WorkspaceID, id, body); err != nil {
 					return err
 				}
+				if err := autoFollow(ctx, tx, p, id); err != nil {
+					return err
+				}
+				if err := bodySaved(ctx, tx, p, id, "", body); err != nil {
+					return err
+				}
 				if pg, err = loadPage(ctx, tx, p.WorkspaceID, id); err != nil {
 					return err
 				}
@@ -329,6 +335,9 @@ func registerPages(d *deps.Deps, api huma.API) {
 					}
 					if next.body != body {
 						if err := indexBody(ctx, tx, p.WorkspaceID, id, next.body); err != nil {
+							return err
+						}
+						if err := bodySaved(ctx, tx, p, id, body, next.body); err != nil {
 							return err
 						}
 					}
@@ -485,6 +494,9 @@ func registerPages(d *deps.Deps, api huma.API) {
 					if err := pageEvent(ctx, tx, p.WorkspaceID, before, "wiki_page.deleted", map[string]any{"wiki_page_id": id, "wiki_page_ids": gone, "moved": true}); err != nil {
 						return err
 					}
+					if err := dropHiddenNotifications(ctx, tx, p.WorkspaceID, gone); err != nil {
+						return err
+					}
 				}
 				return pageEvent(ctx, tx, p.WorkspaceID, pg, "wiki_page.moved", eventPage(pg))
 			})
@@ -542,6 +554,9 @@ func registerPages(d *deps.Deps, api huma.API) {
 					if err := place(ctx, tx, p.WorkspaceID, pg.ParentID, pg.owner, pg.TeamID, pg.Template, nil, nil); err != nil {
 						return err
 					}
+				}
+				if err := dropHiddenNotifications(ctx, tx, p.WorkspaceID, all); err != nil {
+					return err
 				}
 				if err := audit.Log(ctx, tx, p, p.WorkspaceID, "wiki_page.deleted", "wiki_page", &id, map[string]any{"title": pg.Title, "subpages": len(all) - 1}); err != nil {
 					return err

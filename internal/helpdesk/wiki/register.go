@@ -21,4 +21,6 @@ func Register(d *deps.Deps, api huma.API, _ chi.Router) {
 	registerTemplates(d, api)
 	registerPersonal(d, api)
 	registerRows(d, api)
+	registerComments(d, api)
+	registerFollows(d, api)
 }

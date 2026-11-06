@@ -11,7 +11,7 @@ client appends `/websocket`.
 
 | socket | `new Socket(...)` URL | wire path | tokens | Origin | topics |
 | --- | --- | --- | --- | --- | --- |
-| agents | `GATEWAY_URL` | `/socket/websocket?vsn=2.0.0` + the token header | `ws` only | must be in `CHECK_ORIGINS` (non-browser clients send none and are allowed) | `workspace:`, `team:`, `user:`, `ticket:` |
+| agents | `GATEWAY_URL` | `/socket/websocket?vsn=2.0.0` + the token header | `ws` only | must be in `CHECK_ORIGINS` (non-browser clients send none and are allowed) | `workspace:`, `team:`, `user:`, `ticket:`, `wiki_page:` |
 | widget | `GATEWAY_URL + "/widget"` | `/socket/widget/websocket?vsn=2.0.0` + the token header | `widget_ws` only | any (the widget is embedded on customer sites) | `contact:<wid>:<sub>` only |
 
 The token rides in `Sec-WebSocket-Protocol: phoenix, base64url.bearer.phx.<unpadded base64 of the jwt>`
@@ -58,6 +58,7 @@ URL, where proxies and access logs keep it. A token in the query string is not r
 | `team:<wid>:<tid>`            | `ws` token that covers `wid` with `tid` among its private teams there | `"event"` envelopes of a private team's tickets in full (contracts/teams.md "Visibility"); `workspace:<wid>` gets their stand-in. They may arrive before or after the stand-in: apply them when they arrive, track `seq` on the workspace channel |
 | `user:<uid>`                  | `ws` token, `kind=user`, `sub == uid`          | `"event"` envelopes whose topics include `user:<uid>`, in full (their notifications and assignments, which go only to users who can see the ticket) |
 | `ticket:<wid>:<ticket_id>`    | `ws` token, `kind=user`, that covers `wid`; with `team_id` in the join params, that team among its private teams there. The channel acts with the role the token gives in `wid` | Presence (`presence_state`, `presence_diff`), `"typing"`, `"customer_typing"` and `"live"`; those of a private team's ticket only to sockets with the team (below) |
+| `wiki_page:<wid>:<page_id>`   | `ws` token, `kind=user`, that covers `wid`; with `team_id` in the join params, that team among its private teams there | Presence (`presence_state`, `presence_diff`): who is viewing or editing the page; a private team's page only to sockets with the team (below) |
 | `contact:<wid>:<contact_id>`  | widget socket: `widget_ws` token with `sub == contact_id`, same `wid` | `"event"` for public envelopes with that topic, `"typing"` from agents and `"live"`. Envelopes list `contact:<wid>:<contact_id>:<brand_id>` (the chat's brand) and live events carry `brand_id`: they are pushed only to sockets whose token's `bid` is that brand, without `brand_id`, so a visitor's chats of another brand never reach this widget (a token without `bid` gets every brand's) |
 
 Join params on `ticket:<wid>:<tid>`: `{"watch": true}` watches a ticket (the inbox list
@@ -74,6 +75,15 @@ sockets whose `teams` claim lists that team, and strips `team_id` from what it p
 that joins without `team_id` (any user of the workspace may) sees only what is not scoped to a
 team: clients join a private team's ticket with its `team_id`.
 
+Join params on `wiki_page:<wid>:<page_id>` (contracts/wiki.md): `{"state": "viewing" | "editing" |
+"idle"}` sets the initial Presence state (default `"viewing"`), `{"watch": true}` receives Presence
+without being tracked (its `"presence"` pushes are ignored), and `{"team_id": "<tid>"}` names the
+page's teamspace when its team is private, with the same rule as a ticket's: `tid` must be in the
+token's `teams` claim (else `forbidden`), the joiner's Presence meta carries it, and the gateway pushes
+that meta only to sockets whose `teams` claim lists the team, without `team_id`. Clients join only for
+pages they can read in the workspace and in teamspaces, never for a private page (contracts/wiki.md
+"Private pages and teamspaces"), and join a private team's page with its `team_id`.
+
 Join replies `{"ok": {"server_time": "..."}}`. Unauthorized joins reply `{"error": {"reason": "forbidden"}}`.
 
 ### Client → server
@@ -83,6 +93,10 @@ On `ticket:<wid>:<tid>`:
   meta (`{user_id, name, avatar, state, online_at}`). Rate limited.
 - `"typing"` `{}` broadcasts `"typing"` `{user_id, name}` to the other agents on the ticket topic,
   and nowhere else (a `contact_id` in the payload is ignored).
+
+On `wiki_page:<wid>:<page_id>`:
+- `"presence"` `{ "state": "viewing" | "editing" | "idle" }` updates the caller's Presence meta
+  (`{user_id, name, avatar, state, online_at}`). Rate limited. Any other push is `invalid`.
 
 On `contact:<wid>:<cid>`:
 - `"typing"` is accepted and does nothing.

@@ -28,7 +28,7 @@ const (
 // CoreNotificationTypePrefs is one row of the preferences table.
 type CoreNotificationTypePrefs struct {
 	Type     string               `json:"type"`
-	Group    string               `json:"group" enum:"tickets,team,mail,ai_billing,workspace"`
+	Group    string               `json:"group" enum:"tickets,team,mail,wiki,ai_billing,workspace"`
 	Email    bool                 `json:"email"`
 	Push     bool                 `json:"push"`
 	Desktop  bool                 `json:"desktop"`

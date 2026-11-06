@@ -175,7 +175,8 @@ func registerRevisions(d *deps.Deps, api huma.API) {
 			var pg WikiPage
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
 				var deleted *time.Time
-				err := tx.QueryRow(ctx, `SELECT deleted_at FROM wiki_pages WHERE workspace_id = $1 AND id = $2 FOR UPDATE`, p.WorkspaceID, id).Scan(&deleted)
+				var prev string
+				err := tx.QueryRow(ctx, `SELECT deleted_at, body_html FROM wiki_pages WHERE workspace_id = $1 AND id = $2 FOR UPDATE`, p.WorkspaceID, id).Scan(&deleted, &prev)
 				if db.IsNotFound(err) {
 					return httpx.NotFound("Page")
 				}
@@ -202,6 +203,9 @@ func registerRevisions(d *deps.Deps, api huma.API) {
 					return err
 				}
 				if err := indexBody(ctx, tx, p.WorkspaceID, id, body); err != nil {
+					return err
+				}
+				if err := bodySaved(ctx, tx, p, id, prev, body); err != nil {
 					return err
 				}
 				if pg, err = loadPage(ctx, tx, p.WorkspaceID, id); err != nil {

@@ -1124,6 +1124,9 @@ enum NotificationKind: String, CaseIterable, Sendable, Identifiable {
     case threadReplied = "thread_replied"
     case collabAssigned = "collab_assigned"
     case collabMention = "collab_mention"
+    case wikiMention = "wiki_mention"
+    case wikiComment = "wiki_comment"
+    case wikiReminder = "wiki_reminder"
 
     var id: String { rawValue }
 
@@ -1147,6 +1150,9 @@ enum NotificationKind: String, CaseIterable, Sendable, Identifiable {
         case .threadReplied: "Side conversation answers"
         case .collabAssigned: "Mail assigned to you"
         case .collabMention: "Mail comment mentions"
+        case .wikiMention: "Wiki mentions"
+        case .wikiComment: "Wiki comments"
+        case .wikiReminder: "Wiki reminders"
         }
     }
 
@@ -1169,6 +1175,9 @@ enum NotificationKind: String, CaseIterable, Sendable, Identifiable {
         case .threadReplied: "Someone outside your team answers a side conversation on your ticket"
         case .collabAssigned: "A teammate assigns you a mail conversation"
         case .collabMention: "Someone mentions you in a comment on a mail conversation"
+        case .wikiMention: "Someone mentions you on a wiki page or in a comment on one"
+        case .wikiComment: "New comments on pages you follow and in threads you wrote in"
+        case .wikiReminder: "A reminder you set in a wiki page is due"
         }
     }
 
@@ -1188,6 +1197,9 @@ enum NotificationKind: String, CaseIterable, Sendable, Identifiable {
         case .threadReplied: "bubble.left.and.bubble.right"
         case .collabAssigned: "envelope.badge.person.crop"
         case .collabMention: "at"
+        case .wikiMention: "at"
+        case .wikiComment: "text.bubble"
+        case .wikiReminder: "alarm"
         }
     }
 
@@ -1255,6 +1267,14 @@ struct AppNotification: Codable, Hashable, Sendable, Identifiable {
             return from.map { "\($0) answered your side conversation" } ?? "Someone answered your side conversation"
         case .collabAssigned: return who.map { "\($0) assigned you a conversation" } ?? "A conversation was assigned to you"
         case .collabMention: return who.map { "\($0) mentioned you in a comment" } ?? "You were mentioned in a comment"
+        case .wikiMention:
+            if data["comment_id"]?.string.map({ !$0.isEmpty }) == true {
+                return who.map { "\($0) mentioned you in a wiki comment" } ?? "You were mentioned in a wiki comment"
+            }
+            return who.map { "\($0) mentioned you on a wiki page" } ?? "You were mentioned on a wiki page"
+        case .wikiComment: return who.map { "\($0) commented on a wiki page" } ?? "New comment on a wiki page"
+        case .wikiReminder:
+            return data["label"]?.string.flatMap { $0.isEmpty ? nil : "Reminder: \($0)" } ?? "Your wiki reminder is due"
         case .teamJoined:
             let joiner = data["user"]?["name"]?.string.flatMap { $0.isEmpty ? nil : $0 } ?? "Someone"
             guard let team = data["team"]?["name"]?.string, !team.isEmpty else { return "\(joiner) joined a team you lead" }

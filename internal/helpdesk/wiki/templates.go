@@ -136,6 +136,17 @@ func registerTemplates(d *deps.Deps, api huma.API) {
 					}
 					return body
 				}
+				// A copy's reminders are its own: new ids, set by whoever copies it.
+				reminders := map[string]string{}
+				newReminders := func(body string) string {
+					return reminderAttr.ReplaceAllStringFunc(body, func(m string) string {
+						old := reminderAttr.FindStringSubmatch(m)[1]
+						if reminders[old] == "" {
+							reminders[old] = ids.New().String()
+						}
+						return `data-reminder="` + reminders[old] + `"`
+					})
+				}
 				for _, x := range pages {
 					var row struct {
 						parent                   *uuid.UUID
@@ -165,7 +176,7 @@ func registerTemplates(d *deps.Deps, api huma.API) {
 					if x == id && b.Title != nil {
 						title = cleanTitle(*b.Title)
 					}
-					body := remap(row.body)
+					body := newReminders(remap(row.body))
 					nid := fresh[x]
 					var database any
 					if row.database != nil {
@@ -195,6 +206,12 @@ func registerTemplates(d *deps.Deps, api huma.API) {
 						return err
 					}
 					if err := indexBody(ctx, tx, p.WorkspaceID, nid, body); err != nil {
+						return err
+					}
+					if err := autoFollow(ctx, tx, p, nid); err != nil {
+						return err
+					}
+					if err := bodySaved(ctx, tx, p, nid, "", body); err != nil {
 						return err
 					}
 				}
