@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-const page = `<h2>Refunds</h2><p>Ask <span data-type="mention" data-id="3dcb61fa-abc6-47ac-9916-06acf5b7fdf7" class="mention">@Maya Chen</span> before <time data-type="date" datetime="2026-11-06">Nov 6</time>, see <a data-type="page" data-id="11111111-1111-4111-8111-111111111111" href="/wiki/11111111-1111-4111-8111-111111111111">Escalation process</a> and <a href="https://example.com/a b">the docs</a>. <strong>Never</strong> <em>promise</em> <mark data-bg="yellow">dates</mark>, <code>a*b</code>, <span data-comment="22222222-2222-4222-8222-222222222222">2 * 3_x</span>.</p>` +
+const page = `<h2>Refunds</h2><p>Ask <span data-type="mention" data-id="3dcb61fa-abc6-47ac-9916-06acf5b7fdf7" class="mention">@Maya Chen</span> before <time data-type="date" datetime="2026-11-06">Nov 6</time>, see <a data-type="page" data-id="11111111-1111-4111-8111-111111111111" href="/wiki/11111111-1111-4111-8111-111111111111">Escalation process</a> and <a href="https://example.com/a b">the docs</a> for <a data-type="ticket" data-id="55555555-5555-4555-8555-555555555555" href="/tickets/1042">#1042</a>. <strong>Never</strong> <em>promise</em> <mark data-bg="yellow">dates</mark>, <code>a*b</code>, <span data-comment="22222222-2222-4222-8222-222222222222">2 * 3_x</span>.</p>` +
 	`<ul data-type="taskList"><li data-type="taskItem" data-checked="true"><label><input type="checkbox" checked><span></span></label><div><p>done</p></div></li><li data-type="taskItem" data-checked="false"><label><input type="checkbox"><span></span></label><div><p>todo</p></div></li></ul>` +
 	`<ol><li><p>one</p><ul><li><p>nested</p></li></ul></li><li><p>two</p></li></ol>` +
 	`<div data-type="callout" data-tone="orange" data-icon="⚠️"><p>Careful</p></div>` +
@@ -27,7 +27,7 @@ func TestMarkdown(t *testing.T) {
 	}})
 	for _, want := range []string{
 		"## Refunds\n",
-		"Ask @Maya Chen before Nov 6, see [[Escalation process]] and [the docs](https://example.com/a%20b).",
+		"Ask @Maya Chen before Nov 6, see [[Escalation process]] and [the docs](https://example.com/a%20b) for #1042.",
 		"**Never** *promise* ==dates==, `a*b`, 2 \\* 3\\_x.",
 		"- [x] done\n- [ ] todo",
 		"1. one\n   - nested\n2. two",
@@ -76,7 +76,7 @@ func TestArticle(t *testing.T) {
 			t.Errorf("missing %q in:\n%s", want, out)
 		}
 	}
-	for _, gone := range []string{"data-", "/wiki/", "/v1/attachments", "mention", "<table", "<hr", "<details", "checkbox", "Known issues"} {
+	for _, gone := range []string{"data-", "/wiki/", "/tickets/", "/v1/attachments", "mention", "<table", "<hr", "<details", "checkbox", "Known issues"} {
 		if strings.Contains(out, gone) {
 			t.Errorf("%q left in:\n%s", gone, out)
 		}

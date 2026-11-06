@@ -13,7 +13,7 @@ import (
 // article's plain equivalents, and what belongs to the team stays behind. Teammates'
 // mentions and links to wiki pages keep only their text; comment anchors, dates and tones
 // their words. The workspace's own files and images, databases and subpage links are left
-// out; leftOut counts them so the app can say so.
+// out; leftOut counts them so the app can say so. Links to tickets and contacts keep their text.
 func Article(body string) (out string, leftOut int) {
 	root := parse(body)
 	leftOut = toArticle(root)
@@ -75,7 +75,7 @@ func rewrite(n *html.Node) int {
 	switch kind(n) {
 	case "mention":
 		replace(n, textNode(strings.TrimPrefix(text(n), "@")))
-	case "page", "date":
+	case "page", "date", "ticket", "contact":
 		replace(n, textNode(text(n)))
 	case "inline-math":
 		replace(n, element("code", atom.Code, textNode(attr(n, "data-latex"))))
