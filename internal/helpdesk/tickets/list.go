@@ -85,8 +85,6 @@ func (b *sqlBuilder) sql() string {
 	return " WHERE " + strings.Join(b.where, " AND ")
 }
 
-var numberRef = regexp.MustCompile(`^#?(\d{1,18})$`)
-
 // applyFilters adds the filter clauses for f. me is the caller's user id (nil for API keys).
 func applyFilters(b *sqlBuilder, wid uuid.UUID, me *uuid.UUID, f listQuery) error {
 	b.add("t.workspace_id = " + b.arg(wid))
@@ -231,12 +229,12 @@ func applyFilters(b *sqlBuilder, wid uuid.UUID, me *uuid.UUID, f listQuery) erro
 	}
 	if q := strings.TrimSpace(f.Q); q != "" {
 		var parts []string
-		if m := numberRef.FindStringSubmatch(q); m != nil {
+		if m := domain.TicketNumberRef.FindStringSubmatch(q); m != nil {
 			n, _ := strconv.ParseInt(m[1], 10, 64)
 			parts = append(parts, "t.number = "+b.arg(n))
 		}
 		alias := strings.TrimLeft(q, "# ")
-		if ticketAliasPattern.MatchString(alias) && strings.ContainsAny(alias, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") {
+		if domain.TicketAliasPattern.MatchString(alias) && strings.ContainsAny(alias, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") {
 			parts = append(parts, "lower(t.alias) = lower("+b.arg(alias)+")")
 		}
 		tsq := "websearch_to_tsquery('simple', " + b.arg(q) + ")"
@@ -572,64 +570,6 @@ func mergeFilters(view, req hd.TicketFilters) hd.TicketFilters {
 	// Field filters add up: the view's and the request's all apply.
 	out.Fields = append(slices.Clone(view.Fields), req.Fields...)
 	return out
-}
-
-// resolveTicket finds a ticket by uuid, alias, "#123" or "123" in the workspace.
-func resolveTicket(ctx context.Context, q db.Querier, wid uuid.UUID, ref string) (uuid.UUID, error) {
-	ref = strings.TrimSpace(ref)
-	if id, err := uuid.Parse(ref); err == nil {
-		var exists bool
-		if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM tickets WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL)`,
-			wid, id).Scan(&exists); err != nil {
-			return uuid.Nil, err
-		}
-		if !exists {
-			return uuid.Nil, httpx.NotFound("Ticket")
-		}
-		return id, nil
-	}
-	m := numberRef.FindStringSubmatch(ref)
-	if m != nil {
-		n, _ := strconv.ParseInt(m[1], 10, 64)
-		var id uuid.UUID
-		err := q.QueryRow(ctx, `SELECT id FROM tickets WHERE workspace_id = $1 AND number = $2 AND deleted_at IS NULL`, wid, n).Scan(&id)
-		if db.IsNotFound(err) {
-			return uuid.Nil, httpx.NotFound("Ticket")
-		}
-		return id, err
-	}
-	alias := strings.TrimLeft(ref, "# ")
-	if !ticketAliasPattern.MatchString(alias) || !strings.ContainsAny(alias, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") {
-		return uuid.Nil, httpx.NotFound("Ticket")
-	}
-	var id uuid.UUID
-	err := q.QueryRow(ctx, `SELECT id FROM tickets WHERE workspace_id = $1 AND lower(alias) = lower($2) AND deleted_at IS NULL`, wid, alias).Scan(&id)
-	if db.IsNotFound(err) {
-		return uuid.Nil, httpx.NotFound("Ticket")
-	}
-	return id, err
-}
-
-// resolveVisible is resolveTicket for a caller: a ticket of a private team the caller may
-// not see is not found, like a missing one.
-func resolveVisible(ctx context.Context, q db.Querier, p *auth.Principal, ref string) (uuid.UUID, error) {
-	id, err := resolveTicket(ctx, q, p.WorkspaceID, ref)
-	if err != nil {
-		return id, err
-	}
-	var team, assignee *uuid.UUID
-	if err := q.QueryRow(ctx, `SELECT team_id, assignee_id FROM tickets WHERE workspace_id = $1 AND id = $2`,
-		p.WorkspaceID, id).Scan(&team, &assignee); err != nil {
-		return id, err
-	}
-	ok, err := domain.CanSee(ctx, q, p, team, assignee)
-	if err != nil {
-		return id, err
-	}
-	if !ok {
-		return uuid.Nil, httpx.NotFound("Ticket")
-	}
-	return id, nil
 }
 
 // Counts is the sidebar badge set.

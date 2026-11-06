@@ -16,17 +16,20 @@ import (
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/deps"
+	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 	"github.com/useopendesk/opendesk/internal/httpx"
 )
 
 // Links and tags (contracts/wiki.md "Links and tags"): kept from each page's body as it is
 // saved. A link is a link to a page or a subpage block; a tag is #word in the text (at
-// least one letter, so "#42" is a number), never inside code.
+// least one letter, so "#42" is a number), never inside code. A ticket mention is the
+// sanitizer's `<a data-type="ticket" data-id="…">` (hd.SanitizeWiki).
 var (
-	linkRef  = regexp.MustCompile(`(?:/wiki/|data-id=")([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})`)
-	codeText = regexp.MustCompile(`(?i)<code\b[^>]*>[^<]*</code>`)
-	tagRef   = regexp.MustCompile(`(?:^|\s)#([\p{L}\p{N}_/-]*\p{L}[\p{L}\p{N}_/-]*)`)
+	linkRef   = regexp.MustCompile(`(?:/wiki/|data-id=")([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})`)
+	ticketRef = regexp.MustCompile(`data-type="ticket" data-id="([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"`)
+	codeText  = regexp.MustCompile(`(?i)<code\b[^>]*>[^<]*</code>`)
+	tagRef    = regexp.MustCompile(`(?:^|\s)#([\p{L}\p{N}_/-]*\p{L}[\p{L}\p{N}_/-]*)`)
 )
 
 const (
@@ -51,9 +54,14 @@ func pageTags(body string) []string {
 }
 
 // linkedIDs are the page ids a body links to, each once.
-func linkedIDs(body string) []uuid.UUID {
+func linkedIDs(body string) []uuid.UUID { return refIDs(linkRef, body) }
+
+// ticketIDs are the ticket ids a body mentions, each once.
+func ticketIDs(body string) []uuid.UUID { return refIDs(ticketRef, body) }
+
+func refIDs(re *regexp.Regexp, body string) []uuid.UUID {
 	var out []uuid.UUID
-	for _, m := range linkRef.FindAllStringSubmatch(body, -1) {
+	for _, m := range re.FindAllStringSubmatch(body, -1) {
 		if id, err := uuid.Parse(m[1]); err == nil && !slices.Contains(out, id) {
 			out = append(out, id)
 		}
@@ -61,8 +69,9 @@ func linkedIDs(body string) []uuid.UUID {
 	return out
 }
 
-// indexBody keeps a page's tags and outgoing links in step with its body. Links to pages
-// that don't exist in the workspace (deleted, another workspace's) are left out.
+// indexBody keeps a page's tags, outgoing links and ticket mentions in step with its body.
+// Links to pages and mentions of tickets that don't exist in the workspace (deleted pages,
+// another workspace's) are left out.
 func indexBody(ctx context.Context, tx pgx.Tx, wid, id uuid.UUID, body string) error {
 	if _, err := tx.Exec(ctx, `UPDATE wiki_pages SET tags = $3 WHERE workspace_id = $1 AND id = $2`, wid, id, pageTags(body)); err != nil {
 		return err
@@ -70,14 +79,24 @@ func indexBody(ctx context.Context, tx pgx.Tx, wid, id uuid.UUID, body string) e
 	if _, err := tx.Exec(ctx, `DELETE FROM wiki_links WHERE workspace_id = $1 AND from_id = $2`, wid, id); err != nil {
 		return err
 	}
-	ids := linkedIDs(body)
-	if len(ids) == 0 {
-		return nil
+	if _, err := tx.Exec(ctx, `DELETE FROM wiki_ticket_links WHERE workspace_id = $1 AND page_id = $2`, wid, id); err != nil {
+		return err
 	}
-	_, err := tx.Exec(ctx, `INSERT INTO wiki_links (workspace_id, from_id, to_id)
-		SELECT $1, $2, t.id FROM wiki_pages t WHERE t.workspace_id = $1 AND t.id = ANY($3) AND t.id <> $2
-		ON CONFLICT DO NOTHING`, wid, id, ids)
-	return err
+	if ids := linkedIDs(body); len(ids) > 0 {
+		if _, err := tx.Exec(ctx, `INSERT INTO wiki_links (workspace_id, from_id, to_id)
+			SELECT $1, $2, t.id FROM wiki_pages t WHERE t.workspace_id = $1 AND t.id = ANY($3) AND t.id <> $2
+			ON CONFLICT DO NOTHING`, wid, id, ids); err != nil {
+			return err
+		}
+	}
+	if ids := ticketIDs(body); len(ids) > 0 {
+		if _, err := tx.Exec(ctx, `INSERT INTO wiki_ticket_links (workspace_id, page_id, ticket_id)
+			SELECT $1, $2, t.id FROM tickets t WHERE t.workspace_id = $1 AND t.id = ANY($3)
+			ON CONFLICT DO NOTHING`, wid, id, ids); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // WikiMention is a page that links to another (a backlink), or names it without a link.
@@ -219,6 +238,38 @@ func registerLinks(d *deps.Deps, api huma.API) {
 				}
 			}
 			return &mentionsOut{httpx.Page[WikiMention]{Data: out}}, nil
+		})
+
+	huma.Register(api, huma.Operation{OperationID: "list-ticket-wiki-pages", Method: http.MethodGet, Path: "/v1/tickets/{id}/wiki",
+		Summary: "List the wiki pages that mention a ticket", Tags: []string{"Tickets"},
+		Description: "The pages of the tree the caller may see whose text mentions the ticket, newest edit first, at most 50. " +
+			"Needs `tickets:read` and `wiki:read`; a ticket the caller may not see is `404`."},
+		func(ctx context.Context, in *struct {
+			ID string `path:"id" doc:"The ticket's id, \"#123\", \"123\" or alias"`
+		}) (*struct{ Body httpx.Page[WikiNode] }, error) {
+			if _, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeTicketsRead); err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeWikiRead)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			tid, err := domain.ResolveVisibleTicket(ctx, d.DB.Pool, p, in.ID)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			v, err := viewerFor(ctx, d, p)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			me, hidden := v.args()
+			out, err := collectNodes(d.DB.Pool.Query(ctx, nodeSelect+` JOIN wiki_ticket_links l ON l.workspace_id = p.workspace_id AND l.page_id = p.id
+				WHERE l.workspace_id = $1 AND l.ticket_id = $2 AND `+liveSQL("p", 3, 4)+` ORDER BY p.updated_at DESC, p.id LIMIT 50`,
+				p.WorkspaceID, tid, me, hidden))
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			return &struct{ Body httpx.Page[WikiNode] }{httpx.Page[WikiNode]{Data: out}}, nil
 		})
 
 	huma.Register(api, huma.Operation{OperationID: "get-wiki-graph", Method: http.MethodGet, Path: "/v1/wiki/graph",

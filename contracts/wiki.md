@@ -248,14 +248,15 @@ knowledge base uses (`hd.SanitizeRich`: paragraphs, headings, lists, quotes, cod
 https or our attachments, mentions) and the wiki's blocks below. Pages written before the blocks
 existed are valid as they are. The knowledge base keeps its own allowlist: no block reaches an article.
 Images and files are uploaded as attachments (`POST /v1/attachments`).
-People are mentioned with `<span data-type="mention" data-id="<user id>">`; a run of text an inline
+People are mentioned with `<span data-type="mention" data-id="<user id>">`, tickets and contacts with a
+link of their kind (see "Desk"); a run of text an inline
 comment is on is `<span data-comment="<thread id>">`, and a date that reminds someone carries
 `data-reminder="<uuid>"` (see "Comments", "Reminders").
 
 ## Blocks
 
 The app writes pages with a block editor (`web/src/components/wiki/editor`): "/" offers every block,
-"[[" links a page, "@" mentions a person, a page or a date, ":" an emoji; a handle beside each block
+"[[" links a page, "@" mentions a person, a page, a date, a ticket or a contact, "#" a ticket, ":" an emoji; a handle beside each block
 drags it or opens its menu (turn into, colour, duplicate, copy a link to it, move, delete), and a
 toolbar shows over selected text. The page's formatting bar stays available (page menu, "Formatting
 bar", kept per browser). Every block is a plain element with data attributes, each value checked:
@@ -278,6 +279,8 @@ bar", kept per browser). Every block is a plain element with data attributes, ea
 | table of contents | `<div data-type="toc">`: the app lists the page's headings |
 | subpage | `<div data-type="subpage" data-id="<page id>">`: the page shows where it sits in the text |
 | link to a page | `<a data-type="page" data-id="<page id>" data-block="<block id>" href="/wiki/<id>">title when linked</a>`; the app shows the page's live title and icon |
+| ticket, contact | `<a data-type="ticket" data-id="<ticket id>" href="/tickets/<number>">`, `<a data-type="contact" data-id="<contact id>" href="/contacts/<contact id>">`; drawn live, see "Desk" |
+| ticket list | `<div data-type="tickets" data-id="<saved view id>" data-limit="<number>">`: the view's open tickets, see "Desk" |
 | date | `<time data-type="date" datetime="YYYY-MM-DD">`, or with a time `YYYY-MM-DDTHH:MM` (the writer's clock) or RFC 3339; `data-reminder="<uuid>"` makes it a reminder (see "Reminders") |
 | inline comment | `<span data-comment="<thread id>">commented text</span>`: the run of text a thread is on (see "Comments") |
 | table | `table`, `colgroup`/`col` (`style` width or min-width in px), `th`/`td` (`colspan`, `rowspan`, `colwidth`) |
@@ -427,6 +430,8 @@ As a page's body is saved (create, update, restore), the API keeps what it links
 
 - A link is a link to a page (`/wiki/<id>`, the page-link and subpage blocks) of the same workspace;
   a link to a page that doesn't exist there is left out. Deleting a page removes its links both ways.
+- A ticket mention (`<a data-type="ticket" data-id>`) is kept as the page's link to that ticket
+  (`wiki_ticket_links`), for the ticket's list of pages ("Desk"). Contact mentions are kept in the text only.
 - A tag is `#` and letters, digits, `_`, `/` or `-` with at least one letter (`#42` is a number), after
   a space or at a line's start, never inside code. Lower case, each once, at most 50 of 64 characters.
   `/` nests them (`#process/refunds` is under `#process`).
@@ -487,8 +492,70 @@ The web app patches the tree in place on `created`, `updated` and `deleted`, and
 | comment | 20,000 characters of HTML, 50 mentions, 20 different reactions; an inline thread's quote 500 characters |
 | reminders per page | 100 (more are not kept) |
 
+## Desk
+
+The wiki sits beside the desk: pages mention tickets and contacts, show a saved view's tickets, and
+become help center articles; a ticket lists the pages that mention it. Each reader sees what their own
+access shows them (contracts/teams.md "Visibility"): a mention grants nothing.
+
+### Mentions
+
+`<a data-type="ticket" data-id="<ticket id>" href="/tickets/<number>">#<number> <subject></a>` and
+`<a data-type="contact" data-id="<contact id>" href="/contacts/<contact id>">name</a>`. `hd.SanitizeWiki`
+keeps exactly that on them: `data-type`, a uuid `data-id` and the app's own route of that kind as `href`
+(a ticket's number, a contact's id); another `href` or any other attribute is dropped, and a link
+without an id is a plain link. The text is what the writer saw when they mentioned it. The app draws
+a ticket live for a reader who may see it (status, `#number`, subject; a card with status, assignee
+and last update on hover; a click opens it) and as "a ticket you can't see" for anyone else, without
+its subject; a contact with its initial and name, opening the contact. The editor offers tickets from
+"@" and "#" (a number, or text to search) and contacts from "@", through the app's search. An article
+made from the page ("Publishing") and its Markdown keep only the text.
+
+### Ticket list
+
+`<div data-type="tickets" data-id="<saved view id>" data-limit="<number>">`, inserted with "/tickets":
+the view's open tickets, live, as compact rows (number, subject, status, assignee, last update) with a
+link to the whole view. The app offers 5, 10 or 25 rows. The rows are read through `GET /v1/tickets`
+with the view, as the reader: they see the tickets they may see, or the block's empty line.
+
+### Ticket backlinks
+
+As a page's body is saved (create, update, restore, a copy of a template), the API keeps the tickets
+it mentions in `wiki_ticket_links` beside its links ("Links and tags"; migration `000724` read them
+from pages written before). Only tickets of the page's workspace count; an id that names none is left
+out. The link goes with the page or the ticket when either is removed for good.
+
+| method | path | | |
+| --- | --- | --- | --- |
+| GET | `/v1/tickets/{id}/wiki` | viewer; `tickets:read` and `wiki:read` | `Page<WikiNode>`: the pages of the caller's tree (not the trash, not templates, not someone else's private page, not a page of a private team they are not on) that mention the ticket, last edited first, at most 50. `{id}` is the ticket's id, alias, `#123` or `123`; a ticket the caller may not see is `404`, as on every ticket route, and the route answers `403 feature_disabled` while Tickets is off |
+
+The ticket's details show them as "Wiki", each opening the page, and nothing when there are none. The
+app refetches them on `wiki_page.created`, `wiki_page.updated` and `wiki_page.deleted`.
+
+### Publishing
+
+`POST /v1/kb/articles/from-wiki` (contracts/api.md) copies a page the caller may see into a new draft
+article of the help center (agent; `kb:write` and `wiki:read`; `internal/helpdesk/kb/from_wiki.go`,
+`internal/helpdesk/wikiconv`). Blocks become their article equivalents; mentions of teammates,
+tickets and contacts and links to pages keep only their text; the workspace's own files and images,
+databases and subpage links stay in the wiki and are counted in `left_out`. Nothing stays linked: later
+edits of the page never reach the article. The app offers it from the page menu ("Publish to help
+center") to members who may write articles, except on templates, the journal and databases: a title, a
+collection and, with several brands, a brand; then a link to the draft.
+
+### Ollie writing
+
+`POST /v1/wiki/ai/write` (contracts/ai.md; agent) has Ollie edit a selection (improve, fix grammar,
+shorter, longer, simplify, more formal, friendlier, summarize, action items, explain) or write at the
+cursor from the page around it (continue, or a free ask). The answer is wiki HTML, sanitized like a
+body, and a proposal: the member replaces the selection with it, inserts it below, tries again or
+drops it. Nothing is saved until they do. The app offers it as "Ask Ollie" over selected text and
+"/ai" (or Space) on an empty line, to agents of a workspace with AI on.
+
 ## AI
 
+- **Ollie writing** (`POST /v1/wiki/ai/write`): edits a selection or writes from the page at the
+  member's request; a proposal they insert or drop, never saved by itself ("Desk").
 - **Ollie** (`internal/ai/assistant`) has `search_wiki` and `get_wiki_page` read tools and links
   the pages it used (`Ref.kind: "wiki_page"`). The page context carries `wiki_page_id` on a wiki
   page. Writing goes through `api_change` and its approval, like other settings.

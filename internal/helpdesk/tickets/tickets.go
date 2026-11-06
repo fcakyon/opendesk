@@ -391,7 +391,7 @@ func registerTickets(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			id, err := resolveVisible(ctx, d.DB.Pool, p, in.ID)
+			id, err := domain.ResolveVisibleTicket(ctx, d.DB.Pool, p, in.ID)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -421,7 +421,7 @@ func registerTickets(d *deps.Deps, api huma.API) {
 			}
 			var t domain.Ticket
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				id, err := resolveVisible(ctx, tx, p, in.ID)
+				id, err := domain.ResolveVisibleTicket(ctx, tx, p, in.ID)
 				if err != nil {
 					return err
 				}
@@ -464,7 +464,7 @@ func registerTickets(d *deps.Deps, api huma.API) {
 				return nil, httpx.Wrap(err)
 			}
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				id, err := resolveVisible(ctx, tx, p, in.ID)
+				id, err := domain.ResolveVisibleTicket(ctx, tx, p, in.ID)
 				if err != nil {
 					return err
 				}
@@ -533,7 +533,7 @@ func registerTickets(d *deps.Deps, api huma.API) {
 				}
 				seen := map[uuid.UUID]bool{}
 				for _, raw := range ids {
-					id, err := resolveVisible(ctx, tx, p, raw)
+					id, err := domain.ResolveVisibleTicket(ctx, tx, p, raw)
 					if err != nil {
 						return err
 					}
@@ -589,11 +589,11 @@ func registerTickets(d *deps.Deps, api huma.API) {
 			}
 			var t domain.Ticket
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				src, err := resolveVisible(ctx, tx, p, in.ID)
+				src, err := domain.ResolveVisibleTicket(ctx, tx, p, in.ID)
 				if err != nil {
 					return err
 				}
-				dst, err := resolveVisible(ctx, tx, p, in.Body.IntoID)
+				dst, err := domain.ResolveVisibleTicket(ctx, tx, p, in.Body.IntoID)
 				if err != nil {
 					return httpx.Validation("into_id is not a ticket in this workspace")
 				}
@@ -985,7 +985,7 @@ func liveMergeTarget(ctx context.Context, tx pgx.Tx, p *auth.Principal, src, dst
 		if *next == src {
 			return dst, httpx.Conflict("the target ticket was merged into this one")
 		}
-		if _, err := resolveVisible(ctx, tx, p, next.String()); err != nil {
+		if _, err := domain.ResolveVisibleTicket(ctx, tx, p, next.String()); err != nil {
 			return dst, httpx.Validation("the target ticket was merged into a ticket you cannot see")
 		}
 		dst = *next

@@ -44,6 +44,9 @@ func TestSanitizeWikiKeepsEditorBlocks(t *testing.T) {
 		`data-type="toc"`,
 		`data-id="3dcb61fa-abc6-47ac-9916-06acf5b7fdf7" data-type="subpage"`,
 		`data-id="3dcb61fa-abc6-47ac-9916-06acf5b7fdf7" data-view="board" data-type="database"`,
+		`<a data-type="ticket" data-id="7c1f3a52-4d2e-4b8a-9e61-0f5d2c8b3a14" href="/tickets/42" rel="nofollow noreferrer">#42 Refund stuck</a>`,
+		`<a data-type="contact" data-id="b5e8d2c1-6f3a-4e7b-8d9c-1a2b3c4d5e6f" href="/contacts/b5e8d2c1-6f3a-4e7b-8d9c-1a2b3c4d5e6f" rel="nofollow noreferrer">Ana Ruiz</a>`,
+		`data-type="tickets" data-id="2f4e6a8c-1b3d-4f5a-8c7e-9d0b1a2c3e4f" data-limit="10"`,
 		`<hr data-block-id="b37d5388-87d5-44c1-a276-3283de343057">`,
 		`<table data-block-id="e6b6142d-fc10-455d-9034-f78c32cda801" style="min-width: 160px">`,
 		`<col style="min-width: 80px">`,
@@ -84,6 +87,9 @@ func TestSanitizeWikiRefuses(t *testing.T) {
 		"comment on a div":  `<div data-comment="5b0f6f8e-2f0b-4f55-9d0a-6d2f0c1c9a11">x</div>`,
 		"img width huge":    `<img src="https://x.example/a.png" data-width="1e9">`,
 		"callout icon html": `<div data-type="callout" data-icon="<b>">x</div>`,
+		"tickets limit":     `<div data-type="tickets" data-id="2f4e6a8c-1b3d-4f5a-8c7e-9d0b1a2c3e4f" data-limit="1e9">x</div>`,
+		"tickets view":      `<div data-type="tickets" data-id="../views/evil" data-limit="5">x</div>`,
+		"mention type":      `<a data-type="script" data-id="7c1f3a52-4d2e-4b8a-9e61-0f5d2c8b3a14" href="/tickets/1">x</a>`,
 	}
 	bad := regexp.MustCompile(`(?i)script|onclick|iframe|javascript:|http://|data:text|data-type="script"|background|url\(|evil|position|\.\./|tomorrow|1e9|&lt;b&gt;|<div data-comment`)
 	for name, in := range cases {
@@ -98,5 +104,42 @@ func TestSanitizeRichUnchangedByWiki(t *testing.T) {
 	out := SanitizeRich(`<div data-type="callout" data-icon="💡"><p>x</p></div><mark data-bg="red">y</mark>`)
 	if strings.Contains(out, "data-type") || strings.Contains(out, "data-bg") || strings.Contains(out, "<mark") {
 		t.Errorf("rich policy took wiki blocks: %s", out)
+	}
+}
+
+// A link to a ticket or a contact keeps its type, the record's id and the app's route for
+// it; any other href or attribute goes, and without an id it is a plain link.
+func TestSanitizeWikiMentionLinks(t *testing.T) {
+	const tk, ct = "7c1f3a52-4d2e-4b8a-9e61-0f5d2c8b3a14", "b5e8d2c1-6f3a-4e7b-8d9c-1a2b3c4d5e6f"
+	cases := []struct{ name, in, want string }{
+		{"ticket", `<a href="/tickets/42" data-id="` + tk + `" data-type="ticket">#42 Hi</a>`,
+			`<a data-type="ticket" data-id="` + tk + `" href="/tickets/42" rel="nofollow noreferrer">#42 Hi</a>`},
+		{"contact", `<a data-type="contact" data-id="` + ct + `" href="/contacts/` + ct + `">Ana</a>`,
+			`<a data-type="contact" data-id="` + ct + `" href="/contacts/` + ct + `" rel="nofollow noreferrer">Ana</a>`},
+		{"other attributes", `<a data-type="ticket" data-id="` + tk + `" data-block="` + tk + `" data-mention="` + tk + `" target="_blank" title="x" href="/tickets/7">#7</a>`,
+			`<a data-type="ticket" data-id="` + tk + `" href="/tickets/7" rel="nofollow noreferrer">#7</a>`},
+		{"ticket elsewhere", `<a data-type="ticket" data-id="` + tk + `" href="https://evil.example/tickets/42">#42</a>`,
+			`<a data-type="ticket" data-id="` + tk + `">#42</a>`},
+		{"ticket by id", `<a data-type="ticket" data-id="` + tk + `" href="/tickets/` + tk + `">#42</a>`,
+			`<a data-type="ticket" data-id="` + tk + `">#42</a>`},
+		{"ticket route of a contact", `<a data-type="ticket" data-id="` + tk + `" href="/contacts/` + ct + `">x</a>`,
+			`<a data-type="ticket" data-id="` + tk + `">x</a>`},
+		{"contact route of a ticket", `<a data-type="contact" data-id="` + ct + `" href="/tickets/42">x</a>`,
+			`<a data-type="contact" data-id="` + ct + `">x</a>`},
+		{"path tricks", `<a data-type="ticket" data-id="` + tk + `" href="/tickets/42/../../admin">x</a><a data-type="contact" data-id="` + ct + `" href="//evil.example/contacts/` + ct + `">y</a>`,
+			`<a data-type="ticket" data-id="` + tk + `">x</a><a data-type="contact" data-id="` + ct + `">y</a>`},
+		{"no id", `<a data-type="ticket" data-id="42" href="/tickets/42">#42</a>`,
+			`<a href="/tickets/42" rel="nofollow noreferrer">#42</a>`},
+		{"escaped text kept", `<p>a &amp; b <a data-type="ticket" data-id="` + tk + `" href="/tickets/1">#1 &lt;x&gt;</a> <a href="https://x.example/?a=1&amp;b=2">q</a></p>`,
+			`<p>a &amp; b <a data-type="ticket" data-id="` + tk + `" href="/tickets/1" rel="nofollow noreferrer">#1 &lt;x&gt;</a> <a href="https://x.example/?a=1&amp;b=2" rel="nofollow noreferrer noopener" target="_blank">q</a></p>`},
+	}
+	for _, c := range cases {
+		out := SanitizeWiki(c.in)
+		if out != c.want {
+			t.Errorf("%s:\n got %s\nwant %s", c.name, out, c.want)
+		}
+		if again := SanitizeWiki(out); again != out {
+			t.Errorf("%s: not stable: %s", c.name, again)
+		}
 	}
 }

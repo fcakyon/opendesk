@@ -194,7 +194,7 @@ func registerMessageMutations(d *deps.Deps, api huma.API, tags []string) {
 			}
 			var edited domain.Message
 			if err := d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				tid, err := resolveVisible(ctx, tx, p, in.ID)
+				tid, err := domain.ResolveVisibleTicket(ctx, tx, p, in.ID)
 				if err != nil {
 					return err
 				}
@@ -219,7 +219,7 @@ func registerMessageMutations(d *deps.Deps, api huma.API, tags []string) {
 				return nil, err
 			}
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				tid, err := resolveVisible(ctx, tx, p, in.ID)
+				tid, err := domain.ResolveVisibleTicket(ctx, tx, p, in.ID)
 				if err != nil {
 					return err
 				}
@@ -247,7 +247,7 @@ func registerMessageMutations(d *deps.Deps, api huma.API, tags []string) {
 			}
 			var msg domain.Message
 			if err := d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				tid, err := resolveVisible(ctx, tx, p, in.ID)
+				tid, err := domain.ResolveVisibleTicket(ctx, tx, p, in.ID)
 				if err != nil {
 					return err
 				}
@@ -322,7 +322,7 @@ func registerPurge(d *deps.Deps, api huma.API, tags []string) {
 			var msg domain.Message
 			var keys []string
 			if err := d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				tid, err := resolveVisible(ctx, tx, p, in.ID)
+				tid, err := domain.ResolveVisibleTicket(ctx, tx, p, in.ID)
 				if err != nil {
 					return err
 				}
@@ -603,7 +603,7 @@ func registerRetract(d *deps.Deps, api huma.API, tags []string) {
 			}
 			var msg domain.Message
 			if err := d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				tid, err := resolveVisible(ctx, tx, p, in.ID)
+				tid, err := domain.ResolveVisibleTicket(ctx, tx, p, in.ID)
 				if err != nil {
 					return err
 				}

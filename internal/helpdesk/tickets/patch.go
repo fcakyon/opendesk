@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -134,8 +133,6 @@ func lockTicket(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID) (ticketState
 	return s, nil
 }
 
-var ticketAliasPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{1,39}$`)
-
 // applyOpts controls follow-up work of a patch.
 type applyOpts struct {
 	// Enqueue queues the ticket_updated trigger (automations do not, to avoid loops).
@@ -189,7 +186,7 @@ func applyPatch(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID
 		var to *string
 		if !p.Alias.Null && strings.TrimSpace(p.Alias.Value) != "" {
 			v := strings.ToUpper(strings.TrimSpace(p.Alias.Value))
-			if !ticketAliasPattern.MatchString(v) || !strings.ContainsAny(v, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+			if !domain.TicketAliasPattern.MatchString(v) || !strings.ContainsAny(v, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
 				return nil, httpx.Validation("alias must be 2 to 40 letters, numbers or hyphens, and include a letter")
 			}
 			if _, err := uuid.Parse(v); err == nil {

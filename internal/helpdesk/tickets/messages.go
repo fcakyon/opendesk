@@ -95,7 +95,7 @@ func registerMessages(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			id, err := resolveVisible(ctx, d.DB.Pool, p, in.ID)
+			id, err := domain.ResolveVisibleTicket(ctx, d.DB.Pool, p, in.ID)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -125,7 +125,7 @@ func registerMessages(d *deps.Deps, api huma.API) {
 			}
 			var msg domain.Message
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				id, err := resolveVisible(ctx, tx, p, in.ID)
+				id, err := domain.ResolveVisibleTicket(ctx, tx, p, in.ID)
 				if err != nil {
 					return err
 				}
@@ -151,7 +151,7 @@ func registerMessages(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			id, err := resolveVisible(ctx, d.DB.Pool, p, in.ID)
+			id, err := domain.ResolveVisibleTicket(ctx, d.DB.Pool, p, in.ID)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -204,7 +204,7 @@ func registerMessages(d *deps.Deps, api huma.API) {
 				FROM messages m JOIN tickets t ON t.id = m.ticket_id AND t.deleted_at IS NULL
 				WHERE m.workspace_id = $1 AND m.id = $2 AND (m.deleted_at IS NULL OR $3)`, p.WorkspaceID, id, p.Role.AtLeast(auth.RoleAdmin)).Scan(&out.Body.FullHTML, &tid)
 			if err == nil {
-				if _, err = resolveVisible(ctx, d.DB.Pool, p, tid.String()); err != nil {
+				if _, err = domain.ResolveVisibleTicket(ctx, d.DB.Pool, p, tid.String()); err != nil {
 					return nil, httpx.NotFound("Message")
 				}
 			}

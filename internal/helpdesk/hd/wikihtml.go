@@ -1,10 +1,12 @@
 package hd
 
 import (
+	"html"
 	"regexp"
 	"strings"
 
 	"github.com/microcosm-cc/bluemonday"
+	xhtml "golang.org/x/net/html"
 )
 
 // The wiki's blocks (contracts/wiki.md "Blocks"): data attributes on plain elements, each
@@ -13,7 +15,7 @@ import (
 // https, colours only the named tones.
 var (
 	wikiTone     = regexp.MustCompile(`^(gray|brown|orange|yellow|green|blue|purple|pink|red)$`)
-	wikiDivTypes = regexp.MustCompile(`^(callout|columns|column|file|video|audio|bookmark|embed|toc|subpage|database|block-math|detailsContent)$`)
+	wikiDivTypes = regexp.MustCompile(`^(callout|columns|column|file|video|audio|bookmark|embed|toc|subpage|database|block-math|detailsContent|tickets)$`)
 	wikiSpanType = regexp.MustCompile(`^(mention|inline-math)$`)
 	wikiSrc      = regexp.MustCompile(`^(?i:https://[^\s"'<>]+|/v1/attachments/[0-9a-fA-F-]{36}(\?[^\s"'<>]*)?)$`)
 	httpsURL     = regexp.MustCompile(`^(?i:https://[^\s"'<>]+)$`)
@@ -28,6 +30,12 @@ var (
 	codeLang  = regexp.MustCompile(`^language-[a-z0-9+#-]{1,30}$`)
 	colWidths = regexp.MustCompile(`^\d{1,5}(,\d{1,5}){0,63}$`)
 	pixels    = regexp.MustCompile(`^\d{1,5}px$`)
+	// Where a mention of a ticket or a contact points: the app's own route for it, nothing else.
+	mentionHref = map[string]*regexp.Regexp{
+		"ticket":  regexp.MustCompile(`^/tickets/[0-9]{1,18}$`),
+		"contact": regexp.MustCompile(`^/contacts/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`),
+	}
+	relValue = regexp.MustCompile(`^[a-z ]{1,64}$`)
 
 	wikiPolicy = newWikiPolicy()
 )
@@ -64,10 +72,13 @@ func newWikiPolicy() *bluemonday.Policy {
 	// A database inside a page: which database, and which of its views shows.
 	p.AllowAttrs("data-view").Matching(regexp.MustCompile(`^[a-z0-9_]{1,24}$`)).OnElements("div")
 	p.AllowAttrs("data-latex").Matching(latexText).OnElements("div", "span")
+	// The tickets block: a saved view's open tickets (data-id), how many show.
+	p.AllowAttrs("data-limit").Matching(integer).OnElements("div")
 
-	// Inline: people (the rich policy's), equations, links to pages, dates, highlights.
+	// Inline: people (the rich policy's), equations, links to pages, tickets and contacts,
+	// dates, highlights. A ticket or contact link is reduced further by mentionLinks.
 	p.AllowAttrs("data-type").Matching(wikiSpanType).OnElements("span")
-	p.AllowAttrs("data-type").Matching(regexp.MustCompile(`^page$`)).OnElements("a")
+	p.AllowAttrs("data-type").Matching(regexp.MustCompile(`^(page|ticket|contact)$`)).OnElements("a")
 	p.AllowAttrs("data-id", "data-block").Matching(uuidAttr).OnElements("a")
 	p.AllowAttrs("data-type").Matching(regexp.MustCompile(`^date$`)).OnElements("time")
 	p.AllowAttrs("datetime").Matching(isoWhen).OnElements("time")
@@ -97,5 +108,60 @@ func SanitizeWiki(raw string) string {
 	if strings.TrimSpace(raw) == "" {
 		return ""
 	}
-	return strings.TrimSpace(wikiPolicy.Sanitize(raw))
+	return strings.TrimSpace(mentionLinks(wikiPolicy.Sanitize(raw)))
+}
+
+// mentionLinks reduces each link to a ticket or a contact in sanitized HTML to what the
+// app draws it from: its type, the record's id and the app's route for it
+// (`<a data-type="ticket" data-id="<uuid>" href="/tickets/<number>">`), with the policy's
+// rel. Any other href or attribute goes; without an id it is a plain link. Everything
+// else is copied as it is.
+func mentionLinks(clean string) string {
+	if !strings.Contains(clean, `data-type="ticket"`) && !strings.Contains(clean, `data-type="contact"`) {
+		return clean
+	}
+	var b strings.Builder
+	z := xhtml.NewTokenizer(strings.NewReader(clean))
+	for {
+		tt := z.Next()
+		if tt == xhtml.ErrorToken {
+			return b.String()
+		}
+		if tt != xhtml.StartTagToken {
+			b.Write(z.Raw())
+			continue
+		}
+		// Token unescapes attribute values in the tokenizer's buffer: keep the bytes first.
+		raw := append([]byte(nil), z.Raw()...)
+		tok := z.Token()
+		var kind, id, href, rel string
+		for _, a := range tok.Attr {
+			switch a.Key {
+			case "data-type":
+				kind = a.Val
+			case "data-id":
+				id = a.Val
+			case "href":
+				href = a.Val
+			case "rel":
+				rel = a.Val
+			}
+		}
+		shape, ok := mentionHref[kind]
+		if tok.Data != "a" || !ok {
+			b.Write(raw)
+			continue
+		}
+		b.WriteString("<a")
+		if uuidAttr.MatchString(id) {
+			b.WriteString(` data-type="` + kind + `" data-id="` + html.EscapeString(id) + `"`)
+		}
+		if shape.MatchString(href) {
+			b.WriteString(` href="` + html.EscapeString(href) + `"`)
+			if relValue.MatchString(rel) {
+				b.WriteString(` rel="` + rel + `"`)
+			}
+		}
+		b.WriteString(">")
+	}
 }

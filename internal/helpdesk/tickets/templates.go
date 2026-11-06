@@ -37,7 +37,7 @@ func registerTemplates(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			id, err := resolveVisible(ctx, d.DB.Pool, p, in.ID)
+			id, err := domain.ResolveVisibleTicket(ctx, d.DB.Pool, p, in.ID)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -95,7 +95,7 @@ func registerTemplates(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			id, err := resolveVisible(ctx, d.DB.Pool, p, in.ID)
+			id, err := domain.ResolveVisibleTicket(ctx, d.DB.Pool, p, in.ID)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}

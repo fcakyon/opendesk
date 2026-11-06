@@ -103,9 +103,9 @@ func TestRegisterAll(t *testing.T) {
 
 	w := river.NewWorkers()
 	helpdesk.RegisterWorkers(e.D, w)
-	// Customer session cleanup, help-domain checks and import sweeps run everywhere;
-	// the Cloudflare reconcile runs only with Cloudflare for SaaS.
-	if n := len(helpdesk.Periodic(e.D)); n != 8 {
+	// Customer session cleanup, help-domain checks, import sweeps, the wiki's trash purge
+	// and its reminders run everywhere; the Cloudflare reconcile runs only with Cloudflare for SaaS.
+	if n := len(helpdesk.Periodic(e.D)); n != 10 {
 		t.Fatalf("periodic jobs %d", n)
 	}
 }

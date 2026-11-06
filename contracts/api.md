@@ -595,6 +595,7 @@ Each value is overridable: `NOTIFY_EMAIL_DELAY`, `NOTIFY_EMAIL_COOLDOWNS` (e.g. 
 | DELETE | `/v1/tickets/{id}/draft` | agent (`tickets:write`) → 204; idempotent |
 | POST | `/v1/tickets/{id}/typing` | agent (`tickets:write`), signed-in member (an API key gets `403`) → 204. A teammate is writing a reply: on a chat ticket with a contact, the visitor's widget gets `"typing"` `{ticket_id, user: {id, name}}` (contracts/realtime.md "Live events"); on other tickets nothing happens. A ticket the caller cannot see is `404`. Clients send it at most every 2.5 s while typing |
 | GET | `/v1/tickets/{id}/threads` | viewer → `{data: Thread[]}`, oldest first ("Threads") |
+| GET | `/v1/tickets/{id}/wiki` | viewer; `tickets:read` and `wiki:read` → `{data: WikiNode[]}`: the live wiki pages the caller may see that mention the ticket, last edited first, at most 50 (`contracts/wiki.md` "Ticket backlinks") |
 | POST | `/v1/tickets/{id}/threads` | `{to: string[] /* 1..20 */, cc?: string[], subject, body_html, attachment_ids?, mailbox_id?, include_history?: boolean, forward_attachment_ids?: string[], forward_message_id?: string}` → 201 `{thread: Thread, message: Message}` |
 | POST | `/v1/tickets/{id}/threads/{threadId}/messages` | `{body_html, attachment_ids?}` → 201 `Message` |
 | PATCH | `/v1/tickets/{id}/threads/{threadId}` | `{status: "open"\|"closed"}` → `Thread` |
