@@ -4,19 +4,21 @@
 
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { Link } from "@tanstack/react-router";
-import { AlignCenter, AlignLeft, AlignRight, ArrowUpRight, Download, FileText, Film, Globe, Link2, ListTree, Music, Paperclip } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, ArrowUpRight, BellRing, Clock, Download, X, FileText, Film, Globe, Link2, ListTree, Music, Paperclip } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Calendar, parseDay, formatDay } from "@/components/ui/date-picker";
+import { Calendar, parseDay, formatDay, TimeField } from "@/components/ui/date-picker";
+import { Switch } from "@/components/ui/switch";
 import { TextInput } from "@/components/ui/input";
 import { Popover } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
-import { bytes, longDate } from "@/lib/format";
+import { bytes, longDate, timeOfDay } from "@/lib/format";
+import { newReminderId } from "@/lib/wiki/reminder";
 import { embedFor, EMBED_NAMES } from "@/lib/wiki/embeds";
 import { IconPicker } from "../IconPicker";
 import { PageIcon } from "../WikiTree";
@@ -516,30 +518,58 @@ export function DateView({ node, updateAttributes, editor }: NodeViewProps) {
   const { t } = useTranslation("wiki");
   const [open, setOpen] = useState(false);
   const date = node.attrs.date as string;
+  const time = node.attrs.time as string;
+  const reminder = node.attrs.reminder as string | null;
   const d = parseDay(date);
-  const label = d ? relativeDay(d, t) : t("editor.pickDate");
-  const chip = (
-    <button type="button" contentEditable={false} className="wiki-date" disabled={!editor.isEditable}>
+  const label = d ? relativeDay(d, t) + (time ? ` ${timeOfDay(time)}` : "") : t("editor.pickDate");
+  const title = d ? longDate(d.toISOString()) + (reminder ? ` · ${t("reminder.set")}` : "") : undefined;
+  const face = (
+    <>
       <span aria-hidden>@</span>
       {label}
+      {reminder && <BellRing aria-label={t("reminder.set")} className="wiki-date-bell" />}
+    </>
+  );
+  const chip = (
+    <button type="button" contentEditable={false} className={cn("wiki-date", reminder && "has-reminder")} disabled={!editor.isEditable} title={title}>
+      {face}
     </button>
   );
   return (
     <NodeViewWrapper as="span">
       {editor.isEditable ? (
-        <Popover open={open} onOpenChange={setOpen} trigger={chip} className="p-2">
+        <Popover open={open} onOpenChange={setOpen} trigger={chip} className="w-[240px] p-2">
           <Calendar
             value={d}
             onChange={(v) => {
               updateAttributes({ date: formatDay(v) });
-              setOpen(false);
+              if (!reminder) setOpen(false);
             }}
           />
+          <div className="mt-2 flex flex-col gap-1 border-t border-line pt-2">
+            <div className="flex h-8 items-center gap-2 px-1 text-[12.5px]">
+              <Clock className="size-3.5 text-fg-4" />
+              <span className="flex-1 text-fg-2">{t("reminder.time")}</span>
+              <TimeField size="sm" value={time} onChange={(v) => updateAttributes({ time: v })} aria-label={t("reminder.time")} />
+              {time && (
+                <Tooltip content={t("reminder.clearTime")}>
+                  <button type="button" aria-label={t("reminder.clearTime")} onClick={() => updateAttributes({ time: "" })} className="grid size-6 place-items-center rounded text-fg-4 hover:bg-hover hover:text-fg">
+                    <X className="size-3" />
+                  </button>
+                </Tooltip>
+              )}
+            </div>
+            <label className="flex h-8 cursor-pointer items-center gap-2 px-1 text-[12.5px]">
+              <BellRing className="size-3.5 text-fg-4" />
+              <span className="flex-1 text-fg-2">{t("reminder.remindMe")}</span>
+              <Switch checked={!!reminder} onCheckedChange={(on) => updateAttributes({ reminder: on ? newReminderId() : null })} aria-label={t("reminder.remindMe")} />
+            </label>
+            {reminder && <p className="px-1 pb-0.5 text-[11.5px] leading-4 text-fg-4">{t("reminder.hintAt", { time: timeOfDay(time || "09:00") })}</p>}
+          </div>
         </Popover>
       ) : (
-        <span className="wiki-date" title={d ? longDate(d.toISOString()) : undefined}>
-          <span aria-hidden>@</span>
-          {label}
+        <span className={cn("wiki-date", reminder && "has-reminder")} title={title}>
+          {face}
         </span>
       )}
     </NodeViewWrapper>

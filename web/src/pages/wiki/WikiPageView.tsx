@@ -30,7 +30,10 @@ import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
 import { HistoryDrawer } from "@/components/wiki/HistoryDrawer";
 import { IconPicker } from "@/components/wiki/IconPicker";
-import { MoveDialog, TrashItem } from "@/components/wiki/PageMenu";
+import { FollowItem, MoveDialog, TrashItem } from "@/components/wiki/PageMenu";
+import { useWikiPresence, WikiViewers } from "@/components/wiki/presence";
+import { CommentsPanel } from "@/components/wiki/comments/CommentsPanel";
+import { CommentCount, FollowButton, usePageComments } from "@/components/wiki/comments/PageComments";
 import { DayNav, TemplateBanner, TrashBanner, Verification } from "@/components/wiki/PageBanners";
 import { useUseTemplate } from "./WikiTemplatesPage";
 import { AddToSpace } from "@/components/wiki/AddToSpace";
@@ -45,7 +48,7 @@ import type { WikiPage } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { fullDate, relLong } from "@/lib/format";
 import { q, qk } from "@/lib/queries";
-import { atLeast, useRole } from "@/lib/session";
+import { atLeast, useRole, useSession } from "@/lib/session";
 import { useNow } from "@/lib/useNow";
 import { forgetSaver, openSaver, saverFor, type PageSaver } from "@/lib/wiki/saver";
 import { ancestorsOf, childrenOf, MAX_TITLE } from "@/lib/wiki/tree";
@@ -58,6 +61,8 @@ const route = getRouteApi("/app/wiki/$pageId");
 export default function WikiPageView() {
   const { t } = useTranslation("wiki");
   const { pageId } = route.useParams();
+  const { comment } = route.useSearch();
+  const navigate = useNavigate();
   const page = useQuery(q.wikiPage(pageId));
   if (page.isLoading)
     return (
@@ -92,7 +97,15 @@ export default function WikiPageView() {
         />
       </div>
     );
-  return <PageScreen key={pageId} page={page.data} />;
+  return (
+    <PageScreen
+      key={pageId}
+      page={page.data}
+      openThread={comment}
+      // The link has done its work: the address goes back to the page's own.
+      onThreadOpened={() => void navigate({ to: "/wiki/$pageId", params: { pageId }, search: {}, replace: true })}
+    />
+  );
 }
 
 /** Typing left on a page that is gone: it can still be copied. */
@@ -118,12 +131,14 @@ function useSaver(saver: PageSaver) {
   }, [saver]);
 }
 
-export function PageScreen({ page, peek }: { page: WikiPage; peek?: boolean }) {
+export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: WikiPage; peek?: boolean; openThread?: string; onThreadOpened?: () => void }) {
   const { t } = useTranslation("wiki");
   const { t: ui } = useTranslation("ui");
   const qc = useQueryClient();
   const title = useTitle();
-  const canEdit = atLeast(useRole(), "agent");
+  const role = useRole();
+  const me = useSession((s) => s.user?.id ?? null);
+  const canEdit = atLeast(role, "agent");
   const create = useCreatePage();
   const navigate = useNavigate();
   const { tree } = useWikiTree();
@@ -184,6 +199,26 @@ export function PageScreen({ page, peek }: { page: WikiPage; peek?: boolean }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [panel, setPanel]);
+  // Comments (contracts/wiki.md "Comments"): agents write them on a page that isn't in the
+  // trash; a thread on selected text also needs the right to edit the text it marks.
+  const canComment = canEdit && !live.deleted_at;
+  const openComments = useCallback(() => setPanel("comments"), [setPanel]);
+  // Who else has the page open (contracts/realtime.md): editing while the text has focus.
+  // A side peek leaves the page behind it joined.
+  const [editorFocused, setEditorFocused] = useState(false);
+  useEffect(() => {
+    if (!editor) return;
+    const on = () => setEditorFocused(true);
+    const off = () => setEditorFocused(false);
+    editor.on("focus", on);
+    editor.on("blur", off);
+    return () => {
+      editor.off("focus", on);
+      editor.off("blur", off);
+    };
+  }, [editor]);
+  useWikiPresence(peek ? undefined : live, canWrite && editorFocused);
+  const comments = usePageComments({ pageId: page.id, editor, panelOpen: panel === "comments" && !peek, openPanel: openComments, openThread, onThreadOpened });
   const env = useMemo<WikiEditorEnv>(
     () => ({ pageId: page.id, canEdit: canWrite, upload: (f) => api.attachments.upload(f), unfurl: (url) => api.wiki.unfurl(url) }),
     [page.id, canWrite],
@@ -381,6 +416,8 @@ export function PageScreen({ page, peek }: { page: WikiPage; peek?: boolean }) {
                 </Button>
               </Tooltip>
             )}
+            <WikiViewers pageId={page.id} />
+            {!live.deleted_at && <FollowButton pageId={page.id} />}
             <Tooltip content={t("page.copyLink")}>
               <Button square variant="ghost" size="sm" aria-label={t("page.copyLink")} onClick={copyLink}>
                 <Link2 className="size-4" />
@@ -426,6 +463,7 @@ export function PageScreen({ page, peek }: { page: WikiPage; peek?: boolean }) {
                     {t("page.copyLink")}
                   </MenuItem>
                   {!live.template && <AddToSpace pageId={page.id} />}
+                  <FollowItem pageId={page.id} />
                   <MenuItem icon={<History />} onSelect={() => setHistory(true)}>
                     {t("history.open")}
                   </MenuItem>
@@ -550,6 +588,7 @@ export function PageScreen({ page, peek }: { page: WikiPage; peek?: boolean }) {
               <div className="flex flex-wrap items-center gap-x-3">
                 <EditedLine page={current} />
                 <BacklinkCount pageId={page.id} onOpen={() => setPanel("links")} />
+                {!peek && <CommentCount count={comments.count} canComment={canComment} onOpen={canComment ? comments.addComment : openComments} />}
               {!live.template && !live.journal && !live.daily_date && <Verification page={live} canEdit={canEdit && !live.deleted_at} onChange={verify} />}
               </div>
             </div>
@@ -573,6 +612,8 @@ export function PageScreen({ page, peek }: { page: WikiPage; peek?: boolean }) {
               className={isDb ? "mt-2 text-fg-2" : "mt-5"}
               contentClassName={isDb ? "min-h-0" : "prose-lg"}
               onReady={setEditor}
+              onOpenComment={peek ? undefined : comments.open}
+              onStartComment={canWrite && !peek ? comments.start : undefined}
             />
             {live.kind === "database" && (
               <div className="mt-6">
@@ -625,8 +666,32 @@ export function PageScreen({ page, peek }: { page: WikiPage; peek?: boolean }) {
           </article>
         </div>
         {panel && !peek && (
-          <div className="hidden lg:flex">
-            <PagePanel page={live} editor={editor} scrollEl={scrollEl} tab={panel} onTab={setPanel} onClose={() => setPanel(null)} canEdit={canWrite} />
+          // Comments also open on a narrow screen, over the page.
+          <div className={panel === "comments" ? "fixed inset-y-0 right-0 z-40 flex max-w-full shadow-float lg:static lg:z-auto lg:shadow-none" : "hidden lg:flex"}>
+            <PagePanel
+              page={live}
+              editor={editor}
+              scrollEl={scrollEl}
+              tab={panel}
+              onTab={setPanel}
+              onClose={() => setPanel(null)}
+              canEdit={canWrite}
+              commentCount={comments.count}
+              className="max-w-full"
+              comments={
+                <CommentsPanel
+                  pageId={page.id}
+                  editor={editor}
+                  access={{ me, admin: atLeast(role, "admin"), canComment }}
+                  active={comments.active}
+                  onActive={comments.setActive}
+                  pending={comments.pending}
+                  onCancelPending={comments.cancel}
+                  onSendPending={comments.sendPending}
+                  focusNew={comments.focusNew}
+                />
+              }
+            />
           </div>
         )}
       </div>

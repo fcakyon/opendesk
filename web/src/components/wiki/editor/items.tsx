@@ -6,6 +6,7 @@ import type { Editor, Range } from "@tiptap/core";
 import type { TFunction } from "i18next";
 import {
   AtSign,
+  BellRing,
   Bookmark,
   CalendarDays,
   Code2,
@@ -43,6 +44,7 @@ import {
 } from "lucide-react";
 import type { DbViewType, Member, WikiNode } from "@/lib/api/types";
 import { Avatar } from "@/components/ui/avatar";
+import { newReminderId } from "@/lib/wiki/reminder";
 import { EMOJI, searchEmoji } from "../emoji";
 import { rank, type MenuItem } from "./menu";
 import { TONES } from "./tones";
@@ -129,6 +131,12 @@ const insertDate = (date: string) => (editor: Editor, range: Range) =>
     .insertContent([{ type: "dateMention", attrs: { date } }, { type: "text", text: " " }])
     .run();
 
+/** "Remind me": tomorrow, with a reminder for whoever writes it (contracts/wiki.md "Reminders"). */
+const insertReminder = (editor: Editor, range: Range) =>
+  clear(editor, range)
+    .insertContent([{ type: "dateMention", attrs: { date: today(1), reminder: newReminderId() } }, { type: "text", text: " " }])
+    .run();
+
 /** "@": people, then dates, then pages. */
 export function mentionItems(query: string, s: MenuSources): MenuItem[] {
   const t = s.t;
@@ -159,8 +167,16 @@ export function mentionItems(query: string, s: MenuSources): MenuItem[] {
     ],
     (d) => [d.label, "date day"],
   ).map<MenuItem>((d) => ({ id: `date-${d.id}`, group: t("editor.menu.dates"), label: d.label, hint: d.date, icon: <CalendarDays />, run: insertDate(d.date) }));
+  const remind = rank(query, [{ id: "remind", label: t("reminder.remindMe") }], (d) => [d.label, "remind reminder alarm"]).map<MenuItem>((d) => ({
+    id: d.id,
+    group: t("editor.menu.dates"),
+    label: d.label,
+    hint: t("editor.tomorrow"),
+    icon: <BellRing />,
+    run: insertReminder,
+  }));
   const pages = pageItems(query, s, linkPage, { group: t("editor.menu.pages"), limit: 5 });
-  return [...people, ...(query.trim() ? dates.slice(0, 2) : dates.slice(0, 2)), ...pages];
+  return [...people, ...dates.slice(0, 2), ...remind, ...pages];
 }
 
 /** ":": emoji, after two letters so "a:b" and times stay as typed. */
@@ -253,6 +269,7 @@ export function slashItems(query: string, s: MenuSources): MenuItem[] {
     { id: "toc", group: advanced, label: t("editor.block.toc"), icon: <ListTree />, words: "table of contents outline headings index", run: (e, r) => clear(e, r).insertContent({ type: "toc" }).run() },
     { id: "mention", group: inline, label: t("editor.block.mention"), icon: <AtSign />, hint: "@", words: "person user teammate", run: (e, r) => clear(e, r).insertContent("@").run() },
     { id: "date", group: inline, label: t("editor.block.date"), icon: <CalendarDays />, words: "today day reminder when", run: insertDate(today(0)) },
+    { id: "remind", group: inline, label: t("reminder.remindMe"), icon: <BellRing />, words: "remind reminder alarm notify tomorrow", run: insertReminder },
     { id: "inlineMath", group: inline, label: t("editor.block.inlineMath"), icon: <Sigma />, hint: "$", words: "equation latex inline formula", run: (e, r) => clear(e, r).insertInlineMath({ latex: "x" }).run() },
     { id: "emoji", group: inline, label: t("editor.block.emoji"), icon: <Smile />, hint: ":", words: "emoticon smiley icon", run: (e, r) => clear(e, r).insertContent(":").run() },
     ...TONES.map<Def>((tone) => ({

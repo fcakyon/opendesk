@@ -31,9 +31,9 @@ export function useToolbarPref(): [boolean, (on: boolean) => void] {
   return [on, set];
 }
 
-export type PanelTab = "outline" | "links" | "graph" | "info";
+export type PanelTab = "outline" | "links" | "graph" | "comments" | "info";
 const PANEL_KEY = "od:wiki:panel";
-const PANEL_TABS: PanelTab[] = ["outline", "links", "graph", "info"];
+const PANEL_TABS: PanelTab[] = ["outline", "links", "graph", "comments", "info"];
 
 // Private mode refuses storage: the choice then holds in memory until the tab closes.
 let panelMemory: PanelTab | null = null;

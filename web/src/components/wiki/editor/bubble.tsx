@@ -5,7 +5,7 @@
 import type { Editor } from "@tiptap/core";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { DropdownMenu as M } from "radix-ui";
-import { Bold, ChevronDown, Code, FileText, Italic, Link2, Sigma, Strikethrough, Underline, Unlink } from "lucide-react";
+import { Bold, ChevronDown, Code, FileText, Italic, Link2, MessageSquareText, Sigma, Strikethrough, Underline, Unlink } from "lucide-react";
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import type { EditorState } from "@tiptap/pm/state";
 import { useTranslation } from "react-i18next";
@@ -18,6 +18,7 @@ import { cn } from "@/lib/cn";
 import type { WikiNode } from "@/lib/api/types";
 import { useTitle, useWikiTree } from "../hooks";
 import { PageIcon } from "../WikiTree";
+import { heldComment } from "./comment";
 import { turnIntoOptions, type TurnId } from "./handle";
 import { rank } from "./menu";
 import { TONES, type Tone } from "./tones";
@@ -58,7 +59,7 @@ function currentKind(editor: Editor): TurnId {
 // every transaction: they must stay the same objects across renders.
 const BUBBLE_OPTIONS = { placement: "top", offset: 8, flip: true, shift: { padding: 8 } } as const;
 
-export function BubbleToolbar({ editor }: { editor: Editor }) {
+export function BubbleToolbar({ editor, canComment }: { editor: Editor; canComment: boolean }) {
   const { t } = useTranslation("wiki");
   const [linking, setLinking] = useState(false);
   const linkingRef = useRef(linking);
@@ -67,6 +68,8 @@ export function BubbleToolbar({ editor }: { editor: Editor }) {
     // The link field keeps the toolbar up while it has focus.
     if (linkingRef.current) return true;
     if (!e.isEditable || from === to) return false;
+    // A thread being written on the selection has the panel's attention.
+    if (heldComment(state)) return false;
     if ((state.selection as { node?: unknown }).node) return false;
     if (e.isActive("codeBlock") || e.isActive("inlineMath") || e.isActive("blockMath")) return false;
     return state.doc.textBetween(from, to).trim().length > 0;
@@ -132,6 +135,22 @@ export function BubbleToolbar({ editor }: { editor: Editor }) {
       {sep}
       <LinkPopover editor={editor} open={linking} onOpenChange={setLinking} />
       <ColorPopover editor={editor} />
+      {canComment && (
+        <>
+          {sep}
+          <Tooltip content={t("comments.commentOnText")} shortcut="mod alt m">
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => editor.commands.startComment()}
+              className="flex h-7 items-center gap-1 rounded-md px-1.5 text-[12.5px] text-fg-2 transition-colors hover:bg-hover hover:text-fg [&_svg]:size-[15px]"
+            >
+              <MessageSquareText />
+              {t("comments.comment")}
+            </button>
+          </Tooltip>
+        </>
+      )}
     </BubbleMenu>
   );
 }

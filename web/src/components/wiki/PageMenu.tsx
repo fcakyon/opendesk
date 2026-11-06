@@ -1,13 +1,14 @@
 // What a page's menus share, in the tree and in the page's header: "Move to…" (a page
 // picked from a searchable list, or the top level; how pages move on touch screens,
-// where the tree can't be dragged) and Delete, which says when only an admin can.
+// where the tree can't be dragged), Delete, which says when only an admin can, and
+// following the page's comments.
 
 import { Command } from "cmdk";
-import { ArrowUpToLine, Trash2 } from "lucide-react";
+import { ArrowUpToLine, Bell, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Dialog } from "@/components/ui/dialog";
-import { MenuItem, MenuSeparator } from "@/components/ui/menu";
+import { MenuCheckItem, MenuItem, MenuSeparator } from "@/components/ui/menu";
 import { pickerSearch } from "@/components/ui/picker";
 import type { WikiNode } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
@@ -17,6 +18,7 @@ import { q } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useDeletePage, useDeleteRule, useExpanded, useMovePage, useTitle, useTrashPage, useWikiTree } from "./hooks";
 import { PageIcon } from "./WikiTree";
+import { useFollow } from "./comments/hooks";
 
 const row =
   "flex h-8 cursor-default items-center gap-2 rounded-md px-2 text-[12.5px] text-fg data-[selected=true]:bg-hover [@media(pointer:coarse)]:h-10 [&_svg]:size-3.5 [&_svg]:shrink-0";
@@ -132,5 +134,17 @@ export function DeleteItem({ node }: { node: WikiNode }) {
       </MenuItem>
       {rule !== "yes" && <p className="max-w-[232px] px-2 pb-1.5 pt-0.5 text-[11.5px] leading-4 text-fg-3">{t(rule === "page" ? "delete.adminOnlyPage" : "delete.adminOnlySubpages")}</p>}
     </>
+  );
+}
+
+/** Following the page's comments (contracts/wiki.md "Following"), as the header's bell does. */
+export function FollowItem({ pageId }: { pageId: string }) {
+  const { t } = useTranslation("wiki");
+  const f = useFollow(pageId);
+  if (!f.ready) return null;
+  return (
+    <MenuCheckItem icon={<Bell />} checked={f.following} onSelect={f.toggle}>
+      {t("follow.followComments")}
+    </MenuCheckItem>
   );
 }

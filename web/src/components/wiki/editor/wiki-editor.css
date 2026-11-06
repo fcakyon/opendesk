@@ -659,3 +659,39 @@ button.wiki-date:hover {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* Inline comments (comment.ts): open threads' text with a soft amber underline, the thread
+   in hand (or under the pointer) on an amber wash. Resolved threads draw nothing. */
+.wiki-prose .wiki-comment {
+  border-bottom: 2px solid color-mix(in oklab, var(--tone-amber-solid) 45%, transparent);
+  background: color-mix(in oklab, var(--tone-amber-solid) 9%, transparent);
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+.wiki-prose .wiki-comment.is-active {
+  border-bottom-color: var(--tone-amber-solid);
+  background: color-mix(in oklab, var(--tone-amber-solid) 24%, transparent);
+}
+.wiki-prose .wiki-comment.is-pending {
+  cursor: text;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wiki-prose .wiki-comment {
+    transition: none;
+  }
+}
+
+/* A date with a reminder: a small bell after it. */
+.wiki-date .wiki-date-bell {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-left: 0.25em;
+  vertical-align: -0.05em;
+  color: var(--tone-amber);
+}
+.wiki-date.has-reminder {
+  color: var(--fg);
+}

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { AtSign, Bell, BellOff, Mail, ChevronRight, CornerDownLeft, CreditCard, Gauge, Hand, Import, Inbox, KeyRound, MailX, MessagesSquare, Moon, Settings2, Sparkles, TimerOff, TriangleAlert, UserPlus, UsersRound } from "lucide-react";
+import { AlarmClock, AtSign, Bell, BellOff, Mail, ChevronRight, CornerDownLeft, CreditCard, Gauge, Hand, Import, Inbox, KeyRound, MailX, MessageSquareText, MessagesSquare, Moon, Settings2, Sparkles, TimerOff, TriangleAlert, UserPlus, UsersRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -43,6 +43,9 @@ const kind: Record<Notification["type"], { icon: React.ReactNode; tone: Tone }> 
   support_channel_unhealthy: { icon: <TriangleAlert />, tone: "red" },
   collab_assigned: { icon: <Mail />, tone: "blue" },
   collab_mention: { icon: <AtSign />, tone: "indigo" },
+  wiki_mention: { icon: <AtSign />, tone: "indigo" },
+  wiki_comment: { icon: <MessageSquareText />, tone: "teal" },
+  wiki_reminder: { icon: <AlarmClock />, tone: "amber" },
 };
 
 /** A notification's icon and hue; an import that stopped or waits for credentials is not green. */
@@ -58,11 +61,26 @@ export function collabThread(n: Notification): string | null {
   return typeof n.data.thread_id === "string" && n.data.thread_id ? n.data.thread_id : null;
 }
 
-/** Where a notification leads: its ticket, its mail conversation, or the settings page it is about. */
+const isWiki = (n: Notification) => n.type === "wiki_mention" || n.type === "wiki_comment" || n.type === "wiki_reminder";
+const text = (v: unknown) => (typeof v === "string" && v ? v : null);
+
+/** The wiki page a wiki notification is about, and the comment thread when it is about one. */
+export function wikiTarget(n: Notification): { pageId: string | null; title: string | null; thread: string | null } | null {
+  if (!isWiki(n)) return null;
+  return { pageId: text(n.data.page_id), title: text(n.data.page_title), thread: text(n.data.thread_id) };
+}
+
+/** Where a notification leads: its ticket, its mail conversation, its wiki page, or the settings page it is about. */
 export function notificationPath(n: Notification): string | null {
   if (n.type === "collab_assigned" || n.type === "collab_mention") {
     const id = collabThread(n);
     return id ? `/mail/${n.type === "collab_assigned" ? "assigned" : "all"}/${encodeURIComponent(id)}` : "/mail/assigned";
+  }
+  const wiki = wikiTarget(n);
+  if (wiki) {
+    if (!wiki.pageId) return "/wiki";
+    const page = `/wiki/${encodeURIComponent(wiki.pageId)}`;
+    return wiki.thread ? `${page}?comment=${encodeURIComponent(wiki.thread)}` : page;
   }
   if (n.type === "ai_cap_reached") return "/settings/ai/behaviour";
   if (n.type === "ai_key_failed") return "/settings/ai";
@@ -159,13 +177,23 @@ export function describe(n: Notification, t: TFunction<"shell">): string {
       if (n.type === "collab_assigned") return who ? c("notifications.assigned", { who }) : c("notifications.assignedAnon");
       return who ? c("notifications.mention", { who }) : c("notifications.mentionAnon");
     }
+    case "wiki_mention":
+      if (text(n.data.comment_id)) return who ? t("notifications.type.wikiMentionComment", { who }) : t("notifications.type.wikiMentionCommentAnon");
+      return who ? t("notifications.type.wikiMention", { who }) : t("notifications.type.wikiMentionAnon");
+    case "wiki_comment":
+      return who ? t("notifications.type.wikiComment", { who }) : t("notifications.type.wikiCommentAnon");
+    case "wiki_reminder": {
+      const label = text(n.data.label);
+      return label ? t("notifications.type.wikiReminder", { label }) : t("notifications.type.wikiReminderAnon");
+    }
     default:
       return t("notifications.type.other");
   }
 }
 
-/** A Collab notification's conversation subject, when the server sent one. */
-function collabSubject(n: Notification): string | null {
+/** The line under a notification without a ticket: a Collab conversation's subject or a wiki page's title, when the server sent one. */
+function contextLine(n: Notification): string | null {
+  if (isWiki(n)) return wikiTarget(n)?.title ?? null;
   const s = n.data.subject;
   return collabThread(n) && typeof s === "string" && s ? s : null;
 }
@@ -216,6 +244,10 @@ export function NotificationsButton() {
     else if (n.type === "collab_assigned" || n.type === "collab_mention") {
       const id = collabThread(n);
       void navigate({ to: "/mail/$box/{-$threadId}", params: { box: n.type === "collab_assigned" ? "assigned" : "all", threadId: id ?? undefined }, search: {} });
+    } else if (isWiki(n)) {
+      const w = wikiTarget(n);
+      if (w?.pageId) void navigate({ to: "/wiki/$pageId", params: { pageId: w.pageId }, search: w.thread ? { comment: w.thread } : {} });
+      else void navigate({ to: "/wiki" });
     }
     else if (n.ticket)
       void navigate({
@@ -359,9 +391,9 @@ export function NotificationsButton() {
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className={cn("block truncate text-[12.5px]", n.read_at ? "text-fg-2" : "font-medium text-fg")}>{describe(n, t)}</span>
-                        {!n.ticket && collabSubject(n) && (
+                        {!n.ticket && contextLine(n) && (
                           <span className="mt-0.5 block truncate text-xs text-fg-3" data-ph-mask>
-                            {collabSubject(n)}
+                            {contextLine(n)}
                           </span>
                         )}
                         {n.ticket && (

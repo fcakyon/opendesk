@@ -130,7 +130,15 @@
       "importAnd": "{{a}} et {{b}}",
       "importSource": "historique",
       "supportChannel": "Canal de support",
-      "supportChannelUnhealthy": "{{name}} nécessite une intervention"
+      "supportChannelUnhealthy": "{{name}} nécessite une intervention",
+      "wikiMention": "{{who}} vous a mentionné sur une page du wiki",
+      "wikiMentionAnon": "Vous avez été mentionné sur une page du wiki",
+      "wikiMentionComment": "{{who}} vous a mentionné dans un commentaire du wiki",
+      "wikiMentionCommentAnon": "Vous avez été mentionné dans un commentaire du wiki",
+      "wikiComment": "{{who}} a commenté une page du wiki",
+      "wikiCommentAnon": "Nouveau commentaire sur une page du wiki",
+      "wikiReminder": "Rappel : {{label}}",
+      "wikiReminderAnon": "Votre rappel du wiki arrive à échéance"
     },
     "hold": {
       "paused": "En pause jusqu’à {{when}} : aucune notification par e-mail, sur téléphone ou sur ordinateur",

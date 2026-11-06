@@ -43,3 +43,25 @@ group("Collab notifications", () => {
     expect(describe(collab("collab_mention", { thread_id: "th1" }), t)).toBe("You were mentioned in a comment");
   });
 });
+
+group("wiki notifications", () => {
+  const wiki = (type: "wiki_mention" | "wiki_comment" | "wiki_reminder", data: Record<string, unknown>): Notification => ({ id: "n3", type, ticket: null, data, read_at: null, created_at: "2026-10-13T09:00:00Z" });
+  const maya = { id: "u1", name: "Maya Chen" };
+
+  it("leads to the page, at the comment's thread when there is one", () => {
+    expect(notificationPath(wiki("wiki_mention", { page_id: "p1", page_title: "Onboarding", by: "u1", actor: maya }))).toBe("/wiki/p1");
+    expect(notificationPath(wiki("wiki_comment", { page_id: "p1", thread_id: "th1", comment_id: "c1", actor: maya }))).toBe("/wiki/p1?comment=th1");
+    expect(notificationPath(wiki("wiki_reminder", { page_id: "p1", reminder_id: "r1", remind_at: "2026-10-13T09:00:00Z", label: "Renew" }))).toBe("/wiki/p1");
+    expect(notificationPath(wiki("wiki_mention", {}))).toBe("/wiki");
+  });
+
+  it("says who mentioned or commented, and what the reminder is", () => {
+    expect(describe(wiki("wiki_mention", { page_id: "p1", actor: maya }), t)).toBe("Maya Chen mentioned you on a wiki page");
+    expect(describe(wiki("wiki_mention", { page_id: "p1", thread_id: "th1", comment_id: "c1", actor: maya }), t)).toBe("Maya Chen mentioned you in a wiki comment");
+    expect(describe(wiki("wiki_mention", { page_id: "p1" }), t)).toBe("You were mentioned on a wiki page");
+    expect(describe(wiki("wiki_comment", { page_id: "p1", thread_id: "th1", actor: maya }), t)).toBe("Maya Chen commented on a wiki page");
+    expect(describe(wiki("wiki_comment", { page_id: "p1" }), t)).toBe("New comment on a wiki page");
+    expect(describe(wiki("wiki_reminder", { page_id: "p1", label: "Renew the cert" }), t)).toBe("Reminder: Renew the cert");
+    expect(describe(wiki("wiki_reminder", { page_id: "p1" }), t)).toBe("Your wiki reminder is due");
+  });
+});

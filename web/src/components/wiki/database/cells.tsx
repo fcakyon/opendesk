@@ -457,12 +457,8 @@ export const pickerTypes: DbPropType[] = ["select", "multi_select", "status", "p
 export function ValuePicker({ prop, row, ctx, onChange, onAddOption, trigger, open, onOpenChange }: Omit<EditorProps, "onClose"> & { trigger: ReactNode; open: boolean; onOpenChange: (o: boolean) => void }) {
   const { t } = useTranslation("wiki");
   const [ticketQuery, setTicketQuery] = useState("");
-  const tickets = useQuery({
-    queryKey: ["wiki-db-ticket-search", ticketQuery],
-    queryFn: () => api.search(ticketQuery),
-    enabled: prop.type === "ticket" && open && ticketQuery.trim().length > 1,
-    staleTime: 10_000,
-  });
+  const search = q.search(ticketQuery);
+  const tickets = useQuery({ ...search, enabled: prop.type === "ticket" && open && search.enabled !== false });
   const cur = row.props[prop.id];
   const multi = prop.type === "multi_select" || prop.type === "person" || prop.type === "relation" || prop.type === "ticket";
   let items: PickerItem[] = [];

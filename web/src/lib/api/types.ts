@@ -1423,7 +1423,7 @@ export type AuditLog = {
   ip: string;
   created_at: string;
 };
-export type NotificationType = "assigned" | "new_ticket" | "mentioned" | "customer_replied" | "thread_replied" | "sla_breached" | "ai_handoff" | "ai_cap_reached" | "ai_balance_low" | "ai_balance_out" | "auto_recharge_failed" | "ai_key_failed" | "team_joined" | "import_finished" | "support_channel_unhealthy" | "collab_assigned" | "collab_mention";
+export type NotificationType = "assigned" | "new_ticket" | "mentioned" | "customer_replied" | "thread_replied" | "sla_breached" | "ai_handoff" | "ai_cap_reached" | "ai_balance_low" | "ai_balance_out" | "auto_recharge_failed" | "ai_key_failed" | "team_joined" | "import_finished" | "support_channel_unhealthy" | "collab_assigned" | "collab_mention" | "wiki_mention" | "wiki_comment" | "wiki_reminder";
 /** `ai_cap_reached`: data `{cap_usd}`, ticket null; the widget agent reached `widget_monthly_cap_usd` (once a month, owners and admins).
  * `ai_balance_low` / `ai_balance_out`: data `{remaining_usd}` (US dollars); `auto_recharge_failed`: data `{reason: AutoRechargeFailure}` (billing, owners and admins, ticket null).
  * `ai_key_failed`: data `{provider: AIKeyKind, reason: "rejected" | "no_funds"}`; the workspace's own AI key failed (at most hourly, owners and admins, ticket null).
@@ -1444,7 +1444,7 @@ export type Notification = {
 /** Where a notification can reach someone besides the bell: email, their phones (`push`) and the desktop app or browser (`desktop`). */
 export type NotificationChannels = { email: boolean; push: boolean; desktop: boolean };
 export type NotificationChannel = keyof NotificationChannels;
-export type NotificationGroup = "tickets" | "team" | "mail" | "ai_billing" | "workspace";
+export type NotificationGroup = "tickets" | "team" | "mail" | "wiki" | "ai_billing" | "workspace";
 /** `urgent`: may be emailed sooner than the cooldown (contracts/api.md "Notification preferences and emails"). */
 export type NotificationTypePrefs = NotificationChannels & { type: NotificationType; group: NotificationGroup; defaults: NotificationChannels; urgent: boolean };
 /** How the server paces notification emails for this person. */
@@ -1771,6 +1771,36 @@ export type WikiVerification = { by: UserRef | null; at: string; until: string |
 export type WikiTrashed = WikiNode & { deleted_at: string; deleted_by: UserRef | null; purge_at: string; subpages: number; path: WikiRef[] };
 
 export type WikiPageViews = { views: number; people: number; readers: { user: UserRef; visits: number; last_at: string }[] };
+
+/** One emoji on a comment and who added it, oldest first (contracts/wiki.md "Comments"). */
+export type WikiReaction = { emoji: string; users: string[] };
+
+export type WikiComment = {
+  id: string;
+  thread_id: string;
+  author: UserRef | null;
+  body_html: string;
+  mentions: string[];
+  created_at: string;
+  edited_at: string | null;
+  reactions: WikiReaction[];
+};
+
+/** A discussion on a page: inline on the text it quotes (`<span data-comment="<id>">`), or on the page. */
+export type WikiThread = {
+  id: string;
+  page_id: string;
+  quote: string;
+  inline: boolean;
+  created_at: string;
+  resolved_at: string | null;
+  resolved_by: UserRef | null;
+  /** Oldest first; the first is the thread's own. */
+  comments: WikiComment[];
+};
+
+/** A page's threads, oldest first, open and resolved, and whether the person follows the page. */
+export type WikiComments = { data: WikiThread[]; following: boolean };
 
 export type WikiDailyNote = { date: string; id: string };
 

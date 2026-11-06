@@ -1,11 +1,12 @@
 // The panel beside a wiki page, as Obsidian's right sidebar: the page's outline, its links
 // (pages linking here, pages naming it without a link, pages it links to), its local graph,
-// and what it holds (words, reading time, tags, who made it). Kept open per browser.
+// its comments (comments/CommentsPanel.tsx) and what it holds (words, reading time, tags,
+// who made it). Kept open per browser.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/react";
-import { ArrowUpRight, Hash, Link2, ListTree, Network, X, Info, CornerDownRight } from "lucide-react";
+import { ArrowUpRight, Hash, Link2, ListTree, MessageSquare, Network, X, Info, CornerDownRight } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Avatar } from "@/components/ui/avatar";
@@ -79,11 +80,34 @@ function useCurrentHeading(heads: Heading[], scrollEl: HTMLElement | null): stri
   return current;
 }
 
-export function PagePanel({ page, editor, scrollEl, tab, onTab, onClose, canEdit }: { page: WikiPage; editor: Editor | null; scrollEl: HTMLElement | null; tab: PanelTab; onTab: (t: PanelTab) => void; onClose: () => void; canEdit: boolean }) {
+export function PagePanel({
+  page,
+  editor,
+  scrollEl,
+  tab,
+  onTab,
+  onClose,
+  canEdit,
+  comments,
+  commentCount,
+  className,
+}: {
+  page: WikiPage;
+  editor: Editor | null;
+  scrollEl: HTMLElement | null;
+  tab: PanelTab;
+  onTab: (t: PanelTab) => void;
+  onClose: () => void;
+  canEdit: boolean;
+  /** The Comments tab's content. */
+  comments: ReactNode;
+  commentCount: number;
+  className?: string;
+}) {
   const { t } = useTranslation("wiki");
   const backlinks = useQuery(q.wikiBacklinks(page.id));
   return (
-    <aside aria-label={t("panel.label")} className="flex h-full w-[320px] shrink-0 flex-col border-l border-line bg-surface animate-slide-in-right motion-reduce:animate-none">
+    <aside aria-label={t("panel.label")} className={cn("flex h-full w-[320px] shrink-0 flex-col border-l border-line bg-surface animate-slide-in-right motion-reduce:animate-none", className)}>
       <Tabs value={tab} onValueChange={(v) => onTab(v as PanelTab)} className="flex min-h-0 flex-1 flex-col">
         <div className="flex h-11 shrink-0 items-center border-b border-line pr-1.5">
           <TabsList className="h-full min-w-0 flex-1 gap-0 border-b-0 px-1">
@@ -94,7 +118,10 @@ export function PagePanel({ page, editor, scrollEl, tab, onTab, onClose, canEdit
               {t("panel.links")}
             </TabsTrigger>
             <TabsTrigger value="graph" icon={<Network />}>
-              {t("panel.graph")}
+              <span className="sr-only">{t("panel.graph")}</span>
+            </TabsTrigger>
+            <TabsTrigger value="comments" icon={<MessageSquare />} count={commentCount || undefined}>
+              <span className="sr-only">{t("comments.tab")}</span>
             </TabsTrigger>
             <TabsTrigger value="info" icon={<Info />}>
               <span className="sr-only">{t("panel.info")}</span>
@@ -114,6 +141,9 @@ export function PagePanel({ page, editor, scrollEl, tab, onTab, onClose, canEdit
         </TabsContent>
         <TabsContent value="graph" className="flex min-h-0 flex-1 flex-col">
           <LocalGraph page={page} />
+        </TabsContent>
+        <TabsContent value="comments" className="flex min-h-0 flex-1 flex-col">
+          {comments}
         </TabsContent>
         <TabsContent value="info" className="min-h-0 flex-1 overflow-y-auto p-3">
           <PageInfo page={page} editor={editor} />

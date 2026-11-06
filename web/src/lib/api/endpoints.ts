@@ -696,6 +696,19 @@ export const api = {
     backlinks: (id: string) => http.get<T.Page<T.WikiMention>>(`/v1/wiki/pages/${id}/backlinks`),
     mentions: (id: string) => http.get<T.Page<T.WikiMention>>(`/v1/wiki/pages/${id}/mentions`),
     graph: () => http.get<T.Page<T.WikiLink>>("/v1/wiki/graph"),
+    /** A page's discussions (contracts/wiki.md "Comments"): every write answers with the whole thread. */
+    comments: {
+      list: (pageId: string) => http.get<T.WikiComments>(`/v1/wiki/pages/${pageId}/comments`),
+      /** A new thread without thread_id (inline with the quote it is on), else a reply, which reopens it. */
+      create: (pageId: string, b: { body_html: string; mentions?: string[]; thread_id?: string; quote?: string; inline?: boolean }) =>
+        http.post<T.WikiThread>(`/v1/wiki/pages/${pageId}/comments`, b),
+      update: (id: string, b: { body_html: string; mentions?: string[] }) => http.patch<T.WikiThread>(`/v1/wiki/comments/${id}`, b),
+      /** Deleting a thread's first comment deletes the thread. */
+      remove: (id: string) => http.del(`/v1/wiki/comments/${id}`),
+      resolve: (threadId: string, resolved: boolean) => http.post<T.WikiThread>(`/v1/wiki/threads/${threadId}/resolve`, { resolved }),
+      react: (id: string, emoji: string, on: boolean) => http.post<T.WikiThread>(`/v1/wiki/comments/${id}/reactions`, { emoji, on }),
+    },
+    follow: (pageId: string, following: boolean) => http.put<{ following: boolean }>(`/v1/wiki/pages/${pageId}/follow`, { following }),
   },
   search: (q: string) => http.get<T.SearchResults>("/v1/search", { query: { q } }),
   reports: {

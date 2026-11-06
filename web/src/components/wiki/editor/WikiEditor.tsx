@@ -18,6 +18,7 @@ import { api } from "@/lib/api/endpoints";
 import { starterDatabase } from "../database/starter";
 import { useWikiTree } from "../hooks";
 import { BubbleToolbar } from "./bubble";
+import type { CommentRange } from "./comment";
 import { WikiEditorContext, type WikiEditorEnv } from "./context";
 import { wikiExtensions } from "./extensions";
 import { BlockHandle } from "./handle";
@@ -38,6 +39,10 @@ export type WikiEditorProps = {
   className?: string;
   contentClassName?: string;
   onReady?: (editor: Editor) => void;
+  /** Someone clicked the text of an open thread. */
+  onOpenComment?: (threadId: string) => void;
+  /** Someone asked to comment on the selected text (contracts/wiki.md "Comments"); left out, nobody can. */
+  onStartComment?: (range: CommentRange, quote: string) => void;
 };
 
 export const WikiEditor = forwardRef<RichEditorHandle, WikiEditorProps>(function WikiEditor(props, ref) {
@@ -59,6 +64,10 @@ export const WikiEditor = forwardRef<RichEditorHandle, WikiEditorProps>(function
       wikiExtensions({
         placeholder: () => live.current.props.placeholder,
         onOpenTag: (tag) => void navigate({ to: "/wiki/tags", search: { tag } }),
+        comments: {
+          onOpen: (id) => live.current.props.onOpenComment?.(id),
+          onStart: (range, quote) => live.current.props.onStartComment?.(range, quote),
+        },
         sources: {
           t,
           untitled: t("untitled"),
@@ -165,7 +174,7 @@ export const WikiEditor = forwardRef<RichEditorHandle, WikiEditorProps>(function
         {editor && props.editable && (
           <>
             <BlockHandle editor={editor} onCopyLink={props.onCopyBlockLink} />
-            <BubbleToolbar editor={editor} />
+            <BubbleToolbar editor={editor} canComment={!!props.onStartComment} />
           </>
         )}
         <WikiMenuPopup />

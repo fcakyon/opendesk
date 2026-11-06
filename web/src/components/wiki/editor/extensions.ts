@@ -16,6 +16,7 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import { AudioBlock, Bookmark, DatabaseBlock, PersonMention, Callout, Column, Columns, DateMention, Embed, FileBlock, HighlightTone, imageAttributes, imageView, PageLink, SubpageBlock, TableOfContents, TextTone, VideoBlock } from "./blocks";
 import { WikiCodeBlock } from "./code";
+import { CommentMark, copyOfBlock, type CommentOptions } from "./comment";
 import { moveBlock, blockAt } from "./handle";
 import { emojiItems, linkItems, mentionItems, slashItems, type MenuSources } from "./items";
 import { typedMenu } from "./menu";
@@ -100,7 +101,7 @@ const BlockKeys = Extension.create({
       "Mod-d": () => {
         const b = current();
         if (!b) return false;
-        return this.editor.chain().insertContentAt(b.pos + b.node.nodeSize, b.node.toJSON()).run();
+        return this.editor.chain().insertContentAt(b.pos + b.node.nodeSize, copyOfBlock(b.node)).run();
       },
       "Mod-Alt-0": () => this.editor.chain().focus().setParagraph().run(),
       "Mod-Alt-1": () => this.editor.chain().focus().setHeading({ level: 1 }).run(),
@@ -158,7 +159,7 @@ export function looksLikeMarkdown(text: string): boolean {
   return /^(#{1,6} |[-*+] |\d+\. |> |```|- \[[ xX]\] |\|.+\|)/m.test(text);
 }
 
-export function wikiExtensions(opts: { placeholder: () => string; sources: MenuSources; onOpenTag: (tag: string) => void }): Extensions {
+export function wikiExtensions(opts: { placeholder: () => string; sources: MenuSources; onOpenTag: (tag: string) => void; comments: CommentOptions }): Extensions {
   const s = opts.sources;
   return [
     StarterKit.configure({
@@ -216,6 +217,7 @@ export function wikiExtensions(opts: { placeholder: () => string; sources: MenuS
     BlockKeys,
     SmartPaste,
     TagMarks.configure({ onOpen: (tag) => opts.onOpenTag(tag) }),
+    CommentMark.configure(opts.comments),
     Markdown,
     UniqueID.configure({ attributeName: "block-id", types: ID_TYPES }),
     typedMenu({ name: "slash", char: "/", items: (q) => slashItems(q, s), labels: () => ({ title: s.t("editor.menu.blocks"), empty: s.t("editor.menu.noBlocks") }) }),

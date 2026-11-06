@@ -125,7 +125,15 @@
       "importAnd": "{{a}} and {{b}}",
       "importSource": "history",
       "supportChannel": "Support channel",
-      "supportChannelUnhealthy": "{{name}} needs attention"
+      "supportChannelUnhealthy": "{{name}} needs attention",
+      "wikiMention": "{{who}} mentioned you on a wiki page",
+      "wikiMentionAnon": "You were mentioned on a wiki page",
+      "wikiMentionComment": "{{who}} mentioned you in a wiki comment",
+      "wikiMentionCommentAnon": "You were mentioned in a wiki comment",
+      "wikiComment": "{{who}} commented on a wiki page",
+      "wikiCommentAnon": "New comment on a wiki page",
+      "wikiReminder": "Reminder: {{label}}",
+      "wikiReminderAnon": "Your wiki reminder is due"
     },
     "hold": {
       "paused": "Paused until {{when}}: nothing reaches your email, phone or desktop",
@@ -202,5 +210,8 @@
     "popupBlocked": "Your browser blocked the {{name}} window. Allow pop-ups from the address bar to finish there.",
     "popupThisTab": "Continue in this tab",
     "changePassword": "Your password is on a list of leaked passwords or is shorter than we now ask. Choose a new one."
+  },
+  "wikiPresence": {
+    "editing": "{{name}} is editing"
   }
 }

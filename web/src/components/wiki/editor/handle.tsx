@@ -36,6 +36,7 @@ import { Menu, MenuContent, MenuItem } from "@/components/ui/menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
 import { menuItemCls } from "@/components/ui/menu";
+import { copyOfBlock } from "./comment";
 import { TONES, type Tone } from "./tones";
 
 /** Parents whose children each get a handle. A callout or a quote moves as one block. */
@@ -322,7 +323,7 @@ export function BlockHandle({ editor, onCopyLink }: { editor: Editor; onCopyLink
                 </M.Sub>
               )}
               <M.Separator className="my-1 h-px bg-line" />
-              <MenuItem icon={<Copy />} shortcut="mod d" onSelect={run((b) => editor.chain().insertContentAt(b.pos + b.node.nodeSize, b.node.toJSON()).run())}>
+              <MenuItem icon={<Copy />} shortcut="mod d" onSelect={run((b) => editor.chain().insertContentAt(b.pos + b.node.nodeSize, copyOfBlock(b.node)).run())}>
                 {t("editor.handle.duplicate")}
               </MenuItem>
               {blockId && (

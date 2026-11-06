@@ -6,6 +6,7 @@
 import { InputRule, Mark, mergeAttributes, Node } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import { isTone, type Tone } from "./tones";
+import { formatWhen, parseWhen, reminderId } from "@/lib/wiki/reminder";
 import { DatabaseBlockView } from "../database/DatabaseBlock";
 import { BookmarkView, CalloutView, DateView, EmbedView, FileView, ImageView, MediaView, PageLinkView, SubpageView, TocView } from "./views";
 
@@ -225,13 +226,20 @@ export const DateMention = Node.create({
   atom: true,
   selectable: true,
   addAttributes() {
+    // A day, and a time of day on the writer's clock ("" for none): `datetime` holds both.
     return {
-      date: { default: "", parseHTML: (el) => (/^\d{4}-\d{2}-\d{2}$/.test(el.getAttribute("datetime") ?? "") ? el.getAttribute("datetime") : "") },
+      date: { default: "", parseHTML: (el) => parseWhen(el.getAttribute("datetime"))?.date ?? "", renderHTML: () => ({}) },
+      time: { default: "", parseHTML: (el) => parseWhen(el.getAttribute("datetime"))?.time ?? "", renderHTML: () => ({}) },
+      /** The reminder set on the day (contracts/wiki.md "Reminders"), or null. */
+      reminder: { default: null, parseHTML: (el) => reminderId(el.getAttribute("data-reminder")), renderHTML: () => ({}) },
     };
   },
   parseHTML: () => [{ tag: 'time[data-type="date"]' }],
-  renderHTML: ({ node }) => ["time", { "data-type": "date", datetime: node.attrs.date }, node.attrs.date],
-  renderText: ({ node }) => node.attrs.date,
+  renderHTML: ({ node }) => {
+    const datetime = formatWhen(node.attrs.date as string, node.attrs.time as string);
+    return ["time", { "data-type": "date", datetime, ...(node.attrs.reminder ? { "data-reminder": node.attrs.reminder } : {}) }, datetime];
+  },
+  renderText: ({ node }) => formatWhen(node.attrs.date as string, node.attrs.time as string),
   addNodeView() {
     return ReactNodeViewRenderer(DateView, { as: "span" });
   },

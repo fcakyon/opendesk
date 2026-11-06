@@ -20,25 +20,30 @@ import type {
   DbStatusGroup,
   DbValue,
   DbView,
+  Notification,
   Role,
+  WikiComments,
   WikiDailyNote,
   WikiNode,
   WikiPage,
   WikiPageSettings,
   WikiPageViews,
+  WikiReaction,
   WikiRef,
   WikiRevision,
   WikiSearchHit,
+  WikiThread,
   WikiTrashed,
 } from "@/lib/api/types";
+import { mentionIds } from "@/lib/collab/html";
 import { MAX_DEPTH, buildTree, childrenOf } from "@/lib/wiki/tree";
 import { DEFAULT_LOOK } from "@/lib/wiki/look";
 import { linkedIds, pageTags } from "@/lib/wiki/links";
 import { db, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
-import { del, get, HttpError, invalid, notFound, patch, post, put, respond, s, type Ctx } from "../router";
+import { del, forbidden, get, HttpError, invalid, notFound, patch, post, put, respond, s, type Ctx } from "../router";
 import { roleIn, teamRole } from "../teams";
-import { ago, DAY, HOUR, MIN, NOW, nowIso, parseUUID, stripHtml, uuid } from "../util";
+import { ago, DAY, escapeHtml, HOUR, MIN, NOW, nowIso, parseUUID, stripHtml, uuid } from "../util";
 
 type Row = WikiPageSettings & {
   id: string;
@@ -76,7 +81,33 @@ type Row = WikiPageSettings & {
 };
 type Rev = { id: string; page_id: string; title: string; icon: string; body_html: string; author: string | null; created_at: string; updated_at: string };
 type Visit = { user_id: string; page_id: string; visits: number; last_at: string; seq: number };
-type State = { pages: Row[]; revisions: Rev[]; favorites: Map<string, string[]>; visits: Visit[] };
+/** A comment; a thread is its first comment (thread_id = id), which holds the quote and the resolution. */
+type CommentRow = {
+  id: string;
+  page_id: string;
+  thread_id: string;
+  quote: string;
+  inline: boolean;
+  author_id: string | null;
+  body_html: string;
+  mentions: string[];
+  created_at: string;
+  edited_at: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  seq: number;
+};
+type Reaction = { comment_id: string; user_id: string; emoji: string; seq: number };
+type State = {
+  pages: Row[];
+  revisions: Rev[];
+  favorites: Map<string, string[]>;
+  visits: Visit[];
+  comments: CommentRow[];
+  reactions: Reaction[];
+  /** Explicit follows and unfollows, by page then user; without one, a page's creator follows it. */
+  follows: Map<string, Map<string, boolean>>;
+};
 
 const MAX_PAGES = 5000;
 const MAX_BODY = 512 * 1024;
@@ -93,7 +124,7 @@ let rowSeq = 0;
 function stateOf(ws: WsData): State {
   let st = states.get(ws);
   if (!st) {
-    st = { pages: [], revisions: [], favorites: new Map(), visits: [] };
+    st = { pages: [], revisions: [], favorites: new Map(), visits: [], comments: [], reactions: [], follows: new Map() };
     states.set(ws, st);
     if (ws === db.workspaces[0]) seedHandbook(ws, st);
   }
@@ -194,6 +225,10 @@ function removeRows(st: State, ids: string[]) {
   st.pages = st.pages.filter((r) => !gone.has(r.id));
   st.revisions = st.revisions.filter((x) => !gone.has(x.page_id));
   st.visits = st.visits.filter((x) => !gone.has(x.page_id));
+  const comments = new Set(st.comments.filter((c) => gone.has(c.page_id)).map((c) => c.id));
+  st.comments = st.comments.filter((c) => !comments.has(c.id));
+  st.reactions = st.reactions.filter((x) => !comments.has(x.comment_id));
+  for (const id of gone) st.follows.delete(id);
   for (const [user, list] of st.favorites) st.favorites.set(user, list.filter((id) => !gone.has(id)));
 }
 
@@ -483,6 +518,7 @@ export function registerWiki() {
   registerPersonal();
   registerLinks();
   registerDatabases();
+  registerComments();
 }
 
 function registerPages() {
@@ -552,6 +588,7 @@ function registerPages() {
     place(st, r.parent_id, r.private_to, r.team_id, r.template, r.id, typeof ctx.body.position === "number" ? ctx.body.position : undefined);
     record(st, r, false);
     pageEvent(ctx.ws, r, "wiki_page.created", eventPage(r));
+    notifyBodyMentions(ctx.ws, r, "");
     return respond(201, pageOut(st, r));
   });
 
@@ -573,8 +610,10 @@ function registerPages() {
     const verify = verificationPatch(ctx.body);
     const data = dataPatch(ctx, st, r);
     if (textChanged) {
+      const before = r.body_html;
       Object.assign(r, next, { version: r.version + 1, updated_by: db.meId, updated_at: nowIso() });
       record(st, r, true);
+      notifyBodyMentions(ctx.ws, r, before);
     }
     if (lookChanged) Object.assign(r, look);
     const verifyChanged = applyVerification(r, verify);
@@ -1447,6 +1486,291 @@ function registerLinks() {
   });
 }
 
+// ─── Comments, following and mentions (contracts/wiki.md "Comments", "Following") ──
+
+const MAX_COMMENT = 20000;
+const MAX_QUOTE = 500;
+const MAX_REACTIONS = 20;
+let commentSeq = 0;
+
+/** hd.SanitizeRich, as the mock has it: what can run goes, mentions and formatting stay. */
+function cleanCommentBody(v: unknown): string {
+  const html = DOMPurify.sanitize(typeof v === "string" ? v : "", { FORBID_TAGS: ["input", "label", "iframe", "form", "style", "script", "img"] });
+  if (!stripHtml(html).trim()) throw invalid("body_html can't be empty");
+  if (html.length > MAX_COMMENT) throw invalid("body_html must be at most 20000 characters");
+  return html;
+}
+
+/** The people a comment mentions: the ones sent, else those in its HTML; members only, once each. */
+function cleanMentions(ws: WsData, raw: unknown, html: string): string[] {
+  const ids = Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : mentionIds(html);
+  return [...new Set(ids)].filter((id) => ws.members.some((m) => m.user_id === id));
+}
+
+/** Whether uid follows the page: what they chose, else whether they made it. */
+function follows(st: State, r: Row, uid: string): boolean {
+  return st.follows.get(r.id)?.get(uid) ?? r.created_by === uid;
+}
+
+function setFollow(st: State, r: Row, uid: string, on: boolean, onlyIfUnset = false) {
+  let m = st.follows.get(r.id);
+  if (!m) st.follows.set(r.id, (m = new Map()));
+  if (onlyIfUnset && m.has(uid)) return;
+  m.set(uid, on);
+}
+
+function threadOut(st: State, root: CommentRow): WikiThread {
+  const comments = st.comments.filter((c) => c.thread_id === root.id).sort((a, b) => a.seq - b.seq);
+  return {
+    id: root.id,
+    page_id: root.page_id,
+    quote: root.quote,
+    inline: root.inline,
+    created_at: root.created_at,
+    resolved_at: root.resolved_at,
+    resolved_by: userRef(root.resolved_by),
+    comments: comments.map((c) => {
+      const mine = st.reactions.filter((x) => x.comment_id === c.id).sort((a, b) => a.seq - b.seq);
+      const reactions: WikiReaction[] = [];
+      for (const x of mine) {
+        const at = reactions.find((y) => y.emoji === x.emoji);
+        if (at) at.users.push(x.user_id);
+        else reactions.push({ emoji: x.emoji, users: [x.user_id] });
+      }
+      return { id: c.id, thread_id: c.thread_id, author: userRef(c.author_id), body_html: c.body_html, mentions: [...c.mentions], created_at: c.created_at, edited_at: c.edited_at, reactions };
+    }),
+  };
+}
+
+/** A comment of a page the person sees, with its page and thread; else not found. */
+function commentOf(ctx: Ctx, id: string, st = stateOf(ctx.ws)): { c: CommentRow; root: CommentRow; page: Row } {
+  const c = st.comments.find((x) => x.id === id);
+  const page = c && st.pages.find((r) => r.id === c.page_id);
+  const root = c && st.comments.find((x) => x.id === c.thread_id);
+  if (!c || !page || !root || !sees(viewerOf(ctx.ws), page)) throw notFound("Comment");
+  return { c, root, page };
+}
+
+/**
+ * A wiki notification (hd.Notify with no ticket) to someone who may see the page now; a
+ * page in the trash notifies nobody. The mock's own person keeps theirs in the bell.
+ */
+function notifyWiki(ws: WsData, r: Row, uid: string, type: "wiki_mention" | "wiki_comment", data: Record<string, unknown>) {
+  if (uid === db.meId || r.deleted_at || !ws.members.some((m) => m.user_id === uid) || !sees(viewerOf(ws, uid), r)) return;
+  const n: Notification = { id: uuid(), type, ticket: null, data: { ...data, by: db.meId, actor: userRef(db.meId) }, read_at: null, created_at: nowIso() };
+  publish(ws, "notification.created", { notification: n }, { topics: [`user:${uid}`] });
+}
+
+/** After a comment: who it newly mentions hears of the mention, the page's followers and the thread's people of the comment. */
+function notifyComment(ws: WsData, st: State, r: Row, c: CommentRow, mentioned: string[], isNew: boolean) {
+  const data = { page_id: r.id, page_title: r.title, preview: excerpt(stripHtml(c.body_html), 140), thread_id: c.thread_id, comment_id: c.id };
+  for (const uid of mentioned) notifyWiki(ws, r, uid, "wiki_mention", data);
+  if (!isNew) return;
+  const told = new Set([db.meId, ...mentioned]);
+  const people = new Set([
+    ...ws.members.map((m) => m.user_id).filter((uid) => follows(st, r, uid)),
+    ...st.comments.filter((x) => x.thread_id === c.thread_id && x.author_id).map((x) => x.author_id as string),
+  ]);
+  for (const uid of people) if (!told.has(uid)) notifyWiki(ws, r, uid, "wiki_comment", data);
+}
+
+/** People a page's text newly mentions (diffed with what it said before) hear of it. */
+function notifyBodyMentions(ws: WsData, r: Row, before: string) {
+  const had = new Set(mentionIds(before));
+  const fresh = mentionIds(r.body_html).filter((id) => !had.has(id));
+  for (const uid of fresh) notifyWiki(ws, r, uid, "wiki_mention", { page_id: r.id, page_title: r.title, preview: excerpt(stripHtml(r.body_html), 140) });
+}
+
+const commentChanged = (ws: WsData, r: Row, threadId: string) => pageEvent(ws, r, "wiki_comment.changed", { page_id: r.id, thread_id: threadId });
+
+function registerComments() {
+  get("/v1/wiki/pages/:id/comments", (ctx) => {
+    const st = stateOf(ctx.ws);
+    const r = find(ctx, st);
+    const roots = st.comments.filter((c) => c.page_id === r.id && c.thread_id === c.id).sort((a, b) => a.seq - b.seq);
+    return { data: roots.map((x) => threadOut(st, x)), following: follows(st, r, db.meId) } satisfies WikiComments;
+  });
+
+  post("/v1/wiki/pages/:id/comments", (ctx) => {
+    requireAgent(ctx);
+    const st = stateOf(ctx.ws);
+    const r = find(ctx, st);
+    if (r.deleted_at) throw inTrash();
+    const body = cleanCommentBody(ctx.body.body_html);
+    const mentions = cleanMentions(ctx.ws, ctx.body.mentions, body);
+    let root: CommentRow | undefined;
+    if (ctx.body.thread_id !== undefined && ctx.body.thread_id !== null && ctx.body.thread_id !== "") {
+      const id = typeof ctx.body.thread_id === "string" ? parseUUID(ctx.body.thread_id) : undefined;
+      root = id ? st.comments.find((c) => c.id === id && c.thread_id === c.id && c.page_id === r.id) : undefined;
+      if (!root) throw invalid("thread_id is not a thread of this page");
+    }
+    const inline = !root && ctx.body.inline === true;
+    const quote = inline && typeof ctx.body.quote === "string" ? [...ctx.body.quote.replace(/\s+/g, " ").trim()].slice(0, MAX_QUOTE).join("") : "";
+    if (inline && !quote) throw invalid("an inline comment needs the quote it is on");
+    const id = uuid();
+    const c: CommentRow = {
+      id,
+      page_id: r.id,
+      thread_id: root?.id ?? id,
+      quote,
+      inline,
+      author_id: db.meId,
+      body_html: body,
+      mentions,
+      created_at: nowIso(),
+      edited_at: null,
+      resolved_at: null,
+      resolved_by: null,
+      seq: ++commentSeq,
+    };
+    st.comments.push(c);
+    // A reply brings a resolved thread back.
+    if (root?.resolved_at) Object.assign(root, { resolved_at: null, resolved_by: null });
+    setFollow(st, r, db.meId, true, true);
+    notifyComment(ctx.ws, st, r, c, mentions, true);
+    commentChanged(ctx.ws, r, c.thread_id);
+    return respond(201, threadOut(st, root ?? c));
+  });
+
+  patch("/v1/wiki/comments/:id", (ctx) => {
+    requireAgent(ctx);
+    const st = stateOf(ctx.ws);
+    const { c, root, page } = commentOf(ctx, ctx.params.id, st);
+    if (page.deleted_at) throw inTrash();
+    if (c.author_id !== db.meId) throw forbidden("Only its author edits a comment.");
+    const body = cleanCommentBody(ctx.body.body_html);
+    const mentions = cleanMentions(ctx.ws, ctx.body.mentions, body);
+    const fresh = mentions.filter((id) => !c.mentions.includes(id));
+    Object.assign(c, { body_html: body, mentions, edited_at: nowIso() });
+    notifyComment(ctx.ws, st, page, c, fresh, false);
+    commentChanged(ctx.ws, page, root.id);
+    return threadOut(st, root);
+  });
+
+  del("/v1/wiki/comments/:id", (ctx) => {
+    requireAgent(ctx);
+    const st = stateOf(ctx.ws);
+    const { c, root, page } = commentOf(ctx, ctx.params.id, st);
+    if (page.deleted_at) throw inTrash();
+    if (c.author_id !== db.meId && rank[role(ctx)] < rank.admin) throw forbidden("Someone else wrote this comment, so only an admin can delete it.");
+    const gone = new Set(c.id === root.id ? st.comments.filter((x) => x.thread_id === root.id).map((x) => x.id) : [c.id]);
+    st.comments = st.comments.filter((x) => !gone.has(x.id));
+    st.reactions = st.reactions.filter((x) => !gone.has(x.comment_id));
+    commentChanged(ctx.ws, page, root.id);
+    return respond(204);
+  });
+
+  post("/v1/wiki/threads/:id/resolve", (ctx) => {
+    requireAgent(ctx);
+    const st = stateOf(ctx.ws);
+    const { root, page } = commentOf(ctx, ctx.params.id, st);
+    if (root.id !== ctx.params.id) throw notFound("Thread");
+    if (page.deleted_at) throw inTrash();
+    if (typeof ctx.body.resolved !== "boolean") throw invalid("resolved must be true or false");
+    if (ctx.body.resolved && !root.resolved_at) Object.assign(root, { resolved_at: nowIso(), resolved_by: db.meId });
+    if (!ctx.body.resolved) Object.assign(root, { resolved_at: null, resolved_by: null });
+    commentChanged(ctx.ws, page, root.id);
+    return threadOut(st, root);
+  });
+
+  post("/v1/wiki/comments/:id/reactions", (ctx) => {
+    requireAgent(ctx);
+    const st = stateOf(ctx.ws);
+    const { c, root, page } = commentOf(ctx, ctx.params.id, st);
+    if (page.deleted_at) throw inTrash();
+    const emoji = typeof ctx.body.emoji === "string" ? ctx.body.emoji.trim() : "";
+    if (!emoji || emoji.length > 64 || !oneEmoji.test(emoji)) throw invalid("emoji must be one emoji");
+    if (typeof ctx.body.on !== "boolean") throw invalid("on must be true or false");
+    const has = st.reactions.some((x) => x.comment_id === c.id && x.user_id === db.meId && x.emoji === emoji);
+    const kinds = new Set(st.reactions.filter((x) => x.comment_id === c.id).map((x) => x.emoji));
+    if (ctx.body.on && !kinds.has(emoji) && kinds.size >= MAX_REACTIONS) throw invalid("A comment takes up to 20 different reactions.");
+    if (ctx.body.on && !has) st.reactions.push({ comment_id: c.id, user_id: db.meId, emoji, seq: ++commentSeq });
+    if (!ctx.body.on) st.reactions = st.reactions.filter((x) => !(x.comment_id === c.id && x.user_id === db.meId && x.emoji === emoji));
+    commentChanged(ctx.ws, page, root.id);
+    return threadOut(st, root);
+  });
+
+  // Following is a reader's choice: viewers follow too.
+  put("/v1/wiki/pages/:id/follow", (ctx) => {
+    const st = stateOf(ctx.ws);
+    const r = find(ctx, st);
+    if (r.deleted_at) throw inTrash();
+    if (typeof ctx.body.following !== "boolean") throw invalid("following must be true or false");
+    setFollow(st, r, db.meId, ctx.body.following);
+    return { following: ctx.body.following };
+  });
+}
+
+/** Threads the starter handbook comes with: {c:<key>} in a seeded body is that thread's id. */
+type SeedComment = { by: number; hours: number; body: string; reactions?: [string, number[]][] };
+type SeedThread = { page: string; key?: string; quote?: string; resolvedBy?: number; resolvedHours?: number; comments: SeedComment[] };
+
+const SEED_THREADS: SeedThread[] = [
+  {
+    page: "Escalation process",
+    key: "money",
+    quote: "money is at stake",
+    comments: [
+      { by: 1, hours: 50, body: "<p>Should we name a threshold here? Some of us escalate at 50 euros, some at 500.</p>", reactions: [["👍", [0, 2]]] },
+      { by: 2, hours: 26, body: "<p>Refunds over 100 euros already need a lead. {me}, should we use the same line here?</p>", reactions: [["🎉", [1]]] },
+    ],
+  },
+  {
+    page: "Escalation process",
+    comments: [{ by: 2, hours: 5, body: "<p>Worth adding a sev2 section? The on-call lead asked about it twice this week.</p>", reactions: [["👀", [1]]] }],
+  },
+  {
+    page: "Refund policy",
+    key: "annual",
+    quote: "no questions asked",
+    resolvedBy: 0,
+    resolvedHours: 170,
+    comments: [
+      { by: 1, hours: 192, body: "<p>Does this include annual plans?</p>" },
+      { by: 0, hours: 180, body: "<p>Yes, for the first 30 days. The second bullet covers the rest.</p>", reactions: [["🙏", [1]]] },
+    ],
+  },
+];
+
+function seedComments(ws: WsData, st: State, person: (i: number) => string | null) {
+  const me = ws.members.find((m) => m.user_id === db.meId);
+  const mention = me ? `<span data-type="mention" data-id="${me.user_id}" data-label="${escapeHtml(userRef(me.user_id)?.name ?? "")}" class="mention">@${escapeHtml(userRef(me.user_id)?.name ?? "")}</span>` : "";
+  for (const s of SEED_THREADS) {
+    const r = st.pages.find((p) => p.title === s.page && !p.template);
+    if (!r) continue;
+    const id = uuid();
+    if (s.key) {
+      r.body_html = r.body_html.replace(`{c:${s.key}}`, id);
+      for (const x of st.revisions) if (x.page_id === r.id) x.body_html = x.body_html.replace(`{c:${s.key}}`, id);
+    }
+    s.comments.forEach((sc, i) => {
+      const by = person(sc.by);
+      const body = sc.body.replace("{me}", mention);
+      const c: CommentRow = {
+        id: i === 0 ? id : uuid(),
+        page_id: r.id,
+        thread_id: id,
+        quote: i === 0 ? (s.quote ?? "") : "",
+        inline: i === 0 && !!s.quote,
+        author_id: by,
+        body_html: body,
+        mentions: mentionIds(body),
+        created_at: ago(sc.hours * HOUR),
+        edited_at: null,
+        resolved_at: i === 0 && s.resolvedHours ? ago(s.resolvedHours * HOUR) : null,
+        resolved_by: i === 0 && s.resolvedBy !== undefined ? person(s.resolvedBy) : null,
+        seq: ++commentSeq,
+      };
+      st.comments.push(c);
+      for (const [emoji, who] of sc.reactions ?? []) for (const w of who) {
+        const uid = person(w);
+        if (uid && !st.reactions.some((x) => x.comment_id === c.id && x.user_id === uid && x.emoji === emoji)) st.reactions.push({ comment_id: c.id, user_id: uid, emoji, seq: ++commentSeq });
+      }
+      if (by) setFollow(st, r, by, true, true);
+    });
+  }
+}
+
 // ─── The starter handbook ──────────────────────────────────────────────────
 
 type Seed = { title: string; icon: string; body: string; days: number; by: number; cover?: string; verified?: { by: number; days: number; for: number }; children?: Seed[] };
@@ -1466,14 +1790,14 @@ const HANDBOOK: Seed[] = [
         days: 3,
         by: 1,
         verified: { by: 0, days: 2, for: 90 },
-        body: "<p>Escalate when a customer is blocked, money is at stake or you have tried twice without progress.</p><h2>Steps</h2><ol><li><p>Set the ticket to <strong>urgent</strong> and add the <code>escalated</code> label.</p></li><li><p>Leave a note with what you tried and what the customer needs.</p></li><li><p>Assign it to the on-call lead (see Business hours and on-call).</p></li><li><p>Tell the customer who has it now and when they will hear back.</p></li></ol><h2>Sev1 outages</h2><p>Page the on-call engineer from the incident channel. Post a status update every 30 minutes until it is resolved. #process #incidents</p>",
+        body: "<p>Escalate when a customer is blocked, <span data-comment=\"{c:money}\">money is at stake</span> or you have tried twice without progress.</p><h2>Steps</h2><ol><li><p>Set the ticket to <strong>urgent</strong> and add the <code>escalated</code> label.</p></li><li><p>Leave a note with what you tried and what the customer needs.</p></li><li><p>Assign it to the on-call lead (see Business hours and on-call).</p></li><li><p>Tell the customer who has it now and when they will hear back.</p></li></ol><h2>Sev1 outages</h2><p>Page the on-call engineer from the incident channel. Post a status update every 30 minutes until it is resolved. #process #incidents</p>",
       },
       {
         title: "Refund policy",
         icon: "💸",
         days: 9,
         by: 2,
-        body: "<p>Refund within 30 days of a charge, no questions asked, for any plan.</p><ul><li><p>Annual plans: refund the unused months after 30 days, if the customer asks.</p></li><li><p>Duplicate charges: refund at once and apologise.</p></li><li><p>Chargebacks: don't refund twice. Hand it to billing.</p></li></ul>",
+        body: "<p>Refund within 30 days of a charge, <span data-comment=\"{c:annual}\">no questions asked</span>, for any plan.</p><ul><li><p>Annual plans: refund the unused months after 30 days, if the customer asks.</p></li><li><p>Duplicate charges: refund at once and apologise.</p></li><li><p>Chargebacks: don't refund twice. Hand it to billing.</p></li></ul>",
         children: [
           {
             title: "Refunds over 100 euros",
@@ -1579,6 +1903,7 @@ function seedHandbook(ws: WsData, st: State) {
       r.body_html = r.body_html.replace(re, (_m, before: string, name: string) => `${before}<a data-type="page" data-id="${other.id}" href="/wiki/${other.id}">${name}</a>`);
     }
   }
+  seedComments(ws, st, person);
   add(TEMPLATES, null, true);
   for (const r of st.pages.filter((p) => p.template && p.body_html.includes("{sub}"))) {
     const sub = st.pages.filter((c) => c.parent_id === r.id).sort(byPosition)[0];

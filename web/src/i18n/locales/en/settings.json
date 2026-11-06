@@ -596,6 +596,7 @@
       "tickets": "Tickets",
       "team": "Team",
       "mail": "Mail",
+      "wiki": "Wiki",
       "ai_billing": "AI and billing",
       "workspace": "Workspace"
     },
@@ -653,6 +654,18 @@
       "collab_mention": {
         "label": "Mail comment mentions",
         "hint": "Someone mentions you in a comment on a mail conversation"
+      },
+      "wiki_mention": {
+        "label": "Wiki mentions",
+        "hint": "Someone mentions you on a wiki page or in a comment on one"
+      },
+      "wiki_comment": {
+        "label": "Wiki comments",
+        "hint": "New comments on pages you follow and in threads you wrote in"
+      },
+      "wiki_reminder": {
+        "label": "Wiki reminders",
+        "hint": "A reminder you set in a wiki page is due"
       },
       "team_joined": {
         "label": "Team changes",

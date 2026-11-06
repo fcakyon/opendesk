@@ -125,7 +125,15 @@
       "importAnd": "{{a}} und {{b}}",
       "importSource": "Verlaufs",
       "supportChannel": "Support-Kanal",
-      "supportChannelUnhealthy": "{{name}} erfordert Aufmerksamkeit"
+      "supportChannelUnhealthy": "{{name}} erfordert Aufmerksamkeit",
+      "wikiMention": "{{who}} hat dich auf einer Wiki-Seite erwähnt",
+      "wikiMentionAnon": "Du wurdest auf einer Wiki-Seite erwähnt",
+      "wikiMentionComment": "{{who}} hat dich in einem Wiki-Kommentar erwähnt",
+      "wikiMentionCommentAnon": "Du wurdest in einem Wiki-Kommentar erwähnt",
+      "wikiComment": "{{who}} hat eine Wiki-Seite kommentiert",
+      "wikiCommentAnon": "Neuer Kommentar auf einer Wiki-Seite",
+      "wikiReminder": "Erinnerung: {{label}}",
+      "wikiReminderAnon": "Deine Wiki-Erinnerung ist fällig"
     },
     "hold": {
       "paused": "Pausiert bis {{when}}: nichts erreicht deine E-Mail, dein Telefon oder deinen Desktop",

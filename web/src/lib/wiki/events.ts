@@ -55,3 +55,8 @@ export function applyWikiEvent(qc: QueryClient, verb: string, d: Record<string, 
   if (known < node.version) void qc.invalidateQueries({ queryKey: qk.wikiPage(node.id) });
   void qc.invalidateQueries({ queryKey: qk.wikiRevisions(node.id), refetchType: "none" });
 }
+
+/** wiki_comment.changed (contracts/wiki.md "Comments"): the page's threads are read again. */
+export function applyWikiCommentEvent(qc: QueryClient, d: Record<string, unknown>) {
+  if (typeof d.page_id === "string") void qc.invalidateQueries({ queryKey: qk.wikiComments(d.page_id) });
+}

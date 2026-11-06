@@ -578,6 +578,7 @@
       "tickets": "Tickets",
       "team": "Équipe",
       "mail": "Courrier",
+      "wiki": "Wiki",
       "ai_billing": "IA et facturation",
       "workspace": "Espace de travail"
     },
@@ -630,6 +631,18 @@
       "collab_mention": {
         "label": "Mentions dans les commentaires de courrier",
         "hint": "Quelqu’un vous mentionne dans un commentaire d’une conversation par e-mail"
+      },
+      "wiki_mention": {
+        "label": "Mentions dans le wiki",
+        "hint": "Quelqu’un vous mentionne sur une page du wiki ou dans un commentaire de celle-ci"
+      },
+      "wiki_comment": {
+        "label": "Commentaires du wiki",
+        "hint": "Nouveaux commentaires sur les pages que vous suivez et dans les discussions où vous avez écrit"
+      },
+      "wiki_reminder": {
+        "label": "Rappels du wiki",
+        "hint": "Un rappel que vous avez placé dans une page du wiki arrive à échéance"
       },
       "team_joined": {
         "label": "Changements dans l’équipe",

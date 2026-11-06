@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/cn";
 import { tone, toneFor } from "@/lib/tones";
+import type { PresenceStatus } from "@/lib/realtime/presence";
 
 export function initials(name: string) {
   const parts = name.trim().split(/[\s@._-]+/).filter(Boolean);
@@ -121,7 +122,8 @@ export function AvatarStack({
   live,
   className,
 }: {
-  people: { id: string; name: string; avatar?: string | null; state?: "viewing" | "replying" | "idle" }[];
+  /** A writing dot shows on someone replying (a ticket) or editing (a wiki page). */
+  people: { id: string; name: string; avatar?: string | null; state?: PresenceStatus }[];
   size?: "xs" | "sm" | "md";
   max?: number;
   /** People on it right now: green rings instead of the surface ring. */
@@ -135,7 +137,7 @@ export function AvatarStack({
       {shown.map((p) => (
         <span key={p.id} className="relative">
           <Avatar name={p.name} src={p.avatar} size={size} ring={!live} className={live ? liveRing : undefined} />
-          {p.state === "replying" && (
+          {(p.state === "replying" || p.state === "editing") && (
             <span className="absolute -bottom-px -right-px size-[7px] rounded-full bg-warn ring-[1.5px] ring-surface" />
           )}
         </span>

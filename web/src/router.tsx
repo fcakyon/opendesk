@@ -590,6 +590,8 @@ const wikiTrashRoute = createRoute({
 const wikiPageRoute = createRoute({
   getParentRoute: () => wikiLayout,
   path: "$pageId",
+  // ?comment=<thread id> opens that thread (notifications link there; contracts/wiki.md "Comments").
+  validateSearch: (s: Record<string, unknown>): { comment?: string } => ({ comment: str(s.comment) }),
   loader: ({ context, params }) => context.queryClient.ensureQueryData(q.wikiPage(params.pageId)).catch(() => undefined),
   component: page(() => import("./pages/wiki/WikiPageView")),
   staticData: { title: "wikiPage" },

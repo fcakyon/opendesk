@@ -22,7 +22,7 @@ import { q, qk } from "@/lib/queries";
 import { subscribeWebPush } from "@/lib/webPush";
 import { afterOwnCreations, wantsTicketSound } from "@/lib/ownTickets";
 import { i18n } from "@/i18n";
-import { collabThread, describe, joinedTeam, ticketFolder } from "./Notifications";
+import { collabThread, describe, joinedTeam, ticketFolder, wikiTarget } from "./Notifications";
 import { Sidebar } from "./Sidebar";
 import { SuspendedWorkspace } from "./SuspendedWorkspace";
 import { AppHeader } from "./AppHeader";
@@ -82,6 +82,9 @@ function notificationText(n: Notification) {
     case "support_channel_unhealthy":
     case "collab_assigned":
     case "collab_mention":
+    case "wiki_mention":
+    case "wiki_comment":
+    case "wiki_reminder":
       return describe(n, i18n.getFixedT(null, "shell"));
     default:
       return `Notification ${subject}`;
@@ -104,6 +107,9 @@ const notificationSound: Partial<Record<Notification["type"], AlertSound>> = {
   sla_breached: "assigned",
   collab_assigned: "assigned",
   collab_mention: "assigned",
+  wiki_mention: "assigned",
+  wiki_comment: "reply",
+  wiki_reminder: "assigned",
 };
 
 /** What a stopped import says went wrong, for its toast. */
@@ -176,7 +182,7 @@ function useRealtimeConnection() {
         const body =
           n.type === "ai_cap_reached"
             ? "Chats go to your team until the cap resets or you raise it."
-            : (billingNoticeBody[n.type] ?? importProblem(n) ?? n.ticket?.subject ?? (typeof n.data.subject === "string" ? n.data.subject : undefined));
+            : (billingNoticeBody[n.type] ?? importProblem(n) ?? n.ticket?.subject ?? (typeof n.data.subject === "string" ? n.data.subject : undefined) ?? wikiTarget(n)?.title ?? undefined);
         toast.info(notificationText(n), {
           description: name ? [name, body].filter(Boolean).join(" · ") : body,
           action: n.ticket
@@ -204,6 +210,14 @@ function useRealtimeConnection() {
                       () =>
                         void navigate({ to: "/mail/$box/{-$threadId}", params: { box: n.type === "collab_assigned" ? "assigned" : "all", threadId: collabThread(n)! }, search: {} }),
                     ),
+                  }
+              : wikiTarget(n)?.pageId
+                ? {
+                    label: "Open",
+                    onClick: go(() => {
+                      const w = wikiTarget(n)!;
+                      void navigate({ to: "/wiki/$pageId", params: { pageId: w.pageId! }, search: w.thread ? { comment: w.thread } : {} });
+                    }),
                   }
               : n.type === "ai_cap_reached" || n.type === "ai_key_failed"
               ? { label: "Settings", onClick: go(() => void navigate({ to: n.type === "ai_key_failed" ? "/settings/ai" : "/settings/ai/behaviour" })) }

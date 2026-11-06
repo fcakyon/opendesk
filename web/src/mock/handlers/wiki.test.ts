@@ -1,8 +1,8 @@
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
-import type { Database, DbProperty, DbRows, WikiDailyNote, WikiNode, WikiPage, WikiPageViews, WikiRevision, WikiSearchHit, WikiTrashed } from "@/lib/api/types";
+import type { Database, DbProperty, DbRows, Notification, WikiComments, WikiDailyNote, WikiNode, WikiPage, WikiPageViews, WikiRevision, WikiSearchHit, WikiThread, WikiTrashed } from "@/lib/api/types";
 import { qk } from "@/lib/queries";
-import { applyWikiEvent } from "@/lib/wiki/events";
+import { applyWikiCommentEvent, applyWikiEvent } from "@/lib/wiki/events";
 import { resetSavers, saverFor } from "@/lib/wiki/saver";
 import { installMock } from "../index";
 import { dispatch } from "../router";
@@ -534,6 +534,168 @@ async function as<T>(userId: string, fn: () => Promise<T>): Promise<T> {
     db.meId = me;
   }
 }
+
+describe("mock wiki comments", () => {
+  installMock();
+
+  const ws = () => db.workspaces[0];
+  const pageNamed = async (title: string) => ((await call("GET", "/v1/wiki/pages")).body.data as WikiNode[]).find((n) => n.title === title)!;
+  const comments = async (id: string) => (await call("GET", `/v1/wiki/pages/${id}/comments`)).body as WikiComments;
+  const mention = (uid: string) => `<span data-type="mention" data-id="${uid}" class="mention">@x</span>`;
+  /** Notifications published since mark, as [type, user]. */
+  const told = (mark: number) =>
+    ws()
+      .events.slice(mark)
+      .filter((e) => e.type === "notification.created")
+      .map((e) => [(e.data.notification as Notification).type, e.topics?.find((x) => x.startsWith("user:"))?.slice(5)]);
+  const asRole = async <T,>(role: "viewer" | "agent", fn: () => Promise<T>) => {
+    const me = ws().members.find((m) => m.user_id === db.meId)!;
+    const was = me.role;
+    me.role = role;
+    try {
+      return await fn();
+    } finally {
+      me.role = was;
+    }
+  };
+
+  it("seeds threads: one inline on marked text, one on the page, one resolved, with reactions", async () => {
+    const esc = await pageNamed("Escalation process");
+    const page = (await call("GET", `/v1/wiki/pages/${esc.id}`)).body as WikiPage;
+    const { data, following } = await comments(esc.id);
+    expect(following).toBe(false);
+    const inline = data.find((t) => t.inline)!;
+    expect(inline.quote).toBe("money is at stake");
+    expect(page.body_html).toContain(`<span data-comment="${inline.id}">money is at stake</span>`);
+    expect(inline.comments).toHaveLength(2);
+    expect(inline.comments[0].reactions[0]).toMatchObject({ emoji: "👍" });
+    expect(data.some((t) => !t.inline && !t.resolved_at)).toBe(true);
+    const refunds = await comments((await pageNamed("Refund policy")).id);
+    expect(refunds.data[0]).toMatchObject({ inline: true, quote: "no questions asked", resolved_by: { id: db.meId } });
+  });
+
+  it("starts threads and replies, checks what is sent and reopens a resolved thread with a reply", async () => {
+    const p = (await call("POST", "/v1/wiki/pages", { title: "Discussed" })).body as WikiPage;
+    expect((await call("POST", `/v1/wiki/pages/${p.id}/comments`, { body_html: "<p> </p>" })).status).toBe(422);
+    expect((await call("POST", `/v1/wiki/pages/${p.id}/comments`, { body_html: "<p>x</p>", inline: true })).status).toBe(422);
+    const made = await call("POST", `/v1/wiki/pages/${p.id}/comments`, { body_html: "<p>On this <script>x()</script>bit</p>", quote: "  the   bit ", inline: true });
+    expect(made.status).toBe(201);
+    const t = made.body as WikiThread;
+    expect(t).toMatchObject({ page_id: p.id, inline: true, quote: "the bit", resolved_at: null });
+    expect(t.comments[0].body_html).not.toContain("script");
+    expect((await call("POST", `/v1/wiki/threads/${t.id}/resolve`, { resolved: true })).body).toMatchObject({ resolved_by: { id: db.meId } });
+    const reply = (await call("POST", `/v1/wiki/pages/${p.id}/comments`, { body_html: "<p>Back to it</p>", thread_id: t.id })).body as WikiThread;
+    expect(reply.resolved_at).toBeNull();
+    expect(reply.comments.map((c) => c.body_html)).toEqual(["<p>On this bit</p>", "<p>Back to it</p>"]);
+    // A thread of another page is not one to reply to.
+    const other = (await call("POST", "/v1/wiki/pages", { title: "Elsewhere" })).body as WikiPage;
+    expect((await call("POST", `/v1/wiki/pages/${other.id}/comments`, { body_html: "<p>x</p>", thread_id: t.id })).status).toBe(422);
+  });
+
+  it("lets only the author edit, the author or an admin delete, and the first comment takes the thread", async () => {
+    const esc = await pageNamed("Escalation process");
+    const theirs = (await comments(esc.id)).data.find((t) => t.inline)!;
+    expect(theirs.comments[0].author?.id).not.toBe(db.meId);
+    expect((await call("PATCH", `/v1/wiki/comments/${theirs.comments[0].id}`, { body_html: "<p>mine now</p>" })).status).toBe(403);
+    expect((await asRole("agent", () => call("DELETE", `/v1/wiki/comments/${theirs.comments[1].id}`))).status).toBe(403);
+    // The mock person is the owner: an admin deletes anyone's.
+    expect((await call("DELETE", `/v1/wiki/comments/${theirs.comments[1].id}`)).status).toBe(204);
+    const p = (await call("POST", "/v1/wiki/pages", { title: "Edits" })).body as WikiPage;
+    const t = (await call("POST", `/v1/wiki/pages/${p.id}/comments`, { body_html: "<p>first</p>" })).body as WikiThread;
+    const edited = (await call("PATCH", `/v1/wiki/comments/${t.id}`, { body_html: "<p>first, better</p>" })).body as WikiThread;
+    expect(edited.comments[0]).toMatchObject({ body_html: "<p>first, better</p>", edited_at: expect.any(String) });
+    await call("POST", `/v1/wiki/pages/${p.id}/comments`, { body_html: "<p>reply</p>", thread_id: t.id });
+    expect((await call("DELETE", `/v1/wiki/comments/${t.id}`)).status).toBe(204);
+    expect((await comments(p.id)).data).toEqual([]);
+  });
+
+  it("toggles reactions, one emoji at a time, oldest first", async () => {
+    const p = (await call("POST", "/v1/wiki/pages", { title: "Reacted" })).body as WikiPage;
+    const t = (await call("POST", `/v1/wiki/pages/${p.id}/comments`, { body_html: "<p>hi</p>" })).body as WikiThread;
+    const id = t.comments[0].id;
+    for (const emoji of ["👍👍", "ab", ""]) expect((await call("POST", `/v1/wiki/comments/${id}/reactions`, { emoji, on: true })).status, emoji).toBe(422);
+    await call("POST", `/v1/wiki/comments/${id}/reactions`, { emoji: "🎉", on: true });
+    await call("POST", `/v1/wiki/comments/${id}/reactions`, { emoji: "🎉", on: true });
+    const on = (await call("POST", `/v1/wiki/comments/${id}/reactions`, { emoji: "👍", on: true })).body as WikiThread;
+    expect(on.comments[0].reactions).toEqual([
+      { emoji: "🎉", users: [db.meId] },
+      { emoji: "👍", users: [db.meId] },
+    ]);
+    const off = (await call("POST", `/v1/wiki/comments/${id}/reactions`, { emoji: "🎉", on: false })).body as WikiThread;
+    expect(off.comments[0].reactions).toEqual([{ emoji: "👍", users: [db.meId] }]);
+    // Up to 20 different ones; one already there still toggles.
+    const twenty = ["😀", "😃", "😄", "😁", "😆", "😅", "😂", "🙂", "😉", "😊", "😇", "🥰", "😍", "🤩", "😘", "😗", "😚", "😙", "🥲"];
+    for (const emoji of twenty) expect((await call("POST", `/v1/wiki/comments/${id}/reactions`, { emoji, on: true })).status, emoji).toBeLessThan(300);
+    expect((await call("POST", `/v1/wiki/comments/${id}/reactions`, { emoji: "🎉", on: true })).body).toMatchObject({ code: "validation_failed", detail: expect.stringContaining("20 different") });
+    expect((await call("POST", `/v1/wiki/comments/${id}/reactions`, { emoji: "👍", on: false })).status).toBeLessThan(300);
+    expect((await call("POST", `/v1/wiki/comments/${id}/reactions`, { emoji: "👍", on: true })).status).toBeLessThan(300);
+  });
+
+  it("lets viewers read and follow but not write, and keeps a page in the trash read-only", async () => {
+    const p = (await call("POST", "/v1/wiki/pages", { title: "Quiet" })).body as WikiPage;
+    const t = (await call("POST", `/v1/wiki/pages/${p.id}/comments`, { body_html: "<p>hi</p>" })).body as WikiThread;
+    await asRole("viewer", async () => {
+      expect((await call("GET", `/v1/wiki/pages/${p.id}/comments`)).status).toBe(200);
+      expect((await call("POST", `/v1/wiki/pages/${p.id}/comments`, { body_html: "<p>x</p>" })).status).toBe(403);
+      expect((await call("POST", `/v1/wiki/threads/${t.id}/resolve`, { resolved: true })).status).toBe(403);
+      // Following is a reader's choice.
+      expect((await call("PUT", `/v1/wiki/pages/${p.id}/follow`, { following: false })).body).toEqual({ following: false });
+    });
+    await call("POST", `/v1/wiki/pages/${p.id}/trash`);
+    expect((await comments(p.id)).data).toHaveLength(1);
+    expect((await call("POST", `/v1/wiki/pages/${p.id}/comments`, { body_html: "<p>x</p>" })).body.code).toBe("page_in_trash");
+    expect((await call("PUT", `/v1/wiki/pages/${p.id}/follow`, { following: false })).body.code).toBe("page_in_trash");
+  });
+
+  it("follows pages people make or comment on, until they unfollow", async () => {
+    const esc = await pageNamed("Escalation process");
+    expect((await comments(esc.id)).following).toBe(false);
+    await call("POST", `/v1/wiki/pages/${esc.id}/comments`, { body_html: "<p>me too</p>" });
+    expect((await comments(esc.id)).following).toBe(true);
+    expect((await call("PUT", `/v1/wiki/pages/${esc.id}/follow`, { following: false })).body).toEqual({ following: false });
+    await call("POST", `/v1/wiki/pages/${esc.id}/comments`, { body_html: "<p>and again</p>" });
+    expect((await comments(esc.id)).following).toBe(false);
+    const mine = (await call("POST", "/v1/wiki/pages", { title: "Mine" })).body as WikiPage;
+    expect((await comments(mine.id)).following).toBe(true);
+    expect((await call("PUT", `/v1/wiki/pages/${mine.id}/follow`, { following: "yes" })).status).toBe(422);
+  });
+
+  it("notifies who a comment mentions, then followers and the thread's people, once each, and publishes the change", async () => {
+    const esc = await pageNamed("Escalation process");
+    const thread = (await comments(esc.id)).data.find((t) => t.inline)!;
+    const first = thread.comments[0].author!.id;
+    const second = ws().members.find((m) => m.user_id !== db.meId && m.user_id !== first && m.role !== "viewer")!.user_id;
+    const mark = ws().events.length;
+    await call("POST", `/v1/wiki/pages/${esc.id}/comments`, { body_html: `<p>Agreed ${mention(second)}</p>`, thread_id: thread.id });
+    const got = told(mark);
+    expect(got).toContainEqual(["wiki_mention", second]);
+    expect(got).toContainEqual(["wiki_comment", first]);
+    expect(got.filter(([, u]) => u === second)).toHaveLength(1);
+    expect(got.some(([, u]) => u === db.meId)).toBe(false);
+    const change = ws().events.slice(mark).find((e) => e.type === "wiki_comment.changed")!;
+    expect(change.data).toEqual({ page_id: esc.id, thread_id: thread.id });
+    const n = ws().events.slice(mark).find((e) => e.type === "notification.created")!.data.notification as Notification;
+    expect(n.data).toMatchObject({ page_id: esc.id, page_title: "Escalation process", thread_id: thread.id, by: db.meId });
+  });
+
+  it("notifies someone newly mentioned in a page's text, not again on the next save", async () => {
+    const other = ws().members.find((m) => m.user_id !== db.meId && m.role !== "viewer")!.user_id;
+    const p = (await call("POST", "/v1/wiki/pages", { title: "Mentions" })).body as WikiPage;
+    let mark = ws().events.length;
+    const a = (await call("PATCH", `/v1/wiki/pages/${p.id}`, { body_html: `<p>${mention(other)}</p>` })).body as WikiPage;
+    expect(told(mark)).toEqual([["wiki_mention", other]]);
+    mark = ws().events.length;
+    await call("PATCH", `/v1/wiki/pages/${p.id}`, { body_html: `<p>${mention(other)} again</p>`, version: a.version });
+    expect(told(mark)).toEqual([]);
+  });
+
+  it("refetches a page's comments on wiki_comment.changed", () => {
+    const qc = new QueryClient();
+    qc.setQueryData(qk.wikiComments("p1"), { data: [], following: false });
+    applyWikiCommentEvent(qc, { page_id: "p1", thread_id: "t1" });
+    expect(qc.getQueryState(qk.wikiComments("p1"))?.isInvalidated).toBe(true);
+  });
+});
 
 describe("wiki events on the cache", () => {
   const node = (id: string, parent: string | null, position: number, version = 1): WikiNode => ({ id, parent_id: parent, title: id, icon: "", position, version, updated_at: "2026-10-01T00:00:00Z", created_by_id: null, tags: [] });

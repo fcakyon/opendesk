@@ -1,9 +1,10 @@
 // Fake activity so the app feels alive in mock mode: customer replies, new
-// tickets, notifications, teammates moving between tickets and typing, and
-// Ollie answering chat visitors on a ticket you're viewing (ollie.ts).
+// tickets, notifications, teammates moving between tickets and typing, teammates
+// coming and going on the wiki page you have open, and Ollie answering chat
+// visitors on a ticket you're viewing (ollie.ts).
 
 import { contactRef, db, type WsData } from "./db";
-import { activeTicketIds, emitOnTicket, publish, setTeammatePresence, teammatePresence } from "./gateway";
+import { activeTicketIds, activeWikiPageIds, emitOnTicket, publish, setTeammatePresence, teammatePresence, wikiRoom } from "./gateway";
 import { customerReply } from "./handlers/tickets";
 import { FOLLOW_UPS, GENERATED, TEAM } from "./content";
 import { countRuleRun, evaluateRouting } from "./teams";
@@ -117,6 +118,21 @@ function setTeammatePresenceIfPresent(tid: string, uid: string) {
   if (teammatePresence.get(tid)?.some((m) => m.user_id === uid)) setTeammatePresence(tid, null, uid);
 }
 
+/** A teammate on the wiki page you have open starts or stops editing, leaves, or turns up. */
+function wikiMateOnActive() {
+  const id = any(activeWikiPageIds());
+  if (!id) return;
+  const room = wikiRoom(id);
+  const here = teammatePresence.get(room)?.[0];
+  if (here) {
+    if (Math.random() < 0.3) setTeammatePresence(room, null, here.user_id);
+    else setTeammatePresence(room, { user_id: here.user_id, name: here.name, avatar: here.avatar, state: here.state === "editing" ? "viewing" : "editing" });
+    return;
+  }
+  const mate = any(db.users.filter((u) => u.id !== db.meId).slice(0, 4));
+  if (mate) setTeammatePresence(room, { user_id: mate.id, name: mate.name, avatar: mate.avatar_url ?? "", state: "viewing" });
+}
+
 function typingOnActive() {
   const w = ws();
   const tid = any(activeTicketIds());
@@ -158,6 +174,7 @@ export function startLive() {
   schedule(randomNotification, 60_000, 120_000);
   schedule(teammateWander, 30_000, 60_000);
   schedule(typingOnActive, 12_000, 25_000);
+  schedule(wikiMateOnActive, 15_000, 30_000);
   schedule(ollieOnActive, 35_000, 60_000);
 }
 

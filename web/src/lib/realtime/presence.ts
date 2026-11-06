@@ -1,10 +1,14 @@
 // Phoenix Presence state, kept as a plain map so it is easy to test and render.
 
+/** A ticket's states are viewing, replying and idle; a wiki page's viewing, editing and idle. */
+export type PresenceStatus = "viewing" | "replying" | "editing" | "idle";
+export type WikiPresenceStatus = Extract<PresenceStatus, "viewing" | "editing" | "idle">;
+
 export type PresenceMeta = {
   user_id: string;
   name: string;
   avatar?: string;
-  state: "viewing" | "replying" | "idle";
+  state: PresenceStatus;
   online_at?: string;
   phx_ref?: string;
 };
@@ -35,9 +39,11 @@ export function syncDiff(prev: PresenceState, diff: PresenceDiff): PresenceState
 
 export type Viewer = { user_id: string; name: string; avatar?: string; state: PresenceMeta["state"] };
 
-/** One entry per user (most active state wins), excluding `self`. */
+/** Who is writing (a reply, a page) first, then who is looking, then who stepped away. */
+const rank: Record<PresenceStatus, number> = { replying: 2, editing: 2, viewing: 1, idle: 0 };
+
+/** One entry per user (most active state wins), excluding `self`; the most active first, then by name. */
 export function viewers(state: PresenceState, self?: string): Viewer[] {
-  const rank = { replying: 2, viewing: 1, idle: 0 } as const;
   const out: Viewer[] = [];
   for (const [key, { metas }] of Object.entries(state)) {
     if (!metas.length) continue;
