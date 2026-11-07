@@ -157,13 +157,24 @@ export function TreeView({
   useEffect(() => {
     if (ancestorIds.length) open(ancestorIds);
   }, [ancestorIds, open]);
+  // The page that opened last is shown once its row is there: its parents may still be
+  // opening, or a page made a moment ago join the tree a render later.
+  const reveal = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!openId || !root.current) return;
+    reveal.current = openId;
+  }, [openId]);
+  useEffect(() => {
+    const id = reveal.current;
+    if (!id || !root.current) return;
+    const row = root.current.querySelector<HTMLElement>(`[data-id="${CSS.escape(id)}"]`);
+    if (!row) return;
+    reveal.current = undefined;
     // In the main sidebar a page can also be a row of Favorites or of a section: when one
     // of its rows is already in sight (the one just clicked), the sidebar stays where it is.
-    if (variant === "nav" && rowInSight(root.current, openId)) return;
-    root.current.querySelector<HTMLElement>(`[data-id="${openId}"]`)?.scrollIntoView({ block: "nearest" });
-  }, [openId, variant]);
+    if (variant === "nav" && rowInSight(root.current, id)) return;
+    // After the router has restored the scroll of a navigation, which would undo this.
+    requestAnimationFrame(() => requestAnimationFrame(() => row.isConnected && row.scrollIntoView({ block: "nearest" })));
+  });
 
   const rows = useMemo(() => {
     const all = visibleRows(view, expanded);
