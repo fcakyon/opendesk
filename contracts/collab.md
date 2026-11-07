@@ -846,7 +846,8 @@ interface CollabStatus {
 }
 
 interface SidebarPrefs {
-  order: string[]              // section ids, top to bottom: "favorites", "inbox", "mail", "teams", "views", "pages", "workspace" (the default)
+  order: string[]              // section ids, top to bottom: "favorites", "inbox", "mail", "teams", "views", "pages", "workspace" (the default),
+                               // and "custom:<id>" for the member's own sections; at most 40
   hidden: string[]             // "section:<id>", "box:<box>", "account:<id>", "folder:<id>", "folder:<inbox|starred|...>", "view:<id>", "team:<id>", "ticket_folder:<id>", "row:waiting_chats",
                                // and in Pages "pages:<workspace|teamspaces|private|today|templates|trash>", "wiki_page:<id>", "wiki_space:<team id>" (contracts/wiki.md "In the main sidebar")
   pinned: { kind: "box" | "folder" | "account" | "view" | "team" | "ticket_folder" | "view_section"; id: string }[]  // shown under Favorites, in order, at most 30
@@ -856,8 +857,38 @@ interface SidebarPrefs {
   badges: Record<string, "unread" | "total" | "count" | "awaiting" | "urgent" | "overdue" | "open" | "none">  // the number beside a row; default {}
   mail_tabs: string[]          // the mail page's folder bar, in order; default ["inbox","starred","sent","drafts","archive"]
   auto_pins: string[]          // pins the sidebar added once by itself, so one unpinned stays so; default []
+  sections: SidebarSection[]   // the member's own sections ("Your own sections"); default []
+}
+
+interface SidebarSection {
+  id: string                   // made by the client, 1..40 of [A-Za-z0-9_-], once
+  title: string                // 0..40 characters, a name people choose (internal/displayname, Workspace)
+  collapsed: boolean
+  items: SidebarItem[]         // at most 60; at most 300 across the sections
+}
+
+// A Space row (contracts/spaces.md SpaceItem) without its workspace, which is this one;
+// never "section" or "everywhere".
+interface SidebarItem {
+  kind: "ticket_folder" | "team" | "view" | "box" | "account" | "folder" | "page" | "wiki_page" | "wiki_space"
+  id: string                   // the ids of SpaceItem; a team row may also be "mine" (My teams)
+  name?: string                // the member's own label for the row, 1..64 characters
+  badge?: SidebarBadge         // the number beside the row; left out: the row's default
 }
 ```
+
+**Your own sections.** A member adds sections of their own to a workspace's sidebar, among the
+built-in ones: rows of anything the workspace offers, as a Space's (contracts/spaces.md), all of this
+workspace. `order` places each as `custom:<id>`; one the order lacks shows last, and an order entry
+naming no section is kept and skipped. A row names a thing by id; one gone or out of the member's sight
+(a deleted view, a private team they left, a page in the trash) is kept and skipped, as in a Space, and
+mail rows show only with Collab. A row sits in one of the member's sections at most. The web app adds
+rows from any row's menu ("Add to sidebar": Favorites, each section, a new section), a page's menu, the
+button beside an inbox folder's, team's or view's title, and a section's own "Add rows" popup with
+everything the workspace offers; rows drag to reorder and between sections. A section's menu renames,
+adds rows, moves, folds and deletes it; Customize sidebar lists the sections with the built-in ones,
+and copies a Space's sections with this workspace's rows ("Start from a Space"). Nothing of it is
+added from Settings.
 
 These arrange a workspace's own sidebar. A Space (contracts/spaces.md) picked in the switcher shows
 its own rows instead; a whole section in a Space follows these preferences.
@@ -1024,7 +1055,7 @@ account or conversation; "act": sees it and is agent or above; "manage": "Who se
 | GET | `/v1/collab/messages/{id}/details` | see | `MessageDetails` ("Message details"), read from the message's source (stored, else the provider: `502 provider_error`) |
 | GET | `/v1/collab/attachments/{message_id}/{index}` | signed (`exp`, `sig`) | the file, `Content-Disposition: attachment` unless an image; `?inline=1` for images. `404` when the signature is wrong or expired |
 | GET | `/v1/collab/sidebar` | member | `SidebarPrefs` (defaults when never saved); with or without Collab; with Collab, pins All inboxes once at a second account ("All inboxes in Favorites") |
-| PUT | `/v1/collab/sidebar` | member | `SidebarPrefs` → `SidebarPrefs`; with or without Collab; at most 16 KB; unknown ids are kept (an id of something gone is ignored by the app). `badges`: at most 300, keys of at most 100 characters with the prefixes above, values `unread`, `total`, `count`, `awaiting`, `urgent`, `overdue`, `open` or `none`; `mail_tabs`: at most 30, each a box above or `folder:<uuid>`, once. Leaving out `badges`, `mail_tabs` or `auto_pins` keeps the saved value; `422` otherwise |
+| PUT | `/v1/collab/sidebar` | member | `SidebarPrefs` → `SidebarPrefs`; with or without Collab; at most 16 KB besides `sections`, which hold at most 32 KB; unknown ids are kept (an id of something gone is ignored by the app). `badges`: at most 300, keys of at most 100 characters with the prefixes above, values `unread`, `total`, `count`, `awaiting`, `urgent`, `overdue`, `open` or `none`; `mail_tabs`: at most 30, each a box above or `folder:<uuid>`, once. `sections`: the limits above, item ids as SpaceItem's. Leaving out `badges`, `mail_tabs`, `auto_pins` or `sections` keeps the saved value; `422` otherwise |
 
 Errors: `403 feature_disabled` (with product and reason), `404 not_found`, `422 labels_unsupported`, `422 connection_failed`,
 `409 account_conflict`, `502 provider_error`, `502 send_failed`, `422 provider_not_configured`,

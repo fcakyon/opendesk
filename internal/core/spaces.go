@@ -48,16 +48,16 @@ var spaceIcons = []string{"sun", "moon", "star", "inbox", "mail", "headphones", 
 // spaceItemIDs are the ids of the item kinds with a fixed set; the other kinds name a uuid.
 var spaceItemIDs = map[string][]string{
 	"section":       collab.SidebarSectionIDs,
-	"ticket_folder": {"unassigned", "mine", "open", "pending", "solved", "spam"},
-	"box":           {"inbox", "shared", "assigned"},
-	"page":          {"contacts", "knowledge", "wiki", "reports"},
+	"ticket_folder": collab.SidebarItemIDs["ticket_folder"],
+	"box":           collab.SidebarItemIDs["box"],
+	"page":          collab.SidebarItemIDs["page"],
 	"everywhere":    {"mine", "mail"},
 }
 
 // spaceEverywhere is the kind of the Everywhere lists, the one kind of no workspace (workspace_id "").
 const spaceEverywhere = "everywhere"
 
-var spaceUUIDKinds = []string{"team", "view", "account", "folder", "wiki_page", "wiki_space"}
+var spaceUUIDKinds = collab.SidebarUUIDKinds
 
 var spaceSectionIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,40}$`)
 

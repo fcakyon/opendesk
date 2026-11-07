@@ -68,6 +68,10 @@ An item names a thing by id; one that is gone or no longer visible to the person
 private team they left, an account they no longer see) is kept and skipped by the app, like unknown
 ids in `SidebarPrefs`.
 
+A workspace's own sidebar takes sections of these rows too, of that workspace alone: the member's own
+sections (`SidebarPrefs.sections`, contracts/collab.md "Your own sections"). Customize sidebar copies a
+Space's sections into them, with that workspace's rows.
+
 ### The starter Space
 
 A workspace's admins can publish one **starter Space**: a `Space` whose items are all of that

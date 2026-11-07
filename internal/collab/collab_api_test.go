@@ -1016,6 +1016,88 @@ func TestAPISidebarPinsAllInboxes(t *testing.T) {
 	}
 }
 
+// TestAPISidebarSections: a member's own sections hold rows of anything the workspace
+// offers, sit in the order as custom:<id>, and stay when a client leaves them out.
+func TestAPISidebarSections(t *testing.T) {
+	w := newWorld(t)
+	srv := w.api(w.agent)
+	var prefs SidebarPrefs
+	if st := doJSON(t, "GET", srv.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || prefs.Sections == nil || len(prefs.Sections) != 0 {
+		t.Fatalf("defaults: %d %+v", st, prefs.Sections)
+	}
+	page := uuid.New()
+	base := func() SidebarPrefs {
+		p := defaultSidebar()
+		p.Order = append([]string{"custom:launch"}, p.Order...)
+		p.Sections = []SidebarSection{{ID: "launch", Title: "  Launch  ", Items: []SidebarItem{
+			{Kind: "folder", ID: strings.ToUpper(uuid.NewString())}, {Kind: "view", ID: uuid.NewString(), Name: "Bugs", Badge: "urgent"},
+			{Kind: "wiki_page", ID: page.String()}, {Kind: "wiki_space", ID: uuid.NewString()}, {Kind: "box", ID: "inbox"},
+			{Kind: "ticket_folder", ID: "mine"}, {Kind: "team", ID: "mine"}, {Kind: "page", ID: "reports"},
+		}}, {ID: "later", Collapsed: true}}
+		return p
+	}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", base(), &prefs); st != 200 {
+		t.Fatalf("put: %d", st)
+	}
+	prefs = SidebarPrefs{}
+	if st := doJSON(t, "GET", srv.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || len(prefs.Sections) != 2 || prefs.Order[0] != "custom:launch" {
+		t.Fatalf("roundtrip: %d %+v", st, prefs)
+	}
+	got := prefs.Sections[0]
+	if got.Title != "Launch" || len(got.Items) != 8 || got.Items[0].ID != strings.ToLower(got.Items[0].ID) || got.Items[1].Name != "Bugs" ||
+		got.Items[1].Badge != "urgent" || !prefs.Sections[1].Collapsed || prefs.Sections[1].Items == nil {
+		t.Fatalf("stored: %+v", prefs.Sections)
+	}
+	// A client that leaves them out keeps them.
+	old := map[string]any{"order": []string{"mail"}, "hidden": []string{}, "pinned": []any{}, "expanded_accounts": []string{},
+		"mark_read_on_open": true, "unified_inbox": true}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", old, &prefs); st != 200 || len(prefs.Sections) != 2 {
+		t.Fatalf("left out: %d %+v", st, prefs.Sections)
+	}
+	// Up to 300 rows fit, past the 16 KB of the rest.
+	full := base()
+	full.Sections = nil
+	for i := range 5 {
+		sec := SidebarSection{ID: "s" + strconv.Itoa(i), Title: "Section " + strconv.Itoa(i)}
+		for range 60 {
+			sec.Items = append(sec.Items, SidebarItem{Kind: "wiki_page", ID: uuid.NewString()})
+		}
+		full.Sections = append(full.Sections, sec)
+	}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", full, nil); st != 200 {
+		t.Fatalf("300 rows: %d", st)
+	}
+
+	bad := map[string]func(p *SidebarPrefs){
+		"kind":          func(p *SidebarPrefs) { p.Sections[0].Items[0].Kind = "everywhere" },
+		"section kind":  func(p *SidebarPrefs) { p.Sections[0].Items[0] = SidebarItem{Kind: "section", ID: "inbox"} },
+		"fixed id":      func(p *SidebarPrefs) { p.Sections[0].Items[0] = SidebarItem{Kind: "box", ID: "spam"} },
+		"uuid":          func(p *SidebarPrefs) { p.Sections[0].Items[0].ID = "nope" },
+		"badge":         func(p *SidebarPrefs) { p.Sections[0].Items[0].Badge = "all" },
+		"section id":    func(p *SidebarPrefs) { p.Sections[0].ID = "no spaces" },
+		"duplicate id":  func(p *SidebarPrefs) { p.Sections[1].ID = "launch" },
+		"long title":    func(p *SidebarPrefs) { p.Sections[0].Title = strings.Repeat("x", 41) },
+		"long name":     func(p *SidebarPrefs) { p.Sections[0].Items[1].Name = strings.Repeat("x", 65) },
+		"too many rows": func(p *SidebarPrefs) { p.Sections[1].Items = make([]SidebarItem, 61) },
+		"too many in all": func(p *SidebarPrefs) {
+			*p = full
+			p.Sections = append(p.Sections, SidebarSection{ID: "more", Items: []SidebarItem{{Kind: "box", ID: "inbox"}}})
+		},
+		"too many sections": func(p *SidebarPrefs) {
+			for i := range 19 {
+				p.Sections = append(p.Sections, SidebarSection{ID: "x" + strconv.Itoa(i)})
+			}
+		},
+	}
+	for name, f := range bad {
+		p := base()
+		f(&p)
+		if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", p, nil); st != 422 {
+			t.Errorf("%s: %d", name, st)
+		}
+	}
+}
+
 func TestAPISidebarBadgesAndTabs(t *testing.T) {
 	w := newWorld(t)
 	srv := w.api(w.agent)

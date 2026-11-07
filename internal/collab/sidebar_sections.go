@@ -1,8 +1,117 @@
 package collab
 
+import (
+	"regexp"
+	"slices"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
+
+	"github.com/useopendesk/opendesk/internal/displayname"
+	"github.com/useopendesk/opendesk/internal/httpx"
+)
+
 // SidebarSectionIDs are the built-in sidebar sections, in their default order.
 var SidebarSectionIDs = []string{"favorites", "inbox", "mail", "teams", "views", "pages", "workspace"}
 
 // BadgeValue reports whether v is one of the numbers a sidebar row can show
 // (contracts/collab.md "badges").
 func BadgeValue(v string) bool { return badgeValues[v] }
+
+// SidebarItemIDs are the ids of the row kinds with a fixed set, in a member's own sections
+// and in Spaces alike; the other row kinds (SidebarUUIDKinds) name a uuid.
+var SidebarItemIDs = map[string][]string{
+	"ticket_folder": {"unassigned", "mine", "open", "pending", "solved", "spam"},
+	"box":           {"inbox", "shared", "assigned"},
+	"page":          {"contacts", "knowledge", "wiki", "reports"},
+}
+
+// SidebarUUIDKinds are the row kinds that name a uuid. A team row may also be "mine" (My teams).
+var SidebarUUIDKinds = []string{"team", "view", "account", "folder", "wiki_page", "wiki_space"}
+
+// Limits of a member's own sections, those of a Space (contracts/spaces.md).
+const (
+	maxOwnSections      = 20
+	maxOwnSectionItems  = 60
+	maxOwnItems         = 300
+	maxOwnTitle         = 40
+	maxOwnItemName      = 64
+	maxOwnSectionsBytes = 32 << 10
+)
+
+var ownSectionIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,40}$`)
+
+// validateSections checks the member's own sections and returns their stored form: titles
+// and names normalized, uuids canonical. An id of something gone or out of sight is kept;
+// the app skips the row, as in a Space.
+func validateSections(in []SidebarSection) ([]SidebarSection, error) {
+	if len(in) > maxOwnSections {
+		return nil, httpx.Validation("The sidebar holds at most 20 sections of your own.")
+	}
+	out := make([]SidebarSection, 0, len(in))
+	ids := map[string]bool{}
+	total := 0
+	for _, sec := range in {
+		if !ownSectionIDRe.MatchString(sec.ID) || ids[sec.ID] {
+			return nil, httpx.Validation("Each section needs an id of 1 to 40 letters, digits, dashes or underscores, once.")
+		}
+		ids[sec.ID] = true
+		if utf8.RuneCountInString(displayname.Normalize(sec.Title)) > maxOwnTitle {
+			return nil, httpx.Validation("A section's title must be 40 characters or less.")
+		}
+		title, err := displayname.Validate("A section's title", sec.Title, displayname.Workspace, true)
+		if err != nil {
+			return nil, err
+		}
+		if len(sec.Items) > maxOwnSectionItems {
+			return nil, httpx.Validation("A section holds at most 60 rows.")
+		}
+		total += len(sec.Items)
+		if total > maxOwnItems {
+			return nil, httpx.Validation("Your sections hold at most 300 rows.")
+		}
+		o := SidebarSection{ID: sec.ID, Title: title, Collapsed: sec.Collapsed, Items: make([]SidebarItem, 0, len(sec.Items))}
+		for _, it := range sec.Items {
+			item, err := validateItem(it)
+			if err != nil {
+				return nil, err
+			}
+			o.Items = append(o.Items, item)
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+func validateItem(in SidebarItem) (SidebarItem, error) {
+	out := SidebarItem{Kind: in.Kind, ID: in.ID, Badge: in.Badge}
+	if fixed, ok := SidebarItemIDs[in.Kind]; ok {
+		if !slices.Contains(fixed, in.ID) {
+			return out, httpx.Validation("Each " + in.Kind + " row needs one of the ids the app knows.")
+		}
+	} else if slices.Contains(SidebarUUIDKinds, in.Kind) {
+		if in.Kind == "team" && in.ID == "mine" {
+			// My teams: the member's teams together.
+		} else if id, err := uuid.Parse(in.ID); err != nil || len(in.ID) != 36 {
+			return out, httpx.Validation("Each " + in.Kind + " row needs an id that is a uuid.")
+		} else {
+			out.ID = id.String()
+		}
+	} else {
+		return out, httpx.Validation("Each row's kind is ticket_folder, team, view, box, account, folder, page, wiki_page or wiki_space.")
+	}
+	if in.Name != "" {
+		if utf8.RuneCountInString(displayname.Normalize(in.Name)) > maxOwnItemName {
+			return out, httpx.Validation("A row's name must be 64 characters or less.")
+		}
+		name, err := displayname.Validate("A row's name", in.Name, displayname.Workspace, false)
+		if err != nil {
+			return out, err
+		}
+		out.Name = name
+	}
+	if out.Badge != "" && !badgeValues[out.Badge] {
+		return out, httpx.Validation("A row's number is unread, total, count, awaiting, urgent, overdue, open or none.")
+	}
+	return out, nil
+}

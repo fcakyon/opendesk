@@ -3,7 +3,7 @@
 // customize dialog and the optimistic save read the prefs the same way. Ids the app
 // does not know are kept as they are (another client may know them) and ignored here.
 
-import type { MailAccount, MailFolder, SidebarBadge, SidebarPin, SidebarPrefs, SidebarSectionId } from "../api/types";
+import type { MailAccount, MailFolder, SidebarBadge, SidebarItem, SidebarPin, SidebarPrefs, SidebarSection, SidebarSectionId } from "../api/types";
 import { hasBox, isTabBox, type TabBox } from "./boxes";
 
 export const SECTION_IDS: readonly SidebarSectionId[] = ["favorites", "inbox", "mail", "teams", "views", "pages", "workspace"];
@@ -24,6 +24,7 @@ export function defaultSidebarPrefs(): SidebarPrefs {
     badges: {},
     mail_tabs: [...DEFAULT_MAIL_TABS],
     auto_pins: [],
+    sections: [],
   };
 }
 
@@ -51,7 +52,26 @@ export function normalizePrefs(p: Partial<SidebarPrefs> | null | undefined): Sid
     badges: readBadges(p.badges) ?? d.badges,
     mail_tabs: Array.isArray(p.mail_tabs) ? p.mail_tabs.filter((x): x is string => typeof x === "string") : d.mail_tabs,
     auto_pins: Array.isArray(p.auto_pins) ? p.auto_pins.filter((x): x is string => typeof x === "string") : d.auto_pins,
+    sections: Array.isArray(p.sections) ? p.sections.map(readSection).filter((x): x is SidebarSection => !!x) : d.sections,
   };
+}
+
+const OWN_KINDS: readonly SidebarItem["kind"][] = ["ticket_folder", "team", "view", "box", "account", "folder", "page", "wiki_page", "wiki_space"];
+
+function readSection(v: unknown): SidebarSection | null {
+  if (!v || typeof v !== "object") return null;
+  const x = v as Record<string, unknown>;
+  if (typeof x.id !== "string") return null;
+  const items: SidebarItem[] = [];
+  for (const it of Array.isArray(x.items) ? x.items : []) {
+    const i = it as Record<string, unknown> | null;
+    if (!i || typeof i.id !== "string" || !(OWN_KINDS as readonly unknown[]).includes(i.kind)) continue;
+    const out: SidebarItem = { kind: i.kind as SidebarItem["kind"], id: i.id };
+    if (typeof i.name === "string" && i.name.trim()) out.name = i.name;
+    if (isBadge(i.badge)) out.badge = i.badge;
+    items.push(out);
+  }
+  return { id: x.id, title: typeof x.title === "string" ? x.title : "", collapsed: x.collapsed === true, items };
 }
 
 const isSection = (id: string): id is SidebarSectionId => (SECTION_IDS as readonly string[]).includes(id);

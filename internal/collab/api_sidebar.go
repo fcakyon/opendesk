@@ -17,7 +17,8 @@ import (
 	"github.com/useopendesk/opendesk/internal/products"
 )
 
-// maxSidebarBytes bounds the stored sidebar preferences.
+// maxSidebarBytes bounds the stored sidebar preferences, the member's own sections apart
+// (maxOwnSectionsBytes).
 const maxSidebarBytes = 16 << 10
 
 // maxSidebarItem bounds one id in the sidebar preferences ("folder:<uuid>" and the like).
@@ -51,7 +52,7 @@ var (
 func defaultSidebar() SidebarPrefs {
 	return SidebarPrefs{Order: slices.Clone(SidebarSectionIDs), Hidden: []string{},
 		Pinned: []SidebarPin{}, ExpandedAccounts: []string{}, MarkReadOnOpen: true, UnifiedInbox: true,
-		Badges: map[string]string{}, MailTabs: defaultMailTabs(), AutoPins: []string{}}
+		Badges: map[string]string{}, MailTabs: defaultMailTabs(), AutoPins: []string{}, Sections: []SidebarSection{}}
 }
 
 // normalized fills missing lists so the shape always has arrays.
@@ -76,6 +77,14 @@ func (p SidebarPrefs) normalized() SidebarPrefs {
 	}
 	if p.AutoPins == nil {
 		p.AutoPins = []string{}
+	}
+	if p.Sections == nil {
+		p.Sections = []SidebarSection{}
+	}
+	for i := range p.Sections {
+		if p.Sections[i].Items == nil {
+			p.Sections[i].Items = []SidebarItem{}
+		}
 	}
 	return p
 }
@@ -182,9 +191,9 @@ func (s *service) registerSidebarRoutes(api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			// A client that does not know the numbers, the tabs or the pins added by themselves
-			// leaves them as saved.
-			if in.Body.Badges == nil || in.Body.MailTabs == nil || in.Body.AutoPins == nil {
+			// A client that does not know the numbers, the tabs, the pins added by themselves or
+			// the member's own sections leaves them as saved.
+			if in.Body.Badges == nil || in.Body.MailTabs == nil || in.Body.AutoPins == nil || in.Body.Sections == nil {
 				saved, err := s.loadSidebar(ctx, p.WorkspaceID, p.UserID)
 				if err != nil {
 					return nil, httpx.Wrap(err)
@@ -198,10 +207,23 @@ func (s *service) registerSidebarRoutes(api huma.API) {
 				if in.Body.AutoPins == nil {
 					in.Body.AutoPins = saved.AutoPins
 				}
+				if in.Body.Sections == nil {
+					in.Body.Sections = saved.Sections
+				}
 			}
 			prefs := in.Body.normalized()
 			if err := validateSidebar(prefs); err != nil {
 				return nil, err
+			}
+			if prefs.Sections, err = validateSections(prefs.Sections); err != nil {
+				return nil, err
+			}
+			own, err := json.Marshal(prefs.Sections)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if len(own) > maxOwnSectionsBytes {
+				return nil, httpx.Validation("Your sections are too large.")
 			}
 			for _, list := range [][]string{prefs.Order, prefs.Hidden, prefs.ExpandedAccounts, prefs.AutoPins} {
 				for _, item := range list {
@@ -219,7 +241,7 @@ func (s *service) registerSidebarRoutes(api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			if len(raw) > maxSidebarBytes {
+			if len(raw)-len(own) > maxSidebarBytes {
 				return nil, httpx.Validation("The sidebar settings are too large.")
 			}
 			if err := saveSidebar(ctx, s.d.DB.Pool, p.WorkspaceID, p.UserID, raw); err != nil {

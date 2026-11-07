@@ -2064,11 +2064,17 @@ export function registerCollab() {
   });
 
   put("/v1/collab/sidebar", (ctx) => {
-    if (JSON.stringify(ctx.body).length > 16 * 1024) throw invalid("Sidebar preferences are limited to 16 KB");
     const body = ctx.body as Partial<SidebarPrefs>;
+    // Like the API: the member's own sections are bounded apart (32 KB), the rest to 16 KB.
+    const own = JSON.stringify(body.sections ?? []).length;
+    if (JSON.stringify(ctx.body).length - own > 16 * 1024) throw invalid("Sidebar preferences are limited to 16 KB");
+    if (own > 32 * 1024) throw invalid("Your sections are too large.");
     const saved = state(ctx.ws).prefs[db.meId] ?? defaultSidebarPrefs();
-    // Like the API: a client that leaves out the numbers, the tabs or the pins added by themselves keeps them as saved.
-    const p = normalizePrefs({ ...body, badges: body.badges ?? saved.badges, mail_tabs: body.mail_tabs ?? saved.mail_tabs, auto_pins: body.auto_pins ?? saved.auto_pins });
+    // Like the API: a client that leaves out the numbers, the tabs, the pins added by themselves or its own sections keeps them as saved.
+    const p = normalizePrefs({ ...body, badges: body.badges ?? saved.badges, mail_tabs: body.mail_tabs ?? saved.mail_tabs, auto_pins: body.auto_pins ?? saved.auto_pins, sections: body.sections ?? saved.sections });
+    if (p.sections.length > 20) throw invalid("The sidebar holds at most 20 sections of your own.");
+    if (p.sections.some((x) => x.items.length > 60) || p.sections.reduce((n, x) => n + x.items.length, 0) > 300) throw invalid("A section holds at most 60 rows, and your sections 300.");
+    if (new Set(p.sections.map((x) => x.id)).size !== p.sections.length || p.sections.some((x) => !/^[A-Za-z0-9_-]{1,40}$/.test(x.id) || x.title.trim().length > 40)) throw invalid("Each section needs an id once and a title of at most 40 characters.");
     if (p.pinned.length > 30) throw invalid("At most 30 favorites");
     if (Object.keys(p.badges).length > 300) throw invalid("Numbers can be chosen for at most 300 rows.");
     if (p.mail_tabs.length > 30) throw invalid("The folder bar holds at most 30 tabs.");

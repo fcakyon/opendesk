@@ -372,7 +372,7 @@ type SidebarPin struct {
 }
 
 type SidebarPrefs struct {
-	Order            []string     `json:"order" maxItems:"20"`
+	Order            []string     `json:"order" maxItems:"40"`
 	Hidden           []string     `json:"hidden" maxItems:"500"`
 	Pinned           []SidebarPin `json:"pinned" maxItems:"30"`
 	ExpandedAccounts []string     `json:"expanded_accounts" maxItems:"200"`
@@ -387,4 +387,24 @@ type SidebarPrefs struct {
 	// AutoPins are the pins the sidebar added once by itself ("box:inbox": All inboxes, when
 	// the member first sees two accounts), so one unpinned is not added again.
 	AutoPins []string `json:"auto_pins" required:"false" maxItems:"20" doc:"Left out: the saved value stays"`
+	// Sections are the member's own sections, placed in Order as "custom:<id>": rows of
+	// anything the workspace offers, like a Space's (contracts/spaces.md), all of this workspace.
+	Sections []SidebarSection `json:"sections" required:"false" maxItems:"20" doc:"Left out: the saved value stays"`
+}
+
+// SidebarSection is one of the member's own sidebar sections.
+type SidebarSection struct {
+	ID        string        `json:"id" maxLength:"40"`
+	Title     string        `json:"title" maxLength:"200"`
+	Collapsed bool          `json:"collapsed"`
+	Items     []SidebarItem `json:"items" maxItems:"60"`
+}
+
+// SidebarItem is one row of a member's own section: a Space row without its workspace,
+// which is the sidebar's.
+type SidebarItem struct {
+	Kind  string `json:"kind" enum:"ticket_folder,team,view,box,account,folder,page,wiki_page,wiki_space"`
+	ID    string `json:"id" maxLength:"100"`
+	Name  string `json:"name,omitempty" maxLength:"300"`
+	Badge string `json:"badge,omitempty" enum:"unread,total,count,awaiting,urgent,overdue,open,none"`
 }

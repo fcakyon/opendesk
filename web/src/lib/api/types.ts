@@ -3381,7 +3381,15 @@ export type SidebarPrefs = {
   mail_tabs: string[];
   /** Pins the sidebar added once by itself ("box:inbox": All inboxes, at a second account), so one unpinned stays so. */
   auto_pins: string[];
+  /** The member's own sections, placed in `order` as "custom:<id>": rows of anything the workspace offers. */
+  sections: SidebarSection[];
 };
+
+/** A row of a member's own section: a Space row of this workspace. */
+export type SidebarItem = Omit<SpaceItem, "workspace_id" | "kind"> & { kind: Exclude<SpaceItemKind, "section" | "everywhere"> };
+
+/** One of a member's own sidebar sections: at most 20, 60 rows each, 300 in all. */
+export type SidebarSection = { id: string; title: string; collapsed: boolean; items: SidebarItem[] };
 
 /** unread / total / none for mail rows; count / awaiting / urgent / overdue / none for ticket rows, and open for team rows. */
 export type SidebarBadge = "unread" | "total" | "count" | "awaiting" | "urgent" | "overdue" | "open" | "none";

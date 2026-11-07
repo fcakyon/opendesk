@@ -64,6 +64,11 @@ describe("mock Collab", () => {
     const kept = (await call("PUT", "/v1/collab/sidebar", { order: ["mail"], hidden: [], pinned: [], expanded_accounts: [], mark_read_on_open: true, unified_inbox: true })).body;
     expect(kept.badges).toEqual({ "section:mail": "total" });
     expect(kept.mail_tabs).toEqual(["inbox", "spam"]);
+    // The member's own sections: kept when left out, and bounded.
+    const sections = [{ id: "launch", title: "Launch", collapsed: false, items: [{ kind: "view", id: "v1" }, { kind: "wiki_page", id: "p1" }] }];
+    await call("PUT", "/v1/collab/sidebar", { ...kept, order: ["custom:launch", "inbox"], sections });
+    expect((await call("PUT", "/v1/collab/sidebar", { order: ["custom:launch"], hidden: [], pinned: [], expanded_accounts: [], mark_read_on_open: true, unified_inbox: true })).body.sections).toEqual(sections);
+    expect((await call("PUT", "/v1/collab/sidebar", { ...kept, sections: [...sections, { ...sections[0] }] })).body.code).toBe("validation_failed");
   });
 
   it("keeps the sidebar prefs without Collab too", async () => {
