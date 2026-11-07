@@ -860,6 +860,8 @@ interface SidebarPrefs {
   auto_pins: string[]          // pins the sidebar added once by itself, so one unpinned stays so; default []
   sections: SidebarSection[]   // the member's own sections ("Your own sections"); default []
   row_order: Record<"inbox" | "mail" | "teams" | "workspace", string[]>  // the member's order of a built-in section's rows ("Row order"); default {}
+  names: Record<string, string>  // the member's own labels: "section:<id>" for a built-in section, a row key as in `hidden`; default {}
+  icons: Record<string, string>  // the member's own emoji, keyed like `names`; default {}
 }
 
 interface SidebarSection {
@@ -880,6 +882,13 @@ interface SidebarItem {
   icon?: string                // one emoji in place of the row's own icon; left out: the row's own
 }
 ```
+
+**Names and icons.** `names` and `icons` give any built-in section (`section:<id>`) and any row (its
+key as in `hidden`: `ticket_folder:mine`, `row:waiting_chats`, `box:inbox`, `account:<id>`, `folder:<id>`,
+`team:<id>`, `view:<id>`, `page:knowledge`, `pages:<part>`, `wiki_page:<id>`, `wiki_space:<id>`) a label and an
+emoji of the member's own. They show wherever the sidebar draws that section or row (Favorites, its own
+section, a Space showing the whole section) and never rename the team, view or page for anyone else. A row
+of the member's own sections keeps its own `name` and `icon` first. An empty name or icon is dropped.
 
 **Row order.** `row_order` keeps the member's order of the rows inside a built-in section, by
 section id, as row keys spelled like `hidden`'s: `ticket_folder:<id>` and `row:waiting_chats` in
@@ -1080,7 +1089,7 @@ account or conversation; "act": sees it and is agent or above; "manage": "Who se
 | GET | `/v1/collab/messages/{id}/details` | see | `MessageDetails` ("Message details"), read from the message's source (stored, else the provider: `502 provider_error`) |
 | GET | `/v1/collab/attachments/{message_id}/{index}` | signed (`exp`, `sig`) | the file, `Content-Disposition: attachment` unless an image; `?inline=1` for images. `404` when the signature is wrong or expired |
 | GET | `/v1/collab/sidebar` | member | `SidebarPrefs` (defaults when never saved); with or without Collab; with Collab, pins All inboxes once at a second account ("All inboxes in Favorites") |
-| PUT | `/v1/collab/sidebar` | member | `SidebarPrefs` → `SidebarPrefs`; with or without Collab; at most 16 KB besides `sections`, which hold at most 32 KB; unknown ids are kept (an id of something gone is ignored by the app). `badges`: at most 300, keys of at most 100 characters with the prefixes above, values `unread`, `total`, `count`, `awaiting`, `urgent`, `overdue`, `open` or `none`; `mail_tabs`: at most 30, each a box above or `folder:<uuid>`, once. `sections`: the limits above, item ids as SpaceItem's, each `icon` one emoji. `row_order`: keys the built-in section ids, at most 300 rows each, each 1..100 characters once, at most 16 KB. Leaving out `badges`, `mail_tabs`, `auto_pins`, `sections` or `row_order` keeps the saved value; `422` otherwise |
+| PUT | `/v1/collab/sidebar` | member | `SidebarPrefs` → `SidebarPrefs`; with or without Collab; at most 16 KB besides `sections`, which hold at most 32 KB; unknown ids are kept (an id of something gone is ignored by the app). `badges`: at most 300, keys of at most 100 characters with the prefixes above, values `unread`, `total`, `count`, `awaiting`, `urgent`, `overdue`, `open` or `none`; `mail_tabs`: at most 30, each a box above or `folder:<uuid>`, once. `sections`: the limits above, item ids as SpaceItem's, each `icon` one emoji. `row_order`: keys the built-in section ids, at most 300 rows each, each 1..100 characters once, at most 16 KB. `names` and `icons`: at most 300 each, keys 1..100 characters, names checked like a name people choose (1..64 characters, `422 invalid_name`), icons one emoji, at most 48 KB together. Leaving out `badges`, `mail_tabs`, `auto_pins`, `sections`, `row_order`, `names` or `icons` keeps the saved value; `422` otherwise |
 
 Errors: `403 feature_disabled` (with product and reason), `404 not_found`, `422 labels_unsupported`, `422 connection_failed`,
 `409 account_conflict`, `502 provider_error`, `502 send_failed`, `422 provider_not_configured`,

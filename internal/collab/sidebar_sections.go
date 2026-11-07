@@ -141,7 +141,50 @@ func SidebarIcon(s string) (string, error) {
 }
 
 // Limits of RowOrder: one list per built-in section, each naming at most maxRowOrder rows.
-const maxRowOrder = 300
+// Names and Icons hold at most maxLabels entries each.
+const (
+	maxRowOrder = 300
+	maxLabels   = 300
+)
+
+// validateLabels checks the member's own names and emoji for sections and rows and returns
+// their stored form; an empty name or icon is dropped (the row's own shows again).
+func validateLabels(names, icons map[string]string) (map[string]string, map[string]string, error) {
+	if len(names) > maxLabels || len(icons) > maxLabels {
+		return nil, nil, httpx.Validation("At most 300 sections and rows can have a name or an icon of your own.")
+	}
+	outNames := map[string]string{}
+	for k, v := range names {
+		if !sidebarItemOK(k) {
+			return nil, nil, httpx.Validation("Each name belongs to a section or row of 1 to 100 characters.")
+		}
+		if strings.TrimSpace(v) == "" {
+			continue
+		}
+		if utf8.RuneCountInString(displayname.Normalize(v)) > maxOwnItemName {
+			return nil, nil, httpx.Validation("A name must be 64 characters or less.")
+		}
+		name, err := displayname.Validate("A name", v, displayname.Workspace, false)
+		if err != nil {
+			return nil, nil, err
+		}
+		outNames[k] = name
+	}
+	outIcons := map[string]string{}
+	for k, v := range icons {
+		if !sidebarItemOK(k) {
+			return nil, nil, httpx.Validation("Each icon belongs to a section or row of 1 to 100 characters.")
+		}
+		icon, err := SidebarIcon(v)
+		if err != nil {
+			return nil, nil, err
+		}
+		if icon != "" {
+			outIcons[k] = icon
+		}
+	}
+	return outNames, outIcons, nil
+}
 
 // validateRowOrder checks the member's order of rows inside built-in sections: keys are
 // built-in section ids, rows are sidebar ids, each once.

@@ -1077,6 +1077,7 @@ func TestAPISidebarSections(t *testing.T) {
 		"section id":    func(p *SidebarPrefs) { p.Sections[0].ID = "no spaces" },
 		"duplicate id":  func(p *SidebarPrefs) { p.Sections[1].ID = "launch" },
 		"long title":    func(p *SidebarPrefs) { p.Sections[0].Title = strings.Repeat("x", 41) },
+		"title link":    func(p *SidebarPrefs) { p.Sections[0].Title = "see example.com" },
 		"long name":     func(p *SidebarPrefs) { p.Sections[0].Items[1].Name = strings.Repeat("x", 65) },
 		"too many rows": func(p *SidebarPrefs) { p.Sections[1].Items = make([]SidebarItem, 61) },
 		"too many in all": func(p *SidebarPrefs) {
@@ -1129,10 +1130,35 @@ func TestAPISidebarIconsAndRowOrder(t *testing.T) {
 	if n := w.count(`SELECT count(*) FROM events WHERE workspace_id = $1 AND type = 'collab.sidebar' AND user_ids = ARRAY[$2::uuid]`, w.wid, w.agent.UserID); n != 1 {
 		t.Fatalf("sidebar events: %d", n)
 	}
+	// Names and emoji of the member's own for built-in sections and rows; an empty one goes.
+	p.Names = map[string]string{"section:inbox": "  My  desk ", "view:" + uuid.NewString(): "Hot", "box:inbox": ""}
+	p.Icons = map[string]string{"section:inbox": "🛎️", "team:mine": ""}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", p, &prefs); st != 200 || prefs.Names["section:inbox"] != "My desk" || len(prefs.Names) != 2 ||
+		prefs.Icons["section:inbox"] != "🛎️" || len(prefs.Icons) != 1 {
+		t.Fatalf("labels: %d %+v %+v", st, prefs.Names, prefs.Icons)
+	}
+	for name, f := range map[string]func(q *SidebarPrefs){
+		"long name": func(q *SidebarPrefs) { q.Names = map[string]string{"section:inbox": strings.Repeat("x", 65)} },
+		"link name": func(q *SidebarPrefs) { q.Names = map[string]string{"section:inbox": "see example.com"} },
+		"empty key": func(q *SidebarPrefs) { q.Names = map[string]string{"": "x"} },
+		"icon":      func(q *SidebarPrefs) { q.Icons = map[string]string{"section:inbox": "bell"} },
+		"too many": func(q *SidebarPrefs) {
+			q.Names = map[string]string{}
+			for i := range 301 {
+				q.Names["view:"+strconv.Itoa(i)] = "x"
+			}
+		},
+	} {
+		q := p
+		f(&q)
+		if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", q, nil); st != 422 {
+			t.Errorf("%s: %d", name, st)
+		}
+	}
 	old := map[string]any{"order": []string{"inbox"}, "hidden": []string{}, "pinned": []any{}, "expanded_accounts": []string{},
 		"mark_read_on_open": true, "unified_inbox": true}
 	prefs = SidebarPrefs{}
-	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", old, &prefs); st != 200 || prefs.RowOrder["workspace"][0] != "page:reports" {
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", old, &prefs); st != 200 || prefs.RowOrder["workspace"][0] != "page:reports" || prefs.Names["section:inbox"] != "My desk" {
 		t.Fatalf("left out: %d %+v", st, prefs.RowOrder)
 	}
 }

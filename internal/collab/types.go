@@ -394,6 +394,12 @@ type SidebarPrefs struct {
 	// ("inbox", "mail", "teams", "workspace"): row keys as in Hidden ("ticket_folder:mine",
 	// "team:<id>", "account:<id>", "page:knowledge"). Rows it does not name follow in their usual order.
 	RowOrder map[string][]string `json:"row_order" required:"false" doc:"Left out: the saved value stays"`
+	// Names are the member's own labels for sections and rows, by key: "section:<id>" for a
+	// built-in section, a row key as in Hidden for a row. Nobody else sees them, and the team,
+	// view or page keeps its own name.
+	Names map[string]string `json:"names" required:"false" doc:"Left out: the saved value stays"`
+	// Icons are the member's own emoji for sections and rows, keyed like Names.
+	Icons map[string]string `json:"icons" required:"false" doc:"Left out: the saved value stays"`
 }
 
 // SidebarSection is one of the member's own sidebar sections.

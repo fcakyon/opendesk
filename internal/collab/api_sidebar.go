@@ -24,6 +24,7 @@ import (
 const (
 	maxSidebarBytes  = 16 << 10
 	maxRowOrderBytes = 16 << 10
+	maxLabelsBytes   = 48 << 10
 )
 
 // maxSidebarItem bounds one id in the sidebar preferences ("folder:<uuid>" and the like).
@@ -58,7 +59,7 @@ func defaultSidebar() SidebarPrefs {
 	return SidebarPrefs{Order: slices.Clone(SidebarSectionIDs), Hidden: []string{},
 		Pinned: []SidebarPin{}, ExpandedAccounts: []string{}, MarkReadOnOpen: true, UnifiedInbox: true,
 		Badges: map[string]string{}, MailTabs: defaultMailTabs(), AutoPins: []string{}, Sections: []SidebarSection{},
-		RowOrder: map[string][]string{}}
+		RowOrder: map[string][]string{}, Names: map[string]string{}, Icons: map[string]string{}}
 }
 
 // normalized fills missing lists so the shape always has arrays.
@@ -89,6 +90,12 @@ func (p SidebarPrefs) normalized() SidebarPrefs {
 	}
 	if p.RowOrder == nil {
 		p.RowOrder = map[string][]string{}
+	}
+	if p.Names == nil {
+		p.Names = map[string]string{}
+	}
+	if p.Icons == nil {
+		p.Icons = map[string]string{}
 	}
 	for i := range p.Sections {
 		if p.Sections[i].Items == nil {
@@ -202,7 +209,7 @@ func (s *service) registerSidebarRoutes(api huma.API) {
 			}
 			// A client that does not know the numbers, the tabs, the pins added by themselves,
 			// the member's own sections or their row order leaves them as saved.
-			if in.Body.Badges == nil || in.Body.MailTabs == nil || in.Body.AutoPins == nil || in.Body.Sections == nil || in.Body.RowOrder == nil {
+			if in.Body.Badges == nil || in.Body.MailTabs == nil || in.Body.AutoPins == nil || in.Body.Sections == nil || in.Body.RowOrder == nil || in.Body.Names == nil || in.Body.Icons == nil {
 				saved, err := s.loadSidebar(ctx, p.WorkspaceID, p.UserID)
 				if err != nil {
 					return nil, httpx.Wrap(err)
@@ -222,6 +229,12 @@ func (s *service) registerSidebarRoutes(api huma.API) {
 				if in.Body.RowOrder == nil {
 					in.Body.RowOrder = saved.RowOrder
 				}
+				if in.Body.Names == nil {
+					in.Body.Names = saved.Names
+				}
+				if in.Body.Icons == nil {
+					in.Body.Icons = saved.Icons
+				}
 			}
 			prefs := in.Body.normalized()
 			if err := validateSidebar(prefs); err != nil {
@@ -230,8 +243,11 @@ func (s *service) registerSidebarRoutes(api huma.API) {
 			if err := validateRowOrder(prefs.RowOrder); err != nil {
 				return nil, err
 			}
+			if prefs.Names, prefs.Icons, err = validateLabels(prefs.Names, prefs.Icons); err != nil {
+				return nil, httpx.Wrap(err)
+			}
 			if prefs.Sections, err = validateSections(prefs.Sections); err != nil {
-				return nil, err
+				return nil, httpx.Wrap(err)
 			}
 			own, err := json.Marshal(prefs.Sections)
 			if err != nil {
@@ -259,11 +275,18 @@ func (s *service) registerSidebarRoutes(api huma.API) {
 			if len(order) > maxRowOrderBytes {
 				return nil, httpx.Validation("Your row order is too large.")
 			}
+			labels, err := json.Marshal([]any{prefs.Names, prefs.Icons})
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if len(labels) > maxLabelsBytes {
+				return nil, httpx.Validation("Your names and icons are too large.")
+			}
 			raw, err := json.Marshal(prefs)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			if len(raw)-len(own)-len(order) > maxSidebarBytes {
+			if len(raw)-len(own)-len(order)-len(labels) > maxSidebarBytes {
 				return nil, httpx.Validation("The sidebar settings are too large.")
 			}
 			// The member's other tabs and devices follow (contracts/collab.md "Events").
