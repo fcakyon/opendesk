@@ -17,7 +17,8 @@ import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import { Tooltip } from "@/components/ui/tooltip";
 import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
 import type { WaitingScope } from "@/components/tickets/useUrgentChats";
-import type { MailBox, SidebarBadge, SidebarPrefs, SidebarSectionId, WorkspaceOverview } from "@/lib/api/types";
+import type { MailBox, SidebarBadge, SidebarPrefs, SidebarSectionId, WikiArea, WorkspaceOverview } from "@/lib/api/types";
+import { pageTo } from "@/lib/wiki/area";
 import { accountNumbers, allInboxNumbers, boxTabNumbers, folderNumbers, listBoxNumbers, ticketRowNumbers } from "@/lib/collab/badges";
 import { accountName, isMailBox, isTabBox, type MailSearch } from "@/lib/collab/boxes";
 import { badgeFor, hid, pickCount, type BadgeKind, type BadgeNumbers, type MailBadge, type TicketBadge } from "@/lib/collab/sidebarPrefs";
@@ -34,7 +35,7 @@ export type RowLink =
   | { kind: "view"; viewId: string }
   | { kind: "mail"; box: MailBox | "folder"; account?: string; folder?: string }
   | { kind: "page"; page: SpacePage }
-  | { kind: "wiki"; pageId: string }
+  | { kind: "wiki"; pageId: string; area?: WikiArea }
   | { kind: "everywhere"; list: EverywhereList };
 
 const pagePaths: Record<SpacePage, string> = { contacts: "/contacts", knowledge: "/kb", wiki: "/wiki", reports: "/reports" };
@@ -88,7 +89,7 @@ export function rowNavigate(l: RowLink): NavigateOptions {
     case "page":
       return (l.page === "contacts" ? { to: "/contacts/{-$contactId}", params: { contactId: undefined } } : { to: pagePaths[l.page] }) as NavigateOptions;
     case "wiki":
-      return { to: "/wiki/$pageId", params: { pageId: l.pageId } } as NavigateOptions;
+      return pageTo({ id: l.pageId, area: l.area }) as NavigateOptions;
     case "everywhere":
       return { to: "/everywhere/$list", params: { list: l.list } } as NavigateOptions;
   }
@@ -290,7 +291,7 @@ export function buildRow(item: { kind: string; id: string }, d: WorkspaceData, c
       // A page in the trash, deleted or out of the person's sight is skipped.
       const n = d.wiki?.find((x) => x.id === item.id);
       if (!n) return null;
-      return { key: `wiki_page:${n.id}`, label: n.title.trim() || ctx.labels.untitled, icon: <WikiPageGlyph icon={n.icon} />, link: { kind: "wiki", pageId: n.id } };
+      return { key: `wiki_page:${n.id}`, label: n.title.trim() || ctx.labels.untitled, icon: <WikiPageGlyph icon={n.icon} />, link: { kind: "wiki", pageId: n.id, area: n.area } };
     }
     case "wiki_space": {
       // A teamspace shows while its team is in sight and has pages the person sees.
@@ -428,7 +429,7 @@ const RowAnchor = forwardRef<HTMLAnchorElement, AnchorProps>(function RowAnchor(
       );
     case "wiki":
       return (
-        <Link to="/wiki/$pageId" params={{ pageId: link.pageId }} activeProps={activeLink} {...common}>
+        <Link {...pageTo({ id: link.pageId, area: link.area })} activeProps={activeLink} {...common}>
           {fn}
         </Link>
       );

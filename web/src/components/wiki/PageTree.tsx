@@ -30,6 +30,17 @@ export function pageUrl(id: string) {
   return `${location.origin}/wiki/${id}`;
 }
 
+/** Whether a sidebar row opening page id (a favorite, a row of a section) is in sight in from's sidebar. */
+function rowInSight(from: HTMLElement, id: string): boolean {
+  const nav = from.closest("nav");
+  if (!nav) return false;
+  const box = (from.closest(".overflow-y-auto") ?? nav).getBoundingClientRect();
+  return [...nav.querySelectorAll<HTMLAnchorElement>(`a[href$="/${CSS.escape(id)}"]`)].some((a) => {
+    const r = a.getBoundingClientRect();
+    return r.height > 0 && r.top >= box.top && r.bottom <= box.bottom;
+  });
+}
+
 export function PageIcon({ icon, className, kind }: { icon: string; className?: string; kind?: WikiKind }) {
   if (icon)
     return (
@@ -143,9 +154,12 @@ export function TreeView({
     if (ancestorIds.length) open(ancestorIds);
   }, [ancestorIds, open]);
   useEffect(() => {
-    if (!openId) return;
-    root.current?.querySelector<HTMLElement>(`[data-id="${openId}"]`)?.scrollIntoView({ block: "nearest" });
-  }, [openId]);
+    if (!openId || !root.current) return;
+    // In the main sidebar a page can also be a row of Favorites or of a section: when one
+    // of its rows is already in sight (the one just clicked), the sidebar stays where it is.
+    if (variant === "nav" && rowInSight(root.current, openId)) return;
+    root.current.querySelector<HTMLElement>(`[data-id="${openId}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [openId, variant]);
 
   const rows = useMemo(() => {
     const all = visibleRows(view, expanded);
