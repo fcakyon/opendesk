@@ -17,6 +17,8 @@ import (
 const (
 	EventChanged  = "collab.changed"
 	EventAccounts = "collab.accounts"
+	// EventSidebar tells a member that their sidebar preferences of the workspace changed.
+	EventSidebar = "collab.sidebar"
 )
 
 // publishChanged tells who sees the account and the conversations that they changed, in tx.

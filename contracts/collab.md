@@ -1284,6 +1284,7 @@ webhooks.
 | --- | --- | --- |
 | `collab.changed` | `{account_id: string \| null, thread_ids: string[], folders: boolean}`: conversations changed (synced, acted on, sent, shared, assigned, commented, or their account's `reply_all` changed); `folders` when folders or counts changed. Refetch what is shown | who sees the account, plus who sees the conversations |
 | `collab.accounts` | `{account_id}`: an account was connected, changed, removed, or changed status | its owner and audience, before and after |
+| `collab.sidebar` | `{}`: the member saved their sidebar preferences (`PUT /v1/collab/sidebar`, with or without Collab). Refetch them | that member alone |
 
 ## Audit
 

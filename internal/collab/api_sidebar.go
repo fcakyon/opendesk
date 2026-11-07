@@ -10,9 +10,11 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/events"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/products"
 )
@@ -264,7 +266,16 @@ func (s *service) registerSidebarRoutes(api huma.API) {
 			if len(raw)-len(own)-len(order) > maxSidebarBytes {
 				return nil, httpx.Validation("The sidebar settings are too large.")
 			}
-			if err := saveSidebar(ctx, s.d.DB.Pool, p.WorkspaceID, p.UserID, raw); err != nil {
+			// The member's other tabs and devices follow (contracts/collab.md "Events").
+			err = s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+				if err := saveSidebar(ctx, tx, p.WorkspaceID, p.UserID, raw); err != nil {
+					return err
+				}
+				_, err := events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: EventSidebar, Users: []uuid.UUID{p.UserID},
+					Data: map[string]any{}})
+				return err
+			})
+			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
 			return &sidebarBody{prefs}, nil

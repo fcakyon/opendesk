@@ -1125,6 +1125,10 @@ func TestAPISidebarIconsAndRowOrder(t *testing.T) {
 	if prefs.Sections[0].Icon != "🚀" || prefs.Sections[0].Items[0].Icon != "📥" || len(prefs.RowOrder["inbox"]) != 2 {
 		t.Fatalf("stored: %+v %+v", prefs.Sections, prefs.RowOrder)
 	}
+	// The member's other tabs and devices hear of it, and nobody else.
+	if n := w.count(`SELECT count(*) FROM events WHERE workspace_id = $1 AND type = 'collab.sidebar' AND user_ids = ARRAY[$2::uuid]`, w.wid, w.agent.UserID); n != 1 {
+		t.Fatalf("sidebar events: %d", n)
+	}
 	old := map[string]any{"order": []string{"inbox"}, "hidden": []string{}, "pinned": []any{}, "expanded_accounts": []string{},
 		"mark_read_on_open": true, "unified_inbox": true}
 	prefs = SidebarPrefs{}
