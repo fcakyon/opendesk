@@ -18,7 +18,7 @@ import type { WikiKind, WikiNode } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { ancestorsOf, childrenOf, dropIn, keyMove, spaceOf, spaceTree, visibleRows, type Drop, type SpaceKey, type Tree, type Zone } from "@/lib/wiki/tree";
 import { pageTo, useArea } from "@/lib/wiki/area";
-import { useAreaTree, useCreatePage, useExpanded, useFavorites, useMovePage, useOpenPageId, useTitle } from "./hooks";
+import { markOpener, openHere, useAreaTree, useCreatePage, useExpanded, useFavorites, useMovePage, useOpenPageId, useOpener, useTitle } from "./hooks";
 import { MoveDialog, TrashItem } from "./PageMenu";
 import { useSplit } from "./split";
 import { AddToSpace } from "./AddToSpace";
@@ -138,6 +138,7 @@ export function TreeView({
   const { t } = useTranslation("wiki");
   const { expanded, toggle, open } = useExpanded();
   const openId = useOpenPageId();
+  const who = useOpener();
   const navigate = useNavigate();
   const move = useMovePage();
   const area = useArea();
@@ -231,6 +232,7 @@ export function TreeView({
         break;
       case "Enter":
         e.preventDefault();
+        if (variant === "nav") markOpener(id, "tree");
         void navigate(pageTo({ id, area: n.area }));
         onNavigate?.();
         break;
@@ -298,7 +300,7 @@ export function TreeView({
             onHide={onHide && depth === 0 ? () => onHide(n.id) : undefined}
             hasKids={childrenOf(view, n.id).length > 0}
             open={expanded.has(n.id)}
-            active={n.id === openId}
+            active={variant === "nav" ? openHere(who, openId, n.id, "tree") : n.id === openId}
             focusable={n.id === current}
             dragging={drag === n.id || (!!drag && ancestorsOf(view, n.id).some((a) => a.id === drag))}
             over={over && over.id === n.id ? over.zone : null}
@@ -462,7 +464,15 @@ function TreeRow({
         <ChevronRight className={cn("size-3 transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")} />
       </button>
       )}
-      <Link {...pageTo(n)} tabIndex={-1} draggable={false} onClick={onNavigate} className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch outline-none">
+      <Link
+        {...pageTo(n)}
+        tabIndex={-1}
+        draggable={false}
+        onClick={() => {
+          if (nav) markOpener(n.id, "tree");
+          onNavigate?.();
+        }}
+        className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch outline-none">
         {!nav && <PageIcon icon={n.icon} kind={n.kind} />}
         <span className={cn("truncate", !n.title.trim() && "text-fg-3")}>{title(n.title)}</span>
         {n.verified && <VerifiedMark />}

@@ -57,6 +57,37 @@ export function useOpenPageId(): string | undefined {
   return useRouterState({ select: (s) => s.location.pathname.match(/^\/(?:wiki|pages)\/([0-9a-f-]{36})/i)?.[1] });
 }
 
+// ─── The sidebar row that opened the page ───────────────────────────────────
+
+/** A row of the main sidebar that can open a page: a favorite, or its place in the Pages tree. */
+export type OpenerRow = "favorite" | "tree";
+
+// A page can be a row in several places of the main sidebar. The one clicked lights up alone,
+// like a tab; a page opened from anywhere else lights up every row of it.
+let opener: { pageId: string; row: OpenerRow } | null = null;
+const openerListeners = new Set<() => void>();
+
+export function markOpener(pageId: string, row: OpenerRow) {
+  opener = { pageId, row };
+  openerListeners.forEach((l) => l());
+}
+
+export function useOpener() {
+  return useSyncExternalStore(
+    (l) => {
+      openerListeners.add(l);
+      return () => openerListeners.delete(l);
+    },
+    () => opener,
+  );
+}
+
+/** Whether row shows pageId as the open page, given who opened it. */
+export function openHere(who: ReturnType<typeof useOpener>, openId: string | undefined, pageId: string, row: OpenerRow): boolean {
+  if (openId !== pageId) return false;
+  return !who || who.pageId !== pageId || who.row === row;
+}
+
 // ─── Open pages in the tree ─────────────────────────────────────────────────
 
 const listeners = new Set<() => void>();

@@ -11,7 +11,7 @@ import { Link } from "@tanstack/react-router";
 import { CalendarDays, ChevronRight, EyeOff, FileText, LayoutTemplate, Lock, MoreHorizontal, Plus, StarOff, Trash2 } from "lucide-react";
 import { useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Label, NavTip, rowActive, rowBase, rowIdle, rowShape, Section, withPill } from "@/app/sidebarParts";
+import { ActivePill, Label, NavTip, rowActive, rowBase, rowIdle, rowShape, Section, withPill } from "@/app/sidebarParts";
 import { openImport, quickAdd } from "@/app/quickAdd";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { toast } from "@/components/ui/toast";
@@ -25,7 +25,7 @@ import { atLeast, useRole, useSession } from "@/lib/session";
 import { buildTree, childrenOf, spaceBody, type SpaceKey } from "@/lib/wiki/tree";
 import { useProducts } from "@/lib/products";
 import { AreaProvider, pageTo } from "@/lib/wiki/area";
-import { useAreaTree, useCreatePage, useFavorites, useTitle, useWikiTree } from "./hooks";
+import { markOpener, openHere, useAreaTree, useCreatePage, useFavorites, useOpenPageId, useOpener, useTitle, useWikiTree } from "./hooks";
 import { useOpenToday } from "./journal";
 import { DragProvider, EmptyRow, PageIcon, TreeView, useSpaceView } from "./PageTree";
 
@@ -346,29 +346,30 @@ export function FavoritePageRows({ rail }: { rail: boolean }) {
   const title = useTitle();
   const fav = useFavorites();
   const { tree } = useWikiTree();
+  const openId = useOpenPageId();
+  const who = useOpener();
   return (
     <>
       {fav.list.map((saved) => {
         const n = tree.byId.get(saved.id);
         if (!n) return null;
         const label = title(n.title);
+        const active = openHere(who, openId, n.id, "favorite");
         return (
           <div key={n.id} className="group/row relative">
             <NavTip rail={rail} label={label}>
               <Link
                 {...pageTo(n)}
-                className={cn(rowBase, rowShape(rail), rowIdle, !rail && "group-hover/row:pr-8")}
-                activeProps={{ className: rowActive, "data-status": "active" } as Record<string, string>}
+                onClick={() => markOpener(n.id, "favorite")}
+                className={cn(rowBase, rowShape(rail), rowIdle, !rail && "group-hover/row:pr-8", active && rowActive)}
                 aria-label={rail ? label : undefined}
               >
-                {withPill(
-                  <>
-                    <span className="flex size-[15px] shrink-0 items-center justify-center">
-                      <PageIcon icon={n.icon} kind={n.kind} />
-                    </span>
-                    <Label rail={rail}>{label}</Label>
-                  </>,
-                )}
+                {/* Drawn by hand, not from the route: the same page's row in the tree may be the one lit. */}
+                {active && <ActivePill />}
+                <span className="flex size-[15px] shrink-0 items-center justify-center">
+                  <PageIcon icon={n.icon} kind={n.kind} />
+                </span>
+                <Label rail={rail}>{label}</Label>
               </Link>
             </NavTip>
             {!rail && (
