@@ -128,19 +128,23 @@ export function sentencesUpTo(text: string, max: number): string {
   return out.join(" ");
 }
 
+const TEXT_BREAKS = new Set(["BR", "P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "DIV", "BLOCKQUOTE"]);
+
+/** HTML's text, one line: the browser's parser reads it inert, blocks end with a space. */
 export function stripHtml(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, " ")
-    .replace(/<\/(p|li|h\d|div|blockquote)>/gi, " ")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/\s+/g, " ")
-    .trim();
+  let out = "";
+  const walk = (n: Node) => {
+    if (n.nodeType === Node.TEXT_NODE) {
+      out += n.textContent ?? "";
+      return;
+    }
+    const tag = (n as Element).tagName;
+    if (tag === "SCRIPT" || tag === "STYLE" || tag === "TEMPLATE") return;
+    n.childNodes.forEach(walk);
+    if (TEXT_BREAKS.has(tag)) out += " ";
+  };
+  walk(new DOMParser().parseFromString(html, "text/html").body);
+  return out.replace(/\s+/g, " ").trim();
 }
 
 export function preview(html: string): string {
