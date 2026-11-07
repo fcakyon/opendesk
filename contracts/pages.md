@@ -29,7 +29,7 @@ a page from before Pages is the wiki's). A subpage is always in its parent's are
 | | |
 | --- | --- |
 | lists of one area | `GET /v1/wiki/pages`, `/recent`, `/trash`, `/graph`, `/daily`, `/export` take `area` (`wiki` by default, so every existing client reads the wiki as before) |
-| lists of both | `GET /v1/wiki/favorites` (one list of favorites, in the member's order), `GET /v1/wiki/search` (both unless `area` names one; each hit says its area), `GET /v1/tickets/{id}/wiki`, global search |
+| lists of both | `GET /v1/wiki/favorites` (one list of favorites, in the member's order; `PUT` replaces the favorites of the areas that are on, so Pages' stay while Pages is off), `GET /v1/wiki/search` (both unless `area` names one; each hit says its area), `GET /v1/tickets/{id}/wiki`, global search |
 | shared | templates (`GET /v1/wiki/templates`): a template makes a page in either area |
 | by id | every page route works whatever the area |
 | making | `POST /v1/wiki/pages`, `/duplicate`, `/import` and `/daily` take `area` for a top-level page (`wiki` by default); under a parent, the parent's |

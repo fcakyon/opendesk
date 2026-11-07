@@ -109,7 +109,14 @@ func TestPagesArea(t *testing.T) {
 	e.Do("POST", "/v1/wiki/pages/"+roadmap.ID+"/move", agent, map[string]any{"parent_id": nil, "position": 0, "area": "pages"}).Want(t, 200)
 
 	// Pages off: its pages and lists are refused, the wiki's are not, nothing is lost.
+	var favs struct{ Data []areaNode }
+	e.Do("PUT", "/v1/wiki/favorites", agent, map[string]any{"page_ids": []string{roadmap.ID, runbook.ID}}).Want(t, 200)
 	e.SetSettings(ws, map[string]any{"pages_enabled": false})
+	// Saving favorites while Pages is off replaces the wiki's and keeps Pages'.
+	e.Do("PUT", "/v1/wiki/favorites", agent, map[string]any{"page_ids": []string{runbook.ID}}).Want(t, 200).JSON(t, &favs)
+	if got := areaTitles(favs.Data); !slices.Equal(got, []string{"Runbook"}) {
+		t.Fatalf("favorites with Pages off %v", got)
+	}
 	for _, path := range []string{"/v1/wiki/pages?area=pages", "/v1/wiki/pages/" + roadmap.ID, "/v1/wiki/trash?area=pages", "/v1/wiki/search?q=roadmap&area=pages"} {
 		var problem struct {
 			Code    string `json:"code"`
@@ -130,5 +137,9 @@ func TestPagesArea(t *testing.T) {
 	e.SetSettings(ws, map[string]any{"pages_enabled": true})
 	if got := areaTitles(areaTree(t, e, agent, "pages")); !slices.Contains(got, "Roadmap") {
 		t.Fatalf("pages tree back %v", got)
+	}
+	e.Do("GET", "/v1/wiki/favorites", agent, nil).Want(t, 200).JSON(t, &favs)
+	if got := areaTitles(favs.Data); !slices.Equal(got, []string{"Roadmap", "Runbook"}) {
+		t.Fatalf("favorites with Pages back %v", got)
 	}
 }

@@ -87,7 +87,8 @@ func registerPersonal(d *deps.Deps, api huma.API) {
 
 	huma.Register(api, huma.Operation{OperationID: "set-wiki-favorites", Method: http.MethodPut, Path: "/v1/wiki/favorites",
 		Summary: "Set your favorite wiki pages", Tags: tags,
-		Description: "Replaces your favorites with these pages, in this order (at most 100). Pages you may not see, or in the trash, are left out."},
+		Description: "Replaces your favorites with these pages, in this order (at most 100). Pages you may not see, or in the trash, are left out. " +
+			"Favorites in Pages stay as they are while the workspace has Pages off."},
 		func(ctx context.Context, in *struct {
 			Body struct {
 				PageIDs []string `json:"page_ids" maxItems:"100"`
@@ -112,22 +113,30 @@ func registerPersonal(d *deps.Deps, api huma.API) {
 			if len(list) > maxFavorites {
 				return nil, httpx.Validation("at most 100 favorites")
 			}
+			// Only the areas that are on are replaced: the list a client sends while Pages is
+			// off cannot name Pages' favorites, and they come back when Pages does.
+			areas, err := areasOn(ctx, d.DB.Pool, p.WorkspaceID)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
 			me, hidden := v.args()
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				if _, err := tx.Exec(ctx, `DELETE FROM wiki_favorites WHERE workspace_id = $1 AND user_id = $2`, p.WorkspaceID, p.UserID); err != nil {
+				if _, err := tx.Exec(ctx, `DELETE FROM wiki_favorites f USING wiki_pages p
+					WHERE f.workspace_id = $1 AND f.user_id = $2 AND p.workspace_id = f.workspace_id AND p.id = f.page_id AND p.area = ANY($3)`,
+					p.WorkspaceID, p.UserID, areas); err != nil {
 					return err
 				}
 				_, err := tx.Exec(ctx, `INSERT INTO wiki_favorites (workspace_id, user_id, page_id, position)
 					SELECT $1, $2, o.id, min(o.n) FROM unnest($3::uuid[]) WITH ORDINALITY AS o(id, n)
 					JOIN wiki_pages p ON p.workspace_id = $1 AND p.id = o.id
-					WHERE `+liveSQL("p", 4, 5)+` GROUP BY o.id`, p.WorkspaceID, p.UserID, list, me, hidden)
+					WHERE p.area = ANY($6) AND `+liveSQL("p", 4, 5)+` GROUP BY o.id`, p.WorkspaceID, p.UserID, list, me, hidden, areas)
 				return err
 			})
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
 			out, err := collectNodes(d.DB.Pool.Query(ctx, nodeSelect+` JOIN wiki_favorites f ON f.workspace_id = p.workspace_id AND f.page_id = p.id
-				WHERE p.workspace_id = $1 AND f.user_id = $2 ORDER BY f.position`, p.WorkspaceID, p.UserID))
+				WHERE p.workspace_id = $1 AND f.user_id = $2 AND p.area = ANY($3) ORDER BY f.position`, p.WorkspaceID, p.UserID, areas))
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
