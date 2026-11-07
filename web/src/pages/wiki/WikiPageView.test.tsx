@@ -21,7 +21,7 @@ vi.mock("@tanstack/react-router", () => ({
   useRouterState: ({ select }: { select: (s: unknown) => unknown }) => select({ location: { pathname: "/wiki/p1" } }),
 }));
 vi.mock("@/app/RootLayout", () => ({ useDocumentTitle: () => {} }));
-vi.mock("@/app/useBreadcrumbs", () => ({ usePageCrumb: () => {} }));
+vi.mock("@/app/useBreadcrumbs", () => ({ usePageCrumb: () => {}, usePageTrail: () => {} }));
 let restore: ((p: WikiPage) => void) | undefined;
 vi.mock("@/components/wiki/HistoryDrawer", () => ({
   HistoryDrawer: ({ onRestored }: { onRestored: (p: WikiPage) => void }) => {
