@@ -45,7 +45,12 @@
       "done": "Terminer la modification de la barre latérale",
       "next": "Ligne suivante",
       "previous": "Ligne précédente",
-      "rename": "Renommer la ligne"
+      "rename": "Renommer la ligne",
+      "moveUp": "Monter la ligne",
+      "moveDown": "Descendre la ligne",
+      "pin": "Épingler la ligne dans les favoris, ou la désépingler",
+      "hide": "Masquer la ligne",
+      "remove": "Retirer la ligne de votre section ou des favoris"
     },
     "tickets": {
       "next": "Ticket suivant",

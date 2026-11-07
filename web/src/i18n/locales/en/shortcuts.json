@@ -45,7 +45,12 @@
       "done": "Finish editing the sidebar",
       "next": "Next row",
       "previous": "Previous row",
-      "rename": "Rename the row"
+      "rename": "Rename the row",
+      "moveUp": "Move the row up",
+      "moveDown": "Move the row down",
+      "pin": "Pin or unpin the row in Favorites",
+      "hide": "Hide the row",
+      "remove": "Remove the row from your section or Favorites"
     },
     "tickets": {
       "next": "Next ticket",

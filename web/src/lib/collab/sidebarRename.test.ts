@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { sidebarEdit, useSidebarEdit } from "./sidebarEdit";
+import { registerRowKeys, sidebarEdit, useSidebarEdit, type RowAction } from "./sidebarEdit";
 
 describe("renaming the sidebar in place", () => {
   afterEach(() => {
@@ -17,6 +17,21 @@ describe("renaming the sidebar in place", () => {
     document.querySelector<HTMLAnchorElement>('a[href="/inbox/mine"]')!.focus();
     expect(sidebarEdit.renameFocused()).toBe(true);
     expect(useSidebarEdit.getState().renaming).toBe("inbox|ticket_folder:mine");
+  });
+
+  it("acts on the focused row with what that row can do, and leaves other keys alone", () => {
+    document.body.innerHTML = `<div data-sidebar-row="views|view:v1"><a href="/views/v1">Urgent</a></div><a id="away" href="/">Elsewhere</a>`;
+    const done: RowAction[] = [];
+    const off = registerRowKeys("views|view:v1", (a) => (a === "remove" ? false : (done.push(a), true)));
+    document.querySelector<HTMLAnchorElement>('a[href="/views/v1"]')!.focus();
+    expect(sidebarEdit.actOnFocused("hide")).toBe(true);
+    expect(sidebarEdit.actOnFocused("remove")).toBe(false);
+    document.querySelector<HTMLAnchorElement>("#away")!.focus();
+    expect(sidebarEdit.actOnFocused("up")).toBe(false);
+    off();
+    document.querySelector<HTMLAnchorElement>('a[href="/views/v1"]')!.focus();
+    expect(sidebarEdit.actOnFocused("hide")).toBe(false);
+    expect(done).toEqual(["hide"]);
   });
 
   it("opens one thing at a time: the picker closes a rename, and done closes both", () => {

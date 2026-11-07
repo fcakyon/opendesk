@@ -45,7 +45,12 @@
       "done": "Bearbeiten der Seitenleiste beenden",
       "next": "Nächste Zeile",
       "previous": "Vorige Zeile",
-      "rename": "Zeile umbenennen"
+      "rename": "Zeile umbenennen",
+      "moveUp": "Zeile nach oben verschieben",
+      "moveDown": "Zeile nach unten verschieben",
+      "pin": "Zeile in Favoriten anheften oder lösen",
+      "hide": "Zeile ausblenden",
+      "remove": "Zeile aus Ihrem Bereich oder den Favoriten entfernen"
     },
     "tickets": {
       "next": "Nächstes Ticket",

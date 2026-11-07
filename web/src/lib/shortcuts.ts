@@ -63,6 +63,11 @@ export const SHORTCUTS = def([
   { id: "sidebar.next", keys: "arrowdown", scope: "sidebar" },
   { id: "sidebar.previous", keys: "arrowup", scope: "sidebar" },
   { id: "sidebar.rename", keys: "f2", scope: "sidebar" },
+  { id: "sidebar.moveUp", keys: "mod+shift+arrowup", scope: "sidebar" },
+  { id: "sidebar.moveDown", keys: "mod+shift+arrowdown", scope: "sidebar" },
+  { id: "sidebar.pin", keys: "p", scope: "sidebar" },
+  { id: "sidebar.hide", keys: "h", scope: "sidebar" },
+  { id: "sidebar.remove", keys: "delete", scope: "sidebar" },
   // The ticket list (the inbox, a team, a view).
   { id: "tickets.next", keys: "j", scope: "tickets", needs: "tickets" },
   { id: "tickets.previous", keys: "k", scope: "tickets", needs: "tickets" },

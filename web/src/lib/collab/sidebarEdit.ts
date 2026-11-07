@@ -9,6 +9,20 @@ import { create } from "zustand";
 import { shell, toggleNav, useNav } from "@/app/shellStore";
 import { useSession } from "@/lib/session";
 
+/** What a key does to the focused sidebar row. */
+export type RowAction = "up" | "down" | "pin" | "hide" | "remove";
+
+/** Each mounted row's keyboard actions, by its `data-sidebar-row` id; true when it acted. */
+const rowKeys = new Map<string, (action: RowAction) => boolean>();
+
+/** Registers a row's keyboard actions while it is in the sidebar; the return takes them away. */
+export function registerRowKeys(id: string, act: (action: RowAction) => boolean): () => void {
+  rowKeys.set(id, act);
+  return () => {
+    if (rowKeys.get(id) === act) rowKeys.delete(id);
+  };
+}
+
 type EditState = {
   editing: boolean;
   /** The rail was collapsed when editing began: it folds back on Done. */
@@ -62,6 +76,17 @@ export const sidebarEdit = {
    * Renames the sidebar row or section header that has the keyboard focus, in place (F2).
    * Returns whether something was there to rename.
    */
+  /**
+   * Acts on the focused sidebar row from the keyboard (move, pin, hide, remove): what the row
+   * can do is registered by the row itself (`rowKeys`). False when no row has the focus or it
+   * can't do that, so the key is left alone.
+   */
+  actOnFocused(action: RowAction): boolean {
+    if (typeof document === "undefined") return false;
+    const id = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-sidebar-row]")?.dataset.sidebarRow;
+    const act = id ? rowKeys.get(id) : undefined;
+    return !!act && act(action);
+  },
   renameFocused(): boolean {
     if (typeof document === "undefined") return false;
     const el = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-sidebar-row]");

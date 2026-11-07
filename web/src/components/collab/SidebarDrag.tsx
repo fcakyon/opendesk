@@ -11,7 +11,13 @@ import { GripVertical } from "lucide-react";
 import { useCallback, useLayoutEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { SidebarDragCtx } from "@/app/sidebarParts";
-import { canDrop, dropInSpace, dropOnSidebar, type EditSource, type EditTarget } from "@/lib/collab/sidebarEditModel";
+import { useTranslation } from "react-i18next";
+import { toast } from "@/components/ui/toast";
+import type { SidebarPrefs } from "@/lib/api/types";
+import { toggleInSection } from "@/lib/collab/ownSections";
+import type { RowAction } from "@/lib/collab/sidebarEdit";
+import { canDrop, dropInSpace, dropOnSidebar, FAVORITES, type EditSource, type EditTarget } from "@/lib/collab/sidebarEditModel";
+import { isPinned, MAX_PINS, setHidden, togglePin } from "@/lib/collab/sidebarPrefs";
 import { useSpaces } from "@/lib/spaces/hooks";
 import { pickedSpace, replaceSpace } from "@/lib/spaces/model";
 import { usePickedSpaceId } from "@/lib/spaces/store";
@@ -38,6 +44,7 @@ function rowEls(section: HTMLElement): HTMLElement[] {
 }
 
 export function SidebarDragProvider({ rootRef, children }: { rootRef: RefObject<HTMLDivElement | null>; children: ReactNode }) {
+  const { t } = useTranslation("collab");
   const { prefs, wid, change } = useOwnSidebar();
   const { spaces } = useSpaces();
   const space = pickedSpace(spaces, usePickedSpaceId());
@@ -86,12 +93,60 @@ export function SidebarDragProvider({ rootRef, children }: { rootRef: RefObject<
     return true;
   };
 
+  // What a key does to the focused row (lib/collab/sidebarEdit.ts `actOnFocused`): move it, pin
+  // or star it in Favorites, hide it in its built-in section, or take it out of Favorites or a
+  // section of the member's own, with Undo for what takes something away.
+  const undoable = (next: SidebarPrefs, message: string) => {
+    const before = prefs;
+    change(next);
+    toast.undo(message, () => change(before), t("edit.undo"));
+  };
+  const act = (s: EditSource, action: RowAction, label: string): boolean => {
+    if (s.kind !== "row") return false;
+    if (action === "up" || action === "down") return step(s, action === "up" ? -1 : 1);
+    if (space) return false;
+    const node = s.page ? tree.byId.get(s.page) : undefined;
+    if (action === "pin") {
+      if (node) {
+        fav.toggle(node);
+        return true;
+      }
+      if (!s.pin || s.pin.kind === "view_section") return false;
+      if (isPinned(prefs, s.pin)) undoable(togglePin(prefs, s.pin), t("edit.unpinned", { name: label }));
+      else if (prefs.pinned.length >= MAX_PINS) toast.error(t("customize.pinLimit"));
+      else change(togglePin(prefs, s.pin));
+      return true;
+    }
+    if (action === "hide") {
+      // A built-in section's row: its key is its hidden id.
+      if (s.from === FAVORITES || s.from.startsWith("custom:")) return false;
+      undoable(setHidden(prefs, s.key, true), t("edit.hidden", { name: label }));
+      return true;
+    }
+    if (s.from === FAVORITES) {
+      if (node) {
+        fav.toggle(node);
+        toast.undo(t("edit.unpinned", { name: label }), () => fav.toggle(node), t("edit.undo"));
+        return true;
+      }
+      if (!s.pin) return false;
+      undoable(togglePin(prefs, s.pin), t("edit.unpinned", { name: label }));
+      return true;
+    }
+    if (s.from.startsWith("custom:") && s.row) {
+      undoable(toggleInSection(prefs, wid, s.from.slice("custom:".length), s.row), t("edit.removed", { name: label }));
+      return true;
+    }
+    return false;
+  };
+
   const scope: "sidebar" | "space" = space ? "space" : "sidebar";
   const value = {
     scope,
     row: (source: EditSource, label: string) => ({ "data-edit-row": source.key, ...pressable(source, label) }),
     section: (key: string, label: string) => pressable({ kind: "section", key }, label),
     step,
+    act,
   };
 
   return (

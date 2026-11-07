@@ -4,13 +4,13 @@
 // on it. Its menu (RowMenu, SpaceRowMenu) reads what the row can do from useSidebarRow: rename
 // in place, change its icon, move up or down.
 
-import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactElement } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { InlineRename, MENU_SETTLE_MS, SidebarDragCtx } from "@/app/sidebarParts";
 import { IconPicker } from "@/components/wiki/IconPicker";
 import { cn } from "@/lib/cn";
 import type { EditSource } from "@/lib/collab/sidebarEditModel";
-import { sidebarEdit, useSidebarEdit } from "@/lib/collab/sidebarEdit";
+import { registerRowKeys, sidebarEdit, useSidebarEdit, type RowAction } from "@/lib/collab/sidebarEdit";
 import { iconOf, nameOf, setIcon, setName } from "@/lib/collab/sidebarPrefs";
 import { useOwnSidebar } from "./AddToSidebar";
 
@@ -91,6 +91,11 @@ export function SidebarRow({
     () => ({ id, edit, move: live ? (dir, dry) => drag!.step(source!, dir, dry) : undefined }),
     [id, edit, live, drag, source],
   );
+  // Its keys while it has the focus (move, pin, hide, remove): the drag provider does them. Read
+  // through a ref, so the row registers once and the keys always act on the latest prefs.
+  const acts = useRef<((a: RowAction) => boolean) | null>(null);
+  acts.current = live ? (a) => drag!.act(source!, a, label) : null;
+  useEffect(() => registerRowKeys(id, (a) => acts.current?.(a) ?? false), [id]);
 
   if (renaming && edit && !rail)
     return (

@@ -5,7 +5,7 @@
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useOpenToday } from "@/components/wiki/journal";
-import { sidebarEdit } from "@/lib/collab/sidebarEdit";
+import { sidebarEdit, type RowAction } from "@/lib/collab/sidebarEdit";
 import { isTypingTarget, keyName } from "@/lib/hotkeys";
 import { useProducts } from "@/lib/products";
 import { bindingOf, useShortcuts, type ShortcutId } from "@/lib/shortcuts";
@@ -61,14 +61,24 @@ export function useGlobalShortcuts(onMail: boolean) {
   useSyncShortcuts(true);
 }
 
+/** The keys that act on the focused row itself, and what each does. */
+const ROW_ACTIONS: Partial<Record<ShortcutId, RowAction>> = {
+  "sidebar.moveUp": "up",
+  "sidebar.moveDown": "down",
+  "sidebar.pin": "pin",
+  "sidebar.hide": "hide",
+  "sidebar.remove": "remove",
+};
+
 /**
- * The sidebar's keys while one of its rows has the focus: the arrows move between rows and
- * F2 renames the row in place. They are heard before the page's own keys, so an arrow moves
- * in the sidebar rather than down the ticket list.
+ * The sidebar's keys while one of its rows has the focus: the arrows move between rows, F2
+ * renames the row in place, and the row's own keys move, pin, hide or remove it. They are
+ * heard before the page's own keys, so an arrow moves in the sidebar rather than down the
+ * ticket list, and h hides the row rather than snoozing a ticket.
  */
 function useSidebarKeys() {
   useEffect(() => {
-    const ids: ShortcutId[] = ["sidebar.next", "sidebar.previous", "sidebar.rename"];
+    const ids: ShortcutId[] = ["sidebar.next", "sidebar.previous", "sidebar.rename", ...(Object.keys(ROW_ACTIONS) as ShortcutId[])];
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing || isTypingTarget(e.target)) return;
       const list = sidebarList();
@@ -79,6 +89,13 @@ function useSidebarKeys() {
       // F2 on something that can't be renamed (a live count, a plain link) leaves the key alone.
       if (id === "sidebar.rename") {
         if (sidebarEdit.renameFocused()) e.preventDefault();
+        return;
+      }
+      const action = ROW_ACTIONS[id];
+      if (action) {
+        // Taken in the sidebar even when the row can't do it: the page behind never hears it.
+        e.preventDefault();
+        sidebarEdit.actOnFocused(action);
         return;
       }
       e.preventDefault();

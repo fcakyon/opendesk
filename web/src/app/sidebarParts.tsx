@@ -12,7 +12,7 @@ import { cn } from "@/lib/cn";
 import { tone, toneFor } from "@/lib/tones";
 import { useSidebarPrefs } from "@/lib/collab/hooks";
 import { iconOf, nameOf, SECTION_IDS } from "@/lib/collab/sidebarPrefs";
-import { sidebarEdit, useSidebarEdit } from "@/lib/collab/sidebarEdit";
+import { sidebarEdit, useSidebarEdit, type RowAction } from "@/lib/collab/sidebarEdit";
 import type { SidebarSectionId } from "@/lib/api/types";
 import type { EditSource } from "@/lib/collab/sidebarEditModel";
 
@@ -266,6 +266,8 @@ export const SidebarDragCtx = createContext<{
   section: (key: string, label: string) => DragProps;
   /** Moves a row or section one place up (-1) or down (1); `dry` only says whether it can. */
   step: (source: EditSource, dir: -1 | 1, dry?: boolean) => boolean;
+  /** A key's action on a row (moving, pinning, hiding, removing); true when it acted. */
+  act: (source: EditSource, action: RowAction, label: string) => boolean;
 } | null>(null);
 
 /**
