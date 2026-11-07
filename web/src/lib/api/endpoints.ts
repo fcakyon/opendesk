@@ -603,6 +603,8 @@ export const api = {
     render: (id: string, body_html: string, thread?: boolean) =>
       http.post<{ body_html: string }>(`/v1/tickets/${id}/render`, { body_html, thread: thread || undefined }),
     links: (id: string) => http.get<{ data: T.TicketLink[] }>(`/v1/tickets/${id}/links`),
+    /** Wiki pages the caller can see that mention the ticket, newest edit first. */
+    wiki: (id: string) => http.get<{ data: T.WikiNode[] }>(`/v1/tickets/${encodeURIComponent(id)}/wiki`),
     /**
      * What a ticket panel's product knows about the ticket's contact; `refresh` asks it again. An
      * http panel's URL is told the app's language, so it can answer in it.
@@ -657,6 +659,9 @@ export const api = {
       /** `for_brand_id`: what that brand's help center shows, its own articles and those of every brand. */
       search: (q: ListQuery & { collection_id?: string; status?: T.KbArticle["status"]; q?: string; for_brand_id?: string }) =>
         http.get<T.Page<T.KbArticle>>("/v1/kb/articles", { query: q }),
+      /** A draft copy of a wiki page (contracts/api.md); `left_out` counts what stayed in the wiki. */
+      fromWiki: (b: { page_id: string; title?: string; collection_id?: string; brand_id?: string | null }) =>
+        http.create<{ article: T.KbArticle; left_out: number }>("/v1/kb/articles/from-wiki", b),
     },
   },
   changelog: {
@@ -669,7 +674,7 @@ export const api = {
   wiki: {
     tree: () => http.get<T.Page<T.WikiNode>>("/v1/wiki/pages"),
     get: (id: string) => http.get<T.WikiPage>(`/v1/wiki/pages/${id}`),
-    create: (b: { parent_id?: string | null; space?: T.WikiSpace; team_id?: string; template?: boolean; kind?: "page" | "database"; database?: T.Database; props?: Record<string, T.DbValue>; title?: string; icon?: string; body_html?: string; position?: number }) => http.create<T.WikiPage>("/v1/wiki/pages", b),
+    create: (b: { parent_id?: string | null; space?: T.WikiSpace; team_id?: string; template?: boolean; kind?: T.WikiKind; database?: T.Database; canvas?: T.Canvas; props?: Record<string, T.DbValue>; title?: string; icon?: string; body_html?: string; position?: number }) => http.create<T.WikiPage>("/v1/wiki/pages", b),
     /** `keepalive` lets a save started as the page closes finish (contracts/wiki.md "Editing together"). */
     update: (id: string, b: T.WikiPagePatch, opts?: { keepalive?: boolean }) => http.patch<T.WikiPage>(`/v1/wiki/pages/${id}`, b, opts),
     move: (id: string, b: { parent_id: string | null; position: number; space?: T.WikiSpace; team_id?: string }) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/move`, b),
@@ -709,6 +714,8 @@ export const api = {
       react: (id: string, emoji: string, on: boolean) => http.post<T.WikiThread>(`/v1/wiki/comments/${id}/reactions`, { emoji, on }),
     },
     follow: (pageId: string, following: boolean) => http.put<{ following: boolean }>(`/v1/wiki/pages/${pageId}/follow`, { following }),
+    /** Ollie writing (contracts/ai.md): streams `delta` text for a preview, resolves with the sanitized HTML. Nothing is saved. */
+    write: (b: T.WikiWriteInput, h?: StreamHandlers) => stream<{ html: string }>("/v1/wiki/ai/write", b, h),
   },
   search: (q: string) => http.get<T.SearchResults>("/v1/search", { query: { q } }),
   reports: {

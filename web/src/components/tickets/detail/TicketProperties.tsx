@@ -25,6 +25,7 @@ import { LabelPicker } from "./LabelPicker";
 import { SetByOllie, useAISet, useOllieNote } from "../ollie";
 import { FieldsSection } from "./FieldsSection";
 import { TicketLinks } from "./TicketLinks";
+import { TicketWiki } from "./TicketWiki";
 import { TicketPanels } from "./TicketPanels";
 import { SideConversations } from "./SideConversations";
 import { importedFrom } from "@/components/imports/sources";
@@ -706,6 +707,8 @@ export function TicketProperties({
       <OlliePanel t={t} />
 
       <TicketLinks ticketId={t.id} canEdit={canEdit} />
+
+      <TicketWiki ticketId={t.id} />
 
       <SideConversations ticketId={t.id} canEdit={canEdit} onStart={onSideConversation} />
 

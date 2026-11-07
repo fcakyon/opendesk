@@ -18,6 +18,7 @@ import {
   FileText,
   FolderInput,
   Hash,
+  LayoutDashboard,
   LayoutTemplate,
   Link2,
   Lock,
@@ -42,7 +43,7 @@ import { toast } from "@/components/ui/toast";
 import { useDebounced } from "@/components/contacts/hooks";
 import { TeamDot } from "@/components/tickets/teams";
 import { api } from "@/lib/api/endpoints";
-import type { Team, WikiNode, WikiSearchHit } from "@/lib/api/types";
+import type { Team, WikiKind, WikiNode, WikiSearchHit } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
@@ -59,14 +60,14 @@ export function pageUrl(id: string) {
   return `${location.origin}/wiki/${id}`;
 }
 
-export function PageIcon({ icon, className, kind }: { icon: string; className?: string; kind?: "page" | "database" }) {
+export function PageIcon({ icon, className, kind }: { icon: string; className?: string; kind?: WikiKind }) {
   if (icon)
     return (
       <span className={cn("flex size-4 shrink-0 items-center justify-center text-[13px] leading-none", className)} aria-hidden>
         {icon}
       </span>
     );
-  const Glyph = kind === "database" ? Table2 : FileText;
+  const Glyph = kind === "database" ? Table2 : kind === "canvas" ? LayoutDashboard : FileText;
   return <Glyph className={cn("size-[14px] shrink-0 text-fg-4", className)} aria-hidden />;
 }
 
@@ -134,6 +135,9 @@ export function WikiTree({ onNavigate, autoFocusSearch }: { onNavigate?: () => v
               </MenuItem>
               <MenuItem icon={<Table2 />} onSelect={() => create.mutate({ kind: "database", database: starterDatabase("table", t) })}>
                 {t("tree.newDatabase")}
+              </MenuItem>
+              <MenuItem icon={<LayoutDashboard />} onSelect={() => create.mutate({ kind: "canvas" })}>
+                {t("canvas.newCanvas")}
               </MenuItem>
             </MenuContent>
           </Menu>

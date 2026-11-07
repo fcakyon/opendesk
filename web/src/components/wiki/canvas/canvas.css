@@ -1,0 +1,50 @@
+/* A wiki canvas (contracts/wiki.md "Canvas"). Zoom is --z on the scene, so handles, outlines
+   and lines keep their size on screen whatever the zoom. */
+
+.canvas-root {
+  background-color: var(--surface);
+  touch-action: none;
+}
+
+.canvas-card {
+  transition: box-shadow 120ms ease-out;
+}
+.canvas-card:focus-visible {
+  box-shadow: 0 0 0 calc(2px / var(--z)) var(--focus-line);
+}
+.canvas-card.canvas-selected {
+  box-shadow:
+    0 0 0 calc(2px / var(--z)) var(--tone-blue-solid),
+    0 6px 22px -12px rgb(10 10 10 / 0.25);
+}
+
+.canvas-handle {
+  width: calc(9px / var(--z));
+  height: calc(9px / var(--z));
+  border-width: calc(1.5px / var(--z));
+  border-color: var(--tone-blue-solid);
+}
+
+.canvas-connect {
+  width: calc(11px / var(--z));
+  height: calc(11px / var(--z));
+  border-width: calc(1.5px / var(--z));
+  cursor: crosshair;
+}
+
+.canvas-prose {
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.canvas-prose > :first-child {
+  margin-top: 0;
+}
+.canvas-prose > :last-child {
+  margin-bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-card {
+    transition: none;
+  }
+}

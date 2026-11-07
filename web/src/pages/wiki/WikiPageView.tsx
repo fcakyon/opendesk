@@ -8,8 +8,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/react";
-import { AlertTriangle, Check, CloudOff, FolderInput, History, Link2, MoreHorizontal, Plus, SmilePlus, Type, ImageIcon, PanelRight, Link2 as BacklinkIcon, Star, Copy, LayoutTemplate, Lock } from "lucide-react";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
+import { AlertTriangle, Check, CloudOff, FolderInput, History, Link2, MoreHorizontal, Plus, SmilePlus, Type, ImageIcon, PanelRight, Link2 as BacklinkIcon, Star, Copy, LayoutTemplate, Lock, BookOpenCheck } from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "@/app/RootLayout";
 import { usePageCrumb } from "@/app/useBreadcrumbs";
@@ -37,6 +37,9 @@ import { CommentCount, FollowButton, usePageComments } from "@/components/wiki/c
 import { DayNav, TemplateBanner, TrashBanner, Verification } from "@/components/wiki/PageBanners";
 import { useUseTemplate } from "./WikiTemplatesPage";
 import { AddToSpace } from "@/components/wiki/AddToSpace";
+import { PublishDialog } from "@/components/wiki/PublishDialog";
+
+const CanvasView = lazy(() => import("@/components/wiki/canvas/CanvasView"));
 import { DatabaseView } from "@/components/wiki/database/DatabaseView";
 import { RowProperties } from "@/components/wiki/database/RowProperties";
 import { UnsentBanner } from "@/components/wiki/Unsent";
@@ -165,6 +168,9 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
   const isRow = !!live.parent_id && tree.byId.get(live.parent_id)?.kind === "database";
   // A database's page is its views: full width, with a short description over them.
   const isDb = live.kind === "database";
+  // A canvas's page is its board: full width too, the description over it.
+  const isCanvas = live.kind === "canvas";
+  const wide = isDb || isCanvas;
   const fav = useFavorites();
   const startFromTemplate = useUseTemplate();
   const [usingTemplate, setUsingTemplate] = useState(false);
@@ -322,6 +328,9 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
   const [coverOpen, setCoverOpen] = useState(false);
   const [history, setHistory] = useState(false);
   const [moving, setMoving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  // A help center article is made from a plain page: not a template, a journal or a database.
+  const canPublish = !live.template && !live.journal && !live.daily_date && !wide;
   const crumbs = tree.byId.has(page.id) ? ancestorsOf(tree, page.id) : page.breadcrumbs;
   const kids = tree.byId.has(page.id) ? childrenOf(tree, page.id) : page.children;
   const current = latest;
@@ -463,6 +472,11 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
                     {t("page.copyLink")}
                   </MenuItem>
                   {!live.template && <AddToSpace pageId={page.id} />}
+                  {canPublish && (
+                    <MenuItem icon={<BookOpenCheck />} onSelect={() => setPublishing(true)}>
+                      {t("publish.action")}
+                    </MenuItem>
+                  )}
                   <FollowItem pageId={page.id} />
                   <MenuItem icon={<History />} onSelect={() => setHistory(true)}>
                     {t("history.open")}
@@ -530,7 +544,7 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
       <div className="flex min-h-0 flex-1">
         <div ref={setScrollEl} className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto", live.font !== "default" && `wiki-font-${live.font}`, live.small_text && "wiki-small")}>
           <PageCover cover={live.cover} coverY={live.cover_y} canEdit={canWrite} onChange={look.set} />
-          <article className={cn("mx-auto w-full px-6 pb-32 md:px-10", isDb ? "max-w-none md:px-16" : live.full_width ? "max-w-none md:px-24" : "max-w-[760px]", live.cover ? "pt-6" : "pt-10 md:pt-14")}>
+          <article className={cn("mx-auto w-full px-6 pb-32 md:px-10", wide ? "max-w-none md:px-16" : live.full_width ? "max-w-none md:px-24" : "max-w-[760px]", live.cover ? "pt-6" : "pt-10 md:pt-14")}>
             {live.daily_date && <DayNav page={live} />}
           <div className="group/head">
               {draft.icon && (
@@ -594,7 +608,7 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
             </div>
 
             {isRow && <RowProperties page={live} canEdit={canWrite} />}
-          {canWrite && editor && showToolbar && !isDb && (
+          {canWrite && editor && showToolbar && !wide && (
               <div className="sticky top-3 z-10 -mx-3 mt-6 rounded-lg border border-line bg-surface/95 pt-1.5 shadow-xs backdrop-blur">
                 <Toolbar editor={editor} full onImage={() => fileRef.current?.click()} end={uploading ? <span className="pr-2 text-xs text-fg-4">{t("page.uploading")}</span> : undefined} />
               </div>
@@ -604,20 +618,28 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
               value={draft.body_html}
               onChange={canWrite ? (html) => saver.edit({ body_html: html }) : undefined}
               editable={canWrite}
-              placeholder={isDb ? (canWrite ? t("db.description") : "") : canWrite ? t("editor.placeholder.empty") : t("page.bodyEmpty")}
+              placeholder={wide ? (canWrite ? t("db.description") : "") : canWrite ? t("editor.placeholder.empty") : t("page.bodyEmpty")}
               ariaLabel={t("page.body")}
               env={env}
               createSubpage={createSubpage}
               onCopyBlockLink={copyBlockLink}
-              className={isDb ? "mt-2 text-fg-2" : "mt-5"}
-              contentClassName={isDb ? "min-h-0" : "prose-lg"}
+              className={wide ? "mt-2 text-fg-2" : "mt-5"}
+              contentClassName={wide ? "min-h-0" : "prose-lg"}
               onReady={setEditor}
               onOpenComment={peek ? undefined : comments.open}
               onStartComment={canWrite && !peek ? comments.start : undefined}
+              pageTitle={draft.title}
             />
             {live.kind === "database" && (
               <div className="mt-6">
                 <DatabaseView databaseId={live.id} />
+              </div>
+            )}
+            {isCanvas && (
+              <div className="mt-5 flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col overflow-hidden rounded-xl border border-line">
+                <Suspense fallback={null}>
+                  <CanvasView page={live} canEdit={canWrite} />
+                </Suspense>
               </div>
             )}
             <input
@@ -632,7 +654,7 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
               }}
             />
 
-            {!isDb && (kids.length > 0 || canEdit) && (
+            {!wide && (kids.length > 0 || canEdit) && (
               <section className="mt-14 border-t border-line-soft pt-6" aria-labelledby="wiki-subpages">
                 <h2 id="wiki-subpages" className="label-caps mb-2">
                   {t("page.subpages")}
@@ -704,6 +726,7 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
         onRestored={take}
       />
       <MoveDialog node={node} open={moving} onOpenChange={setMoving} />
+      {canPublish && <PublishDialog pageId={page.id} pageTitle={draft.title} open={publishing} onOpenChange={setPublishing} beforePublish={() => saver.flush()} />}
     </div>
   );
 }

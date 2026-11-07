@@ -1,12 +1,13 @@
 // The wiki's block editor: the page body as Notion and Obsidian write it. "/" for any
-// block, "[[" to link a page, "@" for people, pages and dates, ":" for emoji, a handle
-// beside each block to drag it or open its menu, and a toolbar over selected text. It
-// keeps RichEditor's handle (focus, setHtml) so the page's saver works with either.
+// block, "[[" to link a page, "@" for people, contacts, tickets, pages and dates, "#" for
+// tickets, ":" for emoji, a handle beside each block to drag it or open its menu, a toolbar
+// over selected text, and Ollie writing where AI is on. It keeps RichEditor's handle
+// (focus, setHtml) so the page's saver works with either.
 
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import "katex/dist/katex.min.css";
 import { toast } from "@/components/ui/toast";
@@ -15,6 +16,8 @@ import type { Member, WikiNode } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { q, qk } from "@/lib/queries";
 import { api } from "@/lib/api/endpoints";
+import { useAI } from "@/lib/ai";
+import type { OllieTarget } from "@/lib/wiki/ollie";
 import { starterDatabase } from "../database/starter";
 import { useWikiTree } from "../hooks";
 import { BubbleToolbar } from "./bubble";
@@ -23,6 +26,7 @@ import { WikiEditorContext, type WikiEditorEnv } from "./context";
 import { wikiExtensions } from "./extensions";
 import { BlockHandle } from "./handle";
 import { WikiMenuPopup } from "./menu";
+import { OllieWriter, targetOf } from "./ollie";
 import "./wiki-editor.css";
 
 export type WikiEditorProps = {
@@ -43,6 +47,8 @@ export type WikiEditorProps = {
   onOpenComment?: (threadId: string) => void;
   /** Someone asked to comment on the selected text (contracts/wiki.md "Comments"); left out, nobody can. */
   onStartComment?: (range: CommentRange, quote: string) => void;
+  /** The page's title, which Ollie reads with its text. */
+  pageTitle?: string;
 };
 
 export const WikiEditor = forwardRef<RichEditorHandle, WikiEditorProps>(function WikiEditor(props, ref) {
@@ -51,10 +57,13 @@ export const WikiEditor = forwardRef<RichEditorHandle, WikiEditorProps>(function
   const members = useQuery(q.members());
   const navigate = useNavigate();
   const qc = useQueryClient();
+  // Ollie writes for people who may edit the page, where AI is on (as the reply composer's).
+  const ai = useAI().enabled && props.editable;
+  const [ollie, setOllie] = useState<OllieTarget | null>(null);
 
   // The menus read these when they open, so they never go stale.
-  const live = useRef({ props, pages: [] as WikiNode[], members: [] as Member[] });
-  live.current = { props, pages: [...tree.byId.values()], members: members.data ?? [] };
+  const live = useRef({ props, pages: [] as WikiNode[], members: [] as Member[], ai });
+  live.current = { props, pages: [...tree.byId.values()], members: members.data ?? [], ai };
 
   const fileRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<Editor | null>(null);
@@ -76,6 +85,14 @@ export const WikiEditor = forwardRef<RichEditorHandle, WikiEditorProps>(function
           pageId: () => live.current.props.env.pageId,
           createSubpage: (title) => live.current.props.createSubpage(title),
           pickImage: () => fileRef.current?.click(),
+          search: (term) => api.search(term),
+          ticket: (ref) => api.tickets.get(ref).catch(() => null),
+          ollie: () => live.current.ai,
+          askOllie: () => {
+            const ed = editorRef.current;
+            const target = ed && live.current.ai ? targetOf(ed.state) : null;
+            if (target) setOllie(target);
+          },
           createDatabase: async (type) => {
             try {
               const db = starterDatabase(type, t);
@@ -154,6 +171,12 @@ export const WikiEditor = forwardRef<RichEditorHandle, WikiEditorProps>(function
     editor?.setEditable(props.editable, false);
   }, [props.editable, editor]);
 
+  const askOllie = useCallback(() => {
+    if (editor && live.current.ai) setOllie(targetOf(editor.state));
+  }, [editor]);
+  const closeOllie = useCallback(() => setOllie(null), []);
+  const pageTitle = useCallback(() => live.current.props.pageTitle ?? "", []);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -174,9 +197,10 @@ export const WikiEditor = forwardRef<RichEditorHandle, WikiEditorProps>(function
         {editor && props.editable && (
           <>
             <BlockHandle editor={editor} onCopyLink={props.onCopyBlockLink} />
-            <BubbleToolbar editor={editor} canComment={!!props.onStartComment} />
+            <BubbleToolbar editor={editor} canComment={!!props.onStartComment} onAskOllie={ai ? askOllie : undefined} ollieOpen={!!ollie} />
           </>
         )}
+        {editor && ai && <OllieWriter editor={editor} target={ollie} onClose={closeOllie} pageTitle={pageTitle} />}
         <WikiMenuPopup />
         <input
           ref={fileRef}

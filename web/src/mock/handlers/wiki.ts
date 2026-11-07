@@ -9,6 +9,9 @@
 
 import DOMPurify from "dompurify";
 import type {
+  Canvas,
+  CanvasEdge,
+  CanvasNode,
   Database,
   DbDate,
   DbFile,
@@ -20,6 +23,7 @@ import type {
   DbStatusGroup,
   DbValue,
   DbView,
+  KbArticle,
   Notification,
   Role,
   WikiComments,
@@ -34,6 +38,7 @@ import type {
   WikiSearchHit,
   WikiThread,
   WikiTrashed,
+  WikiWriteMode,
 } from "@/lib/api/types";
 import { mentionIds } from "@/lib/collab/html";
 import { MAX_DEPTH, buildTree, childrenOf } from "@/lib/wiki/tree";
@@ -41,9 +46,13 @@ import { DEFAULT_LOOK } from "@/lib/wiki/look";
 import { linkedIds, pageTags } from "@/lib/wiki/links";
 import { db, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
-import { del, forbidden, get, HttpError, invalid, notFound, patch, post, put, respond, s, type Ctx } from "../router";
-import { roleIn, teamRole } from "../teams";
-import { ago, DAY, escapeHtml, HOUR, MIN, NOW, nowIso, parseUUID, stripHtml, uuid } from "../util";
+import { chunk, del, forbidden, get, HttpError, invalid, notFound, patch, post, put, respond, s, sse, type Ctx } from "../router";
+import { reserve, spend } from "../aiBalance";
+import { htmlToText, rewriteText, textToParagraphs } from "./aiTicket";
+import { kbBrandRef, recountCollections, uniqueSlug } from "./resources";
+import { canSeeTicket, roleIn, teamRole } from "../teams";
+import { findTicket } from "../tickets";
+import { ago, DAY, escapeHtml, HOUR, MIN, NOW, nowIso, parseUUID, slugify, stripHtml, uuid } from "../util";
 
 type Row = WikiPageSettings & {
   id: string;
@@ -70,8 +79,10 @@ type Row = WikiPageSettings & {
   verified_by: string | null;
   verified_at: string | null;
   verified_until: string | null;
-  /** "database": its subpages are its rows. */
-  kind: "page" | "database";
+  /** "database": its subpages are its rows; "canvas": it holds cards. */
+  kind: "page" | "database" | "canvas";
+  /** A canvas's cards and connections; null for a page. */
+  canvas: Canvas | null;
   /** A database's properties and views; null for a page. */
   database: Database | null;
   /** A row's values, by property id. */
@@ -171,7 +182,7 @@ const node = (r: Row): WikiNode => ({
   version: r.version,
   updated_at: r.updated_at,
   created_by_id: r.created_by,
-  tags: pageTags(r.body_html, stripHtml),
+  tags: pageTags(r.body_html + canvasHtml(r), stripHtml),
   private: r.private_to !== null,
   team_id: r.team_id,
   ...(r.journal ? { journal: true } : {}),
@@ -256,6 +267,7 @@ function pageOut(st: State, r: Row): WikiPage {
     kind: r.kind,
     database: r.database ? structuredClone(r.database) : null,
     props: structuredClone(r.props),
+    canvas: r.canvas ? structuredClone(r.canvas) : null,
     verification: r.verified_at
       ? { by: userRef(r.verified_by), at: r.verified_at, until: r.verified_until, expired: !!r.verified_until && Date.parse(r.verified_until) < Date.now() }
       : null,
@@ -479,6 +491,7 @@ function newRow(fields: Partial<Row> & Pick<Row, "id" | "parent_id" | "title" | 
     kind: "page",
     database: null,
     props: {},
+    canvas: null,
     seq: ++rowSeq,
     ...DEFAULT_LOOK,
     ...fields,
@@ -495,7 +508,7 @@ export function searchWiki(ws: WsData, q: string, limit = 20): WikiSearchHit[] {
     .filter((r) => live(v, r))
     .map((r) => {
       const title = r.title.toLowerCase();
-      const text = stripHtml(r.body_html);
+      const text = stripHtml(r.body_html + canvasHtml(r));
       const lower = text.toLowerCase();
       const has = (w: string, s: string) => new RegExp(`(^|[^\\p{L}\\p{N}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "u").test(s);
       if (!words.every((w) => has(w, title) || has(w, lower))) return null;
@@ -519,6 +532,8 @@ export function registerWiki() {
   registerLinks();
   registerDatabases();
   registerComments();
+  registerDesk();
+  registerTicketWiki();
 }
 
 function registerPages() {
@@ -559,10 +574,11 @@ function registerPages() {
       template = ctx.body.template === true;
     }
     const kind = ctx.body.kind ?? "";
-    if (kind !== "" && kind !== "page" && kind !== "database") throw invalid("kind must be page or database");
+    if (kind !== "" && kind !== "page" && kind !== "database" && kind !== "canvas") throw invalid("kind must be page, database or canvas");
     let database: Database | null = null;
     if (kind === "database") database = ctx.body.database !== undefined ? cleanDatabase(ctx.body.database, null) : defaultDatabase();
     else if (ctx.body.database !== undefined) throw dbInvalid("database goes with kind database.");
+    const canvas = newCanvas(ctx, st, kind);
     let props: Record<string, DbValue> = {};
     const parDb = par?.row.database;
     if (par && parDb) {
@@ -580,9 +596,10 @@ function registerPages() {
       private_to: space.owner,
       team_id: space.team,
       template,
-      kind: kind === "database" ? "database" : "page",
+      kind: kind === "database" || kind === "canvas" ? kind : "page",
       database,
       props,
+      canvas,
     });
     st.pages.push(r);
     place(st, r.parent_id, r.private_to, r.team_id, r.template, r.id, typeof ctx.body.position === "number" ? ctx.body.position : undefined);
@@ -609,6 +626,7 @@ function registerPages() {
     const textChanged = next.title !== r.title || next.icon !== r.icon || next.body_html !== r.body_html;
     const verify = verificationPatch(ctx.body);
     const data = dataPatch(ctx, st, r);
+    const nextCanvas = canvasPatch(ctx, st, r);
     if (textChanged) {
       const before = r.body_html;
       Object.assign(r, next, { version: r.version + 1, updated_by: db.meId, updated_at: nowIso() });
@@ -618,7 +636,8 @@ function registerPages() {
     if (lookChanged) Object.assign(r, look);
     const verifyChanged = applyVerification(r, verify);
     const dataChanged = applyData(st, r, data);
-    if (textChanged || lookChanged || verifyChanged || dataChanged) {
+    const canvasChanged = applyCanvas(r, nextCanvas);
+    if (textChanged || lookChanged || verifyChanged || dataChanged || canvasChanged) {
       const ev = eventPage(r);
       // Readers of the page take the new look as it comes: it has no version to compare.
       if (lookChanged) ev.settings = look;
@@ -628,6 +647,8 @@ function registerPages() {
         if (r.database) ev.database = structuredClone(r.database);
         else ev.props = structuredClone(r.props);
       }
+      // A canvas has no version either.
+      if (canvasChanged) ev.canvas = structuredClone(r.canvas);
       pageEvent(ctx.ws, r, "wiki_page.updated", ev);
     }
     return pageOut(st, r);
@@ -1200,6 +1221,173 @@ function registerDatabases() {
   });
 }
 
+// ─── Canvas (canvas.go) ────────────────────────────────────────────────────
+// A page that is a canvas keeps cards (text, pages, links, files, groups) and connections
+// between them, checked as cleanCanvas checks them. Text cards are wiki HTML; the cards
+// count as the page's text for links, tags and search.
+
+const CANVAS_TYPES = new Set(["text", "page", "link", "file", "group"]);
+const CANVAS_SIDES = new Set(["top", "right", "bottom", "left"]);
+const CANVAS_ENDS = new Set(["none", "arrow"]);
+const CANVAS_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const CANVAS_COLOR = /^(?:[1-6]|#[0-9a-fA-F]{6})$/;
+const canvasInvalid = (detail: string) => new HttpError(422, "invalid_canvas", detail);
+const finiteIn = (v: unknown, lo: number, hi: number): v is number => typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi;
+const optStr = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" : "\u0000");
+
+/** The text the API indexes for a canvas: its text cards, and a link to each page card. */
+function canvasHtml(r: Pick<Row, "canvas">): string {
+  if (!r.canvas) return "";
+  return r.canvas.nodes
+    .map((n) => (n.type === "text" ? n.html : n.type === "page" ? `<a href="/wiki/${n.page_id}"></a>` : n.type === "group" ? `<p>${escapeHtml(n.label ?? "")}</p>` : n.type === "link" ? `<p>${escapeHtml(n.title ?? "")}</p>` : ""))
+    .concat(r.canvas.edges.map((e) => (e.label ? `<p>${escapeHtml(e.label)}</p>` : "")))
+    .join(" ");
+}
+
+function cleanCanvas(ctx: Ctx, st: State, raw: unknown, prev: Canvas | null): Canvas {
+  if (jsonBytes(raw) > 1 << 20) throw canvasInvalid("A canvas holds up to 1 MB.");
+  if (!isObject(raw)) throw canvasInvalid("A canvas is an object with nodes and edges.");
+  const rawNodes = raw.nodes ?? [];
+  const rawEdges = raw.edges ?? [];
+  if (!Array.isArray(rawNodes) || !Array.isArray(rawEdges)) throw canvasInvalid("The canvas isn't valid: nodes and edges are lists.");
+  if (rawNodes.length > 2000) throw canvasInvalid("A canvas holds up to 2,000 cards.");
+  if (rawEdges.length > 4000) throw canvasInvalid("A canvas holds up to 4,000 connections.");
+  const had = new Set((prev?.nodes ?? []).flatMap((n) => (n.type === "page" ? [`page:${n.page_id}`] : n.type === "file" ? [`file:${n.src}`] : [])));
+  const v = viewerOf(ctx.ws);
+  const ids = new Set<string>();
+  const nodes = rawNodes.map((x): CanvasNode => {
+    if (!isObject(x)) throw canvasInvalid("The canvas isn't valid: a card is an object.");
+    const id = optStr(x.id);
+    if (!CANVAS_ID.test(id) || ids.has(id)) throw canvasInvalid("Each card needs its own id of 1 to 64 letters, digits, _ or -.");
+    ids.add(id);
+    if (!finiteIn(x.x, -1e6, 1e6) || !finiteIn(x.y, -1e6, 1e6)) throw canvasInvalid("A card sits within a million points of the middle.");
+    if (!finiteIn(x.width, 20, 20000) || !finiteIn(x.height, 20, 20000)) throw canvasInvalid("A card is 20 to 20,000 points wide and high.");
+    const color = optStr(x.color);
+    if (color && !CANVAS_COLOR.test(color)) throw canvasInvalid("A colour is 1 to 6 or #rrggbb.");
+    const base = { id, x: x.x, y: x.y, width: x.width, height: x.height, ...(color ? { color } : {}) };
+    const type = optStr(x.type);
+    if (!CANVAS_TYPES.has(type)) throw canvasInvalid(`"${type}" isn't a card type.`);
+    switch (type) {
+      case "text":
+        return { ...base, type: "text", html: cleanBody(typeof x.html === "string" ? x.html : "") };
+      case "page": {
+        const pid = parseUUID(optStr(x.page_id));
+        if (!pid) throw canvasInvalid("A page card needs page_id.");
+        if (!had.has(`page:${pid}`)) {
+          const target = st.pages.find((r) => r.id === pid);
+          if (!target || target.deleted_at || !sees(v, target)) throw canvasInvalid("A page card names a page that isn't in this workspace.");
+        }
+        return { ...base, type: "page", page_id: pid };
+      }
+      case "link": {
+        const url = optStr(x.url).trim();
+        let ok = url.length <= 2000 && /^https:\/\//i.test(url) && !/[\s"'<>]/.test(url);
+        try {
+          ok = ok && !!new URL(url).hostname;
+        } catch {
+          ok = false;
+        }
+        if (!ok) throw canvasInvalid("A link card needs an https address.");
+        const title = optStr(x.title);
+        const description = optStr(x.description);
+        const image = optStr(x.image);
+        if ((image && (image.length > 2000 || !WIKI_SRC.test(image))) || !shortText(title, 300) || !shortText(description, 500))
+          throw canvasInvalid("A link card's title, description or image isn't valid.");
+        return { ...base, type: "link", url, ...(fields(title) ? { title: fields(title) } : {}), ...(fields(description) ? { description: fields(description) } : {}), ...(image ? { image } : {}) };
+      }
+      case "file": {
+        const src = optStr(x.src);
+        const name = optStr(x.name);
+        if (!src || src.length > 2000 || !WIKI_SRC.test(src) || !shortText(name, 255))
+          throw canvasInvalid("A file card needs an uploaded file or an https address, and a name of up to 255 characters.");
+        return { ...base, type: "file", src, name: name.trim() };
+      }
+      default: {
+        const label = optStr(x.label);
+        if (!shortText(label, 200)) throw canvasInvalid("A group's label is up to 200 characters.");
+        return { ...base, type: "group", ...(fields(label) ? { label: fields(label) } : {}) };
+      }
+    }
+  });
+  const edgeIds = new Set<string>();
+  const edges = rawEdges.map((x): CanvasEdge => {
+    if (!isObject(x)) throw canvasInvalid("The canvas isn't valid: a connection is an object.");
+    const id = optStr(x.id);
+    if (!CANVAS_ID.test(id) || edgeIds.has(id)) throw canvasInvalid("Each connection needs its own id of 1 to 64 letters, digits, _ or -.");
+    edgeIds.add(id);
+    const from = optStr(x.fromNode);
+    const to = optStr(x.toNode);
+    if (!ids.has(from) || !ids.has(to)) throw canvasInvalid("A connection joins two cards of the canvas.");
+    const [fromSide, toSide, fromEnd, toEnd, color, label] = [x.fromSide, x.toSide, x.fromEnd, x.toEnd, x.color, x.label].map(optStr) as string[];
+    if ((fromSide && !CANVAS_SIDES.has(fromSide)) || (toSide && !CANVAS_SIDES.has(toSide))) throw canvasInvalid("A side is top, right, bottom or left.");
+    if ((fromEnd && !CANVAS_ENDS.has(fromEnd)) || (toEnd && !CANVAS_ENDS.has(toEnd))) throw canvasInvalid("An end is none or arrow.");
+    if (color && !CANVAS_COLOR.test(color)) throw canvasInvalid("A colour is 1 to 6 or #rrggbb.");
+    if (!shortText(label!, 200)) throw canvasInvalid("A connection's label is up to 200 characters.");
+    return {
+      id,
+      fromNode: from,
+      ...(fromSide ? { fromSide: fromSide as CanvasEdge["fromSide"] } : {}),
+      ...(fromEnd && fromEnd !== "none" ? { fromEnd: fromEnd as CanvasEdge["fromEnd"] } : {}),
+      toNode: to,
+      ...(toSide ? { toSide: toSide as CanvasEdge["toSide"] } : {}),
+      ...(toEnd && toEnd !== "arrow" ? { toEnd: toEnd as CanvasEdge["toEnd"] } : {}),
+      ...(color ? { color } : {}),
+      ...(fields(label!) ? { label: fields(label!) } : {}),
+    };
+  });
+  return { nodes, edges };
+}
+
+/** A new page's canvas: empty unless one is sent, and only for kind canvas. */
+function newCanvas(ctx: Ctx, st: State, kind: string): Canvas | null {
+  if (kind === "canvas") return ctx.body.canvas !== undefined ? cleanCanvas(ctx, st, ctx.body.canvas, null) : { nodes: [], edges: [] };
+  if (ctx.body.canvas !== undefined) throw canvasInvalid("canvas goes with kind canvas.");
+  return null;
+}
+
+/** A PATCH's canvas, checked before anything changes; undefined when it sends none. */
+function canvasPatch(ctx: Ctx, st: State, r: Row): Canvas | undefined {
+  if (ctx.body.canvas === undefined) return undefined;
+  if (r.kind !== "canvas") throw canvasInvalid("Only a canvas has cards.");
+  return cleanCanvas(ctx, st, ctx.body.canvas, r.canvas);
+}
+
+/** Replaces a canvas: keeps the version, moves the last edit. */
+function applyCanvas(r: Row, next: Canvas | undefined): boolean {
+  if (!next || canonical(next) === canonical(r.canvas)) return false;
+  Object.assign(r, { canvas: next, updated_by: db.meId, updated_at: nowIso() });
+  return true;
+}
+
+/** The handbook's first response map: a canvas of steps, the pages they lean on, and a group. */
+function seedCanvas(st: State, person: (i: number) => string | null) {
+  const top = st.pages.filter((r) => !r.parent_id && !r.template && r.kind === "page").sort(byPosition);
+  const [first, second] = top;
+  const at = ago(2 * DAY);
+  const card = (id: string, x: number, y: number, width: number, height: number) => ({ id, x, y, width, height });
+  const nodes: CanvasNode[] = [
+    { ...card("tier1", -40, -60, 680, 420), type: "group", label: "Tier 1: the first hour" },
+    { ...card("start", 0, 0, 260, 120), type: "text", html: "<h3>A customer is blocked</h3><p>Reply within 15 minutes, even if it is only to say you are on it. #escalation</p>", color: "4" },
+    { ...card("check", 340, 0, 260, 140), type: "text", html: "<p><strong>Can you fix it yourself?</strong></p><ul><li><p>Known issue: link it</p></li><li><p>Config: walk them through</p></li></ul>" },
+    { ...card("page", 340, 200, 260, 140), type: "text", html: "<p>Still stuck after an hour: page the on-call engineer and tell the customer when you will write next.</p>", color: "1" },
+    { ...card("tier2", 760, -60, 420, 420), type: "group", label: "Tier 2", color: "6" },
+  ];
+  const edges: CanvasEdge[] = [
+    { id: "e1", fromNode: "start", fromSide: "right", toNode: "check", toSide: "left" },
+    { id: "e2", fromNode: "check", fromSide: "bottom", toNode: "page", toSide: "top", label: "no" },
+  ];
+  if (first) {
+    nodes.push({ ...card("ref1", 800, 0, 340, 150), type: "page", page_id: first.id });
+    edges.push({ id: "e3", fromNode: "page", fromSide: "right", toNode: "ref1", toSide: "left", color: "6" });
+  }
+  if (second) nodes.push({ ...card("ref2", 800, 180, 340, 150), type: "page", page_id: second.id });
+  nodes.push({ ...card("status", 0, 420, 320, 120), type: "link", url: "https://status.example.com", title: "Status page", description: "What customers see when something is down." });
+  const by = person(0);
+  const r = newRow({ id: uuid(), parent_id: null, title: "First response map", icon: "🗺️", body_html: "", position: top.length, created_by: by, updated_by: by, created_at: ago(9 * DAY), updated_at: at, kind: "canvas", canvas: { nodes, edges } });
+  st.pages.push(r);
+  st.revisions.push({ id: uuid(), page_id: r.id, title: r.title, icon: r.icon, body_html: "", author: by, created_at: r.created_at, updated_at: r.created_at });
+}
+
 // ─── The trash (trash.go) ──────────────────────────────────────────────────
 
 function registerTrash() {
@@ -1327,6 +1515,7 @@ function registerTemplates() {
         kind: x.kind,
         database: x.database ? remapJSON(x.database) : null,
         props,
+        canvas: x.canvas ? remapJSON(x.canvas) : null,
       });
       st.pages.push(copy);
       record(st, copy, false);
@@ -1448,7 +1637,7 @@ function registerPersonal() {
 function registerLinks() {
   const linksOf = (st: State) => {
     const known = new Set(st.pages.map((r) => r.id));
-    return st.pages.flatMap((r) => linkedIds(r.body_html).filter((to) => to !== r.id && known.has(to)).map((to) => ({ from: r.id, to })));
+    return st.pages.flatMap((r) => linkedIds(r.body_html + canvasHtml(r)).filter((to) => to !== r.id && known.has(to)).map((to) => ({ from: r.id, to })));
   };
   const mentionOut = (r: Row, title: string) => {
     const text = stripHtml(r.body_html).replace(/\s+/g, " ");
@@ -1771,6 +1960,158 @@ function seedComments(ws: WsData, st: State, person: (i: number) => string | nul
   }
 }
 
+// ─── Ollie writing, publishing and the desk seeds (contracts/ai.md, contracts/api.md) ──
+
+const WRITE_MODES: readonly WikiWriteMode[] = ["improve", "fix_grammar", "shorter", "longer", "simplify", "more_formal", "friendlier", "summarize", "action_items", "explain", "continue", "custom"];
+/** Modes that work on a selection (wikiSelectionModes): they need its text. */
+const EDIT_MODES = new Set<WikiWriteMode>(["improve", "fix_grammar", "shorter", "longer", "simplify", "more_formal", "friendlier", "action_items", "explain"]);
+
+const sentencesOf = (text: string) =>
+  text
+    .replace(/\n+/g, " ")
+    .split(/(?<=[.!?])\s+/)
+    .map((x) => x.replace(/^[-•]\s*/, "").trim())
+    .filter(Boolean);
+
+/** What Ollie writes in the mock: built from the text it was given, never invented facts. */
+export function ollieWiki(mode: WikiWriteMode, selection: string, page: string, title: string, instructions: string): string {
+  const src = selection || page;
+  const said = sentencesOf(src);
+  const lines = src.split(/\n+/).map((l) => l.replace(/^-\s*/, "").trim()).filter(Boolean);
+  const esc = escapeHtml;
+  switch (mode) {
+    case "improve":
+      return textToParagraphs(rewriteText(rewriteText(src, "fix_grammar"), "simplify"));
+    case "fix_grammar":
+    case "shorter":
+    case "longer":
+    case "simplify":
+    case "more_formal":
+    case "friendlier":
+      return textToParagraphs(rewriteText(src, mode));
+    case "summarize": {
+      const key = said.slice(1, 6);
+      return `<p>${esc(said[0] ?? title)}</p>${key.length ? `<ul>${key.map((x) => `<li><p>${esc(x)}</p></li>`).join("")}</ul>` : ""}`;
+    }
+    case "action_items": {
+      const items = (lines.length > 1 ? lines : said).slice(0, 6);
+      return `<ul data-type="taskList">${items.map((x) => `<li data-type="taskItem" data-checked="false"><p>${esc(x)}</p></li>`).join("")}</ul>`;
+    }
+    case "explain":
+      return `<p>In plain words: ${esc(said.slice(0, 2).join(" "))}</p><p>If you are new to this, ask the person who wrote it for an example from a real ticket.</p>`;
+    case "continue": {
+      const last = said[said.length - 1] ?? "";
+      return `<p>${last ? "Once that is done, " : ""}write down what you tried and what the customer needs next, so whoever picks it up can carry on. Add the [owner] and the [date] you expect an answer by.</p>`;
+    }
+    case "custom":
+      return `<p>${esc(instructions.replace(/[.!?]*$/, ""))}: here is a first draft from ${selection ? "the selected text" : `“${esc(title || "this page")}”`}.</p>${said
+        .slice(0, 3)
+        .map((x) => `<p>${esc(x)}</p>`)
+        .join("")}`;
+  }
+}
+
+/** The page as a help center article (wikiconv.Article): text kept, the wiki's own blocks left out and counted. */
+export function articleFromWiki(html: string): { html: string; leftOut: number } {
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+  let leftOut = 0;
+  const text = (el: Element, t = el.textContent ?? "") => el.replaceWith(doc.createTextNode(t));
+  doc.querySelectorAll('a[data-type="page"], a[data-type="ticket"], a[data-type="contact"], time[data-type="date"]').forEach((el) => text(el));
+  doc.querySelectorAll('span[data-type="mention"]').forEach((el) => text(el, (el.textContent ?? "").replace(/^@/, "")));
+  doc.querySelectorAll('div[data-type="subpage"], div[data-type="database"]').forEach((el) => (el.remove(), leftOut++));
+  doc.querySelectorAll('div[data-type="file"], div[data-type="video"], div[data-type="audio"]').forEach((el) => {
+    const src = el.getAttribute("data-src") ?? "";
+    if (!/^https:/.test(src)) return void (el.remove(), leftOut++);
+    const a = doc.createElement("a");
+    a.href = src;
+    a.textContent = el.getAttribute("data-name") || src;
+    el.replaceWith(a);
+  });
+  doc.querySelectorAll("img").forEach((el) => !/^https:/.test(el.getAttribute("src") ?? "") && (el.remove(), leftOut++));
+  doc.querySelectorAll('div[data-type="callout"]').forEach((el) => {
+    const q = doc.createElement("blockquote");
+    q.append(...el.childNodes);
+    el.replaceWith(q);
+  });
+  doc.querySelectorAll('div[data-type="toc"], div[data-type="tickets"], hr').forEach((el) => el.remove());
+  return { html: doc.body.innerHTML, leftOut };
+}
+
+function registerDesk() {
+  post("/v1/wiki/ai/write", (ctx) => {
+    requireAgent(ctx);
+    if (!ctx.ws.ai.enabled) throw new HttpError(403, "ai_off", "AI is turned off for this workspace.");
+    const mode = s(ctx, "mode") as WikiWriteMode;
+    if (!WRITE_MODES.includes(mode)) throw invalid("mode is not one Ollie knows");
+    const selection = htmlToText(s(ctx, "html") ?? "");
+    const page = htmlToText(s(ctx, "context_html") ?? "");
+    const instructions = (s(ctx, "instructions") ?? "").trim();
+    if (instructions.length > 1000) throw invalid("instructions must be 1000 characters or less");
+    if (EDIT_MODES.has(mode) && !selection) throw invalid(`html is required for ${mode}`);
+    if (mode === "custom" && !instructions) throw invalid("instructions are required for custom");
+    if (!selection && !page && mode !== "custom") throw invalid("html or context_html is required");
+    const feature = EDIT_MODES.has(mode) ? "rewrite" : "wiki_write";
+    reserve(ctx.ws, feature);
+    const html = ollieWiki(mode, selection, page, (s(ctx, "title") ?? "").trim(), instructions);
+    spend(ctx.ws, feature);
+    // The deltas are the model's raw HTML, as the API streams it; `done` has the sanitized copy.
+    return sse(ctx, chunk(html, 2), { html: cleanBody(html) }, 28);
+  });
+
+  post("/v1/kb/articles/from-wiki", (ctx) => {
+    requireAgent(ctx);
+    const id = parseUUID(s(ctx, "page_id") ?? "");
+    if (!id) throw invalid("page_id must be a wiki page's id");
+    const st = stateOf(ctx.ws);
+    const v = viewerOf(ctx.ws);
+    const r = st.pages.find((p) => p.id === id && !p.deleted_at && sees(v, p));
+    if (!r) throw notFound("Wiki page");
+    const title = (s(ctx, "title") ?? "").trim().slice(0, 200) || r.title.trim();
+    if (!title) throw invalid("title is required for a page without one");
+    const collection = s(ctx, "collection_id") || null;
+    if (collection && !ctx.ws.collections.some((c) => c.id === collection)) throw invalid("collection_id must be a collection of the workspace");
+    const { html, leftOut } = articleFromWiki(r.body_html);
+    const a: KbArticle = {
+      id: uuid(),
+      brand_id: kbBrandRef(ctx, ctx.body.brand_id),
+      collection_id: collection,
+      title,
+      slug: uniqueSlug(ctx.ws.articles, slugify(title)),
+      excerpt: stripHtml(html).replace(/\s+/g, " ").trim().slice(0, 300),
+      body_html: html,
+      status: "draft",
+      author: userRef(db.meId),
+      views: 0,
+      published_at: null,
+      updated_at: nowIso(),
+    };
+    ctx.ws.articles.unshift(a);
+    recountCollections(ctx.ws);
+    publish(ctx.ws, "kb_article.created", { kb_article: a });
+    return respond(201, { article: a, left_out: leftOut });
+  });
+}
+
+/** The handbook mentions tickets as a team would: an example ticket, a contact and a live list of a view. */
+function seedDesk(ws: WsData, st: State) {
+  const page = (title: string) => st.pages.find((p) => p.title === title && !p.template);
+  const ticket = (subject: string) => ws.tickets.find((t) => t.subject === subject && !t.team_id) ?? ws.tickets.find((t) => t.subject === subject);
+  const ticketLink = (t: { id: string; number: number; subject: string }) => `<a data-type="ticket" data-id="${t.id}" href="/tickets/${t.number}">#${t.number} ${escapeHtml(t.subject)}</a>`;
+  const escalation = page("Escalation process");
+  const sync = ticket("Shared journal stopped syncing photos");
+  const urgent = ws.views.find((v) => v.name === "Urgent");
+  if (escalation && (sync || urgent)) {
+    escalation.body_html +=
+      (sync ? `<h2>A recent example</h2><p>${ticketLink(sync)} went to the on-call lead within the hour: several customers were blocked at once.</p>` : "") +
+      (urgent ? `<h2>Urgent right now</h2><div data-type="tickets" data-id="${urgent.id}" data-limit="5"></div>` : "");
+  }
+  const refunds = page("Refund policy");
+  const twice = ticket("Refund for a paid subscriber");
+  const who = twice?.contact;
+  if (refunds && twice)
+    refunds.body_html += `<p>Example: ${ticketLink(twice)}${who ? `, from <a data-type="contact" data-id="${who.id}" href="/contacts/${who.id}">${escapeHtml(who.name || who.email || "")}</a>` : ""}, a duplicate charge refunded the same day.</p>`;
+}
+
 // ─── The starter handbook ──────────────────────────────────────────────────
 
 type Seed = { title: string; icon: string; body: string; days: number; by: number; cover?: string; verified?: { by: number; days: number; for: number }; children?: Seed[] };
@@ -1904,6 +2245,8 @@ function seedHandbook(ws: WsData, st: State) {
     }
   }
   seedComments(ws, st, person);
+  seedDesk(ws, st);
+  seedCanvas(st, person);
   add(TEMPLATES, null, true);
   for (const r of st.pages.filter((p) => p.template && p.body_html.includes("{sub}"))) {
     const sub = st.pages.filter((c) => c.parent_id === r.id).sort(byPosition)[0];
@@ -2341,4 +2684,30 @@ function seedDatabases(ws: WsData, st: State, person: (i: number) => string | nu
     40,
     person(1),
   );
+}
+
+// ─── Ticket backlinks (links.go, contracts/wiki.md "Desk") ──────────────────
+
+/** The ticket ids a body mentions: `<a data-type="ticket" data-id="…">`. */
+function mentionedTickets(html: string): Set<string> {
+  const out = new Set<string>();
+  for (const tag of html.match(/<a\b[^>]*>/gi) ?? []) {
+    const id = /\bdata-id="([^"]+)"/.exec(tag)?.[1];
+    if (id && /\bdata-type="ticket"/.test(tag)) out.add(id.toLowerCase());
+  }
+  return out;
+}
+
+function registerTicketWiki() {
+  // The live pages the caller may see that mention the ticket, newest edit first, at most 50.
+  // A ticket the caller may not see is not found.
+  get("/v1/tickets/:id/wiki", (ctx) => {
+    const t = findTicket(ctx.ws, ctx.params.id);
+    if (!t || !canSeeTicket(ctx.ws, t)) throw notFound("Ticket");
+    const v = viewerOf(ctx.ws);
+    const out = stateOf(ctx.ws)
+      .pages.filter((r) => live(v, r) && mentionedTickets(r.body_html).has(t.id.toLowerCase()))
+      .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
+    return pageOf(out.slice(0, 50).map(node));
+  });
 }

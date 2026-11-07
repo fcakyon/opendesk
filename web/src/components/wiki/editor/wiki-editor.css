@@ -695,3 +695,122 @@ button.wiki-date:hover {
 .wiki-date.has-reminder {
   color: var(--fg);
 }
+
+/* Tickets and contacts mentioned in the text (desk.tsx): a status dot, the number and the subject. */
+.wiki-desk-wrap {
+  display: inline;
+}
+.wiki-ticket,
+.wiki-contact {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3em;
+  max-width: 100%;
+  padding: 0 0.25em;
+  border-radius: 4px;
+  color: var(--fg);
+  font-weight: 500;
+  text-decoration: none !important;
+  vertical-align: baseline;
+  transition: background 120ms;
+}
+a.wiki-ticket:hover,
+a.wiki-contact:hover {
+  background: var(--hover);
+}
+.wiki-ticket-dot {
+  align-self: center;
+  width: 0.5em;
+  height: 0.5em;
+  flex-shrink: 0;
+  border-radius: 999px;
+}
+.wiki-ticket-num {
+  color: var(--fg-3);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.86em;
+  font-weight: 450;
+}
+.wiki-ticket-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 28em;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+.wiki-ticket.is-loading {
+  color: var(--fg-4);
+}
+.wiki-ticket.is-hidden {
+  align-items: center;
+  color: var(--fg-4);
+  font-weight: 450;
+  font-style: italic;
+}
+.wiki-ticket-lock {
+  width: 0.8em;
+  height: 0.8em;
+}
+.wiki-contact-avatar {
+  align-self: center;
+}
+.wiki-contact > span:last-child {
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+/* The text Ollie works on, while its popover is open (ollie.tsx). */
+.wiki-ollie-target {
+  background: var(--tone-violet-soft);
+  border-radius: 2px;
+}
+.wiki-ollie-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: var(--tone-violet-solid);
+  animation: wiki-ollie-blink 1s steps(2, start) infinite;
+}
+@keyframes wiki-ollie-blink {
+  to {
+    visibility: hidden;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wiki-ollie-caret {
+    animation: none;
+  }
+}
+.wiki-ollie-result > * + * {
+  margin-top: 0.5em;
+}
+.wiki-ollie-result ul,
+.wiki-ollie-result ol {
+  padding-left: 1.25em;
+}
+.wiki-ollie-result ul {
+  list-style: disc;
+}
+.wiki-ollie-result ol {
+  list-style: decimal;
+}
+
+/* The ticket list block draws its own rows, not the page's list style. */
+.wiki-prose .wiki-tickets ul,
+.wiki-prose .wiki-tickets li {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wiki-prose .wiki-tickets li::before,
+.wiki-prose .wiki-tickets li::marker {
+  content: none;
+}
+.wiki-prose .wiki-tickets a {
+  text-decoration: none;
+}

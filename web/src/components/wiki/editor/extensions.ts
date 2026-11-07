@@ -14,12 +14,36 @@ import UniqueID from "@tiptap/extension-unique-id";
 import { Markdown } from "@tiptap/markdown";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
-import { AudioBlock, Bookmark, DatabaseBlock, PersonMention, Callout, Column, Columns, DateMention, Embed, FileBlock, HighlightTone, imageAttributes, imageView, PageLink, SubpageBlock, TableOfContents, TextTone, VideoBlock } from "./blocks";
+import {
+  AudioBlock,
+  Bookmark,
+  DatabaseBlock,
+  PersonMention,
+  Callout,
+  Column,
+  Columns,
+  ContactMention,
+  DateMention,
+  Embed,
+  FileBlock,
+  HighlightTone,
+  imageAttributes,
+  imageView,
+  PageLink,
+  SubpageBlock,
+  TableOfContents,
+  TextTone,
+  TicketMention,
+  TicketsBlock,
+  VideoBlock,
+} from "./blocks";
 import { WikiCodeBlock } from "./code";
 import { CommentMark, copyOfBlock, type CommentOptions } from "./comment";
 import { moveBlock, blockAt } from "./handle";
-import { emojiItems, linkItems, mentionItems, slashItems, type MenuSources } from "./items";
+import { emojiItems, linkItems, mentionItems, mentionSearch, slashItems, ticketSearch, type MenuSources } from "./items";
 import { typedMenu } from "./menu";
+import { OllieExtension } from "./ollie";
+import { parseTicketQuery } from "@/lib/wiki/desk";
 import { isTone } from "./tones";
 import { TagMarks } from "./tags";
 import { embedFor } from "@/lib/wiki/embeds";
@@ -50,6 +74,7 @@ export const ID_TYPES = [
   "blockMath",
   "subpage",
   "database",
+  "tickets",
 ];
 
 const LINE_HINT_PARENTS = new Set(["doc", "column", "callout", "detailsContent"]);
@@ -178,7 +203,8 @@ export function wikiExtensions(opts: { placeholder: () => string; sources: MenuS
         // Decorations are drawn for the state being made, which editor.state may not be yet.
         const doc = editor.state.doc;
         const parent = pos <= doc.content.size ? doc.resolve(pos).parent.type.name : "doc";
-        return node.type.name === "paragraph" && LINE_HINT_PARENTS.has(parent) ? s.t("editor.placeholder.line") : "";
+        if (node.type.name !== "paragraph" || !LINE_HINT_PARENTS.has(parent)) return "";
+        return s.t(s.ollie() ? "ollie.lineHint" : "editor.placeholder.line");
       },
       showOnlyCurrent: true,
     }),
@@ -209,6 +235,9 @@ export function wikiExtensions(opts: { placeholder: () => string; sources: MenuS
     TableOfContents,
     SubpageBlock,
     DatabaseBlock,
+    TicketsBlock,
+    TicketMention,
+    ContactMention,
     PageLink,
     DateMention,
     TextTone,
@@ -220,9 +249,28 @@ export function wikiExtensions(opts: { placeholder: () => string; sources: MenuS
     CommentMark.configure(opts.comments),
     Markdown,
     UniqueID.configure({ attributeName: "block-id", types: ID_TYPES }),
+    OllieExtension.configure({ enabled: () => s.ollie(), ask: () => s.askOllie() }),
     typedMenu({ name: "slash", char: "/", items: (q) => slashItems(q, s), labels: () => ({ title: s.t("editor.menu.blocks"), empty: s.t("editor.menu.noBlocks") }) }),
     typedMenu({ name: "link", char: "[[", allowSpaces: true, items: (q) => linkItems(q, s), labels: () => ({ title: s.t("editor.menu.pages"), empty: s.t("editor.menu.noPages") }) }),
-    typedMenu({ name: "mention", char: "@", allowSpaces: true, items: (q) => mentionItems(q, s), labels: () => ({ title: s.t("editor.menu.mention"), empty: s.t("editor.menu.noMatches") }) }),
+    typedMenu({
+      name: "mention",
+      char: "@",
+      allowSpaces: true,
+      items: (q, _e, found) => mentionItems(q, s, found),
+      search: mentionSearch(s),
+      labels: () => ({ title: s.t("editor.menu.mention"), empty: s.t("editor.menu.noMatches"), searching: s.t("desk.searching") }),
+    }),
+    // "#123" or "#words": tickets. A #tag types on: the menu only shows with tickets to offer,
+    // and Enter picks one only for a number or after an arrow key chose it.
+    typedMenu({
+      name: "ticket",
+      char: "#",
+      quiet: true,
+      preselect: (q) => parseTicketQuery(q).kind === "number",
+      items: (_q, _e, found) => found ?? [],
+      search: ticketSearch(s),
+      labels: () => ({ title: s.t("desk.tickets"), empty: s.t("desk.noTickets"), searching: s.t("desk.searching") }),
+    }),
     typedMenu({ name: "emoji", char: ":", items: (q) => emojiItems(q), labels: () => ({ title: s.t("editor.block.emoji"), empty: s.t("editor.menu.noMatches") }) }),
   ];
 }

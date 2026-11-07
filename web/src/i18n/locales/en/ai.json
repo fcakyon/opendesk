@@ -15,7 +15,8 @@
     "kb_draft": "Draft a help article",
     "assistant": "Assistant messages",
     "assistant_peer": "Ollie asking a teammate's Ollie",
-    "procedure": "Run a procedure from an automation"
+    "procedure": "Run a procedure from an automation",
+    "wiki_write": "Write in the wiki"
   },
   "sentiment": {
     "positive": "Positive",

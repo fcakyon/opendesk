@@ -1,13 +1,14 @@
-// The toolbar over selected text: what the block is (and turning it into another), the
-// inline marks, a link (to a page of the wiki or the web), colour and inline code. It only
-// shows for a text selection someone made, never for a selected image or inside code.
+// The toolbar over selected text: Ollie (where AI is on), what the block is (and turning it
+// into another), the inline marks, a link (to a page of the wiki or the web), colour and
+// inline code. It only shows for a text selection someone made, never for a selected image
+// or inside code, and steps aside while Ollie works on the selection.
 
 import type { Editor } from "@tiptap/core";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { DropdownMenu as M } from "radix-ui";
 import { Bold, ChevronDown, Code, FileText, Italic, Link2, MessageSquareText, Sigma, Strikethrough, Underline, Unlink } from "lucide-react";
-import { useCallback, useRef, useState, type ReactNode } from "react";
-import type { EditorState } from "@tiptap/pm/state";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { PluginKey, type EditorState } from "@tiptap/pm/state";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/ui/input";
@@ -22,6 +23,7 @@ import { heldComment } from "./comment";
 import { turnIntoOptions, type TurnId } from "./handle";
 import { rank } from "./menu";
 import { TONES, type Tone } from "./tones";
+import { OllieMark } from "@/components/assistant/OllieMark";
 
 function Btn({ label, shortcut, active, onClick, children }: { label: string; shortcut?: string; active?: boolean; onClick: () => void; children: ReactNode }) {
   return (
@@ -58,15 +60,19 @@ function currentKind(editor: Editor): TurnId {
 // BubbleMenu sends a transaction whenever these change identity, and the page redraws on
 // every transaction: they must stay the same objects across renders.
 const BUBBLE_OPTIONS = { placement: "top", offset: 8, flip: true, shift: { padding: 8 } } as const;
+const BUBBLE_KEY = new PluginKey("wikiBubble");
 
-export function BubbleToolbar({ editor, canComment }: { editor: Editor; canComment: boolean }) {
+export function BubbleToolbar({ editor, canComment, onAskOllie, ollieOpen }: { editor: Editor; canComment: boolean; onAskOllie?: () => void; ollieOpen?: boolean }) {
   const { t } = useTranslation("wiki");
   const [linking, setLinking] = useState(false);
   const linkingRef = useRef(linking);
   linkingRef.current = linking;
+  const ollieRef = useRef(ollieOpen);
+  ollieRef.current = ollieOpen;
   const shouldShow = useCallback(({ editor: e, state, from, to }: { editor: Editor; state: EditorState; from: number; to: number }) => {
     // The link field keeps the toolbar up while it has focus.
     if (linkingRef.current) return true;
+    if (ollieRef.current) return false;
     if (!e.isEditable || from === to) return false;
     // A thread being written on the selection has the panel's attention.
     if (heldComment(state)) return false;
@@ -74,14 +80,35 @@ export function BubbleToolbar({ editor, canComment }: { editor: Editor; canComme
     if (e.isActive("codeBlock") || e.isActive("inlineMath") || e.isActive("blockMath")) return false;
     return state.doc.textBetween(from, to).trim().length > 0;
   }, []);
+  // Ollie's popover takes over the selection: the toolbar leaves at once, not on the next edit.
+  useEffect(() => {
+    if (ollieOpen && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(BUBBLE_KEY, "hide").setMeta("addToHistory", false));
+  }, [ollieOpen, editor]);
   const kind = currentKind(editor);
   return (
     <BubbleMenu
       editor={editor}
+      pluginKey={BUBBLE_KEY}
       options={BUBBLE_OPTIONS}
       shouldShow={shouldShow}
       className="wiki-bubble z-50 flex items-center gap-0.5 rounded-lg border border-line bg-raised p-1 shadow-pop animate-pop-in"
     >
+      {onAskOllie && (
+        <>
+          <Tooltip content={t("ollie.askSelection")} shortcut="mod j">
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onAskOllie}
+              className="flex h-7 items-center gap-1.5 rounded-md px-1.5 text-[12.5px] font-medium text-tone-violet transition-colors hover:bg-tone-violet-soft"
+            >
+              <OllieMark size={16} eyes={false} />
+              {t("ollie.ask")}
+            </button>
+          </Tooltip>
+          {sep}
+        </>
+      )}
       <M.Root modal={false}>
         <M.Trigger asChild>
           <button

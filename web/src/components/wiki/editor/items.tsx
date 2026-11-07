@@ -1,6 +1,7 @@
 // What the wiki editor's typed menus offer (menu.tsx): the "/" blocks, "[[" pages, "@"
-// people, pages and dates, ":" emoji. Pure lists built from what the page knows; the
-// editor component passes its getters in so the lists stay current without remounting.
+// people, contacts, tickets, pages and dates, "#" tickets, ":" emoji. Lists built from what
+// the page knows, plus what the API finds for a query; the editor component passes its
+// getters in so the lists stay current without remounting.
 
 import type { Editor, Range } from "@tiptap/core";
 import type { TFunction } from "i18next";
@@ -41,10 +42,16 @@ import {
   LayoutGrid,
   GanttChart,
   Database as DatabaseIcon,
+  Hash,
+  ListChecks,
 } from "lucide-react";
-import type { DbViewType, Member, WikiNode } from "@/lib/api/types";
+import type { Contact, DbViewType, Member, SearchResults, Ticket, WikiNode } from "@/lib/api/types";
+import { OllieMark } from "@/components/assistant/OllieMark";
+import { StatusIcon } from "@/components/indicators";
 import { Avatar } from "@/components/ui/avatar";
+import { parseTicketQuery, ticketsForNumber } from "@/lib/wiki/desk";
 import { newReminderId } from "@/lib/wiki/reminder";
+import { openViewPickerNext } from "./desk";
 import { EMOJI, searchEmoji } from "../emoji";
 import { rank, type MenuItem } from "./menu";
 import { TONES } from "./tones";
@@ -62,6 +69,14 @@ export type MenuSources = {
   /** Makes a database inside the page, shown as a layout, and resolves to it. */
   createDatabase: (type: DbViewType) => Promise<{ id: string; view: string } | null>;
   untitled: string;
+  /** The app's search (tickets and contacts the reader can see). */
+  search: (q: string) => Promise<SearchResults>;
+  /** One ticket by number, or null when there is none the reader can see. */
+  ticket: (ref: string) => Promise<Ticket | null>;
+  /** Ollie can write here: AI is on for the workspace and the page is editable. */
+  ollie: () => boolean;
+  /** Opens Ollie's prompt at the cursor. */
+  askOllie: () => void;
 };
 
 const clear = (editor: Editor, range: Range) => editor.chain().focus().deleteRange(range);
@@ -137,8 +152,58 @@ const insertReminder = (editor: Editor, range: Range) =>
     .insertContent([{ type: "dateMention", attrs: { date: today(1), reminder: newReminderId() } }, { type: "text", text: " " }])
     .run();
 
-/** "@": people, then dates, then pages. */
-export function mentionItems(query: string, s: MenuSources): MenuItem[] {
+const insertTicket = (t: Ticket) => (editor: Editor, range: Range) =>
+  clear(editor, range)
+    .insertContent([{ type: "ticketMention", attrs: { id: t.id, number: t.number, label: t.subject.slice(0, 200) } }, { type: "text", text: " " }])
+    .run();
+
+export function ticketItem(t: Ticket, group?: string): MenuItem {
+  return { id: `ticket-${t.id}`, group, label: t.subject, sub: t.contact?.name || t.contact?.email || undefined, hint: `#${t.number}`, icon: <StatusIcon status={t.status} />, run: insertTicket(t) };
+}
+
+export function contactItem(c: Contact, group?: string): MenuItem {
+  const name = c.name || c.email || "";
+  return {
+    id: `contact-${c.id}`,
+    group,
+    label: name,
+    sub: c.name && c.email ? c.email : c.company?.name,
+    icon: <Avatar name={name} src={c.avatar_url} size="xs" />,
+    run: (editor, range) =>
+      clear(editor, range)
+        .insertContent([{ type: "contactMention", attrs: { id: c.id, label: name.slice(0, 200) } }, { type: "text", text: " " }])
+        .run(),
+  };
+}
+
+/** "@" searches contacts and tickets once two letters are typed. */
+export const mentionSearch = (s: MenuSources) => ({
+  when: (q: string) => q.trim().length >= 2,
+  run: async (q: string): Promise<MenuItem[]> => {
+    const r = await s.search(q.trim());
+    return [...r.contacts.slice(0, 4).map((c) => contactItem(c, s.t("desk.contacts"))), ...r.tickets.slice(0, 4).map((t) => ticketItem(t, s.t("desk.tickets")))];
+  },
+});
+
+/** "#": a ticket by number ("#123"), or tickets found by words ("#refund"). */
+export const ticketSearch = (s: MenuSources) => ({
+  when: (q: string) => {
+    const p = parseTicketQuery(q);
+    return p.kind === "number" || (p.kind === "text" && p.text.length >= 2);
+  },
+  run: async (q: string): Promise<MenuItem[]> => {
+    const p = parseTicketQuery(q);
+    if (p.kind === "number") {
+      const [exact, found] = await Promise.all([s.ticket(p.digits), s.search(p.digits).catch(() => null)]);
+      return ticketsForNumber(p.digits, exact, found?.tickets ?? []).map((t) => ticketItem(t));
+    }
+    if (p.kind === "text") return (await s.search(p.text)).tickets.slice(0, 6).map((t) => ticketItem(t));
+    return [];
+  },
+});
+
+/** "@": people, contacts and tickets found, then dates, then pages. */
+export function mentionItems(query: string, s: MenuSources, found: MenuItem[] = []): MenuItem[] {
   const t = s.t;
   const people = rank(
     query,
@@ -176,7 +241,7 @@ export function mentionItems(query: string, s: MenuSources): MenuItem[] {
     run: insertReminder,
   }));
   const pages = pageItems(query, s, linkPage, { group: t("editor.menu.pages"), limit: 5 });
-  return [...people, ...dates.slice(0, 2), ...remind, ...pages];
+  return [...people, ...found, ...dates.slice(0, 2), ...remind, ...pages];
 }
 
 /** ":": emoji, after two letters so "a:b" and times stay as typed. */
@@ -201,6 +266,7 @@ export function slashItems(query: string, s: MenuSources): MenuItem[] {
   const inline = t("editor.menu.inline");
   const colors = t("editor.menu.colors");
   const databases = t("editor.menu.databases");
+  const desk = t("desk.group");
   const database = (type: DbViewType) => async (e: Editor, r: Range) => {
     e.chain().focus().deleteRange(r).run();
     const made = await s.createDatabase(type);
@@ -260,6 +326,18 @@ export function slashItems(query: string, s: MenuSources): MenuItem[] {
     { id: "dbCalendar", group: databases, label: t("editor.block.dbCalendar"), icon: <CalendarDays />, words: "database calendar month dates", run: database("calendar") },
     { id: "dbTimeline", group: databases, label: t("editor.block.dbTimeline"), icon: <GanttChart />, words: "database timeline gantt roadmap", run: database("timeline") },
     { id: "dbLinked", group: databases, label: t("editor.block.dbLinked"), icon: <DatabaseIcon />, words: "linked database view existing", run: (e, r) => clear(e, r).insertContent({ type: "database" }).run() },
+    {
+      id: "tickets",
+      group: desk,
+      label: t("desk.ticketList"),
+      icon: <ListChecks />,
+      words: "tickets view queue inbox list desk",
+      run: (e, r) => {
+        openViewPickerNext();
+        clear(e, r).insertContent({ type: "tickets" }).run();
+      },
+    },
+    { id: "ticket", group: desk, label: t("desk.mentionTicket"), icon: <Hash />, hint: "#", words: "ticket mention conversation case", run: (e, r) => clear(e, r).insertContent("#").run() },
     { id: "table", group: advanced, label: t("editor.block.table"), icon: <Table />, words: "grid rows columns spreadsheet", run: (e, r) => clear(e, r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
     { id: "col2", group: advanced, label: t("editor.block.columns", { count: 2 }), icon: <Columns2 />, words: "layout side by side columns", run: (e, r) => clear(e, r).setColumns(2).run() },
     { id: "col3", group: advanced, label: t("editor.block.columns", { count: 3 }), icon: <Columns3 />, words: "layout columns", run: (e, r) => clear(e, r).setColumns(3).run() },
@@ -289,6 +367,19 @@ export function slashItems(query: string, s: MenuSources): MenuItem[] {
       run: (e, r) => clear(e, r).setHighlightTone(tone).run(),
     })),
   ];
+  if (s.ollie())
+    defs.unshift({
+      id: "ai",
+      group: t("ollie.name"),
+      label: t("ollie.askAtLine"),
+      icon: <OllieMark size={16} eyes={false} />,
+      hint: t("ollie.spaceHint"),
+      words: "ai ollie write continue summarize assistant generate",
+      run: (e, r) => {
+        clear(e, r).run();
+        s.askOllie();
+      },
+    });
   // The colours only show for a query: twenty swatches would bury the blocks.
   const list = query.trim() ? defs : defs.filter((d) => d.group !== colors);
   return rank(query, list, (d) => [d.label, `${d.words ?? ""} ${d.id}`]).map((d) => ({ ...d, group: query.trim() ? undefined : d.group }));

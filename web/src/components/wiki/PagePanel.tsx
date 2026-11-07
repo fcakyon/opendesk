@@ -1,5 +1,6 @@
 // The panel beside a wiki page, as Obsidian's right sidebar: the page's outline, its links
-// (pages linking here, pages naming it without a link, pages it links to), its local graph,
+// (pages linking here, pages naming it without a link, pages it links to, tickets it
+// mentions), its local graph,
 // its comments (comments/CommentsPanel.tsx) and what it holds (words, reading time, tags,
 // who made it). Kept open per browser.
 
@@ -23,6 +24,7 @@ import { q, qk } from "@/lib/queries";
 import { linkFirstMention } from "@/lib/wiki/linkMention";
 import { useNow } from "@/lib/useNow";
 import { scrollToBlock } from "./editor/views";
+import { TicketLine } from "./editor/desk";
 import type { PanelTab } from "./editor/prefs";
 import { WikiGraph } from "./Graph";
 import { useTitle, useWikiTree } from "./hooks";
@@ -228,17 +230,22 @@ function Links({ page, editor, canEdit }: { page: WikiPage; editor: Editor | nul
   const mentions = useQuery(q.wikiMentions(page.id));
   const [linking, setLinking] = useState<string | null>(null);
 
-  // Pages this one links to, read from the text as it is now.
+  // Pages this one links to and tickets it mentions, read from the text as it is now.
   const [outgoing, setOutgoing] = useState<string[]>([]);
+  const [tickets, setTickets] = useState<string[]>([]);
   useEffect(() => {
     if (!editor) return;
     const read = () => {
       const ids: string[] = [];
+      const ticketIds: string[] = [];
       editor.state.doc.descendants((n) => {
         const id = n.type.name === "pageLink" || n.type.name === "subpage" ? (n.attrs.id as string) : "";
         if (id && !ids.includes(id) && id !== page.id) ids.push(id);
+        const tid = n.type.name === "ticketMention" ? (n.attrs.id as string) : "";
+        if (tid && !ticketIds.includes(tid)) ticketIds.push(tid);
       });
-      setOutgoing(ids);
+      setOutgoing((old) => (old.join() === ids.join() ? old : ids));
+      setTickets((old) => (old.join() === ticketIds.join() ? old : ticketIds));
     };
     read();
     editor.on("update", read);
@@ -274,7 +281,7 @@ function Links({ page, editor, canEdit }: { page: WikiPage; editor: Editor | nul
   const back = backlinks.data ?? [];
   const unlinked = mentions.data ?? [];
   const out = outgoing.map((id) => tree.byId.get(id)).filter((n) => !!n);
-  if (!back.length && !unlinked.length && !out.length) return <Empty icon={<Link2 />}>{t("panel.linksEmpty")}</Empty>;
+  if (!back.length && !unlinked.length && !out.length && !tickets.length) return <Empty icon={<Link2 />}>{t("panel.linksEmpty")}</Empty>;
   return (
     <>
       <Section title={t("panel.backlinks")} count={back.length}>
@@ -306,6 +313,13 @@ function Links({ page, editor, canEdit }: { page: WikiPage; editor: Editor | nul
               <PageIcon icon={n.icon} />
               <span className="truncate">{title(n.title)}</span>
             </Link>
+          ))}
+        </Section>
+      )}
+      {tickets.length > 0 && (
+        <Section title={t("desk.panelTickets")} count={tickets.length}>
+          {tickets.map((id) => (
+            <TicketLine key={id} id={id} />
           ))}
         </Section>
       )}

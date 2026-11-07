@@ -12,6 +12,8 @@ import { removeSubtree, upsertNode } from "./tree";
 
 export function applyWikiEvent(qc: QueryClient, verb: string, d: Record<string, unknown>) {
   void qc.invalidateQueries({ queryKey: qk.of("wiki", "search") });
+  // A ticket's "Wiki" section: which pages mention it can change with any page.
+  void qc.invalidateQueries({ queryKey: qk.of("tickets", "wiki") });
   const patch = (fn: (nodes: WikiNode[]) => WikiNode[]) => qc.setQueryData<WikiNode[]>(qk.wikiTree, (old) => (old ? fn(old) : old));
   if (verb === "deleted") {
     const ids = (d.wiki_page_ids as string[] | undefined) ?? [d.wiki_page_id as string];
@@ -49,6 +51,9 @@ export function applyWikiEvent(qc: QueryClient, verb: string, d: Record<string, 
   const settings = d.settings as WikiPageSettings | undefined;
   if (settings) qc.setQueryData<WikiPage>(qk.wikiPage(node.id), (old) => (old ? { ...old, ...settings } : old));
   if ("verification" in d) qc.setQueryData<WikiPage>(qk.wikiPage(node.id), (old) => (old ? { ...old, verification: d.verification as WikiPage["verification"] } : old));
+  // A canvas has no version either (contracts/wiki.md "Canvas"): the open canvas takes it when idle.
+  if (d.canvas) qc.setQueryData<WikiPage>(qk.wikiPage(node.id), (old) => (old ? { ...old, canvas: d.canvas as WikiPage["canvas"] } : old));
+  else if (d.canvas_changed) void qc.invalidateQueries({ queryKey: qk.wikiPage(node.id) });
   const page = qc.getQueryData<WikiPage>(qk.wikiPage(node.id));
   // This tab's own saves come back with their answer (the saver has the version already).
   const known = Math.max(page?.version ?? Infinity, openSaver(node.id)?.version ?? 0);

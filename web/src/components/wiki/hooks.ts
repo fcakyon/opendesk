@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api/endpoints";
-import type { Database, WikiNode, WikiPage, WikiSpace } from "@/lib/api/types";
+import type { Database, WikiKind, WikiNode, WikiPage, WikiSpace } from "@/lib/api/types";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole, useSession } from "@/lib/session";
 import { forgetSaver } from "@/lib/wiki/saver";
@@ -101,7 +101,7 @@ export function patchTree(qc: QueryClient, fn: (nodes: WikiNode[]) => WikiNode[]
 /** Pages just made here: their title takes the focus when they open. */
 export const freshPages = new Set<string>();
 
-export type NewPage = { parent_id?: string | null; space?: WikiSpace; team_id?: string; template?: boolean; kind?: "page" | "database"; database?: Database; title?: string; icon?: string; body_html?: string; position?: number };
+export type NewPage = { parent_id?: string | null; space?: WikiSpace; team_id?: string; template?: boolean; kind?: WikiKind; database?: Database; title?: string; icon?: string; body_html?: string; position?: number };
 
 export function useCreatePage() {
   const qc = useQueryClient();

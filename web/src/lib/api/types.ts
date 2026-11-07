@@ -1616,9 +1616,43 @@ export type WikiNode = {
   template?: boolean;
   /** Verified, and not past the day it was verified until. */
   verified?: boolean;
-  /** "database": its subpages are its rows (contracts/wiki.md "Databases"). */
-  kind?: "page" | "database";
+  /** "database": its subpages are its rows (contracts/wiki.md "Databases"); "canvas": cards on a board ("Canvas"). */
+  kind?: WikiKind;
 };
+
+export type WikiKind = "page" | "database" | "canvas";
+
+// ─── Wiki canvases (contracts/wiki.md "Canvas") ──────────────────────────────
+
+/** A preset tone "1".."6" (red, orange, yellow, green, cyan, purple) or "#rrggbb". */
+export type CanvasColor = string;
+export type CanvasSide = "top" | "right" | "bottom" | "left";
+export type CanvasEnd = "none" | "arrow";
+
+type CanvasNodeBase = { id: string; x: number; y: number; width: number; height: number; color?: CanvasColor };
+export type CanvasTextNode = CanvasNodeBase & { type: "text"; html: string };
+export type CanvasPageNode = CanvasNodeBase & { type: "page"; page_id: string };
+export type CanvasLinkNode = CanvasNodeBase & { type: "link"; url: string; title?: string; description?: string; image?: string };
+export type CanvasFileNode = CanvasNodeBase & { type: "file"; src: string; name: string };
+export type CanvasGroupNode = CanvasNodeBase & { type: "group"; label?: string };
+export type CanvasNode = CanvasTextNode | CanvasPageNode | CanvasLinkNode | CanvasFileNode | CanvasGroupNode;
+
+export type CanvasEdge = {
+  id: string;
+  fromNode: string;
+  fromSide?: CanvasSide;
+  /** Default "none". */
+  fromEnd?: CanvasEnd;
+  toNode: string;
+  toSide?: CanvasSide;
+  /** Default "arrow". */
+  toEnd?: CanvasEnd;
+  color?: CanvasColor;
+  label?: string;
+};
+
+/** A canvas page's cards (in z order, later above) and connections. */
+export type Canvas = { nodes: CanvasNode[]; edges: CanvasEdge[] };
 
 // ─── Wiki databases (contracts/wiki.md "Databases") ─────────────────────────
 
@@ -1822,8 +1856,10 @@ export type WikiPageSettings = {
 export type WikiPage = WikiNode &
   WikiPageSettings & {
   body_html: string;
-  kind: "page" | "database";
+  kind: WikiKind;
   database: Database | null;
+  /** A canvas's cards and connections; null for a page (contracts/wiki.md "Canvas"). */
+  canvas?: Canvas | null;
   props: Record<string, DbValue>;
   verification: WikiVerification | null;
   /** In the trash since; null for a page in the tree. */
@@ -1866,7 +1902,7 @@ export type WikiSearchHit = {
   updated_at: string;
 };
 
-export type WikiPagePatch = Partial<WikiPageSettings> & { title?: string; icon?: string; body_html?: string; version?: number; verified?: boolean; verified_days?: number; database?: Database; props?: Record<string, DbValue> };
+export type WikiPagePatch = Partial<WikiPageSettings> & { title?: string; icon?: string; body_html?: string; version?: number; verified?: boolean; verified_days?: number; database?: Database; props?: Record<string, DbValue>; canvas?: Canvas };
 
 export type ReportsOverview = {
   created: number;
@@ -2168,7 +2204,7 @@ export type AutoRecharge = {
 };
 export type AutoRechargePatch = Partial<Pick<AutoRecharge, "enabled" | "threshold_usd" | "amount_usd" | "monthly_limit_usd">>;
 export type AIFeature =
-  | "summarize" | "rewrite" | "translate" | "triage" | "decide" | "answer_check" | "copilot" | "draft_reply" | "answer" | "answer_email" | "playground" | "kb_draft" | "assistant" | "assistant_peer" | "procedure";
+  | "summarize" | "rewrite" | "translate" | "triage" | "decide" | "answer_check" | "copilot" | "draft_reply" | "answer" | "answer_email" | "playground" | "kb_draft" | "assistant" | "assistant_peer" | "procedure" | "wiki_write";
 /**
  * GET /v1/billing/usage (contracts/billing.md). `from`/`to` are RFC 3339; `to` is exclusive.
  * Every usd value is US dollars, a number with up to 6 decimals.
@@ -2382,6 +2418,19 @@ export type Triage = {
   suggestions?: AISuggestions;
 };
 export type RewriteMode = "friendlier" | "more_formal" | "shorter" | "longer" | "fix_grammar" | "simplify";
+/** POST /v1/wiki/ai/write (contracts/ai.md): Ollie writing in the wiki. */
+export type WikiWriteMode =
+  | "improve" | "fix_grammar" | "shorter" | "longer" | "simplify" | "more_formal" | "friendlier"
+  | "summarize" | "action_items" | "explain" | "continue" | "custom";
+export type WikiWriteInput = {
+  mode: WikiWriteMode;
+  /** The selection to edit. */
+  html?: string;
+  /** The page around the selection or cursor. */
+  context_html?: string;
+  title?: string;
+  instructions?: string;
+};
 export type TranslateResult = { html?: string; text?: string; source_language: string };
 export type KBArticleDraft = { title: string; body_html: string; excerpt: string };
 

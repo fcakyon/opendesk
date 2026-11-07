@@ -7,7 +7,9 @@ import { InputRule, Mark, mergeAttributes, Node } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import { isTone, type Tone } from "./tones";
 import { formatWhen, parseWhen, reminderId } from "@/lib/wiki/reminder";
+import { cleanLimit, isUuid, parseTicketLink } from "@/lib/wiki/desk";
 import { DatabaseBlockView } from "../database/DatabaseBlock";
+import { ContactMentionView, TicketMentionView, TicketsBlockView } from "./desk";
 import { BookmarkView, CalloutView, DateView, EmbedView, FileView, ImageView, MediaView, PageLinkView, SubpageView, TocView } from "./views";
 
 
@@ -171,6 +173,13 @@ export const DatabaseBlock = atomBlock(
   DatabaseBlockView,
 );
 
+/** A saved view's open tickets, live, with a link to the whole view (contracts/wiki.md "Desk"). */
+export const TicketsBlock = atomBlock(
+  "tickets",
+  { id: { default: "", clean: (v) => (isUuid(v) ? v : "") }, limit: { default: 5, clean: cleanLimit } },
+  TicketsBlockView,
+);
+
 /** The page's headings as links, kept up to date. */
 export const TableOfContents = atomBlock("toc", {}, TocView);
 
@@ -317,4 +326,51 @@ export const PersonMention = Node.create({
   parseHTML: () => [{ tag: 'span[data-type="mention"]' }, { tag: "span[data-mention]" }],
   renderHTML: ({ node }) => ["span", { "data-type": "mention", "data-id": node.attrs.id, class: "mention" }, `@${node.attrs.label}`],
   renderText: ({ node }) => `@${node.attrs.label}`,
+});
+
+/**
+ * A ticket, inline: drawn live (status, number, subject) for readers who can see it. The
+ * stored text, "#123 Subject" when it was mentioned, is what other readers of the HTML get.
+ */
+export const TicketMention = Node.create({
+  name: "ticketMention",
+  group: "inline",
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      id: { default: "", parseHTML: (el) => (isUuid(el.getAttribute("data-id")) ? el.getAttribute("data-id") : "") },
+      number: { default: 0, parseHTML: (el) => parseTicketLink(el.getAttribute("href"), el.textContent).number },
+      label: { default: "", parseHTML: (el) => parseTicketLink(el.getAttribute("href"), el.textContent).label },
+    };
+  },
+  // Before the link mark's a[href], which would otherwise take it as a plain link.
+  parseHTML: () => [{ tag: 'a[data-type="ticket"]', priority: 100 }],
+  renderHTML: ({ node }) => ["a", { "data-type": "ticket", "data-id": node.attrs.id, href: `/tickets/${node.attrs.number}` }, `#${node.attrs.number} ${node.attrs.label}`.trim()],
+  renderText: ({ node }) => `#${node.attrs.number}`,
+  addNodeView() {
+    return ReactNodeViewRenderer(TicketMentionView, { as: "span" });
+  },
+});
+
+/** A contact, inline: their name, opening the contact. */
+export const ContactMention = Node.create({
+  name: "contactMention",
+  group: "inline",
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      id: { default: "", parseHTML: (el) => (isUuid(el.getAttribute("data-id")) ? el.getAttribute("data-id") : "") },
+      label: { default: "", parseHTML: (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 200) },
+    };
+  },
+  parseHTML: () => [{ tag: 'a[data-type="contact"]', priority: 100 }],
+  renderHTML: ({ node }) => ["a", { "data-type": "contact", "data-id": node.attrs.id, href: `/contacts/${node.attrs.id}` }, node.attrs.label || "?"],
+  renderText: ({ node }) => node.attrs.label || "",
+  addNodeView() {
+    return ReactNodeViewRenderer(ContactMentionView, { as: "span" });
+  },
 });

@@ -729,3 +729,121 @@ describe("wiki events on the cache", () => {
     resetSavers();
   });
 });
+
+// ─── Ticket backlinks (GET /v1/tickets/{id}/wiki) ──────────────────────────
+
+describe("mock ticket wiki pages", () => {
+  installMock();
+
+  it("lists the live pages the caller may see that mention a ticket, newest edit first", async () => {
+    const ws = db.workspaces[0];
+    const hiddenTeams = new Set(ws.teams.filter((t) => t.private && !t.members.some((m) => m.user_id === db.meId)).map((t) => t.id));
+    const tk = ws.tickets.find((t) => !t.team_id || !hiddenTeams.has(t.team_id))!;
+    const other = ws.members.find((m) => m.user_id !== db.meId)!.user_id;
+    const mention = `<a data-type="ticket" data-id="${tk.id}" href="/tickets/${tk.number}">#${tk.number} ${tk.subject}</a>`;
+    const pages = async (ref: string) => (await call("GET", `/v1/tickets/${ref}/wiki`)).body.data as WikiNode[];
+
+    const older = (await call("POST", "/v1/wiki/pages", { title: "Refund runbook", body_html: `<p>See ${mention}</p>` })).body as WikiPage;
+    const newer = (await call("POST", "/v1/wiki/pages", { title: "Escalation", body_html: "<p>nothing yet</p>" })).body as WikiPage;
+    await call("PATCH", `/v1/wiki/pages/${newer.id}`, { body_html: `<p>${mention}</p>`, version: newer.version });
+    const listed = ids(await pages(tk.id));
+    expect(listed.indexOf(newer.id)).toBeLessThan(listed.indexOf(older.id));
+    expect(listed.indexOf(older.id)).toBeGreaterThanOrEqual(0);
+    expect(ids(await pages(encodeURIComponent(`#${tk.number}`)))).toEqual(listed);
+    expect(ids(await pages(String(tk.number)))).toEqual(listed);
+
+    // Someone else's private page stays theirs; a trashed page leaves the list.
+    const theirs = await as(other, async () => (await call("POST", "/v1/wiki/pages", { title: "Theirs", space: "private", body_html: `<p>${mention}</p>` })).body as WikiPage);
+    expect(ids(await pages(tk.id))).not.toContain(theirs.id);
+    await as(other, async () => expect(ids(await pages(tk.id))).toContain(theirs.id));
+    await call("POST", `/v1/wiki/pages/${newer.id}/trash`);
+    expect(ids(await pages(tk.id))).not.toContain(newer.id);
+
+    // A private team's ticket is not found for someone off the team, like a missing one.
+    const hidden = ws.tickets.find((t) => t.team_id && hiddenTeams.has(t.team_id))!;
+    expect((await call("GET", `/v1/tickets/${hidden.id}/wiki`)).status).toBe(404);
+    expect((await call("GET", "/v1/tickets/999999/wiki")).status).toBe(404);
+  });
+});
+
+// ─── Canvas (contracts/wiki.md "Canvas") ────────────────────────────────────
+
+describe("mock wiki canvases", () => {
+  installMock();
+  const card = (id: string, type: string, extra: Record<string, unknown> = {}) => ({ id, type, x: 0, y: 0, width: 240, height: 120, ...extra });
+
+  it("seeds a canvas in the handbook, its page cards counted as links", async () => {
+    const tree = (await call("GET", "/v1/wiki/pages")).body.data as WikiNode[];
+    const map = tree.find((n) => n.title === "First response map")!;
+    expect(map.kind).toBe("canvas");
+    const page = (await call("GET", `/v1/wiki/pages/${map.id}`)).body as WikiPage;
+    const ref = page.canvas!.nodes.find((n) => n.type === "page")!;
+    expect(ref.type === "page" && tree.some((n) => n.id === ref.page_id)).toBe(true);
+    const graph = (await call("GET", "/v1/wiki/graph")).body.data as { from: string; to: string }[];
+    expect(graph.some((l) => l.from === map.id)).toBe(true);
+  });
+
+  it("makes a canvas, replaces its cards whole without a new version, and sends them live", async () => {
+    const target = (await call("POST", "/v1/wiki/pages", { title: "Refunds" })).body as WikiPage;
+    const made = (await call("POST", "/v1/wiki/pages", { title: "Board", kind: "canvas" })).body as WikiPage;
+    expect(made.kind).toBe("canvas");
+    expect(made.canvas).toEqual({ nodes: [], edges: [] });
+    const canvas = {
+      nodes: [card("t", "text", { html: "<p>Ship it #launch<script>x</script></p>" }), card("p", "page", { page_id: target.id }), card("g", "group", { label: " Week  one " })],
+      edges: [{ id: "e", fromNode: "t", toNode: "p", fromEnd: "none", toEnd: "arrow", label: "explains" }],
+    };
+    const saved = (await call("PATCH", `/v1/wiki/pages/${made.id}`, { canvas })).body as WikiPage;
+    expect(saved.version).toBe(made.version);
+    expect(saved.canvas!.nodes[0]).toMatchObject({ type: "text" });
+    expect(JSON.stringify(saved.canvas)).not.toContain("script");
+    expect(saved.canvas!.nodes[2]).toMatchObject({ label: "Week one" });
+    expect(saved.canvas!.edges[0]).toEqual({ id: "e", fromNode: "t", toNode: "p", label: "explains" });
+    const tree = (await call("GET", "/v1/wiki/pages")).body.data as WikiNode[];
+    expect(tree.find((n) => n.id === made.id)?.tags).toEqual(["launch"]);
+    const back = (await call("GET", `/v1/wiki/pages/${target.id}/backlinks`)).body.data as { id: string }[];
+    expect(back.map((b) => b.id)).toContain(made.id);
+    const hits = (await call("GET", "/v1/wiki/search?q=explains")).body.data as WikiSearchHit[];
+    expect(hits.map((h) => h.id)).toContain(made.id);
+
+    // The cards copy with the page.
+    const copy = (await call("POST", `/v1/wiki/pages/${made.id}/duplicate`, { title: "Board copy" })).body as WikiPage;
+    expect(copy.kind).toBe("canvas");
+    expect(copy.canvas!.nodes).toHaveLength(3);
+  });
+
+  it("refuses canvases the API refuses", async () => {
+    const made = (await call("POST", "/v1/wiki/pages", { title: "Board", kind: "canvas" })).body as WikiPage;
+    const plain = (await call("POST", "/v1/wiki/pages", { title: "Plain" })).body as WikiPage;
+    const bad: unknown[] = [
+      { nodes: [card("a b", "text")] },
+      { nodes: [card("a", "text"), card("a", "text")] },
+      { nodes: [card("a", "text", { x: 2e6 })] },
+      { nodes: [card("a", "text", { width: 5 })] },
+      { nodes: [card("a", "text", { color: "7" })] },
+      { nodes: [card("a", "shape")] },
+      { nodes: [card("a", "page", { page_id: "00000000-0000-4000-8000-000000000000" })] },
+      { nodes: [card("a", "link", { url: "http://x.test" })] },
+      { nodes: [card("a", "file", { src: "data:text/html,x", name: "x" })] },
+      { nodes: [card("a", "group", { label: "x".repeat(201) })] },
+      { nodes: [card("a", "text")], edges: [{ id: "e", fromNode: "a", toNode: "zz" }] },
+      { nodes: [card("a", "text")], edges: [{ id: "e", fromNode: "a", toNode: "a", toSide: "middle" }] },
+      { nodes: Array.from({ length: 2001 }, (_, i) => card(`n${i}`, "group")) },
+    ];
+    for (const canvas of bad) expect(await call("PATCH", `/v1/wiki/pages/${made.id}`, { canvas })).toMatchObject({ status: 422, body: { code: "invalid_canvas" } });
+    expect((await call("PATCH", `/v1/wiki/pages/${plain.id}`, { canvas: { nodes: [], edges: [] } })).status).toBe(422);
+    expect((await call("POST", "/v1/wiki/pages", { title: "x", canvas: { nodes: [], edges: [] } })).status).toBe(422);
+  });
+
+  it("puts a canvas from an event on the cached page, and refetches one too large to carry", () => {
+    const qc = new QueryClient();
+    const node: WikiNode = { id: "c", parent_id: null, title: "c", icon: "", position: 0, version: 1, updated_at: "2026-10-01T00:00:00Z", created_by_id: null, tags: [], kind: "canvas" };
+    const page = { ...DEFAULT_LOOK, ...node, body_html: "", breadcrumbs: [], children: [], created_at: "", created_by: null, updated_by: null, verification: null, deleted_at: null, deleted_by: null, kind: "canvas", database: null, props: {}, canvas: { nodes: [], edges: [] } } as WikiPage;
+    qc.setQueryData(qk.wikiPage("c"), page);
+    const canvas = { nodes: [{ id: "a", type: "text", html: "<p>hi</p>", x: 0, y: 0, width: 100, height: 100 }], edges: [] };
+    applyWikiEvent(qc, "updated", { wiki_page: node, updated_by: { id: "other" }, canvas });
+    expect(qc.getQueryData<WikiPage>(qk.wikiPage("c"))?.canvas).toEqual(canvas);
+    expect(qc.getQueryState(qk.wikiPage("c"))?.isInvalidated).toBe(false);
+    applyWikiEvent(qc, "updated", { wiki_page: node, updated_by: { id: "other" }, canvas_changed: true });
+    expect(qc.getQueryState(qk.wikiPage("c"))?.isInvalidated).toBe(true);
+  });
+});

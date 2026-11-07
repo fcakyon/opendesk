@@ -40,6 +40,8 @@ export const TYPICAL_TOKENS: Record<AIFeature, [number, number]> = {
   assistant: [6000, 400],
   assistant_peer: [4000, 400],
   procedure: [6000, 400],
+  // Ollie writing in the wiki from a page: the page in, a few paragraphs out.
+  wiki_write: [6000, 600],
 };
 
 /** What a call costs when no price gives it (contracts/billing.md "Typical costs"), in US dollars. */
@@ -59,6 +61,7 @@ export const FALLBACK_USD: Record<AIFeature, number> = {
   assistant: 0.02,
   assistant_peer: 0.01,
   procedure: 0.02,
+  wiki_write: 0.03,
 };
 
 export const DEFAULT_MODEL = "anthropic/claude-sonnet-5.5";

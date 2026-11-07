@@ -1,6 +1,8 @@
 // The wiki editor's typed menus, all drawn by one popup: "/" for blocks, "[[" for a link to
-// a page (Obsidian's), "@" for people, pages and dates (Notion's), ":" for emoji. Tiptap's
-// Suggestion finds the query; each item knows what it does with the typed range.
+// a page (Obsidian's), "@" for people, contacts, tickets, pages and dates (Notion's), "#" for
+// tickets, ":" for emoji. Tiptap's Suggestion finds the query; each item knows what it does
+// with the typed range. A menu that searches the API shows what it knows at once and adds
+// what the search finds once the typing settles.
 
 import { Extension, type Editor, type Range } from "@tiptap/core";
 import { PluginKey } from "@tiptap/pm/state";
@@ -9,6 +11,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { create } from "zustand";
 import { placeBelowOrAbove, useCaretAnchor } from "@/components/editor/anchor";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 
 export type MenuItem = {
@@ -25,29 +28,62 @@ export type MenuItem = {
 
 type MenuState = {
   open: boolean;
+  /** The typed menu showing ("slash", "mention", ...). */
+  menu: string;
   title: string;
   empty: string;
+  searching: string;
   items: MenuItem[];
+  /** -1: nothing picked yet, so Enter and Tab go on to the text. */
   index: number;
+  /** A search is still out. */
+  loading: boolean;
+  /** Shown only with something to offer: "#" starts a tag as often as a ticket. */
+  quiet: boolean;
   getRect: (() => DOMRect | null) | null;
   anchorEl: HTMLElement | null;
   pick: ((item: MenuItem) => void) | null;
 };
 
-export const useWikiMenu = create<MenuState>(() => ({ open: false, title: "", empty: "", items: [], index: 0, getRect: null, anchorEl: null, pick: null }));
+export const useWikiMenu = create<MenuState>(() => ({ open: false, menu: "", title: "", empty: "", searching: "", items: [], index: 0, loading: false, quiet: false, getRect: null, anchorEl: null, pick: null }));
 const dismiss = () => useWikiMenu.setState({ open: false });
+/** The popup shows: open, and for a quiet menu, with items. */
+const visible = (s: MenuState) => s.open && (!s.quiet || s.items.length > 0);
 
-function renderer(labels: () => { title: string; empty: string }): SuggestionOptions<MenuItem>["render"] {
+type Labels = { title: string; empty: string; searching?: string };
+
+/** What one typed menu tracks between its updates. */
+type Live = { query: string; editor: Editor | null; loading: boolean };
+
+function renderer(m: TypedMenu, live: Live, stop: () => void): SuggestionOptions<MenuItem>["render"] {
+  const first = (query: string, s: { index: number }, n: number) => {
+    if (m.preselect && !m.preselect(query)) return -1;
+    return Math.min(Math.max(s.index, 0), Math.max(0, n - 1));
+  };
   return () => ({
     onStart: (p: SuggestionProps<MenuItem>) => {
-      useWikiMenu.setState({ open: true, ...labels(), items: p.items, index: 0, getRect: p.clientRect ?? null, anchorEl: p.editor.view.dom, pick: (i) => p.command(i) });
+      const labels = m.labels();
+      useWikiMenu.setState({
+        open: true,
+        menu: m.name,
+        title: labels.title,
+        empty: labels.empty,
+        searching: labels.searching ?? "",
+        quiet: !!m.quiet,
+        items: p.items,
+        loading: live.loading,
+        index: first(p.query, { index: 0 }, p.items.length),
+        getRect: p.clientRect ?? null,
+        anchorEl: p.editor.view.dom,
+        pick: (i) => p.command(i),
+      });
     },
     onUpdate: (p: SuggestionProps<MenuItem>) => {
-      useWikiMenu.setState((s) => ({ open: true, items: p.items, index: Math.min(s.index, Math.max(0, p.items.length - 1)), getRect: p.clientRect ?? s.getRect, pick: (i) => p.command(i) }));
+      useWikiMenu.setState((s) => ({ open: true, items: p.items, loading: live.loading, index: first(p.query, s, p.items.length), getRect: p.clientRect ?? s.getRect, pick: (i) => p.command(i) }));
     },
     onKeyDown: ({ event }: SuggestionKeyDownProps) => {
       const s = useWikiMenu.getState();
-      if (!s.open) return false;
+      if (!visible(s)) return false;
       if (event.key === "Escape") {
         dismiss();
         return true;
@@ -58,16 +94,19 @@ function renderer(labels: () => { title: string; empty: string }): SuggestionOpt
         return true;
       }
       if (event.key === "ArrowUp" || (event.key === "p" && event.ctrlKey)) {
-        useWikiMenu.setState({ index: (s.index - 1 + s.items.length) % s.items.length });
+        useWikiMenu.setState({ index: s.index < 0 ? s.items.length - 1 : (s.index - 1 + s.items.length) % s.items.length });
         return true;
       }
-      if (event.key === "Enter" || event.key === "Tab") {
+      if ((event.key === "Enter" || event.key === "Tab") && s.index >= 0) {
         s.pick?.(s.items[s.index]);
         return true;
       }
       return false;
     },
-    onExit: () => useWikiMenu.setState({ open: false, pick: null, getRect: null, anchorEl: null }),
+    onExit: () => {
+      stop();
+      useWikiMenu.setState({ open: false, pick: null, getRect: null, anchorEl: null, loading: false });
+    },
   });
 }
 
@@ -77,13 +116,48 @@ export type TypedMenu = {
   /** Only where a word starts (a space or the line's start before it). */
   allowSpaces?: boolean;
   startOfLine?: boolean;
-  items: (query: string, editor: Editor) => MenuItem[];
-  labels: () => { title: string; empty: string };
+  /** The items for a query; `found` is what the search found for it, undefined while it runs. */
+  items: (query: string, editor: Editor, found?: MenuItem[]) => MenuItem[];
+  labels: () => Labels;
+  /** Items from the API, for the queries `when` accepts; merged into `items` as they arrive. */
+  search?: { when: (query: string) => boolean; run: (query: string) => Promise<MenuItem[]> };
+  /** Whether the first item is picked as the menu opens (default yes); otherwise Enter types on. */
+  preselect?: (query: string) => boolean;
+  /** Hidden while it has nothing to offer. */
+  quiet?: boolean;
 };
+
+/** How long typing must pause before a menu searches. */
+const SEARCH_DELAY = 180;
 
 /** One extension per trigger; they share the popup. Never inside code. */
 export function typedMenu(m: TypedMenu) {
   const key = new PluginKey(`wiki-menu-${m.name}`);
+  const live: Live = { query: "", editor: null, loading: false };
+  const cache = new Map<string, MenuItem[]>();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const stop = () => {
+    clearTimeout(timer);
+    cache.clear();
+    live.loading = false;
+  };
+  const search = (query: string) => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      let found: MenuItem[] = [];
+      try {
+        found = (await m.search?.run(query)) ?? [];
+      } catch {
+        // A failed search offers what the menu knows without it.
+      }
+      cache.set(query, found);
+      const s = useWikiMenu.getState();
+      if (live.query !== query || !live.editor || !s.open || s.menu !== m.name) return;
+      live.loading = false;
+      const items = m.items(query, live.editor, found);
+      useWikiMenu.setState({ items, loading: false, index: s.index < 0 ? -1 : Math.min(s.index, Math.max(0, items.length - 1)) });
+    }, SEARCH_DELAY);
+  };
   return Extension.create({
     name: `wikiMenu-${m.name}`,
     addProseMirrorPlugins() {
@@ -96,9 +170,21 @@ export function typedMenu(m: TypedMenu) {
           startOfLine: m.startOfLine ?? false,
           allowedPrefixes: [" ", "(", String.fromCharCode(160)],
           allow: ({ editor }) => editor.isEditable && !editor.isActive("codeBlock") && !editor.isActive("code"),
-          items: ({ query, editor }) => m.items(query, editor),
+          items: ({ query, editor }) => {
+            live.query = query;
+            live.editor = editor;
+            if (!m.search?.when(query)) {
+              live.loading = false;
+              clearTimeout(timer);
+              return m.items(query, editor, []);
+            }
+            const hit = cache.get(query);
+            live.loading = !hit;
+            if (!hit) search(query);
+            return m.items(query, editor, hit);
+          },
           command: ({ editor, range, props }) => props.run(editor, range),
-          render: renderer(m.labels),
+          render: renderer(m, live, stop),
         }),
       ];
     },
@@ -132,23 +218,26 @@ export function rank<T>(query: string, list: T[], key: (x: T) => [string, string
 
 /** The floating list; mount once beside the editor. */
 export function WikiMenuPopup() {
-  const { open, title, empty, items, index, getRect, anchorEl, pick } = useWikiMenu();
+  const st = useWikiMenu();
+  const { title, empty, searching, items, index, getRect, anchorEl, pick, loading } = st;
+  const show = visible(st);
   const ref = useRef<HTMLDivElement>(null);
-  const rect = useCaretAnchor({ open, getRect, anchorEl, popupRef: ref, onDismiss: dismiss });
+  const rect = useCaretAnchor({ open: show, getRect, anchorEl, popupRef: ref, onDismiss: dismiss });
   useEffect(() => {
     ref.current?.querySelector(`[data-i="${index}"]`)?.scrollIntoView({ block: "nearest" });
   }, [index]);
-  if (!open || !rect) return null;
+  if (!show || !rect) return null;
   return createPortal(
     <div
       ref={ref}
       role="listbox"
       aria-label={title}
+      aria-busy={loading || undefined}
       data-floating
       style={placeBelowOrAbove(rect, 320, 360)}
       className="z-[80] max-h-[360px] w-[320px] overflow-y-auto overscroll-contain rounded-xl border border-line bg-raised p-1 shadow-pop animate-pop-in"
     >
-      {items.length === 0 ? (
+      {items.length === 0 && !loading ? (
         <div className="px-2.5 py-3 text-[12.5px] text-fg-3">{empty}</div>
       ) : (
         items.map((it, i) => (
@@ -175,6 +264,12 @@ export function WikiMenuPopup() {
             </button>
           </div>
         ))
+      )}
+      {loading && (
+        <div role="status" className="flex h-8 items-center gap-2 px-2.5 text-[12px] text-fg-4">
+          <Spinner className="size-3" />
+          {searching}
+        </div>
       )}
     </div>,
     document.body,

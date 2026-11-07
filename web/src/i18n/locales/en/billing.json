@@ -230,6 +230,7 @@
     "assistant": "Assistant",
     "assistant_peer": "Asking a teammate's Ollie",
     "procedure": "Procedures run by automations",
+    "wiki_write": "Wiki writing",
     "other": "Other"
   },
   "dialog": {

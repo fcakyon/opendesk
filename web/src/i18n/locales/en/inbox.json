@@ -1051,5 +1051,9 @@
     "attachments": "Attachments",
     "nothing": "Nothing to print",
     "nothingHint": "There are no messages to print with these options, or the message is no longer on the ticket."
+  },
+  "wiki": {
+    "title": "Wiki",
+    "untitled": "Untitled"
   }
 }
