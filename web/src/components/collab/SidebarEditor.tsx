@@ -315,7 +315,7 @@ function EditList({
 function EditBar({ title, menu, onReset }: { title: ReactNode; menu: ReactNode; onReset?: () => void }) {
   const { t } = useTranslation("collab");
   return (
-    <div className="sticky top-0 z-10 -mt-1 mb-2 flex h-10 items-center gap-1 border-b border-chrome-line bg-chrome px-3">
+    <div className="sticky -top-1 z-10 -mt-1 mb-2 flex h-11 items-center gap-1 border-b border-chrome-line bg-chrome px-3 pt-1">
       <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-fg">{title}</span>
       {onReset && (
         <Tooltip content={t("edit.reset")}>

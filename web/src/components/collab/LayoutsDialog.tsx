@@ -6,7 +6,10 @@ import { Check } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
-import { useRowLabels } from "@/components/spaces/rows";
+import { buildRow, useRowLabels } from "@/components/spaces/rows";
+import { useFavorites } from "@/components/wiki/hooks";
+import { useWorkspacesData } from "@/lib/spaces/hooks";
+import { applyRowOrder, isOrdered } from "@/lib/collab/rowOrder";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
@@ -28,21 +31,22 @@ export const layoutsUi = {
 /** The sidebar as a layout would leave it: section titles and the first few rows of each. */
 function Preview({ layout }: { layout: Layout }) {
   const { t } = useTranslation("collab");
-  const { prefs } = useOwnSidebar();
+  const { prefs, wid } = useOwnSidebar();
   const collab = useCollab().enabled;
   const products = useProducts();
   const labels = useRowLabels();
   const { itemsOf, pinLabel } = useSidebarItems();
+  const fav = useFavorites();
+  const d = useWorkspacesData(wid ? [wid] : [], { folders: () => true, wiki: () => true }).get(wid);
   const next = applyLayout(prefs, layout);
   const entries = visibleEntries(next, collab).filter(
     (e) => e.kind === "custom" || ((products.tickets || (e.id !== "inbox" && e.id !== "teams" && e.id !== "views")) && (products.pages || e.id !== "pages")),
   );
   const rowsOf = (e: (typeof entries)[number]): string[] => {
-    if (e.kind === "custom") return e.section.items.map((i) => i.name ?? "").filter(Boolean);
-    if (e.id === "favorites") return livePins(next, (p) => pinLabel(p)).map((x) => x.target);
-    return itemsOf(e.id)
-      .filter((x) => !x.depth && !x.key.startsWith("every:") && !(x.hideId && isHidden(next, x.hideId)))
-      .map((x) => x.label);
+    if (e.kind === "custom") return e.section.items.map((i) => i.name || (d && buildRow(i, d, { labels })?.label) || "").filter(Boolean);
+    if (e.id === "favorites") return [...livePins(next, (p) => pinLabel(p)).map((x) => x.target), ...fav.list.map((n) => n.title.trim() || labels.untitled)];
+    const rows = itemsOf(e.id).filter((x) => !x.depth && !x.key.startsWith("every:") && !(x.hideId && isHidden(next, x.hideId)));
+    return (isOrdered(e.id) ? applyRowOrder(rows, (x) => x.hideId ?? x.key, next.row_order[e.id]) : rows).map((x) => x.label);
   };
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto rounded-lg bg-chrome p-3 shadow-[inset_0_0_0_1px_var(--chrome-line)]">
