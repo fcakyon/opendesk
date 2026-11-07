@@ -45,6 +45,13 @@ export const nodeOf = (p: WikiPage): WikiNode => ({
   tags: p.tags ?? [],
   ...(p.aliases?.length ? { aliases: p.aliases } : {}),
   ...(p.area ? { area: p.area } : {}),
+  // Where it sits and what it is, so a new page lands in its own group of the tree at once.
+  ...(p.private ? { private: true } : {}),
+  ...(p.team_id ? { team_id: p.team_id } : {}),
+  ...(p.kind && p.kind !== "page" ? { kind: p.kind } : {}),
+  ...(p.journal ? { journal: true } : {}),
+  ...(p.daily_date ? { daily_date: p.daily_date } : {}),
+  ...(p.verified ? { verified: true } : {}),
 });
 
 /** A page's title for display: "Untitled" until it has one. */
