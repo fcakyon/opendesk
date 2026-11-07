@@ -4,7 +4,7 @@
 // on it. Its menu (RowMenu, SpaceRowMenu) reads what the row can do from useSidebarRow: rename
 // in place, change its icon, move up or down.
 
-import { createContext, useContext, useMemo, useState, type MouseEvent, type ReactElement } from "react";
+import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { InlineRename, MENU_SETTLE_MS, SidebarDragCtx } from "@/app/sidebarParts";
 import { IconPicker } from "@/components/wiki/IconPicker";
@@ -94,17 +94,9 @@ export function SidebarRow({
 
   if (renaming && edit && !rail)
     return (
-      <div className="mx-2.5 flex h-7 w-[calc(100%-1.25rem)] items-center">
-        <InlineRename
-          initial={edit.name}
-          placeholder={edit.placeholder}
-          label={edit.label}
-          onDone={(v) => {
-            sidebarEdit.done();
-            if (v !== null && v !== edit.name) edit.onName(v === edit.placeholder ? "" : v);
-          }}
-        />
-      </div>
+      <RenameInPlace edit={edit}>
+        {children}
+      </RenameInPlace>
     );
 
   const rename = (e: MouseEvent) => {
@@ -127,6 +119,44 @@ export function SidebarRow({
     </Ctx.Provider>
   );
 }
+
+/**
+ * The row being renamed: drawn as it is, its icon and indent included, with the name's field laid
+ * over its label from where the label starts.
+ */
+function RenameInPlace({ edit, children }: { edit: RowEdit; children: ReactElement }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [left, setLeft] = useState(LABEL_LEFT);
+  useLayoutEffect(() => {
+    const root = box.current;
+    if (!root) return;
+    // The innermost element showing the name is the label.
+    const hits = [...root.querySelectorAll<HTMLElement>("span")].filter((el) => el.textContent?.trim() === edit.name.trim());
+    const label = hits[hits.length - 1];
+    if (label) setLeft(Math.max(0, Math.round(label.getBoundingClientRect().left - root.getBoundingClientRect().left) - 5));
+  }, [edit.name]);
+  return (
+    <div ref={box} className="relative">
+      <div aria-hidden inert className="pointer-events-none">
+        {children}
+      </div>
+      <div className="absolute inset-y-0 right-2.5 flex items-center" style={{ left }}>
+        <InlineRename
+          initial={edit.name}
+          placeholder={edit.placeholder}
+          label={edit.label}
+          onDone={(v) => {
+            sidebarEdit.done();
+            if (v !== null && v !== edit.name) edit.onName(v === edit.placeholder ? "" : v);
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Where a top-level row's label starts, until the row is measured. */
+const LABEL_LEFT = 36;
 
 /**
  * The emoji picker opened from a menu, on the row or section it is for. The menu closing gives
