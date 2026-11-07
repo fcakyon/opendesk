@@ -830,13 +830,13 @@
     "done": "Terminé",
     "reset": "Réinitialiser",
     "more": "Plus",
-    "resetConfirm": "Réinitialiser la barre latérale ? Chaque section reprend sa place et s'affiche de nouveau, et les lignes retrouvent leur ordre habituel. Vos propres sections et vos favoris restent.",
+    "resetConfirm": "Réinitialiser la barre latérale ? Chaque section reprend sa place et s’affiche de nouveau, et les lignes retrouvent leur ordre habituel. Vos propres sections et vos favoris restent.",
     "resetAction": "Réinitialiser",
     "resetDone": "Barre latérale réinitialisée",
     "undo": "Annuler",
-    "layouts": "Partir d'une disposition",
+    "layouts": "Partir d’une disposition",
     "copySpace": "Copier un espace",
-    "options": "Plus d'options",
+    "options": "Plus d’options",
     "move": "Déplacer {{name}}",
     "rename": "Renommer {{name}}",
     "icon": "Icône de {{name}}",
@@ -851,7 +851,7 @@
     "newSectionTitle": "Nouvelle section",
     "emptySection": "Faites glisser des lignes ici ou ajoutez-en",
     "emptyFavorites": "Faites glisser des lignes ici pour en faire des favoris",
-    "spaceSettings": "Réglages de l'espace",
+    "spaceSettings": "Réglages de l’espace",
     "editingSpace": "Modification de {{name}}",
     "hintTitle": "Faites de la barre latérale la vôtre",
     "hintBody": "Faites glisser lignes et sections pour les déplacer, et double-cliquez sur un nom pour le renommer. Personnaliser, plus bas, fait tout le reste.",
@@ -859,8 +859,8 @@
     "dropNew": "Déposez ici pour une nouvelle section",
     "rowMenu": "Plus pour {{name}}",
     "renameRow": "Renommer",
-    "pickIcon": "Changer l'icône",
-    "resetName": "Rétablir le nom et l'icône",
+    "pickIcon": "Changer l’icône",
+    "resetName": "Rétablir le nom et l’icône",
     "moveToSection": "Ajouter à une section",
     "show": "Afficher dans la barre latérale",
     "renameInSidebar": "Renommer dans la barre latérale",
@@ -870,16 +870,16 @@
     "renameSave": "Enregistrer",
     "favoritesTitle": "Ajouter aux favoris",
     "favoritesHint": "Les dossiers de la boîte de réception, équipes, vues, boîtes mail et pages peuvent être des favoris.",
-    "notFavorite": "Cet élément ne peut pas être un favori. Ajoutez-le plutôt à l'une de vos sections.",
+    "notFavorite": "Cet élément ne peut pas être un favori. Ajoutez-le plutôt à l’une de vos sections.",
     "customize": "Personnaliser",
     "customizeHint": "Organiser la barre latérale : déplacer, renommer, masquer",
-    "doneHint": "Terminer l'organisation de la barre latérale",
+    "doneHint": "Terminer l’organisation de la barre latérale",
     "doneEditing": "Terminé",
     "layoutsShort": "Dispositions",
-    "barHint": "Faites glisser pour déplacer. Cliquez sur un nom pour le renommer. L'œil le masque."
+    "barHint": "Faites glisser pour déplacer. Cliquez sur un nom pour le renommer. L’œil le masque."
   },
   "layouts": {
-    "title": "Partir d'une disposition",
+    "title": "Partir d’une disposition",
     "description": "Choisissez-en une pour voir la barre latérale avec. Vos propres sections, vos favoris et les lignes masquées restent.",
     "use": "Utiliser cette disposition",
     "cancel": "Annuler",
@@ -891,14 +891,14 @@
     "more_other": "{{count}} de plus",
     "support": {
       "name": "Support",
-      "hint": "Les tickets d'abord, avec vos équipes et vues à portée. Mail et Pages sont masqués."
+      "hint": "Les tickets d’abord, avec vos équipes et vues à portée. Mail et Pages sont masqués."
     },
     "mail": {
-      "name": "Mail d'abord",
+      "name": "Mail d’abord",
       "hint": "Vos boîtes de réception en haut, puis les tickets et le reste."
     },
     "docs": {
-      "name": "Docs d'abord",
+      "name": "Docs d’abord",
       "hint": "Pages en haut, puis le support."
     },
     "minimal": {
