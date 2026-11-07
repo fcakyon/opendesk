@@ -403,6 +403,7 @@ export function readerExtensions(opts: { t: TFunction<"wiki">; onOpenTag: (tag: 
       members: none,
       pageId: () => "",
       createSubpage: async () => null,
+      openSubpage: () => {},
       pickImage: () => {},
       createDatabase: async () => null,
       search: async () => ({ tickets: [], contacts: [], articles: [] }),

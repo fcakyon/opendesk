@@ -38,6 +38,8 @@ export type WikiEditorProps = {
   env: WikiEditorEnv;
   /** Makes a subpage of this page ("/page", "[[new"), resolving to its id. */
   createSubpage: (title?: string) => Promise<string | null>;
+  /** Opens a subpage made from the slash menu, after this page saved its block. */
+  openSubpage: (id: string) => void;
   /** "Copy link to block": the page saves first, so the block's id is kept. */
   onCopyBlockLink: (blockId: string) => void;
   className?: string;
@@ -84,6 +86,7 @@ export const WikiEditor = forwardRef<RichEditorHandle, WikiEditorProps>(function
           members: () => live.current.members,
           pageId: () => live.current.props.env.pageId,
           createSubpage: (title) => live.current.props.createSubpage(title),
+          openSubpage: (id) => live.current.props.openSubpage(id),
           pickImage: () => fileRef.current?.click(),
           search: (term) => api.search(term),
           ticket: (ref) => api.tickets.get(ref).catch(() => null),

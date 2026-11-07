@@ -392,6 +392,17 @@ export function PageScreen({
     },
     [create, page.id],
   );
+  const openSubpage = useCallback(
+    (id: string) => {
+      // The block that leads to it is saved before this page closes.
+      const html = editorRef.current?.editor?.getHTML();
+      if (html && html !== saver.draft.body_html) saver.edit({ body_html: html });
+      void saver.flush();
+      freshPages.add(id);
+      void navigate(pageTo({ id, area: live.area }));
+    },
+    [saver, navigate, live.area],
+  );
   const copyBlockLink = useCallback(
     (blockId: string) => {
       // The block's id must be stored before anyone opens the link: save now.
@@ -821,6 +832,7 @@ export function PageScreen({
               ariaLabel={t("page.body")}
               env={env}
               createSubpage={createSubpage}
+              openSubpage={openSubpage}
               onCopyBlockLink={copyBlockLink}
               className={wide ? "mt-2 text-fg-2" : "mt-5"}
               contentClassName={wide ? "min-h-0" : "prose-lg"}

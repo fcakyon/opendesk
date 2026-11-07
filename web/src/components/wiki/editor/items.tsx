@@ -68,6 +68,8 @@ export type MenuSources = {
   pageId: () => string;
   /** Makes a page under this one and resolves to its id. */
   createSubpage: (title?: string) => Promise<string | null>;
+  /** Opens a page just made from here, once this page has saved the block that leads to it. */
+  openSubpage: (id: string) => void;
   /** Asks for an image file and inserts it at the cursor. */
   pickImage: () => void;
   /** Makes a database inside the page, shown as a layout, and resolves to it. */
@@ -313,7 +315,10 @@ export function slashItems(query: string, s: MenuSources): MenuItem[] {
       run: async (e, r) => {
         e.chain().focus().deleteRange(r).run();
         const id = await s.createSubpage();
-        if (id) e.chain().focus().insertContent({ type: "subpage", attrs: { id } }).run();
+        if (!id) return;
+        e.chain().focus().insertContent({ type: "subpage", attrs: { id } }).run();
+        // Like Notion, "/page" opens the new page; its block here and the breadcrumbs lead back.
+        s.openSubpage(id);
       },
     },
     {
