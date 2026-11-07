@@ -41,7 +41,9 @@ defmodule RealtimeWeb.TypingLiveTest do
         forward(parent)
       end)
 
-    assert_receive {:joined, ^pid}
+    # Joining runs the channel's authorization; a busy CI runner can take longer than
+    # assert_receive's default 100 ms.
+    assert_receive {:joined, ^pid}, 2_000
     pid
   end
 

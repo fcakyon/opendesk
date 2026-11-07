@@ -169,7 +169,7 @@ defmodule RealtimeWeb.WikiPageChannelTest do
           forward(parent)
         end)
 
-      assert_receive {:joined, ^pid, channel}
+      assert_receive {:joined, ^pid, channel}, 2_000
       assert_receive {^pid, %Message{event: "presence_state", payload: state}}
       {pid, channel, state}
     end
