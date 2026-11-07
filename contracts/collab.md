@@ -899,7 +899,21 @@ button beside an inbox folder's, team's or view's title, and a section's own "Ad
 everything the workspace offers; rows drag to reorder and between sections. A section's menu renames,
 adds rows, moves, folds and deletes it; Customize sidebar lists the sections with the built-in ones,
 and copies a Space's sections with this workspace's rows ("Start from a Space"). Nothing of it is
-added from Settings.
+added from Settings. A page's title and an inbox folder's, team's or view's title also drag into the
+sidebar (`application/x-od-sidebar-row`): onto Favorites, a section of the member's own, or a spot at
+the end that makes a new section named after it.
+
+**Edit mode.** The web app arranges the sidebar where it is (`web/src/components/collab/SidebarEditor.tsx`),
+entered from Edit sidebar (a row's menu, the user menu, the sidebar's right-click menu, `g e`) and left with
+Done or Escape. Every section and row has a handle (pointer events, so touch drags too; arrow keys move one
+place) and an eye; hidden ones stay listed, dimmed. Sections reorder among sections; a row reorders within
+its section (`row_order` for Inbox, Mail accounts, Teams and Workspace), goes into Favorites (pinned, or a
+page starred) or into a section of the member's own. Own sections and rows are renamed inline and take an
+emoji. The bar has Reset (order, `hidden` and `row_order` back to the defaults; own sections and favorites
+stay), Start from a layout (a preview of the sidebar with each), Copy a Space and the customize dialog.
+Removing, hiding and deleting show Undo. With a Space picked, the same mode edits that Space
+(contracts/spaces.md). When one target is a row in several places (a view under Views and in Favorites), the
+row clicked lights up alone, like a tab.
 
 These arrange a workspace's own sidebar. A Space (contracts/spaces.md) picked in the switcher shows
 its own rows instead; a whole section in a Space follows these preferences.

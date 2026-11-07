@@ -122,6 +122,9 @@ to the starter do not change it.
   its top-level workspace pages that its sidebar shows, and its teamspace rows open its wiki.
 - **Row menu** inside a Space: Number, Rename in this Space, Move to section, Also add to Space, Remove
   from the Space. Rows inside a whole built-in section keep that section's own menu.
+- **Edit in place.** With a Space picked, the sidebar's edit mode (contracts/collab.md "Edit mode") edits
+  that Space where it is: its sections and rows drag, rename, take an emoji (`icon`), are removed with Undo,
+  and get rows from any workspace through a popup. Name, icon, colour and marks stay in the editor below.
 - **The editor** (New Space, Edit) has the name, icon and colour; the Space's sections and rows, dragged
   into order, each row with its name and number; Add section; and "Add from" with a tab per workspace
   listing what that workspace offers: its whole sections, inbox folders, teams, views, Collab boxes,
