@@ -50,6 +50,7 @@
     "bodyEmpty": "Diese Seite hat noch keinen Text.",
     "subpages": "Unterseiten",
     "addSubpage": "Unterseite hinzufügen",
+    "addSubpageBesideHint": "Mit Strg- oder Cmd-Klick neben dieser Seite öffnen",
     "editedBy": "Zuletzt bearbeitet von {{name}}, {{when}}",
     "edited": "Zuletzt bearbeitet {{when}}",
     "uploading": "Wird hochgeladen",

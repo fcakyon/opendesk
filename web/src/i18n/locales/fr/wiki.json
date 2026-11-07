@@ -51,6 +51,7 @@
     "bodyEmpty": "Cette page n’a pas encore de texte.",
     "subpages": "Sous-pages",
     "addSubpage": "Ajouter une sous-page",
+    "addSubpageBesideHint": "Ctrl ou Cmd-clic pour l’ouvrir à côté de cette page",
     "editedBy": "Modifiée par {{name}}, {{when}}",
     "edited": "Modifiée {{when}}",
     "uploading": "Envoi en cours",

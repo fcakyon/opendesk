@@ -566,7 +566,9 @@ function TreeRow({
               aria-label={t("tree.addSubpageTo", { title: title(n.title) })}
               onClick={(e) => {
                 e.stopPropagation();
-                create.mutate({ parent_id: n.id });
+                // Ctrl or Cmd: the new page opens beside the one open, which stays.
+                if ((e.metaKey || e.ctrlKey) && split.available) create.mutate({ parent_id: n.id, navigate: false }, { onSuccess: (p) => split.open(p.id) });
+                else create.mutate({ parent_id: n.id });
               }}
               className={tool}
             >

@@ -50,6 +50,7 @@
     "bodyEmpty": "This page has no text yet.",
     "subpages": "Subpages",
     "addSubpage": "Add a subpage",
+    "addSubpageBesideHint": "Ctrl or Cmd-click to open it beside this page",
     "editedBy": "Last edited by {{name}}, {{when}}",
     "edited": "Last edited {{when}}",
     "uploading": "Uploading",

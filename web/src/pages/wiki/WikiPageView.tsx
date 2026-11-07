@@ -885,7 +885,13 @@ export function PageScreen({
                     <button
                       type="button"
                       disabled={create.isPending}
-                      onClick={() => create.mutate({ parent_id: page.id })}
+                      onClick={(e) =>
+                        // Ctrl or Cmd: the new page opens beside this one.
+                        (e.metaKey || e.ctrlKey) && split.available
+                          ? create.mutate({ parent_id: page.id, navigate: false }, { onSuccess: (p) => split.open(p.id) })
+                          : create.mutate({ parent_id: page.id })
+                      }
+                      title={split.available ? t("page.addSubpageBesideHint") : undefined}
                       className="-mx-2 flex h-8 items-center gap-2 rounded-md px-2 text-[13px] text-fg-3 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:bg-hover disabled:opacity-60"
                     >
                       <Plus className="size-[14px]" />
