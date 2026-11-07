@@ -25,7 +25,7 @@ type fromWikiIn struct {
 type fromWikiOut struct {
 	Body struct {
 		Article KbArticle `json:"article"`
-		// Blocks that stay in the wiki: the workspace's own files and images, databases and subpage links.
+		// Blocks that stay in the wiki: the workspace's own files and images, databases, ticket lists and subpage links.
 		LeftOut int `json:"left_out"`
 	}
 }
@@ -36,7 +36,7 @@ func registerFromWiki(d *deps.Deps, api huma.API) {
 	huma.Register(api, huma.Operation{OperationID: "create-kb-article-from-wiki", Method: http.MethodPost, Path: "/v1/kb/articles/from-wiki",
 		Summary: "Copy a wiki page into a draft article", Tags: []string{"Knowledge base"}, DefaultStatus: http.StatusCreated,
 		Description: "Copies a wiki page's title and text into a new draft article. Mentions of teammates and links to wiki pages keep only their text; " +
-			"the workspace's own files and images, databases and subpage links stay in the wiki. Nothing stays linked: later edits of the page don't reach the article."},
+			"the workspace's own files and images, databases, ticket lists and subpage links stay in the wiki. Nothing stays linked: later edits of the page don't reach the article."},
 		func(ctx context.Context, in *struct{ Body fromWikiIn }) (*fromWikiOut, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleAgent, auth.ScopeKBWrite)
 			if err != nil {

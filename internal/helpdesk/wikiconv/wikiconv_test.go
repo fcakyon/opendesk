@@ -14,6 +14,7 @@ const page = `<h2>Refunds</h2><p>Ask <span data-type="mention" data-id="3dcb61fa
 	`<pre><code class="language-go">fmt.Println("x")</code></pre>` +
 	`<table><tbody><tr><th><p>Plan</p></th><th><p>Price</p></th></tr><tr><td><p>Pro | team</p></td><td><p>$10</p></td></tr></tbody></table>` +
 	`<div data-type="database" data-id="33333333-3333-4333-8333-333333333333"></div>` +
+	`<div data-type="tickets" data-id="66666666-6666-4666-8666-666666666666" data-limit="5"></div>` +
 	`<img src="/v1/attachments/44444444-4444-4444-8444-444444444444" alt="Screen">` +
 	`<img src="https://example.com/a.png" alt="A" data-caption="The form">` +
 	`<div data-type="bookmark" data-url="https://example.com/post" data-title="A post"></div>` +
@@ -60,7 +61,7 @@ func TestMarkdown(t *testing.T) {
 
 func TestArticle(t *testing.T) {
 	out, left := Article(page)
-	if left != 2 { // the database and the workspace's own image
+	if left != 3 { // the database, the ticket list and the workspace's own image
 		t.Errorf("left out %d", left)
 	}
 	for _, want := range []string{

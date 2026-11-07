@@ -12,8 +12,8 @@ import (
 // Article is the page body as help center HTML (hd.SanitizeRich): wiki blocks become the
 // article's plain equivalents, and what belongs to the team stays behind. Teammates'
 // mentions and links to wiki pages keep only their text; comment anchors, dates and tones
-// their words. The workspace's own files and images, databases and subpage links are left
-// out; leftOut counts them so the app can say so. Links to tickets and contacts keep their text.
+// their words. The workspace's own files and images, databases, ticket lists and subpage
+// links are left out; leftOut counts them so the app can say so. Links to tickets and contacts keep their text.
 func Article(body string) (out string, leftOut int) {
 	root := parse(body)
 	leftOut = toArticle(root)
@@ -134,7 +134,7 @@ func rewrite(n *html.Node) int {
 		n.Parent.RemoveChild(n)
 	case "hr", "toc":
 		n.Parent.RemoveChild(n)
-	case "subpage", "database":
+	case "subpage", "database", "tickets":
 		n.Parent.RemoveChild(n)
 		return 1
 	case "img":
