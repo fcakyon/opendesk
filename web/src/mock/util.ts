@@ -70,8 +70,9 @@ export function uuid7(): string {
 
 export function randomToken(len = 32): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  // 64 characters: masking each random byte to 6 bits picks every one alike.
   let s = "";
-  for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  for (const b of crypto.getRandomValues(new Uint8Array(len))) s += chars[b & 63];
   return s;
 }
 
