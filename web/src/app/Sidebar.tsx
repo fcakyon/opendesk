@@ -54,7 +54,9 @@ import { RowMenu } from "@/components/collab/RowMenu";
 import { useCollab, useSidebarPrefs } from "@/lib/collab/hooks";
 import { useProducts } from "@/lib/products";
 import { ticketRowNumbers } from "@/lib/collab/badges";
-import { badgeFor, hid, pickCount, visibleSections, type BadgeNumbers } from "@/lib/collab/sidebarPrefs";
+import { badgeFor, hid, pickCount, type BadgeNumbers } from "@/lib/collab/sidebarPrefs";
+import { entryKey, visibleEntries, type SidebarEntry } from "@/lib/collab/ownSections";
+import { AddSectionButton, OwnSection } from "@/components/collab/OwnSections";
 import { collabUi } from "@/lib/collab/ui";
 import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
 
@@ -555,7 +557,8 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
   // The member's own order and hidden sections, with or without Collab; Mail only with it.
   const collab = useCollab();
   const prefs = useSidebarPrefs();
-  const order = visibleSections(prefs, collab.enabled);
+  // The built-in sections and the member's own, in their order.
+  const order = visibleEntries(prefs, collab.enabled);
   // Spaces (contracts/spaces.md): a picked Space is the sidebar; otherwise the workspace's own.
   const uid = useSession((s) => s.user?.id ?? "");
   const wid = useSession((s) => s.workspaceId);
@@ -572,12 +575,21 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
 
   return (
     <PillCtx.Provider value={drawer ? "nav-pill-drawer" : "nav-pill"}>
-    <nav aria-label={t("nav.main")} className="flex h-full w-full flex-col">
+    <nav aria-label={t("nav.main")} className="group/nav flex h-full w-full flex-col">
       <div className="flex-1 overflow-y-auto overflow-x-hidden pb-3 pt-1">
         {waiting ? null : space && spaces ? (
           <SpaceView key={space.id} spaces={spaces} space={space} rail={rail} renderSection={render} />
         ) : (
-          <SectionList ids={order} render={render} />
+          <>
+            <SectionList
+              ids={order.map(entryKey)}
+              render={(key, first) => {
+                const e = order.find((x) => entryKey(x) === key) as SidebarEntry;
+                return e.kind === "builtin" ? render(e.id, first) : <OwnSection section={e.section} first={first} rail={rail} />;
+              }}
+            />
+            {!rail && <AddSectionButton always={drawer} />}
+          </>
         )}
       </div>
       <div className="flex shrink-0 flex-col gap-px py-1.5">

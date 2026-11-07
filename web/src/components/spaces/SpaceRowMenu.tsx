@@ -2,7 +2,8 @@
 // name in this Space, the section it sits in, another Space to add it to, and taking it out.
 // Like the sidebar's row menu it opens on right-click, long-press or the Menu key, and from
 // the ⋯ button that takes the number's place on hover and focus (not in the rail).
-// Rows inside a whole built-in section keep that section's own menu.
+// Rows inside a whole built-in section keep that section's own menu. In a member's own
+// sidebar section (`sidebar`) it is the same menu, in the sidebar's words.
 
 import { Check, ChevronRight, Ellipsis, FolderInput, Pencil, Plus, RotateCcw, SlidersHorizontal, SquareStack, X } from "lucide-react";
 import { ContextMenu as CM, DropdownMenu as M } from "radix-ui";
@@ -15,6 +16,8 @@ import { badgeChoices, badgeWord, pickCount } from "@/lib/collab/sidebarPrefs";
 import { cn } from "@/lib/cn";
 import { addItems, addSection, hasItem, itemKey, moveItemTo, removeItem, replaceSpace, updateItem } from "@/lib/spaces/model";
 import { spaceUi } from "@/lib/spaces/store";
+import { collabUi } from "@/lib/collab/ui";
+import { ownSectionsUi, type OwnRow } from "@/lib/collab/ownSectionsUi";
 import type { RowModel } from "./rows";
 
 type Kit = {
@@ -41,18 +44,23 @@ export type SpaceRowMenuProps = {
   onRename: () => void;
   rail?: boolean;
   label: string;
+  /** A row of the member's own sidebar section: `space` is those sections (lib/collab/ownSections.ts). */
+  sidebar?: boolean;
   children: ReactElement;
 } & Omit<React.HTMLAttributes<HTMLElement>, "children">;
 
 /** Forwards props and ref to its one child, so it can sit inside the rail's tooltip. */
-export const SpaceRowMenu = forwardRef<HTMLElement, SpaceRowMenuProps>(function SpaceRowMenu({ spaces, space, item, model, put, onRename, rail, label, children, ...rest }, ref) {
+export const SpaceRowMenu = forwardRef<HTMLElement, SpaceRowMenuProps>(function SpaceRowMenu({ spaces, space, item, model, put, onRename, rail, label, sidebar, children, ...rest }, ref) {
   const { t } = useTranslation("spaces");
   const { t: tc } = useTranslation("collab");
+  const words = sidebar
+    ? { rename: tc("ownSections.row.rename"), moveTo: tc("ownSections.row.moveTo"), newSection: tc("ownSections.newSection"), remove: tc("ownSections.row.remove") }
+    : { rename: t("row.rename"), moveTo: t("row.moveTo"), newSection: t("row.newSection"), remove: t("row.remove") };
   const byPointer = useRef(false);
   const key = itemKey(item);
   const change = (next: Space) => put(replaceSpace(spaces, next));
-  const others = spaces.filter((x) => x.id !== space.id);
-  const sectionName = (title: string, i: number) => title.trim() || t("view.untitledN", { n: i + 1 });
+  const others = sidebar ? [] : spaces.filter((x) => x.id !== space.id);
+  const sectionName = (title: string, i: number) => title.trim() || (sidebar ? tc("ownSections.untitled") : t("view.untitledN", { n: i + 1 }));
 
   const body = (K: Kit) => {
     const itemEl = (icon: ReactNode, text: ReactNode, onSelect: () => void, disabled?: boolean) => (
@@ -104,15 +112,17 @@ export const SpaceRowMenu = forwardRef<HTMLElement, SpaceRowMenuProps>(function 
             {sep}
           </>
         )}
-        {itemEl(<Pencil />, t("row.rename"), onRename)}
+        {itemEl(<Pencil />, words.rename, onRename)}
         {item.name && itemEl(<RotateCcw />, t("row.resetName", { name: model.label }), () => change(updateItem(space, key, { name: null })))}
         {sub(
           <FolderInput />,
-          t("row.moveTo"),
+          words.moveTo,
           <>
             {space.sections.map((sec, i) => choice(sec.id, sec.items.some((x) => itemKey(x) === key), sectionName(sec.title, i), () => change(moveItemTo(space, key, sec.id))))}
             {sep}
-            {itemEl(<Plus />, t("row.newSection"), () => {
+            {itemEl(<Plus />, words.newSection, () => {
+              // A sidebar section is named first, in its popup.
+              if (sidebar) return ownSectionsUi.name({ mode: "new", item: { kind: item.kind as OwnRow["kind"], id: item.id } });
               const made = addSection(space, "");
               change(moveItemTo(made.space, key, made.id));
             })}
@@ -132,9 +142,11 @@ export const SpaceRowMenu = forwardRef<HTMLElement, SpaceRowMenuProps>(function 
               );
             }),
           )}
-        {itemEl(<X />, t("row.remove"), () => change(removeItem(space, key)))}
+        {itemEl(<X />, words.remove, () => change(removeItem(space, key)))}
         {sep}
-        {itemEl(<SlidersHorizontal />, t("row.edit"), () => spaceUi.edit({ kind: "space", id: space.id }))}
+        {sidebar
+          ? itemEl(<SlidersHorizontal />, tc("rowMenu.customize"), () => collabUi.customize(true))
+          : itemEl(<SlidersHorizontal />, t("row.edit"), () => spaceUi.edit({ kind: "space", id: space.id }))}
       </>
     );
   };

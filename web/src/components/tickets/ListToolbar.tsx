@@ -61,7 +61,10 @@ export function ListToolbar({
   onLayout,
   below,
   inTeam,
+  titleAction,
 }: {
+  /** Beside the title and count (Add to sidebar). */
+  titleAction?: ReactNode;
   /** A row under the title (a team inbox's tabs). */
   below?: ReactNode;
   /** A team inbox: the team filter is the page itself. */
@@ -220,6 +223,7 @@ export function ListToolbar({
             {count !== null && count !== undefined && (
               <AnimatedNumber value={count} flash className="mono text-[11.5px] text-fg-4" />
             )}
+            {titleAction && <span className="flex self-center">{titleAction}</span>}
           </div>
         )}
         {!searchOpen && (

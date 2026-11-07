@@ -1,3 +1,4 @@
+import { AddToSidebarButton } from "@/components/collab/AddToSidebar";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useRouter, useSearch, type NavigateOptions } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -520,6 +521,11 @@ export default function InboxPage() {
           icon={folder ? folderIcon[folder.id] : team ? <TeamDot team={team} className="size-2.5" /> : teamId ? <Users /> : <ViewIcon icon={view?.icon} size={16} />}
           count={count}
           inTeam={!!teamId}
+          titleAction={
+            <AddToSidebarButton
+              item={folder ? { kind: "ticket_folder", id: folder.id } : teamId ? { kind: "team", id: teamId } : { kind: "view", id: params.viewId ?? "" }}
+            />
+          }
           below={
             teamId ? (
               <TeamTabs

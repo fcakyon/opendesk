@@ -1,5 +1,6 @@
-// "Add to Space" in a wiki page's menus (contracts/spaces.md, kind wiki_page): the page as a
-// row of one of the person's Spaces, at the end of its first section.
+// "Add to sidebar" and "Add to Space" in a wiki page's menus: the page in Favorites or one of
+// the member's own sidebar sections (components/collab/AddToSidebar.tsx), or as a row of one
+// of the person's Spaces (contracts/spaces.md, kind wiki_page), at the end of its first section.
 
 import { Check, SquareStack } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -7,6 +8,8 @@ import { MenuItem, MenuSub } from "@/components/ui/menu";
 import { useSpaceActions } from "@/components/spaces/actions";
 import { useSession } from "@/lib/session";
 import { useSpaces } from "@/lib/spaces/hooks";
+import { AddToSidebar } from "@/components/collab/AddToSidebar";
+import { useFavorites, useWikiTree } from "./hooks";
 import { addItems, hasItem, replaceSpace } from "@/lib/spaces/model";
 
 export function AddToSpace({ pageId }: { pageId: string }) {
@@ -14,9 +17,15 @@ export function AddToSpace({ pageId }: { pageId: string }) {
   const wid = useSession((s) => s.workspaceId) ?? "";
   const { spaces } = useSpaces();
   const { put } = useSpaceActions(spaces);
-  if (!spaces?.length || !wid) return null;
+  const favorites = useFavorites();
+  const node = useWikiTree().data?.find((n) => n.id === pageId);
+  if (!wid) return null;
   const item = { workspace_id: wid, kind: "wiki_page" as const, id: pageId };
+  const sidebar = <AddToSidebar item={{ kind: "wiki_page", id: pageId }} favorite={node ? { on: favorites.has(pageId), toggle: () => favorites.toggle(node) } : undefined} />;
+  if (!spaces?.length) return sidebar;
   return (
+    <>
+    {sidebar}
     <MenuSub icon={<SquareStack />} label={t("spaces.addTo")}>
       {spaces.map((s) => {
         const there = hasItem(s, item);
@@ -27,5 +36,6 @@ export function AddToSpace({ pageId }: { pageId: string }) {
         );
       })}
     </MenuSub>
+    </>
   );
 }

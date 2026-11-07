@@ -2,7 +2,7 @@
 // dropdown menus. Closes on click-away and Escape.
 
 import { ContextMenu as CM } from "radix-ui";
-import { Check } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { forwardRef, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { menuItemCls } from "./menu";
@@ -60,4 +60,21 @@ export function ContextMenuLabel({ children }: { children: ReactNode }) {
 
 export function ContextMenuSeparator() {
   return <CM.Separator className="-mx-1 my-1 h-px bg-line" />;
+}
+
+export function ContextMenuSub({ label, icon, children }: { label: ReactNode; icon?: ReactNode; children: ReactNode }) {
+  return (
+    <CM.Sub>
+      <CM.SubTrigger className={cn(menuItemCls, "data-[state=open]:bg-hover")}>
+        {icon}
+        <span className="flex-1">{label}</span>
+        <ChevronRight />
+      </CM.SubTrigger>
+      <CM.Portal>
+        <CM.SubContent sideOffset={6} collisionPadding={8} className={cn(floatingPanel, "min-w-[180px] origin-[var(--radix-context-menu-content-transform-origin)] p-1")}>
+          {children}
+        </CM.SubContent>
+      </CM.Portal>
+    </CM.Sub>
+  );
 }

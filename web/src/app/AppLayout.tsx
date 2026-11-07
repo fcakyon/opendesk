@@ -41,6 +41,7 @@ import { quickAddOpen, useQuickAdd } from "./quickAdd";
 import { useCollab } from "@/lib/collab/hooks";
 import { useProducts } from "@/lib/products";
 import { useSpaceUi } from "@/lib/spaces/store";
+import { useOwnSectionsUi } from "@/lib/collab/ownSectionsUi";
 import { compose } from "@/lib/collab/compose";
 
 const NewTicketDialog = lazy(() => import("@/components/tickets/NewTicketDialog"));
@@ -49,6 +50,7 @@ const CollabRoot = lazy(() => import("@/components/collab/CollabRoot"));
 // Customize sidebar is every member's, with or without Collab.
 const CustomizeSidebar = lazy(() => import("@/components/collab/CustomizeSidebar").then((m) => ({ default: m.CustomizeSidebar })));
 const SpaceEditorRoot = lazy(() => import("@/components/spaces/SpaceEditor"));
+const OwnSectionDialogs = lazy(() => import("@/components/collab/OwnSectionDialogs").then((m) => ({ default: m.OwnSectionDialogs })));
 const UpgradeDialog = lazy(() => import("@/components/billing/UpgradeDialog"));
 // The sidebar's and the header's add dialogs, loaded the first time one opens.
 const QuickAddRoot = lazy(() => import("./QuickAddRoot"));
@@ -282,6 +284,7 @@ export function AppLayout() {
   const collab = useCollab();
   const { tickets: ticketsOn } = useProducts();
   const spaceEditor = useSpaceUi((s) => !!s.editor);
+  const ownSectionPopup = useOwnSectionsUi((s) => !!s.naming || !!s.adding);
   // Once loaded the add dialogs stay, so one closing plays its animation.
   const quickAddAsked = useQuickAdd(quickAddOpen);
   const [quickAddLoaded, setQuickAddLoaded] = useState(false);
@@ -392,6 +395,11 @@ export function AppLayout() {
       <Suspense fallback={null}>
         <CustomizeSidebar />
       </Suspense>
+      {ownSectionPopup && (
+        <Suspense fallback={null}>
+          <OwnSectionDialogs />
+        </Suspense>
+      )}
       {spaceEditor && (
         <Suspense fallback={null}>
           <SpaceEditorRoot />

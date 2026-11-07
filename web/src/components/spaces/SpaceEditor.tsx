@@ -365,7 +365,8 @@ function EditorSection({
 }
 
 /** "Add from": a tab per workspace, each listing what it offers with a checkbox. */
-function AddFrom({ space, workspaces, data, active, onActive, labels, onToggle }: { space: Space; workspaces: { id: string; name: string; logo: string | null }[]; data: Map<string, WorkspaceData>; active: string; onActive: (w: string) => void; labels: RowLabels; onToggle: (item: SpaceItem, on: boolean) => void }) {
+/** What a workspace offers, by group, with a search; `omit` leaves groups out (the whole sections, for a member's own section). */
+export function AddFrom({ space, workspaces, data, active, onActive, labels, onToggle, omit }: { space: Space; workspaces: { id: string; name: string; logo: string | null }[]; data: Map<string, WorkspaceData>; active: string; onActive: (w: string) => void; labels: RowLabels; onToggle: (item: SpaceItem, on: boolean) => void; omit?: readonly string[] }) {
   const { t } = useTranslation("spaces");
   const [query, setQuery] = useState("");
   const every = active === EVERY;
@@ -373,7 +374,7 @@ function AddFrom({ space, workspaces, data, active, onActive, labels, onToggle }
   const ws = workspaces.find((w) => w.id === active);
   const needle = query.trim().toLowerCase();
   const all = every ? [{ id: "everywhere" as const, offers: everywhereOffers(labels) }] : d ? offersOf(d, labels, t("editor.wholeHint")) : [];
-  const groups = all.map((g) => ({ ...g, offers: needle ? g.offers.filter((o) => o.label.toLowerCase().includes(needle) || o.hint?.toLowerCase().includes(needle)) : g.offers })).filter((g) => g.offers.length);
+  const groups = all.filter((g) => !omit?.includes(g.id)).map((g) => ({ ...g, offers: needle ? g.offers.filter((o) => o.label.toLowerCase().includes(needle) || o.hint?.toLowerCase().includes(needle)) : g.offers })).filter((g) => g.offers.length);
   return (
     <div className="flex min-h-0 flex-col rounded-lg border border-line bg-surface">
       {workspaces.length > 1 && (

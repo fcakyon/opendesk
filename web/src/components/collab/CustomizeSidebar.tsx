@@ -6,10 +6,10 @@
 // (Favorites, Inbox, Teams, Views, Pages, Workspace) and leaves out Mail and the mail options.
 
 import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, ChevronDown, ChevronRight, Eye, EyeOff, FileText, Hash, LayoutTemplate, Layers, ListTree, Lock, Pin, PinOff, Trash2, Users } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronRight, Copy, Eye, EyeOff, FileText, Hash, LayoutTemplate, Layers, ListTree, Lock, Pencil, Pin, PinOff, Plus, Trash2, Users } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { SidebarBadge, SidebarPin, SidebarPrefs, SidebarSectionId, View } from "@/lib/api/types";
+import type { SidebarBadge, SidebarPin, SidebarPrefs, SidebarSection, SidebarSectionId, Space, View } from "@/lib/api/types";
 import { ACCOUNT_BOXES, accountName, buildFolderTree, flattenTree, folderWithRole, isMailBox } from "@/lib/collab/boxes";
 import { useAllFolders, useCollab, useMailAccounts, useSaveSidebarPrefs, useSidebarPrefs } from "@/lib/collab/hooks";
 import {
@@ -21,10 +21,8 @@ import {
   isPinned,
   MAX_PINS,
   movePin,
-  moveSection,
   PAGES_PARTS,
   type PagesPart,
-  sectionOrder,
   sectionsOffered,
   setBadge,
   setHidden,
@@ -43,7 +41,7 @@ import { TeamDot, useTeamsCtx } from "@/components/tickets/teams";
 import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Menu, MenuChoice, MenuContent, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { Menu, MenuChoice, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -54,6 +52,10 @@ import { useSpaces } from "@/lib/spaces/hooks";
 import { PageIcon } from "@/components/wiki/PageTree";
 import { pickedSpace } from "@/lib/spaces/model";
 import { spaceUi, usePickedSpaceId } from "@/lib/spaces/store";
+import { useConfirm } from "@/components/ui/confirm";
+import { asSpace, entryKey, moveEntry, newOwnSection, OWN_LIMITS, ownCount, reorderEntries, sidebarEntries, withSpace } from "@/lib/collab/ownSections";
+import { ownSectionsUi } from "@/lib/collab/ownSectionsUi";
+import { removeSection } from "@/lib/spaces/model";
 
 function IconToggle({ on, onClick, label, iconOn, iconOff, disabled }: { on: boolean; onClick: () => void; label: string; iconOn: ReactNode; iconOff: ReactNode; disabled?: boolean }) {
   return (
@@ -226,8 +228,68 @@ export function CustomizeSidebar() {
 
   const change = (p: SidebarPrefs) => save.mutate(p, { onError: (e) => toast.error(e, t("customize.saveFailed")) });
   const offered = sectionsOffered(collab);
-  const order = sectionOrder(prefs).filter((id) => offered.includes(id));
+  // The built-in sections offered and the member's own, in their order.
+  const order = sidebarEntries(prefs).filter((e) => e.kind === "custom" || offered.includes(e.id));
   const name = (id: SidebarSectionId) => t(`customize.section.${id}`);
+  const wid = useSession((s) => s.workspaceId) ?? "";
+  const confirm = useConfirm();
+  // The section being dragged in the list, and the one it would go before.
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [dropBefore, setDropBefore] = useState<string | null>(null);
+  const dropTo = (before: string) => {
+    if (!dragging || dragging === before) return;
+    const keys = order.map(entryKey).filter((k) => k !== dragging);
+    keys.splice(keys.indexOf(before), 0, dragging);
+    change(reorderEntries(prefs, keys));
+  };
+  const dragProps = (key: string) => ({
+    draggable: true,
+    onDragStart: (e: React.DragEvent) => {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", key);
+      setDragging(key);
+    },
+    onDragEnd: () => {
+      setDragging(null);
+      setDropBefore(null);
+    },
+    onDragOver: (e: React.DragEvent) => {
+      if (!dragging) return;
+      e.preventDefault();
+      if (dropBefore !== key) setDropBefore(key);
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      dropTo(key);
+      setDragging(null);
+      setDropBefore(null);
+    },
+  });
+  const ownName = (s: SidebarSection) => s.title || t("ownSections.untitled");
+  const removeOwn = (s: SidebarSection) =>
+    confirm.show(t("ownSections.deleteConfirm", { name: ownName(s) }), () => change(withSpace(prefs, removeSection(asSpace(prefs, wid), s.id))), {
+      confirmLabel: t("ownSections.deleteAction"),
+      danger: true,
+    });
+  // A Space's sections with this workspace's rows, copied as the member's own.
+  const copyable = (spaces ?? []).filter((sp) => sp.sections.some((sec) => sec.items.some((i) => i.workspace_id === wid && i.kind !== "section" && i.kind !== "everywhere")));
+  const copySpace = (sp: Space) => {
+    let next = prefs;
+    let made = 0;
+    for (const sec of sp.sections) {
+      const rows = sec.items.filter((i) => i.workspace_id === wid && i.kind !== "section" && i.kind !== "everywhere");
+      if (!rows.length || next.sections.length >= OWN_LIMITS.sections) continue;
+      const room = Math.min(OWN_LIMITS.sectionItems, OWN_LIMITS.items - ownCount(next));
+      if (room <= 0) break;
+      const r = newOwnSection(next, wid, sec.title || sp.name);
+      const own = asSpace(r.prefs, wid);
+      next = withSpace(r.prefs, { ...own, sections: own.sections.map((x) => (x.id === r.id ? { ...x, items: rows.slice(0, room).map((i) => ({ workspace_id: wid, kind: i.kind, id: i.id, ...(i.name ? { name: i.name } : {}), ...(i.badge ? { badge: i.badge } : {}) })) } : x)) });
+      made++;
+    }
+    if (!made) return void toast.error(t("ownSections.nothingToCopy"));
+    change(next);
+    toast.success(t("ownSections.copied", { count: made }));
+  };
 
   const mailBadge = (key: string, fallback?: MailBadge): ItemBadge => ({ key, kind: "mail", sections: ["mail"], fallback });
   const ticketBadge = (key: string, section: SidebarSectionId): ItemBadge => ({ key, kind: section === "teams" ? "team" : "ticket", sections: [section] });
@@ -405,15 +467,33 @@ export function CustomizeSidebar() {
         <section>
           <h3 className="label-caps mb-1.5">{t("customize.sections")}</h3>
           <ol className="flex flex-col rounded-lg border border-line">
-            {order.map((id, i) => {
+            {order.map((entry, i) => {
+              const key = entryKey(entry);
+              const dropLine = dragging && dropBefore === key && dragging !== key;
+              if (entry.kind === "custom") {
+                const s = entry.section;
+                return (
+                  <li key={key} {...dragProps(key)} className={cn("relative border-b border-line-soft last:border-0", dragging === key && "opacity-50", dropLine && "before:absolute before:inset-x-2 before:-top-px before:h-0.5 before:rounded-full before:bg-tone-blue-solid")}>
+                    <div className="flex h-10 items-center gap-2 px-2">
+                      <ReorderButtons label={ownName(s)} first={i === 0} last={i === order.length - 1} onUp={() => change(moveEntry(prefs, key, -1, collab))} onDown={() => change(moveEntry(prefs, key, 1, collab))} />
+                      <span className="min-w-0 flex-1 truncate pl-5 text-[13px] font-medium">{ownName(s)}</span>
+                      <span className="mono text-[10.5px] text-fg-4">{s.items.length}</span>
+                      <IconToggle on label={t("ownSections.addRows")} iconOn={<Plus />} iconOff={<Plus />} onClick={() => ownSectionsUi.add(s.id)} />
+                      <IconToggle on label={t("ownSections.rename")} iconOn={<Pencil />} iconOff={<Pencil />} onClick={() => ownSectionsUi.name({ mode: "rename", id: s.id })} />
+                      <IconToggle on label={t("ownSections.delete")} iconOn={<Trash2 />} iconOff={<Trash2 />} onClick={() => removeOwn(s)} />
+                    </div>
+                  </li>
+                );
+              }
+              const id = entry.id;
               const items = itemsOf(id);
               const sectionHidden = isHidden(prefs, hid.section(id));
               const isOpen = expanded.has(id);
               const hasBody = items.length > 0 || id === "favorites";
               return (
-                <li key={id} className="border-b border-line-soft last:border-0">
+                <li key={id} {...dragProps(key)} className={cn("relative border-b border-line-soft last:border-0", dragging === key && "opacity-50", dropLine && "before:absolute before:inset-x-2 before:-top-px before:h-0.5 before:rounded-full before:bg-tone-blue-solid")}>
                   <div className="flex h-10 items-center gap-2 px-2">
-                    <ReorderButtons label={name(id)} first={i === 0} last={i === order.length - 1} onUp={() => change(moveSection(prefs, id, -1, collab))} onDown={() => change(moveSection(prefs, id, 1, collab))} />
+                    <ReorderButtons label={name(id)} first={i === 0} last={i === order.length - 1} onUp={() => change(moveEntry(prefs, key, -1, collab))} onDown={() => change(moveEntry(prefs, key, 1, collab))} />
                     {hasBody ? (
                       <button
                         type="button"
@@ -475,6 +555,28 @@ export function CustomizeSidebar() {
               );
             })}
           </ol>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Button size="xs" icon={<Plus />} disabled={prefs.sections.length >= OWN_LIMITS.sections} onClick={() => ownSectionsUi.name({ mode: "new" })}>
+              {t("ownSections.addSection")}
+            </Button>
+            {copyable.length > 0 && (
+              <Menu>
+                <MenuTrigger asChild>
+                  <Button size="xs" variant="ghost" icon={<Copy />} disabled={prefs.sections.length >= OWN_LIMITS.sections}>
+                    {t("ownSections.fromSpace")}
+                  </Button>
+                </MenuTrigger>
+                <MenuContent align="start" className="w-[240px]">
+                  <p className="px-2 pb-1.5 pt-1 text-[11.5px] leading-4 text-fg-4">{t("ownSections.fromSpaceHint")}</p>
+                  {copyable.map((sp) => (
+                    <MenuItem key={sp.id} icon={<SpaceGlyph icon={sp.icon} name={sp.name} color={sp.color} />} onSelect={() => copySpace(sp)}>
+                      {sp.name}
+                    </MenuItem>
+                  ))}
+                </MenuContent>
+              </Menu>
+            )}
+          </div>
           {prefs.pinned.length >= MAX_PINS && <p className="mt-1.5 text-[11.5px] text-fg-4">{t("customize.pinLimit")}</p>}
         </section>
       </div>

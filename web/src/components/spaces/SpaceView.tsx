@@ -29,7 +29,7 @@ import { defaultSidebarPrefs } from "@/lib/collab/sidebarPrefs";
 const LazyTeamspace = lazy(() => import("@/components/wiki/PagesSection").then((m) => ({ default: m.SpaceTeamspace })));
 
 /** The open workspace's sections, in its order: the sidebar without Spaces. */
-export function SectionList({ ids, render }: { ids: SidebarSectionId[]; render: (id: SidebarSectionId, first: boolean) => ReactNode }) {
+export function SectionList<Id extends string = SidebarSectionId>({ ids, render }: { ids: Id[]; render: (id: Id, first: boolean) => ReactNode }) {
   return (
     <div className="[&>*:first-child]:!mt-0">
       {ids.map((id, i) => (
