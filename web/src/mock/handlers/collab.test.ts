@@ -69,6 +69,14 @@ describe("mock Collab", () => {
     await call("PUT", "/v1/collab/sidebar", { ...kept, order: ["custom:launch", "inbox"], sections });
     expect((await call("PUT", "/v1/collab/sidebar", { order: ["custom:launch"], hidden: [], pinned: [], expanded_accounts: [], mark_read_on_open: true, unified_inbox: true })).body.sections).toEqual(sections);
     expect((await call("PUT", "/v1/collab/sidebar", { ...kept, sections: [...sections, { ...sections[0] }] })).body.code).toBe("validation_failed");
+    // Emoji on own sections and rows, and the order of a built-in section's rows: kept when left out.
+    const withIcons = [{ ...sections[0], icon: "🚀", items: [{ kind: "view", id: "v1", icon: "🔥" }] }];
+    const ordered = (await call("PUT", "/v1/collab/sidebar", { ...kept, sections: withIcons, row_order: { inbox: ["ticket_folder:open", "ticket_folder:unassigned"] } })).body;
+    expect(ordered.sections[0].icon).toBe("🚀");
+    expect(ordered.sections[0].items[0].icon).toBe("🔥");
+    expect((await call("PUT", "/v1/collab/sidebar", { order: ["inbox"], hidden: [], pinned: [], expanded_accounts: [], mark_read_on_open: true, unified_inbox: true })).body.row_order).toEqual({ inbox: ["ticket_folder:open", "ticket_folder:unassigned"] });
+    expect((await call("PUT", "/v1/collab/sidebar", { ...kept, sections: [{ ...withIcons[0], icon: "rocket" }] })).body.code).toBe("validation_failed");
+    expect((await call("PUT", "/v1/collab/sidebar", { ...kept, row_order: { "custom:launch": ["view:v1"] } })).body.code).toBe("validation_failed");
   });
 
   it("keeps the sidebar prefs without Collab too", async () => {
