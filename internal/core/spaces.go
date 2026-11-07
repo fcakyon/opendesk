@@ -76,6 +76,7 @@ type CoreSpaceSection struct {
 	ID        string          `json:"id"`
 	Title     string          `json:"title"`
 	Collapsed bool            `json:"collapsed"`
+	Icon      string          `json:"icon,omitempty"`
 	Items     []CoreSpaceItem `json:"items"`
 }
 
@@ -86,6 +87,7 @@ type CoreSpaceItem struct {
 	ID          string `json:"id"`
 	Name        string `json:"name,omitempty"`
 	Badge       string `json:"badge,omitempty" enum:"unread,total,count,awaiting,urgent,overdue,open,none"`
+	Icon        string `json:"icon,omitempty"`
 }
 
 // coreSpaceIn is a Space as a client sends it: color, icon and marks may be left out.
@@ -102,6 +104,7 @@ type coreSpaceSectionIn struct {
 	ID        string            `json:"id" maxLength:"40"`
 	Title     string            `json:"title,omitempty" maxLength:"200"`
 	Collapsed bool              `json:"collapsed,omitempty"`
+	Icon      string            `json:"icon,omitempty" maxLength:"64" doc:"One emoji beside the title, or empty"`
 	Items     []coreSpaceItemIn `json:"items" maxItems:"60"`
 }
 
@@ -111,6 +114,7 @@ type coreSpaceItemIn struct {
 	ID          string `json:"id" maxLength:"100"`
 	Name        string `json:"name,omitempty" maxLength:"300"`
 	Badge       string `json:"badge,omitempty" maxLength:"20"`
+	Icon        string `json:"icon,omitempty" maxLength:"64" doc:"One emoji in place of the row's own icon, or empty"`
 }
 
 type coreSpacesBody struct {
@@ -192,7 +196,11 @@ func validateSpace(in coreSpaceIn, workspace *uuid.UUID) (CoreSpace, error) {
 		if total > maxSpaceItems {
 			return out, httpx.Validation("A Space holds at most 300 rows.")
 		}
-		oSec := CoreSpaceSection{ID: sec.ID, Title: title, Collapsed: sec.Collapsed, Items: make([]CoreSpaceItem, 0, len(sec.Items))}
+		icon, err := collab.SidebarIcon(sec.Icon)
+		if err != nil {
+			return out, err
+		}
+		oSec := CoreSpaceSection{ID: sec.ID, Title: title, Collapsed: sec.Collapsed, Icon: icon, Items: make([]CoreSpaceItem, 0, len(sec.Items))}
 		for _, it := range sec.Items {
 			item, err := validateSpaceItem(it, workspace)
 			if err != nil {
@@ -254,6 +262,11 @@ func validateSpaceItem(in coreSpaceItemIn, workspace *uuid.UUID) (CoreSpaceItem,
 	if out.Badge != "" && !collab.BadgeValue(out.Badge) {
 		return out, httpx.Validation("A row's number is unread, total, count, awaiting, urgent, overdue, open or none.")
 	}
+	icon, err := collab.SidebarIcon(in.Icon)
+	if err != nil {
+		return out, err
+	}
+	out.Icon = icon
 	return out, nil
 }
 

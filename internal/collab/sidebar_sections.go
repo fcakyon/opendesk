@@ -3,11 +3,13 @@ package collab
 import (
 	"regexp"
 	"slices"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 
 	"github.com/useopendesk/opendesk/internal/displayname"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 	"github.com/useopendesk/opendesk/internal/httpx"
 )
 
@@ -70,7 +72,11 @@ func validateSections(in []SidebarSection) ([]SidebarSection, error) {
 		if total > maxOwnItems {
 			return nil, httpx.Validation("Your sections hold at most 300 rows.")
 		}
-		o := SidebarSection{ID: sec.ID, Title: title, Collapsed: sec.Collapsed, Items: make([]SidebarItem, 0, len(sec.Items))}
+		icon, err := SidebarIcon(sec.Icon)
+		if err != nil {
+			return nil, err
+		}
+		o := SidebarSection{ID: sec.ID, Title: title, Collapsed: sec.Collapsed, Icon: icon, Items: make([]SidebarItem, 0, len(sec.Items))}
 		for _, it := range sec.Items {
 			item, err := validateItem(it)
 			if err != nil {
@@ -113,5 +119,47 @@ func validateItem(in SidebarItem) (SidebarItem, error) {
 	if out.Badge != "" && !badgeValues[out.Badge] {
 		return out, httpx.Validation("A row's number is unread, total, count, awaiting, urgent, overdue, open or none.")
 	}
+	icon, err := SidebarIcon(in.Icon)
+	if err != nil {
+		return out, err
+	}
+	out.Icon = icon
 	return out, nil
+}
+
+// SidebarIcon checks the emoji a member's own section or row wears, in their sidebar and in
+// their Spaces: one emoji, or "" for none.
+func SidebarIcon(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", nil
+	}
+	if len(s) > 64 || !hd.IsEmoji(s) {
+		return "", httpx.Validation("An icon is one emoji.")
+	}
+	return s, nil
+}
+
+// Limits of RowOrder: one list per built-in section, each naming at most maxRowOrder rows.
+const maxRowOrder = 300
+
+// validateRowOrder checks the member's order of rows inside built-in sections: keys are
+// built-in section ids, rows are sidebar ids, each once.
+func validateRowOrder(in map[string][]string) error {
+	for sec, rows := range in {
+		if !slices.Contains(SidebarSectionIDs, sec) {
+			return httpx.Validation("Rows can be ordered in the built-in sections only.")
+		}
+		if len(rows) > maxRowOrder {
+			return httpx.Validation("A section's row order names at most 300 rows.")
+		}
+		seen := map[string]bool{}
+		for _, r := range rows {
+			if !sidebarItemOK(r) || seen[r] {
+				return httpx.Validation("Each row in a section's order is 1 to 100 characters, once.")
+			}
+			seen[r] = true
+		}
+	}
+	return nil
 }

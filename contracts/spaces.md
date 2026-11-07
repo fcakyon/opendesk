@@ -32,6 +32,7 @@ interface SpaceSection {
   id: string                 // made by the client, 1..40 of [A-Za-z0-9_-], once per Space
   title: string              // 0..40 characters, checked like a name (a starter's titles show to the whole workspace); "" shows no header
   collapsed: boolean
+  icon?: string              // one emoji beside the title; left out: none
   items: SpaceItem[]         // at most 60; at most 300 across the Space
 }
 
@@ -41,6 +42,7 @@ interface SpaceItem {
   id: string                 // see below, 1..100 characters
   name?: string              // the person's own label for the row, 1..64 characters, a name people choose
   badge?: SidebarBadge       // the number beside the row (contracts/collab.md "badges"); left out: the row's default
+  icon?: string              // one emoji in place of the row's own icon; left out: the row's own
 }
 
 type SpaceItemKind =

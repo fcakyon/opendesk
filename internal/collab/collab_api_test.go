@@ -1088,6 +1088,14 @@ func TestAPISidebarSections(t *testing.T) {
 				p.Sections = append(p.Sections, SidebarSection{ID: "x" + strconv.Itoa(i)})
 			}
 		},
+		"section icon":      func(p *SidebarPrefs) { p.Sections[0].Icon = "rocket" },
+		"row icon":          func(p *SidebarPrefs) { p.Sections[0].Items[0].Icon = "🚀🚀" },
+		"row order section": func(p *SidebarPrefs) { p.RowOrder = map[string][]string{"custom:launch": {"team:mine"}} },
+		"row order duplicate": func(p *SidebarPrefs) {
+			p.RowOrder = map[string][]string{"inbox": {"ticket_folder:mine", "ticket_folder:mine"}}
+		},
+		"row order empty id": func(p *SidebarPrefs) { p.RowOrder = map[string][]string{"teams": {""}} },
+		"row order too long": func(p *SidebarPrefs) { p.RowOrder = map[string][]string{"teams": make([]string, 301)} },
 	}
 	for name, f := range bad {
 		p := base()
@@ -1095,6 +1103,33 @@ func TestAPISidebarSections(t *testing.T) {
 		if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", p, nil); st != 422 {
 			t.Errorf("%s: %d", name, st)
 		}
+	}
+}
+
+// Own sections and rows wear an emoji, and the member orders the rows of built-in sections;
+// a client that leaves the order out keeps it.
+func TestAPISidebarIconsAndRowOrder(t *testing.T) {
+	w := newWorld(t)
+	srv := w.api(w.agent)
+	var prefs SidebarPrefs
+	if st := doJSON(t, "GET", srv.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || prefs.RowOrder == nil || len(prefs.RowOrder) != 0 {
+		t.Fatalf("defaults: %d %+v", st, prefs.RowOrder)
+	}
+	p := defaultSidebar()
+	p.Order = append(p.Order, "custom:mine")
+	p.Sections = []SidebarSection{{ID: "mine", Title: "Mine", Icon: " 🚀 ", Items: []SidebarItem{{Kind: "box", ID: "inbox", Icon: "📥"}}}}
+	p.RowOrder = map[string][]string{"inbox": {"ticket_folder:open", "ticket_folder:mine"}, "workspace": {"page:reports"}}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", p, &prefs); st != 200 {
+		t.Fatalf("put: %d", st)
+	}
+	if prefs.Sections[0].Icon != "🚀" || prefs.Sections[0].Items[0].Icon != "📥" || len(prefs.RowOrder["inbox"]) != 2 {
+		t.Fatalf("stored: %+v %+v", prefs.Sections, prefs.RowOrder)
+	}
+	old := map[string]any{"order": []string{"inbox"}, "hidden": []string{}, "pinned": []any{}, "expanded_accounts": []string{},
+		"mark_read_on_open": true, "unified_inbox": true}
+	prefs = SidebarPrefs{}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", old, &prefs); st != 200 || prefs.RowOrder["workspace"][0] != "page:reports" {
+		t.Fatalf("left out: %d %+v", st, prefs.RowOrder)
 	}
 }
 
