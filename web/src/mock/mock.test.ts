@@ -136,7 +136,8 @@ describe("mock backend", () => {
   it("breaks each sidebar row's tickets down into awaiting, urgent and overdue", async () => {
     const c = (await call("GET", "/v1/tickets/counts")).body;
     const keys = ["ticket_folder:unassigned", "ticket_folder:mine", "ticket_folder:open", "ticket_folder:pending", "team:mine",
-      ...Object.keys(c.teams).map((id) => `team:${id}`), ...Object.keys(c.views).map((id) => `view:${id}`)];
+      ...Object.keys(c.teams).map((id) => `team:${id}`), ...Object.keys(c.views).map((id) => `view:${id}`),
+      ...Object.keys(c.mailboxes).flatMap((id) => ["unassigned", "mine", "open", "pending"].map((f) => `mailbox:${id}:${f}`))];
     expect(Object.keys(c.stats).sort()).toEqual(keys.sort());
     const open = c.stats["ticket_folder:open"];
     expect(open.urgent).toBeLessThanOrEqual(c.open);

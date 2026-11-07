@@ -83,6 +83,7 @@ function lookOf(item: SpaceItem, d: WorkspaceData | undefined, labels: RowLabels
   const loading =
     (item.kind === "team" && !d.teams) ||
     (item.kind === "view" && !d.views) ||
+    (item.kind === "mailbox" && !d.mailboxes) ||
     ((item.kind === "wiki_space" || item.kind === "wiki_page") && (!d.wiki || !d.teams)) ||
     (isCollabItem(item) && (d.collab === undefined || (d.collab && !d.accounts))) ||
     (item.kind === "folder" && !!d.accounts?.some((a) => !d.folders[a.id]));
@@ -106,7 +107,9 @@ function offersOf(d: WorkspaceData, labels: RowLabels, wholeHint: string): { id:
   const sections = SECTION_IDS
     .filter((id) => d.collab || id !== "mail")
     .map((id) => ({ item: it("section", id), label: labels.section(id, d.collab), icon: sectionIcons[id], hint: wholeHint }));
-  const inbox = ticketFolders.map((f) => ({ item: it("ticket_folder", f.id), label: labels.folder(f.id), icon: buildRow(it("ticket_folder", f.id), d, { labels })?.icon }));
+  const inbox: Offer[] = ticketFolders.map((f) => ({ item: it("ticket_folder", f.id), label: labels.folder(f.id), icon: buildRow(it("ticket_folder", f.id), d, { labels })?.icon }));
+  // Each ticket inbox (a reply address), opening its own Unassigned.
+  for (const m of d.mailboxes ?? []) inbox.push({ item: it("mailbox", m.id), label: m.name || m.email, icon: <Inbox />, hint: m.name ? m.email : undefined });
   const visible = (d.teams ?? []).filter((x) => canSeeTeam(d, x)).sort((a, b) => Number(d.myTeams.has(b.id)) - Number(d.myTeams.has(a.id)) || a.name.localeCompare(b.name));
   const teams: Offer[] = [
     ...(d.myTeams.size > 1 ? [{ item: it("team", "mine"), label: labels.myTeams, icon: <Users /> }] : []),

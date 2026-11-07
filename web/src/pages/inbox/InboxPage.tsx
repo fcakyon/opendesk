@@ -39,6 +39,7 @@ import { conversationMaxWidth, useConversationWidth } from "@/lib/conversationWi
 import { TeamDot, useTeamsCtx } from "@/components/tickets/teams";
 import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import { TeamTabs } from "./TeamTabs";
+import { InboxSwitcher } from "@/components/tickets/inboxes/InboxSwitcher";
 import { useHref } from "@/lib/links";
 
 const TicketDetail = lazy(() => import("@/components/tickets/detail/TicketDetail"));
@@ -159,10 +160,14 @@ export default function InboxPage() {
   const listKey = JSON.stringify(query);
   const teamCounts = teamId ? (teamId === "mine" ? counts?.my_teams : counts?.teams?.[teamId]) : undefined;
   const title = (folder ? tNav(folder.labelKey) : undefined) ?? (view && viewName(view)) ?? (teamId ? (teamId === "mine" ? tr("teams.myTeams") : (team?.name ?? tr("teams.team"))) : tr("list.view"));
+  // One ticket inbox (?mailbox=) counts its own folder; Solved and Spam are not counted per inbox.
+  const inboxCount = folder && search.mailbox && counts?.mailboxes && folder.id !== "solved" && folder.id !== "spam" ? (counts.mailboxes[search.mailbox]?.[folder.id] ?? 0) : undefined;
   const count = folder
-    ? counts
-      ? folder.count(counts)
-      : null
+    ? search.mailbox
+      ? (inboxCount ?? null)
+      : counts
+        ? folder.count(counts)
+        : null
     : params.viewId
       ? counts?.views?.[params.viewId]
       : teamCounts && (tab === "unassigned" || tab === "open")
@@ -534,6 +539,8 @@ export default function InboxPage() {
                 counts={teamCounts}
                 onTab={(next) => go(params.ticketId, { ...search, tab: next === "unassigned" ? undefined : next }, true)}
               />
+            ) : folder ? (
+              <InboxSwitcher mailbox={search.mailbox} onPick={(mailbox) => setSearch({ ...search, mailbox })} />
             ) : undefined
           }
           search={search}

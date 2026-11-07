@@ -5,7 +5,9 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { Lock, RefreshCw, Users } from "lucide-react";
+import { Inbox, Lock, RefreshCw, Users } from "lucide-react";
+import { useCanHandOver } from "@/components/tickets/inboxes/handOver";
+import { quickAdd } from "@/app/quickAdd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BackLink, Row, Section, SettingsPage } from "@/components/layout";
@@ -78,6 +80,8 @@ export default function MailAccountDetail() {
   const collab = useCollab();
   const { data: accounts, isLoading } = useSettingsAccounts();
   const account = accounts?.find((a) => a.id === accountId);
+  const handOver = useCanHandOver(account);
+  const { t: tInbox } = useTranslation("inbox");
   const [form, setForm] = useState<Form | null>(null);
   const [imap, setImap] = useState<ImapForm | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -216,9 +220,16 @@ export default function MailAccountDetail() {
       back={<BackLink to="/settings/mail-accounts">{t("detail.back")}</BackLink>}
       actions={
         manage ? (
+          <>
+          {handOver && (
+            <Button icon={<Inbox className="size-3.5" />} onClick={() => quickAdd.inbox({ accountId: account.id })}>
+              {tInbox("inboxes.useForTickets")}
+            </Button>
+          )}
           <Button variant="primary" disabled={!dirty || !audienceOk || !imapOk || !!fromNameProblem(form.display_name, COLLAB_FROM_VARS)} loading={save.isPending} onClick={() => save.mutate()}>
             {t("detail.save")}
           </Button>
+          </>
         ) : undefined
       }
     >

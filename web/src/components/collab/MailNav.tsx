@@ -8,7 +8,8 @@ import { applyRowOrder } from "@/lib/collab/rowOrder";
 import type { EditSource } from "@/lib/collab/sidebarEditModel";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { AlertCircle, ChevronRight, Layers, Plus } from "lucide-react";
+import { AlertCircle, ChevronRight, Inbox, Layers, Plus } from "lucide-react";
+import { useCanHandOver } from "@/components/tickets/inboxes/handOver";
 import { type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivePill, Count, givesWay, Label, markOpener, NavTip, rowActive, rowBase, rowIdle, rowShape, Section, useOpener } from "@/app/sidebarParts";
@@ -181,11 +182,15 @@ function AccountGroup({
   const key = `account:${account.id}`;
   const shown = mailShown(prefs, key, ["mail"], accountNumbers(account, folders, counts));
   const openSettings = () => void navigate({ to: "/settings/mail-accounts/$accountId", params: { accountId: account.id } });
+  const { t: tInbox } = useTranslation("inbox");
+  const handOver = useCanHandOver(account);
   const menu: Menu = {
     badge: { key, kind: "mail", sections: ["mail"] },
     pin: { kind: "account", id: account.id },
     hideId: hid.account(account.id),
     settings: { label: t("rowMenu.accountSettings"), onSelect: openSettings },
+    // An admin turns an address they connected into a ticket inbox (contracts/collab.md "Using an account for tickets").
+    items: handOver ? [{ label: tInbox("inboxes.useForTickets"), icon: <Inbox />, onSelect: () => quickAdd.inbox({ accountId: account.id }) }] : undefined,
   };
   const expanded = !rail && prefs.expanded_accounts.includes(account.id);
   const atInbox = here.box === "inbox" && here.account === account.id && !here.folder;
