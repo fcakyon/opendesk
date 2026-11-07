@@ -1,19 +1,23 @@
-// The wiki's home (/wiki). A new workspace gets a first-run state with starter pages;
-// otherwise the pages edited lately and the top-level pages to start from.
+// The wiki's home (/wiki). A new workspace gets a first-run state with starter pages (or an
+// import); otherwise the pages edited lately and the top-level pages to start from, and a menu
+// to import pages or export the wiki.
 
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChevronRight, Hash, Network, Plus, Shuffle } from "lucide-react";
+import { ChevronRight, FileUp, Hash, MoreHorizontal, Network, Plus, Shuffle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "@/app/RootLayout";
 import { Button } from "@/components/ui/button";
 import { EmptyState, GhostList } from "@/components/ui/empty";
 import { Kbd } from "@/components/ui/kbd";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { PageIcon } from "@/components/wiki/WikiTree";
 import { useCreatePage, useTitle, useWikiTree } from "@/components/wiki/hooks";
 import { FIRST_RUN, TEMPLATES, templatePage } from "@/components/wiki/templates";
 import { StarterTemplates } from "@/components/wiki/TemplateCards";
+import { ExportWikiItems } from "@/components/wiki/Export";
+import { openImport } from "@/components/wiki/ImportDialog";
 import { relLong, fullDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { atLeast, useRole } from "@/lib/session";
@@ -58,6 +62,23 @@ export default function WikiHome() {
               <Shuffle className="size-4" />
             </Button>
           </Tooltip>
+          <Menu>
+            <Tooltip content={t("home.more")}>
+              <MenuTrigger asChild>
+                <Button variant="ghost" size="sm" square aria-label={t("home.more")}>
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </MenuTrigger>
+            </Tooltip>
+            <MenuContent align="end">
+              {canEdit && (
+                <MenuItem icon={<FileUp />} onSelect={() => openImport()}>
+                  {t("import.action")}
+                </MenuItem>
+              )}
+              <ExportWikiItems />
+            </MenuContent>
+          </Menu>
           {canEdit && (
             <Button variant="primary" size="sm" className="ml-1.5" icon={<Plus />} loading={create.isPending} onClick={() => create.mutate({})}>
               {t("tree.newPage")}
@@ -95,6 +116,13 @@ export default function WikiHome() {
               canEdit ? (
                 <Button variant="primary" icon={<Plus />} loading={create.isPending && !create.variables?.title} onClick={() => create.mutate({})}>
                   {t("empty.create")}
+                </Button>
+              ) : undefined
+            }
+            secondary={
+              canEdit ? (
+                <Button icon={<FileUp />} onClick={() => openImport()}>
+                  {t("import.pages")}
                 </Button>
               ) : undefined
             }

@@ -133,7 +133,8 @@
     "subpages_other": "{{count}} subpages",
     "noSubpages": "No subpages",
     "paletteHint": "Find any page from the command menu:",
-    "random": "Open a random page"
+    "random": "Open a random page",
+    "more": "More"
   },
   "templates": {
     "heading": "Start from a template",
@@ -1091,5 +1092,121 @@
       "file": "File",
       "group": "Group"
     }
+  },
+  "import": {
+    "action": "Import",
+    "here": "Import here",
+    "pages": "Import pages",
+    "title": "Import pages",
+    "description": "Bring pages in from Notion, Obsidian, Confluence or files you already have.",
+    "drop": "Drop a zip or files here, or browse",
+    "dropNow": "Drop to add them",
+    "dropHint": "A zip, or Markdown, HTML, CSV, text and Obsidian canvas files. Up to 100 MB in all.",
+    "remove": "Remove {{name}}",
+    "clear": "Clear",
+    "where": "Where",
+    "under": "Under {{title}}",
+    "topOf": "Top of {{space}}",
+    "sources": {
+      "title": "What it reads",
+      "notion": {
+        "name": "Notion",
+        "body": "Export as Markdown & CSV or HTML, with subpages, and upload the zip."
+      },
+      "obsidian": {
+        "name": "Obsidian",
+        "body": "Zip the vault folder and upload it. Links, embeds, callouts, tags and canvases come along."
+      },
+      "html": {
+        "name": "Confluence and Google Docs",
+        "body": "Upload the HTML export: a page per file."
+      },
+      "files": {
+        "name": "Markdown, HTML and text",
+        "body": "A page per file. A CSV becomes a database."
+      }
+    },
+    "guide": "How importing works",
+    "start": "Import",
+    "uploading": "Uploading {{percent}}%",
+    "making": "Making the pages",
+    "progress": "Import progress",
+    "cancelUpload": "Cancel upload",
+    "done_one": "Imported {{count}} page",
+    "done_other": "Imported {{count}} pages",
+    "doneBody": "They're in the sidebar, with their links and files.",
+    "skipped_one": "{{count}} file was left out or changed",
+    "skipped_other": "{{count}} files were left out or changed",
+    "showAll_one": "Show {{count}} more",
+    "showAll_other": "Show {{count}} more",
+    "open": "Open",
+    "more": "Import more",
+    "close": "Done",
+    "tooLarge": "These files are over 100 MB together. Split the export into smaller parts.",
+    "wrongType": "{{name}} can't be imported. Use a zip, or Markdown, HTML, CSV, text or canvas files.",
+    "failed": "Couldn't import the pages.",
+    "reasons": {
+      "moved_up": {
+        "title": "Moved up a level",
+        "body": "The wiki nests pages up to 10 levels deep, so these went beside their parent at the last level."
+      },
+      "body_too_large": {
+        "title": "Made without their text",
+        "body": "Their text is over 512 KB, more than a page holds. Split it into smaller pages and paste it in."
+      },
+      "columns_dropped": {
+        "title": "Columns left out",
+        "body": "A database keeps up to 100 properties, so the columns past that were left out."
+      },
+      "canvas_simplified": {
+        "title": "Canvases simplified",
+        "body": "Some cards came in simpler: a card for a heading of a note shows the whole note, links and files the import couldn't take became text cards, and group backgrounds were left out."
+      },
+      "canvas_trimmed": {
+        "title": "Canvases trimmed",
+        "body": "A canvas holds up to 2,000 cards and 4,000 connections, so the ones past that were left out."
+      },
+      "files_limit": {
+        "title": "Past the import allowance",
+        "body": "These files go past your plan's allowance for imported files, so the pages that used them don't show them."
+      },
+      "too_large": {
+        "title": "Too large",
+        "body": "Files over 25 MB and page sources over 4 MB aren't imported."
+      },
+      "unreadable": {
+        "title": "Couldn't be read",
+        "body": "Their text or table couldn't be read. A table the wiki can't keep as a database stays as pages."
+      },
+      "unsupported": {
+        "title": "Not imported",
+        "body": "A kind of file the wiki doesn't import, such as Obsidian bases."
+      },
+      "nested_archive": {
+        "title": "Archives inside the upload",
+        "body": "A zip inside the upload isn't opened. Upload it on its own."
+      },
+      "executable": {
+        "title": "Programs and scripts",
+        "body": "Programs and scripts are never imported."
+      },
+      "unused": {
+        "title": "Not used by any page",
+        "body": "Files that no page links to or embeds aren't kept."
+      },
+      "other": {
+        "title": "Left out",
+        "body": "The import left these out."
+      }
+    }
+  },
+  "export": {
+    "action": "Export",
+    "markdown": "Markdown",
+    "html": "HTML",
+    "subpages": "Include subpages",
+    "wiki": "Export the wiki",
+    "started": "Preparing the download",
+    "failed": "Couldn't export."
   }
 }

@@ -2431,6 +2431,18 @@ export type WikiWriteInput = {
   title?: string;
   instructions?: string;
 };
+// ─── Wiki import and export (contracts/wiki.md "Import and export") ──────────
+
+/** Why an import left a file out or changed a page. */
+export type WikiImportSkipReason =
+  | "unsupported" | "unused" | "executable" | "too_large" | "unreadable"
+  | "body_too_large" | "moved_up" | "columns_dropped" | "nested_archive" | "files_limit"
+  | "canvas_simplified" | "canvas_trimmed";
+/** POST /v1/wiki/import: how many pages it made, its top pages in order, and what it left out by path in the upload. */
+export type WikiImportResult = { pages: number; root_ids: string[]; skipped: { path: string; reason: WikiImportSkipReason | (string & {}) }[] };
+/** Where an import lands: under a page, or at the top of a space. */
+export type WikiImportTarget = { parent_id: string } | { space: WikiSpace; team_id?: string };
+export type WikiExportFormat = "markdown" | "html";
 export type TranslateResult = { html?: string; text?: string; source_language: string };
 export type KBArticleDraft = { title: string; body_html: string; excerpt: string };
 

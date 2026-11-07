@@ -142,9 +142,11 @@ export default defineConfig({
               items: [
                 { label: 'Pages and writing', slug: 'guides/wiki' },
                 { label: 'Databases', slug: 'guides/wiki-databases' },
+                { label: 'Canvas', slug: 'guides/wiki-canvas' },
                 { label: 'Links, tags and the graph', slug: 'guides/wiki-links' },
                 { label: 'Comments and following', slug: 'guides/wiki-collaboration' },
                 { label: 'Tickets, help center and Ollie', slug: 'guides/wiki-desk' },
+                { label: 'Import and export', slug: 'guides/wiki-import-export' },
               ],
             },
             { label: 'Help center addresses', slug: 'guides/help-center-addresses' },

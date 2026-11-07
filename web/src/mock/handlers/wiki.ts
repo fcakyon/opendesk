@@ -52,7 +52,9 @@ import { htmlToText, rewriteText, textToParagraphs } from "./aiTicket";
 import { kbBrandRef, recountCollections, uniqueSlug } from "./resources";
 import { canSeeTicket, roleIn, teamRole } from "../teams";
 import { findTicket } from "../tickets";
-import { ago, DAY, escapeHtml, HOUR, MIN, NOW, nowIso, parseUUID, slugify, stripHtml, uuid } from "../util";
+import { ago, DAY, escapeHtml, HOUR, markdownToHtml, MIN, NOW, nowIso, parseUUID, slugify, stripHtml, uuid } from "../util";
+import { htmlToMarkdown } from "@/lib/procedures";
+import { exportBaseName } from "@/lib/wiki/port";
 
 type Row = WikiPageSettings & {
   id: string;
@@ -534,6 +536,7 @@ export function registerWiki() {
   registerComments();
   registerDesk();
   registerTicketWiki();
+  registerPort();
 }
 
 function registerPages() {
@@ -2710,4 +2713,327 @@ function registerTicketWiki() {
       .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
     return pageOf(out.slice(0, 50).map(node));
   });
+}
+
+// ─── Import and export (port.go, contracts/wiki.md "Import and export") ─────
+//
+// The mock reads a small part of what wikiport reads: each Markdown, text or HTML file becomes a
+// page (its title from front matter, the first heading or <title>, else the file name), and an
+// Obsidian .canvas file a canvas of its text, link and group cards (a file card as text). It can't unpack a zip, build
+// a database from a CSV or keep files, and says so with the skip reasons the API uses. Exports
+// are real: Markdown with front matter or standalone HTML, and a zip (stored, not compressed) of
+// a page with its subpages or of the whole tree, with the API's download headers.
+
+const MAX_UPLOAD = 100 << 20;
+const MAX_FILE = 25 << 20;
+const MAX_SOURCE = 4 << 20;
+const EXECUTABLE = /\.(exe|msi|bat|cmd|com|scr|ps1|sh|bash|js|mjs|vbs|jar|app|dmg|apk|dll|so|py|rb|pl|php)$/i;
+
+type Skip = { path: string; reason: string };
+type Source = { key: string; title: string; body: string; canvas: Canvas | null };
+
+const extOf = (name: string) => /\.[^./\\]+$/.exec(name.toLowerCase())?.[0] ?? "";
+const stem = (name: string) => (name.split(/[\\/]/).pop() ?? name).replace(/\.[^.]+$/, "");
+
+/** Markdown as wiki HTML: front matter's title, headings, then markdownToHtml's paragraphs, lists, bold and links. */
+function markdownPage(text: string, name: string): { title: string; body: string } {
+  let md = text.replace(/\r\n?/g, "\n");
+  let title = "";
+  const front = /^---\n([\s\S]*?)\n---\n?/.exec(md);
+  if (front) {
+    title = /^title:\s*["']?(.*?)["']?\s*$/m.exec(front[1])?.[1] ?? "";
+    md = md.slice(front[0].length);
+  }
+  const blocks = md.replace(/%%[\s\S]*?%%/g, "").split(/\n{2,}/);
+  const html = blocks
+    .map((b) => {
+      const h = /^(#{1,3})\s+(.+)$/.exec(b.trim());
+      if (h && !b.trim().includes("\n")) {
+        if (!title && h[1].length === 1) {
+          title = h[2].trim();
+          return "";
+        }
+        return `<h${h[1].length}>${escapeHtml(h[2].trim())}</h${h[1].length}>`;
+      }
+      return markdownToHtml(b.replace(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g, (_m, target: string, alias?: string) => alias ?? target));
+    })
+    .join("");
+  return { title: title || stem(name), body: html };
+}
+
+/** An HTML file's page: its <title> or first heading, and its body. */
+function htmlPage(text: string, name: string): { title: string; body: string } {
+  const doc = new DOMParser().parseFromString(text, "text/html");
+  const heading = doc.body.querySelector("h1");
+  const title = doc.title.trim() || heading?.textContent?.trim() || stem(name);
+  if (heading && heading.textContent?.trim() === title) heading.remove();
+  return { title, body: doc.body.innerHTML };
+}
+
+/**
+ * An Obsidian canvas (JSON Canvas 1.0) as the wiki's: text, https link and group cards and the
+ * connections between them. A file card or an http link becomes a text card and other nodes are
+ * left out (simplified); cards and connections past a canvas's limits are cut (trimmed).
+ */
+function obsidianCanvas(text: string): { canvas: Canvas; simplified: boolean; trimmed: boolean } {
+  const raw = JSON.parse(text) as { nodes?: unknown[]; edges?: unknown[] };
+  const nodes: Record<string, unknown>[] = [];
+  let simplified = false;
+  for (const n of Array.isArray(raw.nodes) ? raw.nodes : []) {
+    if (!isObject(n)) continue;
+    const base = { id: n.id, x: n.x, y: n.y, width: n.width, height: n.height, ...(n.color !== undefined ? { color: n.color } : {}) };
+    if (n.type === "text") nodes.push({ ...base, type: "text", html: markdownToHtml(String(n.text ?? "")) });
+    else if (n.type === "link" && typeof n.url === "string" && n.url.startsWith("https://")) nodes.push({ ...base, type: "link", url: n.url });
+    else if (n.type === "group") nodes.push({ ...base, type: "group", ...(typeof n.label === "string" ? { label: n.label } : {}) });
+    else if (n.type === "file" || n.type === "link") {
+      nodes.push({ ...base, type: "text", html: `<p>${escapeHtml(String(n.file ?? n.url ?? ""))}</p>` });
+      simplified = true;
+    } else simplified = true;
+  }
+  const kept = nodes.slice(0, 2000);
+  const ids = new Set(kept.map((n) => n.id));
+  const linked = (Array.isArray(raw.edges) ? raw.edges : []).filter((e): e is Record<string, unknown> => isObject(e) && ids.has(e.fromNode) && ids.has(e.toNode));
+  const edges = linked.slice(0, 4000);
+  return { canvas: { nodes: kept, edges } as unknown as Canvas, simplified, trimmed: kept.length < nodes.length || edges.length < linked.length };
+}
+
+function registerPort() {
+  post("/v1/wiki/import", async (ctx) => {
+    requireAgent(ctx);
+    const st = stateOf(ctx.ws);
+    const field = (k: string) => {
+      const v = ctx.form?.get(k);
+      return typeof v === "string" ? v : undefined;
+    };
+    const files = (ctx.form?.getAll("files") ?? []).filter((f): f is File => typeof f !== "string");
+    if (!files.length) throw invalid("files is required");
+    if (files.reduce((n, f) => n + f.size, 0) > MAX_UPLOAD)
+      throw new HttpError(413, "import_too_large", "The import holds more than 200 MB once unpacked, or the upload is over 100 MB. Split it into smaller exports.");
+    const par = parentRef(ctx, st, field("parent_id"));
+    if (par?.row.kind === "database") throw new HttpError(422, "import_into_database", "Pages can't be imported into a database. Pick a page, or the top level.");
+    if (par && par.up.length + 2 > MAX_DEPTH) throw tooDeep();
+    const space = par ? { owner: par.row.private_to, team: par.row.team_id } : spaceRef(ctx, field("space"), field("team_id"));
+
+    const skipped: Skip[] = [];
+    const sources: Source[] = [];
+    let zips = 0;
+    for (const f of files) {
+      const ext = extOf(f.name);
+      if (EXECUTABLE.test(f.name)) skipped.push({ path: f.name, reason: "executable" });
+      else if (f.size > MAX_FILE || ([".md", ".markdown", ".txt", ".html", ".htm", ".canvas"].includes(ext) && f.size > MAX_SOURCE))
+        skipped.push({ path: f.name, reason: "too_large" });
+      else if (ext === ".md" || ext === ".markdown") sources.push({ key: f.name, ...markdownPage(await f.text(), f.name), canvas: null });
+      else if (ext === ".txt") sources.push({ key: f.name, title: stem(f.name), body: textToParagraphs(await f.text()), canvas: null });
+      else if (ext === ".html" || ext === ".htm") sources.push({ key: f.name, ...htmlPage(await f.text(), f.name), canvas: null });
+      else if (ext === ".canvas") {
+        try {
+          const read = obsidianCanvas(await f.text());
+          sources.push({ key: f.name, title: stem(f.name), body: "", canvas: cleanCanvas(ctx, st, read.canvas, null) });
+          if (read.trimmed) skipped.push({ path: f.name, reason: "canvas_trimmed" });
+          if (read.simplified) skipped.push({ path: f.name, reason: "canvas_simplified" });
+        } catch {
+          skipped.push({ path: f.name, reason: "unreadable" });
+        }
+      } else {
+        if (ext === ".zip") zips++;
+        // The mock has no zip reader, and keeps no files a page doesn't hold.
+        skipped.push({ path: f.name, reason: ext === ".zip" || ext === ".csv" ? "unsupported" : "unused" });
+      }
+    }
+    if (!sources.length) {
+      if (zips) throw new HttpError(422, "import_unsupported", "The mock app can't unpack a zip. Upload Markdown, HTML, text or canvas files instead.");
+      throw new HttpError(422, "import_empty", "The upload holds no pages to import.");
+    }
+    roomFor(st, sources.length);
+
+    const root_ids: string[] = [];
+    for (const src of sources) {
+      let body = src.body;
+      try {
+        body = cleanBody(body);
+      } catch {
+        body = "";
+        skipped.push({ path: src.key, reason: "body_too_large" });
+      }
+      const r = newRow({
+        id: uuid(),
+        parent_id: par?.row.id ?? null,
+        title: [...src.title.replace(/\s+/g, " ").trim()].slice(0, 200).join(""),
+        icon: "",
+        body_html: body,
+        private_to: space.owner,
+        team_id: space.team,
+        template: par?.row.template ?? false,
+        kind: src.canvas ? "canvas" : "page",
+        canvas: src.canvas,
+      });
+      st.pages.push(r);
+      place(st, r.parent_id, r.private_to, r.team_id, r.template, r.id);
+      record(st, r, false);
+      pageEvent(ctx.ws, r, "wiki_page.created", eventPage(r));
+      root_ids.push(r.id);
+    }
+    return respond(201, { pages: root_ids.length, root_ids, skipped });
+  });
+
+  get("/v1/wiki/pages/:id/export", (ctx) => {
+    const st = stateOf(ctx.ws);
+    const r = find(ctx, st);
+    if (r.deleted_at) throw notFound("Page");
+    const format = exportFormat(ctx);
+    const v = viewerOf(ctx.ws);
+    const below = (id: string): Row[] => st.pages.filter((c) => c.parent_id === id && !c.deleted_at && c.template === r.template && sees(v, c)).sort(byPosition);
+    if (ctx.query.get("subpages") !== "true" || !below(r.id).length) {
+      const ext = format === "html" ? "html" : r.kind === "canvas" ? "canvas" : "md";
+      const type = { html: "text/html; charset=utf-8", canvas: "application/json; charset=utf-8", md: "text/markdown; charset=utf-8" }[ext];
+      return download(type, `${exportBaseName(r.title)}.${ext}`, exportText(st, r, format));
+    }
+    const files: ZipFile[] = [];
+    const walk = (p: Row, dir: string) => {
+      const name = uniqueName(files, dir, p, format);
+      files.push({ name, data: new TextEncoder().encode(exportText(st, p, format)) });
+      for (const c of below(p.id)) walk(c, `${dir}${exportBaseName(p.title)}/`);
+    };
+    walk(r, "");
+    return download("application/zip", `${exportBaseName(r.title)}.zip`, storedZip(files));
+  });
+
+  get("/v1/wiki/export", (ctx) => {
+    const st = stateOf(ctx.ws);
+    const format = exportFormat(ctx);
+    const v = viewerOf(ctx.ws);
+    const tree = st.pages.filter((r) => live(v, r));
+    if (!tree.length) throw new HttpError(422, "wiki_empty", "There are no pages to export yet.");
+    const files: ZipFile[] = [];
+    const walk = (parent: string | null, dir: string) => {
+      for (const p of tree.filter((r) => r.parent_id === parent).sort(byPosition)) {
+        files.push({ name: uniqueName(files, dir, p, format), data: new TextEncoder().encode(exportText(st, p, format)) });
+        walk(p.id, `${dir}${exportBaseName(p.title)}/`);
+      }
+    };
+    walk(null, "");
+    return download("application/zip", `Wiki ${new Date().toISOString().slice(0, 10)}.zip`, storedZip(files));
+  });
+}
+
+function exportFormat(ctx: Ctx): "markdown" | "html" {
+  const f = ctx.query.get("format") ?? "markdown";
+  if (f !== "markdown" && f !== "html") throw invalid("format must be markdown or html");
+  return f;
+}
+
+/** A page as its export file: Markdown with front matter (a canvas as JSON Canvas), or a standalone HTML page. */
+function exportText(st: State, r: Row, format: "markdown" | "html"): string {
+  const title = r.title.trim() || "Untitled";
+  if (format === "html") {
+    const cards = r.canvas ? r.canvas.nodes.map((n) => (n.type === "text" ? n.html : n.type === "group" ? `<h2>${escapeHtml(n.label ?? "")}</h2>` : n.type === "link" ? `<p><a href="${escapeHtml(n.url)}">${escapeHtml(n.title || n.url)}</a></p>` : "")).join("") : "";
+    return `<!doctype html>\n<html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head><body><h1>${escapeHtml(title)}</h1>${r.body_html}${cards}</body></html>\n`;
+  }
+  if (r.canvas) {
+    const nodes = r.canvas.nodes.map((n) => {
+      const base = { id: n.id, x: n.x, y: n.y, width: n.width, height: n.height, ...(n.color ? { color: n.color } : {}) };
+      switch (n.type) {
+        case "text":
+          return { ...base, type: "text", text: htmlToMarkdown(n.html) };
+        case "page":
+          return { ...base, type: "text", text: `[[${st.pages.find((p) => p.id === n.page_id)?.title || "Untitled"}]]` };
+        case "link":
+          return { ...base, type: "link", url: n.url };
+        case "file":
+          return n.src.startsWith("https://") ? { ...base, type: "link", url: n.src } : { ...base, type: "text", text: n.name };
+        case "group":
+          return { ...base, type: "group", ...(n.label ? { label: n.label } : {}) };
+      }
+    });
+    return JSON.stringify({ nodes, edges: r.canvas.edges }, null, "\t") + "\n";
+  }
+  const tags = pageTags(r.body_html, stripHtml);
+  const front = [`title: ${JSON.stringify(title)}`, ...(r.icon ? [`icon: ${JSON.stringify(r.icon)}`] : []), `created: ${r.created_at}`, `updated: ${r.updated_at}`, ...(tags.length ? [`tags: [${tags.join(", ")}]`] : [])];
+  return `---\n${front.join("\n")}\n---\n\n${htmlToMarkdown(r.body_html)}\n`;
+}
+
+/** A page's path in a zip, made unique among the files already there. */
+function uniqueName(files: ZipFile[], dir: string, r: Row, format: "markdown" | "html"): string {
+  const ext = format === "html" ? "html" : r.kind === "canvas" ? "canvas" : "md";
+  const base = `${dir}${exportBaseName(r.title)}`;
+  let name = `${base}.${ext}`;
+  for (let i = 2; files.some((f) => f.name === name); i++) name = `${base} ${i}.${ext}`;
+  return name;
+}
+
+/** A download as the API answers one: never shown or sniffed, never stored. */
+function download(contentType: string, name: string, body: string | Uint8Array): Response {
+  const disposition = /^[\x20-\x7e]*$/.test(name) ? `attachment; filename="${name.replace(/["\\]/g, "\\$&")}"` : `attachment; filename*=utf-8''${encodeURIComponent(name)}`;
+  return new Response(body as BodyInit, {
+    status: 200,
+    headers: {
+      "content-type": contentType,
+      "content-disposition": disposition,
+      "x-content-type-options": "nosniff",
+      "content-security-policy": "default-src 'none'; sandbox",
+      "cache-control": "private, no-store",
+    },
+  });
+}
+
+type ZipFile = { name: string; data: Uint8Array };
+
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+
+function crc32(data: Uint8Array): number {
+  let c = 0xffffffff;
+  for (const b of data) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+/** A zip of files stored as they are (method 0), with UTF-8 names. */
+export function storedZip(files: ZipFile[]): Uint8Array {
+  const enc = new TextEncoder();
+  const local: Uint8Array[] = [];
+  const central: Uint8Array[] = [];
+  let offset = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name);
+    const crc = crc32(f.data);
+    const head = new DataView(new ArrayBuffer(30));
+    head.setUint32(0, 0x04034b50, true);
+    head.setUint16(4, 20, true);
+    head.setUint16(6, 0x0800, true); // names in UTF-8
+    head.setUint32(14, crc, true);
+    head.setUint32(18, f.data.length, true);
+    head.setUint32(22, f.data.length, true);
+    head.setUint16(26, name.length, true);
+    local.push(new Uint8Array(head.buffer), name, f.data);
+    const dir = new DataView(new ArrayBuffer(46));
+    dir.setUint32(0, 0x02014b50, true);
+    dir.setUint16(4, 20, true);
+    dir.setUint16(6, 20, true);
+    dir.setUint16(8, 0x0800, true);
+    dir.setUint32(16, crc, true);
+    dir.setUint32(20, f.data.length, true);
+    dir.setUint32(24, f.data.length, true);
+    dir.setUint16(28, name.length, true);
+    dir.setUint32(42, offset, true);
+    central.push(new Uint8Array(dir.buffer), name);
+    offset += 30 + name.length + f.data.length;
+  }
+  const size = central.reduce((n, p) => n + p.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true);
+  end.setUint16(8, files.length, true);
+  end.setUint16(10, files.length, true);
+  end.setUint32(12, size, true);
+  end.setUint32(16, offset, true);
+  const parts = [...local, ...central, new Uint8Array(end.buffer)];
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const p of parts) {
+    out.set(p, at);
+    at += p.length;
+  }
+  return out;
 }

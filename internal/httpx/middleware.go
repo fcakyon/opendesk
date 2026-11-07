@@ -169,7 +169,7 @@ func CORS(origins []string, adminOrigins ...string) func(http.Handler) http.Hand
 				case public:
 					h.Set("Access-Control-Allow-Origin", "*")
 				}
-				h.Set("Access-Control-Expose-Headers", "X-Request-Id, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, Idempotent-Replayed, Mcp-Session-Id, WWW-Authenticate, OD-Ticket-Hidden")
+				h.Set("Access-Control-Expose-Headers", "X-Request-Id, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, Idempotent-Replayed, Mcp-Session-Id, WWW-Authenticate, OD-Ticket-Hidden, Content-Disposition")
 			}
 			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
 				h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")

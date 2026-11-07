@@ -8,7 +8,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/react";
-import { AlertTriangle, Check, CloudOff, FolderInput, History, Link2, MoreHorizontal, Plus, SmilePlus, Type, ImageIcon, PanelRight, Link2 as BacklinkIcon, Star, Copy, LayoutTemplate, Lock, BookOpenCheck } from "lucide-react";
+import { AlertTriangle, Check, CloudOff, FileUp, FolderInput, History, Link2, MoreHorizontal, Plus, SmilePlus, Type, ImageIcon, PanelRight, Link2 as BacklinkIcon, Star, Copy, LayoutTemplate, Lock, BookOpenCheck } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "@/app/RootLayout";
@@ -38,6 +38,8 @@ import { DayNav, TemplateBanner, TrashBanner, Verification } from "@/components/
 import { useUseTemplate } from "./WikiTemplatesPage";
 import { AddToSpace } from "@/components/wiki/AddToSpace";
 import { PublishDialog } from "@/components/wiki/PublishDialog";
+import { ExportPageItems } from "@/components/wiki/Export";
+import { openImport } from "@/components/wiki/ImportDialog";
 
 const CanvasView = lazy(() => import("@/components/wiki/canvas/CanvasView"));
 import { DatabaseView } from "@/components/wiki/database/DatabaseView";
@@ -442,7 +444,7 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
                 <History className="size-4" />
               </Button>
             </Tooltip>
-            {canEdit && !live.deleted_at && (
+            {!live.deleted_at && (
               <Menu>
                 <MenuTrigger asChild>
                   <Button square variant="ghost" size="sm" aria-label={t("page.more")}>
@@ -450,20 +452,22 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
                   </Button>
                 </MenuTrigger>
                 <MenuContent align="end">
-                  <MenuItem icon={<Plus />} onSelect={() => create.mutate({ parent_id: page.id })}>
-                    {t("tree.addSubpage")}
-                  </MenuItem>
-                  {!live.journal && (
+                  {canEdit && (
+                    <MenuItem icon={<Plus />} onSelect={() => create.mutate({ parent_id: page.id })}>
+                      {t("tree.addSubpage")}
+                    </MenuItem>
+                  )}
+                  {canEdit && !live.journal && (
                     <MenuItem icon={<FolderInput />} onSelect={() => setMoving(true)}>
                       {t("tree.moveTo")}
                     </MenuItem>
                   )}
-                  {!live.journal && (
+                  {canEdit && !live.journal && (
                     <MenuItem icon={<Copy />} onSelect={() => void duplicatePage(false)}>
                       {t("duplicate.action")}
                     </MenuItem>
                   )}
-                  {!live.template && !live.journal && (
+                  {canEdit && !live.template && !live.journal && (
                     <MenuItem icon={<LayoutTemplate />} onSelect={() => void duplicatePage(true)}>
                       {t("templatesPage.saveAs")}
                     </MenuItem>
@@ -471,8 +475,8 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
                   <MenuItem icon={<Link2 />} onSelect={copyLink}>
                     {t("page.copyLink")}
                   </MenuItem>
-                  {!live.template && <AddToSpace pageId={page.id} />}
-                  {canPublish && (
+                  {canEdit && !live.template && <AddToSpace pageId={page.id} />}
+                  {canEdit && canPublish && (
                     <MenuItem icon={<BookOpenCheck />} onSelect={() => setPublishing(true)}>
                       {t("publish.action")}
                     </MenuItem>
@@ -482,12 +486,23 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
                     {t("history.open")}
                   </MenuItem>
                   <MenuSeparator />
-                  <PageStyleItems page={live} onChange={look.set} />
-                  <MenuCheckItem icon={<Type />} checked={showToolbar} onSelect={() => setShowToolbar(!showToolbar)}>
-                    {t("page.formattingBar")}
-                  </MenuCheckItem>
-                  <MenuSeparator />
-                  <TrashItem node={node} />
+                  <ExportPageItems page={live} hasSubpages={kids.length > 0} />
+                  {canEdit && !live.template && live.kind !== "database" && (
+                    <MenuItem icon={<FileUp />} onSelect={() => openImport(page.id)}>
+                      {t("import.here")}
+                    </MenuItem>
+                  )}
+                  {canEdit && (
+                    <>
+                      <MenuSeparator />
+                      <PageStyleItems page={live} onChange={look.set} />
+                      <MenuCheckItem icon={<Type />} checked={showToolbar} onSelect={() => setShowToolbar(!showToolbar)}>
+                        {t("page.formattingBar")}
+                      </MenuCheckItem>
+                      <MenuSeparator />
+                      <TrashItem node={node} />
+                    </>
+                  )}
                 </MenuContent>
               </Menu>
             )}

@@ -16,6 +16,7 @@ import {
   Copy,
   EyeOff,
   FileText,
+  FileUp,
   FolderInput,
   Hash,
   LayoutDashboard,
@@ -55,6 +56,7 @@ import { arrange, useSidebarLayout, type SectionKey } from "./sidebarLayout";
 import { CustomizeSidebar } from "./CustomizeSidebar";
 import { AddToSpace } from "./AddToSpace";
 import { starterDatabase } from "./database/starter";
+import { openImport } from "./ImportDialog";
 
 export function pageUrl(id: string) {
   return `${location.origin}/wiki/${id}`;
@@ -94,6 +96,7 @@ export function WikiTree({ onNavigate, autoFocusSearch }: { onNavigate?: () => v
   const { isLoading } = useWikiTree();
   const canEdit = atLeast(useRole(), "agent");
   const create = useCreatePage();
+  const openId = useOpenPageId();
   const [term, setTerm] = useState("");
   const debounced = useDebounced(term.trim(), 180);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -138,6 +141,14 @@ export function WikiTree({ onNavigate, autoFocusSearch }: { onNavigate?: () => v
               </MenuItem>
               <MenuItem icon={<LayoutDashboard />} onSelect={() => create.mutate({ kind: "canvas" })}>
                 {t("canvas.newCanvas")}
+              </MenuItem>
+              <MenuSeparator />
+              <MenuItem icon={<FileUp />} onSelect={() => {
+                  onNavigate?.();
+                  openImport(openId ?? null);
+                }}
+              >
+                {t("import.action")}
               </MenuItem>
             </MenuContent>
           </Menu>

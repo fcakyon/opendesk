@@ -1,6 +1,6 @@
 // Typed wrappers for every endpoint in contracts/api.md.
 
-import { http, stream, streamEvents, type StreamHandlers } from "./client";
+import { download, http, stream, streamEvents, type StreamHandlers } from "./client";
 import type * as T from "./types";
 import { creatingTicket } from "../ownTickets";
 import { uiLanguage } from "@/i18n";
@@ -716,6 +716,20 @@ export const api = {
     follow: (pageId: string, following: boolean) => http.put<{ following: boolean }>(`/v1/wiki/pages/${pageId}/follow`, { following }),
     /** Ollie writing (contracts/ai.md): streams `delta` text for a preview, resolves with the sanitized HTML. Nothing is saved. */
     write: (b: T.WikiWriteInput, h?: StreamHandlers) => stream<{ html: string }>("/v1/wiki/ai/write", b, h),
+    /**
+     * Pages from other tools: one zip, or page sources with the files they use; up to 100 MB in all.
+     * No Idempotency-Key: the API hashes a keyed request's body, up to 32 MB.
+     */
+    importPages: (files: File[], to: T.WikiImportTarget, onProgress?: (fraction: number) => void, signal?: AbortSignal) => {
+      const fd = new FormData();
+      for (const f of files) fd.append("files", f, f.name);
+      for (const [k, v] of Object.entries(to)) if (v) fd.append(k, v);
+      return http.post<T.WikiImportResult>("/v1/wiki/import", fd, { onUploadProgress: onProgress, signal });
+    },
+    /** One page as a file, or with subpages a zip of the page and the subpages the caller sees. */
+    exportPage: (id: string, format: T.WikiExportFormat, subpages: boolean) => download(`/v1/wiki/pages/${id}/export`, { query: { format, subpages } }),
+    /** Every page of the caller's tree as a zip. */
+    exportAll: (format: T.WikiExportFormat) => download("/v1/wiki/export", { query: { format } }),
   },
   search: (q: string) => http.get<T.SearchResults>("/v1/search", { query: { q } }),
   reports: {

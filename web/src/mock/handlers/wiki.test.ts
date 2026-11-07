@@ -847,3 +847,126 @@ describe("mock wiki canvases", () => {
     expect(qc.getQueryState(qk.wikiPage("c"))?.isInvalidated).toBe(true);
   });
 });
+
+describe("mock wiki import and export", () => {
+  installMock();
+
+  const ws = () => db.workspaces[0].workspace.id;
+  async function upload(files: File[], fields: Record<string, string> = {}) {
+    const fd = new FormData();
+    for (const f of files) fd.append("files", f, f.name);
+    for (const [k, v] of Object.entries(fields)) fd.append(k, v);
+    const r = await dispatch("http://mock/v1/wiki/import", { method: "POST", body: fd, headers: { "OD-Workspace": ws() } });
+    return { status: r.status, body: await r.json() };
+  }
+  const file = (name: string, text: string) => new File([text], name);
+  async function fetchRaw(path: string) {
+    return dispatch(`http://mock${path}`, { method: "GET", headers: { "OD-Workspace": ws() } });
+  }
+
+  it("makes a page per Markdown, text and HTML file under the page picked, and lists what it left out", async () => {
+    const top = (await call("POST", "/v1/wiki/pages", { title: "Imported here" })).body as WikiPage;
+    const res = await upload(
+      [
+        file("Refunds.md", "---\ntitle: Refund policy\n---\n\n## When\n\nWithin **30 days**.\n\n- one\n- two"),
+        file("notes.txt", "First line.\n\nSecond paragraph."),
+        file("Escalation.html", "<html><head><title>Escalations</title></head><body><h1>Escalations</h1><p>Call the lead.</p><script>alert(1)</script></body></html>"),
+        file("vault.zip", "PK"),
+        file("run.sh", "echo hi"),
+      ],
+      { parent_id: top.id },
+    );
+    expect(res.status).toBe(201);
+    expect(res.body.pages).toBe(3);
+    expect(res.body.skipped).toEqual([
+      { path: "vault.zip", reason: "unsupported" },
+      { path: "run.sh", reason: "executable" },
+    ]);
+    const pages = await Promise.all((res.body.root_ids as string[]).map(async (id) => (await call("GET", `/v1/wiki/pages/${id}`)).body as WikiPage));
+    expect(pages.map((p) => [p.title, p.parent_id])).toEqual([
+      ["Refund policy", top.id],
+      ["notes", top.id],
+      ["Escalations", top.id],
+    ]);
+    expect(pages[0].body_html).toContain("<h2>When</h2>");
+    expect(pages[0].body_html).toContain("<strong>30 days</strong>");
+    expect(pages[2].body_html).not.toContain("script");
+    const tree = (await call("GET", "/v1/wiki/pages")).body.data as WikiNode[];
+    expect(tree.filter((n) => n.parent_id === top.id).map((n) => n.title)).toEqual(["Refund policy", "notes", "Escalations"]);
+  });
+
+  it("puts pages at the top of the space asked for, and an Obsidian canvas as a canvas", async () => {
+    const canvas = JSON.stringify({
+      nodes: [
+        { id: "a", type: "text", text: "**Hello**", x: 0, y: 0, width: 200, height: 100 },
+        { id: "b", type: "link", url: "https://example.com", x: 300, y: 0, width: 200, height: 100 },
+        { id: "c", type: "file", file: "Notes/Elsewhere.md", x: 0, y: 300, width: 200, height: 100 },
+      ],
+      edges: [{ id: "e", fromNode: "a", toNode: "b" }],
+    });
+    const res = await upload([file("Board.canvas", canvas)], { space: "private" });
+    expect(res.status).toBe(201);
+    const p = (await call("GET", `/v1/wiki/pages/${res.body.root_ids[0]}`)).body as WikiPage;
+    expect(p).toMatchObject({ title: "Board", kind: "canvas", private: true, parent_id: null });
+    expect(p.canvas?.nodes.map((n) => n.type)).toEqual(["text", "link", "text"]);
+    expect(p.canvas?.edges).toHaveLength(1);
+    expect(res.body.skipped).toEqual([{ path: "Board.canvas", reason: "canvas_simplified" }]);
+  });
+
+  it("refuses what it can't import whole, and viewers", async () => {
+    expect((await upload([file("vault.zip", "PK")])).body).toMatchObject({ code: "import_unsupported" });
+    expect((await upload([file("app.exe", "MZ")])).body).toMatchObject({ code: "import_empty" });
+    const issues = ((await call("GET", "/v1/wiki/pages")).body.data as WikiNode[]).find((n) => n.kind === "database")!;
+    expect((await upload([file("a.md", "# A")], { parent_id: issues.id })).body).toMatchObject({ code: "import_into_database" });
+    const me = db.workspaces[0].members.find((m) => m.user_id === db.meId)!;
+    const role = me.role;
+    me.role = "viewer";
+    try {
+      expect((await upload([file("a.md", "# A")])).status).toBe(403);
+    } finally {
+      me.role = role;
+    }
+  });
+
+  it("exports a page as a Markdown file with the download headers", async () => {
+    const p = (await call("POST", "/v1/wiki/pages", { title: "Refunds: how/why", body_html: "<p>Within <strong>30 days</strong>.</p>" })).body as WikiPage;
+    const r = await fetchRaw(`/v1/wiki/pages/${p.id}/export?format=markdown`);
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+    expect(r.headers.get("content-disposition")).toBe('attachment; filename="Refunds howwhy.md"');
+    expect(r.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(r.headers.get("cache-control")).toBe("private, no-store");
+    const text = await r.text();
+    expect(text).toMatch(/^---\ntitle: "Refunds: how\/why"\n/);
+    expect(text).toContain("Within **30 days**.");
+    const html = await fetchRaw(`/v1/wiki/pages/${p.id}/export?format=html&subpages=true`);
+    expect(html.headers.get("content-disposition")).toBe('attachment; filename="Refunds howwhy.html"');
+    expect(await html.text()).toContain("<title>Refunds: how/why</title>");
+  });
+
+  it("exports a page with its subpages, and the whole wiki, as zips", async () => {
+    const top = (await call("POST", "/v1/wiki/pages", { title: "Café" })).body as WikiPage;
+    await call("POST", "/v1/wiki/pages", { title: "Menu", parent_id: top.id });
+    const r = await fetchRaw(`/v1/wiki/pages/${top.id}/export?format=markdown&subpages=true`);
+    expect(r.headers.get("content-type")).toBe("application/zip");
+    expect(r.headers.get("content-disposition")).toBe(`attachment; filename*=utf-8''${encodeURIComponent("Café.zip")}`);
+    const zip = new Uint8Array(await r.arrayBuffer());
+    expect([...zip.slice(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04]);
+    const names = new TextDecoder().decode(zip);
+    expect(names).toContain("Café.md");
+    expect(names).toContain("Café/Menu.md");
+
+    const all = await fetchRaw("/v1/wiki/export?format=html");
+    expect(all.headers.get("content-disposition")).toMatch(/^attachment; filename="Wiki \d{4}-\d{2}-\d{2}\.zip"$/);
+    expect(new TextDecoder().decode(new Uint8Array(await all.arrayBuffer()))).toContain("Support handbook.html");
+    const lumen = db.workspaces[1].workspace.id;
+    const empty = await dispatch("http://mock/v1/wiki/export", { method: "GET", headers: { "OD-Workspace": lumen } });
+    expect(await empty.json()).toMatchObject({ code: "wiki_empty" });
+  });
+
+  it("hides a page in the trash from export", async () => {
+    const p = (await call("POST", "/v1/wiki/pages", { title: "Gone soon" })).body as WikiPage;
+    await call("POST", `/v1/wiki/pages/${p.id}/trash`, {});
+    expect((await fetchRaw(`/v1/wiki/pages/${p.id}/export`)).status).toBe(404);
+  });
+});

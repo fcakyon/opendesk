@@ -5,14 +5,14 @@ description: Read and write the team's internal wiki pages, spaces, databases, t
 
 The wiki holds your team's internal pages: runbooks, policies, notes, plans, databases. It is for members only and never shown to customers. Pages nest under each other and live in the workspace, a teamspace or one member's private pages.
 
-Scopes: `wiki:read` to read, `wiki:write` to change. Guides: [Wiki](/guides/wiki/), [Databases](/guides/wiki-databases/), [Links, tags and the graph](/guides/wiki-links/), [Comments and following](/guides/wiki-collaboration/), [Tickets, the help center and Ollie](/guides/wiki-desk/).
+Scopes: `wiki:read` to read, `wiki:write` to change. Guides: [Wiki](/guides/wiki/), [Databases](/guides/wiki-databases/), [Canvas](/guides/wiki-canvas/), [Links, tags and the graph](/guides/wiki-links/), [Comments and following](/guides/wiki-collaboration/), [Tickets, the help center and Ollie](/guides/wiki-desk/), [Import and export](/guides/wiki-import-export/).
 
 ## Pages
 
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/v1/wiki/pages` | Every page you can see, without its body, to build the tree |
-| `POST` | `/v1/wiki/pages` | Create a page: `parent_id`, `space`, `team_id`, `title`, `icon`, `body_html`, `position`, `template`, `kind`, `database`, `props` (all optional) |
+| `POST` | `/v1/wiki/pages` | Create a page: `parent_id`, `space`, `team_id`, `title`, `icon`, `body_html`, `position`, `template`, `kind`, `database`, `props`, `canvas` (all optional) |
 | `GET`, `PATCH`, `DELETE` | `/v1/wiki/pages/{id}` | Read a page with its body, change it, or delete it for good with its subpages |
 | `POST` | `/v1/wiki/pages/{id}/move` | Put it under another page, or at the top level of a space, at a position |
 | `POST` | `/v1/wiki/pages/{id}/duplicate` | Copy it with its subpages: `parent_id`, `space`, `team_id`, `template`, `title`, `position` |
@@ -41,7 +41,7 @@ type WikiNode = {
   updated_at: string;
   created_by_id: string | null;
   tags: string[];         // the #tags in its text, lower case
-  kind: "page" | "database";
+  kind: "page" | "database" | "canvas";
   private: boolean;       // yours alone
   team_id: string | null; // the teamspace it is in
   journal?: true;         // your journal, which holds your daily notes
@@ -53,6 +53,7 @@ type WikiNode = {
 type WikiPage = WikiNode & PageSettings & {
   body_html: string;
   database: Database | null;          // a database's properties and views
+  canvas: Canvas | null;              // a canvas's cards and connections
   props: Record<string, unknown>;     // a database row's values, by property id
   verification: { by: UserRef | null; at: string; until: string | null; expired: boolean } | null;
   deleted_at: string | null;          // in the trash since
@@ -104,6 +105,7 @@ Leave `version` out to always apply the change. A `PATCH` that changes nothing k
 - The page's look: `cover`, `cover_y`, `full_width`, `small_text`, `font`, `locked`. A cover is `""`, `gradient:` and one of `dawn`, `ocean`, `forest`, `dusk`, `sand`, `slate`, `rose`, `lagoon`, `aurora`, `ember`, or an image: https or one of your attachments.
 - `verified: true` (with `verified_days`, 1 to 3650, or without for until someone changes it) verifies the page as you; `verified: false` takes it away. People only: an API key is `403`.
 - `database` (a database only, replaced whole) and `props` (a row only, merged; `null` removes a value). See [Databases](#databases).
+- `canvas` (a canvas only, replaced whole). See [Canvas](#canvas).
 
 None of these moves the version or adds a revision. `locked` is for the app: the API doesn't refuse edits to a locked page.
 
@@ -244,6 +246,47 @@ type DbRow = WikiNode & {
 
 `database` is replaced whole; `props` is merged, and `null` removes a value. Neither moves the page's version. A view's `settings` (filters, sorts, grouping, shown properties, calculations) belong to the app, which also works out filters, formulas and rollups. A wrong shape is `422 invalid_database`. A database holds up to 100 properties, 50 views, 128 KB of schema and 64 KB of values per row.
 
+## Canvas
+
+A page with `kind: "canvas"` keeps `canvas`: cards on an endless board and the connections between them, in the shape of [JSON Canvas 1.0](https://jsoncanvas.org) with the wiki's own card types. Its `body_html` is a description (empty from the app); its subpages are pages as anywhere else.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/v1/wiki/pages` | `{ kind: "canvas", canvas? }` makes a canvas; left out, an empty one |
+| `PATCH` | `/v1/wiki/pages/{id}` | `canvas` on a canvas, replaced whole |
+
+```ts
+type Canvas = { nodes: CanvasNode[]; edges: CanvasEdge[] };  // nodes in z order, later above
+
+type CanvasNode = {
+  id: string;              // [A-Za-z0-9_-]{1,64}, unique among the nodes
+  x: number; y: number;    // within ±1,000,000
+  width: number; height: number;  // 20..20,000
+  color?: string;          // "1".."6" (red, orange, yellow, green, cyan, purple) or "#rrggbb"
+} & (
+  | { type: "text"; html: string }        // sanitized like a body
+  | { type: "page"; page_id: string }     // a page of the workspace
+  | { type: "link"; url: string; title?: string; description?: string; image?: string }  // https
+  | { type: "file"; src: string; name: string }   // /v1/attachments/<id> or https; name up to 255
+  | { type: "group"; label?: string }     // label up to 200
+);
+
+type CanvasEdge = {
+  id: string;              // as a node's, unique among the edges
+  fromNode: string; toNode: string;
+  fromSide?: "top" | "right" | "bottom" | "left";  // left out: the sides that face each other
+  toSide?: "top" | "right" | "bottom" | "left";
+  fromEnd?: "none" | "arrow";   // default none
+  toEnd?: "none" | "arrow";     // default arrow
+  color?: string;
+  label?: string;          // up to 200
+};
+```
+
+A save keeps the page's version and adds no revision, and the last save wins. It moves the page's last edit. Fields that don't belong to a node's type are dropped, and default ends are left out. A page card added by a save names a page you can see, not in the trash; a file card added by a save names an attachment of the workspace. Cards already on the canvas stay as they are. Reading a canvas never shows a page's title: look the page up in your own tree. A wrong shape is `422 invalid_canvas`. A canvas holds up to 2,000 nodes, 4,000 edges and 1 MB.
+
+The cards count as the page's text: page cards and page links in text cards are its links (backlinks, the graph), `#tags` and ticket mentions in text cards are its tags and ticket links, and the words on cards and connection labels are searched. Duplicates, templates and the trash carry the canvas with the page.
+
 ## Links, tags and the graph
 
 As a page is saved, the API keeps what it links to and its `#tags`.
@@ -333,6 +376,85 @@ A ticket the caller can't see is `404` on `/v1/tickets/{id}/wiki`, as on every t
 
 `mode` is `improve`, `fix_grammar`, `shorter`, `longer`, `simplify`, `more_formal`, `friendlier`, `summarize`, `action_items` or `explain` for a selection (`html`), `continue` or `summarize` from the page (`context_html`), or `custom` with `instructions`. The answer `{ html }` is sanitized like a body and is not saved: insert it with `PATCH`. Send `Accept: text/event-stream` to stream it. Typical cost $0.01 for a selection and $0.03 from a page. See [AI](/api/resources/ai/).
 
+## Import and export
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/v1/wiki/import` | Make pages from an upload. Agents; `wiki:write` |
+| `GET` | `/v1/wiki/pages/{id}/export?format=&subpages=` | A page as one file, or with `subpages=true` a zip of it and its subpages. Viewers; `wiki:read` |
+| `GET` | `/v1/wiki/export?format=` | Every page you can see, as `Wiki <YYYY-MM-DD>.zip`. Viewers; `wiki:read` |
+
+### Import
+
+`POST /v1/wiki/import` takes a multipart form:
+
+| Field | |
+| --- | --- |
+| `files` | One zip (an Obsidian vault, a Notion, Confluence or Google Docs export), or Markdown, text, HTML, CSV and Obsidian `.canvas` files with the files they use. Repeat the field for each file. Up to 100 MB in all |
+| `parent_id` | Optional: a page to import under (not a database, not in the trash). The import's top pages go last under it |
+| `space`, `team_id` | Without `parent_id`: `workspace` (default), `private` (people only) or `team` with `team_id`, as for `POST /v1/wiki/pages` |
+
+```sh
+curl -X POST https://api.opendesk.sh/v1/wiki/import \
+  -H "Authorization: Bearer od_live_..." \
+  -F "files=@Notion-export.zip" \
+  -F "space=workspace"
+```
+
+→ `201`:
+
+```json
+{
+  "pages": 42,
+  "root_ids": ["0192f0c4-..."],
+  "skipped": [{ "path": "Vault/setup.exe", "reason": "executable" }]
+}
+```
+
+`pages` is how many pages it made, `root_ids` the pages at the top of the import in order, and `skipped` what it left out or changed, by its path in the upload:
+
+| `reason` | |
+| --- | --- |
+| `unsupported` | A kind of file that isn't imported (Obsidian bases) |
+| `unused` | A file no page uses |
+| `executable` | A program or a script; never imported |
+| `too_large` | A file over 25 MB, or a page source over 4 MB |
+| `unreadable` | A file whose text or table could not be read, or a table that can't be kept as a database (its rows stay pages) |
+| `body_too_large` | A page whose text is over 512 KB; the page is made without it |
+| `moved_up` | A page deeper than the wiki holds, placed beside its ancestor at the last level |
+| `columns_dropped` | A table's columns past a database's 100 properties |
+| `canvas_simplified` | A canvas with cards kept simpler, listed once per canvas: a card for a note's heading or block (`subpath`) shows the whole note; an http link, a file or note not in the upload, or a file not taken (a program, too large) is a text card; a group's background picture and nodes of types JSON Canvas doesn't define are left out |
+| `canvas_trimmed` | A canvas's nodes past 2,000 or connections past 4,000, left out |
+| `nested_archive` | An archive inside the upload |
+| `files_limit` | A file past the plan's limit on imported files; what used it is left out of the page |
+
+All the pages are made in one transaction, with their links, tags, files and a first revision each; imported mentions notify nobody. A `wiki_page.created` event follows for each page, parents first. An import is refused whole, before anything is stored:
+
+| Status | Code | When |
+| --- | --- | --- |
+| `413` | `import_too_large` | The upload is over 100 MB, or over 200 MB unpacked |
+| `422` | `wiki_full` | Its pages don't fit in the workspace's 5,000; the message says how many it makes and how many fit |
+| `422` | `page_too_deep` | `parent_id` is at the 10th level |
+| `422` | `import_into_database` | `parent_id` is a database |
+| `422` | `import_unsupported` | Not a zip, nor a page source the wiki reads |
+| `422` | `import_unreadable` | The archive could not be read |
+| `422` | `import_too_many_files` | More than 10,000 files or 5,000 pages |
+| `422` | `import_unsafe_path` | The archive holds links, absolute paths or paths that leave it |
+| `422` | `import_compression` | An entry expands over 100 times past 1 MB |
+| `422` | `import_empty` | No pages to import |
+| `429` | `rate_limited` | Over 20 imports an hour in the workspace |
+
+A tree deeper than fits below where it lands is lifted: pages past the last level go beside their ancestor there.
+
+### Export
+
+`format` is `markdown` (the default) or `html`.
+
+- **Markdown** is an Obsidian vault: a `.md` per page with YAML front matter (title, icon, dates, tags, a row's values), its subpages in a folder of the same name beside it, `[[links]]` between pages, a database as a table of its rows with a `.csv` beside it, and a canvas as a `.canvas` file (JSON Canvas: text cards in Markdown, page cards as file nodes naming the exported page or a text node when that page isn't exported, https files as links, groups and connections as they are).
+- **HTML** is a standalone page per file, linked by relative paths; a canvas draws its cards where they sit, with its connections.
+
+One page without subpages (or without subpages you can see) is one file, `<title>.md` (`text/markdown; charset=utf-8`), a canvas's `<title>.canvas` (`application/json; charset=utf-8`) or `<title>.html` (`text/html; charset=utf-8`), its links to pages and files pointing to the app. A zip carries the files its pages use under `attachments/`, those you may read, up to 1 GB; a link to any other file, or to a page it doesn't carry, goes to the app. Exports never hold signed links. Every download is `Content-Disposition: attachment`. Pages in the trash, templates (for the whole wiki) and pages you can't see are left out; `GET /v1/wiki/export` with no pages is `422 wiki_empty`. An export reads up to 200 MB of page text (`422 export_too_large`). Zips are limited to 30 an hour per person or key (`429 rate_limited`) and recorded in the audit log.
+
 ## Presence
 
 Who is on a page goes through the realtime gateway, on the `wiki_page:<wid>:<page_id>` topic: join with `{ "state": "viewing" | "editing" | "idle" }`, or `{ "watch": true }` to see others without being shown, and `{ "team_id": "<tid>" }` for a private team's page. Private pages have no presence. See [Realtime](/api/realtime/).
@@ -344,12 +466,15 @@ Who is on a page goes through the realtime gateway, on the `wiki_page:<wid>:<pag
 - 512 KB of text and formatting per page (`422 page_too_large`).
 - 100 revisions per page. One person's edits a few minutes apart share a revision.
 - 100 favorites, 100 reminders per page.
+- A canvas: 2,000 nodes, 4,000 edges, 1 MB (`422 invalid_canvas`).
+- Imports: 100 MB uploaded, 200 MB unpacked, 10,000 files, 5,000 pages, 25 MB a file, 4 MB a page source; 20 an hour per workspace.
+- Exports: 200 MB of page text, 1 GB of files in a zip; 30 zips an hour per person or key.
 
 ## Events
 
 | Event | Data |
 | --- | --- |
-| `wiki_page.created`, `wiki_page.updated`, `wiki_page.moved` | `{ wiki_page, updated_by }`: the page without its body. `wiki_page.updated` also carries `settings`, `verification`, `database` or `props` when those changed |
+| `wiki_page.created`, `wiki_page.updated`, `wiki_page.moved` | `{ wiki_page, updated_by }`: the page without its body. `wiki_page.updated` also carries `settings`, `verification`, `database`, `props` or `canvas` when those changed; `canvas_changed: true` instead of `canvas` when it is over 256 KB (fetch the page) |
 | `wiki_page.deleted` | `{ wiki_page_id, wiki_page_ids }`: the page and every subpage that went with it; `trashed: true` when they went to the trash |
 | `wiki_page.restored` | `{ wiki_page, wiki_page_ids }`: back from the trash |
 | `wiki_comment.changed` | `{ page_id, thread_id }`: a thread changed; fetch the page's comments |

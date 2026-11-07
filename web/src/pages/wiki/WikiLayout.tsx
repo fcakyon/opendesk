@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/dialog";
 import { WikiTree } from "@/components/wiki/WikiTree";
+import { ImportDialogHost } from "@/components/wiki/ImportDialog";
 
 const SheetCtx = createContext<() => void>(() => {});
 
@@ -39,6 +40,7 @@ export default function WikiLayout() {
       <Drawer open={sheet} onOpenChange={setSheet} title={t("title")} width={340}>
         <WikiTree onNavigate={() => setSheet(false)} />
       </Drawer>
+      <ImportDialogHost />
     </SheetCtx.Provider>
   );
 }

@@ -92,7 +92,8 @@ export function errorMessage(e: unknown, fallback = "Something went wrong"): str
 
 // Transport: fetch by default; mock mode swaps it for an in-memory handler.
 export type Transport = (input: string, init: RequestInit) => Promise<Response>;
-let transport: Transport = (input, init) => fetch(input, init);
+const fetchTransport: Transport = (input, init) => fetch(input, init);
+let transport: Transport = fetchTransport;
 export function setTransport(t: Transport) {
   transport = t;
 }
@@ -282,6 +283,8 @@ export type RequestOptions = {
   signal?: AbortSignal;
   /** Let the request outlive the page (sent while it unloads). Bodies over KEEPALIVE_MAX go without. */
   keepalive?: boolean;
+  /** How much of the body has gone out, 0..1 (fetch can't tell, so the request goes by XMLHttpRequest); 1 once answered. */
+  onUploadProgress?: (fraction: number) => void;
 };
 
 /** The largest JSON body (bytes) sent with keepalive; browsers allow 64 KB for all of a page's keepalive requests together. */
@@ -370,8 +373,10 @@ async function raw(method: string, path: string, opts: RequestOptions = {}): Pro
     if (bearer) headers.Authorization = `Bearer ${bearer}`;
     if (opts.workspace !== false && workspaceId) headers["OD-Workspace"] = workspaceId;
     if (idemKey) headers["Idempotency-Key"] = idemKey;
+    const progress = opts.onUploadProgress;
+    const go = progress && transport === fetchTransport ? (i: string, init: RequestInit) => xhrTransport(i, init, progress) : transport;
     try {
-      return await transport(apiUrl(path) + buildQuery(opts.query), {
+      return await go(apiUrl(path) + buildQuery(opts.query), {
         method,
         headers,
         body,
@@ -397,7 +402,62 @@ async function raw(method: string, path: string, opts: RequestOptions = {}): Pro
     res = await send();
   }
   if (!res.ok) throw announce(await parseError(res));
+  opts.onUploadProgress?.(1);
   return res;
+}
+
+/** fetch's request over XMLHttpRequest, which reports the upload's progress. */
+function xhrTransport(input: string, init: RequestInit, onProgress: (fraction: number) => void): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open(init.method ?? "GET", input);
+    x.withCredentials = init.credentials === "include";
+    x.responseType = "blob";
+    for (const [k, v] of Object.entries((init.headers ?? {}) as Record<string, string>)) x.setRequestHeader(k, v);
+    x.upload.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) onProgress(Math.min(e.loaded / e.total, 1));
+    };
+    x.onload = () => {
+      const headers = new Headers();
+      for (const line of x.getAllResponseHeaders().trim().split(/[\r\n]+/)) {
+        const at = line.indexOf(":");
+        if (at > 0) headers.append(line.slice(0, at).trim(), line.slice(at + 1).trim());
+      }
+      const empty = x.status === 204 || x.status === 205 || x.status === 304;
+      resolve(new Response(empty ? null : (x.response as Blob), { status: x.status, statusText: x.statusText, headers }));
+    };
+    x.onerror = () => reject(new TypeError("Network error"));
+    x.onabort = () => reject(new DOMException("The request was aborted", "AbortError"));
+    if (init.signal?.aborted) return x.abort();
+    init.signal?.addEventListener("abort", () => x.abort(), { once: true });
+    x.send((init.body ?? null) as XMLHttpRequestBodyInit | null);
+  });
+}
+
+/** A downloaded file: its bytes and the name the server gave it, when the browser may read it. */
+export type Download = { blob: Blob; filename: string | null };
+
+/** GET a file with the session's token (tokens never ride in URLs, so a plain link can't). */
+export async function download(path: string, opts: RequestOptions = {}): Promise<Download> {
+  const res = await raw("GET", path, opts);
+  return { blob: await res.blob(), filename: dispositionName(res.headers.get("content-disposition")) };
+}
+
+/** The file name of a Content-Disposition header: RFC 5987's filename* first, else filename. */
+export function dispositionName(header: string | null): string | null {
+  if (!header) return null;
+  const ext = /filename\*\s*=\s*([^']*)'[^']*'([^;]+)/i.exec(header);
+  if (ext) {
+    try {
+      return decodeURIComponent(ext[2].trim().replace(/^"|"$/g, ""));
+    } catch {
+      /* a malformed escape: fall back to filename */
+    }
+  }
+  const plain = /filename\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;]+))/i.exec(header);
+  if (!plain) return null;
+  const name = plain[1] !== undefined ? plain[1].replace(/\\(.)/g, "$1") : plain[2].trim();
+  return name || null;
 }
 
 export type StreamHandlers = {
@@ -520,5 +580,5 @@ export function __resetClientForTests() {
   sessionListeners.clear();
   accountListeners.clear();
   limitListeners.clear();
-  transport = (input, init) => fetch(input, init);
+  transport = fetchTransport;
 }
