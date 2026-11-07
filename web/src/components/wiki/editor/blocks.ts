@@ -10,6 +10,9 @@ import { formatWhen, parseWhen, reminderId } from "@/lib/wiki/reminder";
 import { cleanLimit, isUuid, parseTicketLink } from "@/lib/wiki/desk";
 import { DatabaseBlockView } from "../database/DatabaseBlock";
 import { ContactMentionView, TicketMentionView, TicketsBlockView } from "./desk";
+import { ButtonBlockView } from "./button";
+import { cleanLabel, isButtonAction, MAX_PROPS } from "./buttons";
+import { TransclusionView } from "./transclusion";
 import { BookmarkView, CalloutView, DateView, EmbedView, FileView, ImageView, MediaView, PageLinkView, SubpageView, TocView } from "./views";
 
 
@@ -178,6 +181,32 @@ export const TicketsBlock = atomBlock(
   "tickets",
   { id: { default: "", clean: (v) => (isUuid(v) ? v : "") }, limit: { default: 5, clean: cleanLimit } },
   TicketsBlockView,
+);
+
+/**
+ * A synced block: another page (id), or one block or heading's section of it (block), shown
+ * live and read-only, as Notion's synced blocks and Obsidian's ![[Note#Heading]].
+ */
+export const Transclusion = atomBlock(
+  "transclusion",
+  { id: { default: "", clean: (v) => (isUuid(v) ? v.toLowerCase() : "") }, block: { default: "", clean: (v) => (isUuid(v) ? v.toLowerCase() : "") } },
+  TransclusionView,
+);
+
+/** A button that does one thing: a template's blocks or a to-do under it, a link, a new database row. */
+export const ButtonBlock = atomBlock(
+  "button",
+  {
+    label: { default: "", clean: cleanLabel },
+    action: { default: "", clean: (v) => (isButtonAction(v) ? v : "") },
+    template: { default: "", clean: (v) => (isUuid(v) ? v : "") },
+    database: { default: "", clean: (v) => (isUuid(v) ? v : "") },
+    url: { default: "", clean: (v) => (v && HTTPS_URL.test(v) ? v : "") },
+    // The to-do's text, or the new row's title.
+    title: { default: "", clean: text(500) },
+    props: { default: "", clean: (v) => (v && v.length <= MAX_PROPS + 2 && v.startsWith("{") ? v : "") },
+  },
+  ButtonBlockView,
 );
 
 /** The page's headings as links, kept up to date. */

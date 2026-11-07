@@ -13,6 +13,7 @@ import {
   CalendarDays,
   ChevronRight,
   Clock,
+  Columns2,
   Copy,
   EyeOff,
   FileText,
@@ -51,6 +52,7 @@ import { atLeast, useRole } from "@/lib/session";
 import { ancestorsOf, buildTree, childrenOf, dropIn, keyMove, spaceBody, spaceOf, spaceTree, visibleRows, type Drop, type SpaceKey, type Tree, type Zone } from "@/lib/wiki/tree";
 import { useCreatePage, useExpanded, useFavorites, useMovePage, useOpenPageId, useTitle, useWikiTree } from "./hooks";
 import { MoveDialog, TrashItem } from "./PageMenu";
+import { useSplit } from "./split";
 import { useOpenToday } from "./journal";
 import { arrange, useSidebarLayout, type SectionKey } from "./sidebarLayout";
 import { CustomizeSidebar } from "./CustomizeSidebar";
@@ -778,6 +780,7 @@ function TreeRow({
   const create = useCreatePage();
   const fav = useFavorites();
   const navigate = useNavigate();
+  const split = useSplit();
   const [menu, setMenu] = useState(false);
   const indent = 6 + depth * 14;
   const line = (where: "top" | "bottom"): ReactNode => (
@@ -871,6 +874,17 @@ function TreeRow({
             >
               {t("page.copyLink")}
             </MenuItem>
+            {split.available && !active && (
+              <MenuItem
+                icon={<Columns2 />}
+                onSelect={() => {
+                  split.open(n.id);
+                  onNavigate?.();
+                }}
+              >
+                {t("split.openBeside")}
+              </MenuItem>
+            )}
             <AddToSpace pageId={n.id} />
             <MenuSeparator />
             <TrashItem node={n} />

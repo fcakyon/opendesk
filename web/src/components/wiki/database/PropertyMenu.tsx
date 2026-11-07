@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import type { Database, DbNumberFormat, DbOption, DbProperty, DbPropType, DbRollupFn, DbStatusGroup, DbTone, DbView } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
-import { addProperty, changePropertyType, newOptionId, newPropId, parseFormula, removeProperty, TONE_ORDER } from "@/lib/wiki/db";
+import { addProperty, changePropertyType, newOptionId, newPropId, pairsOf, parseFormula, removeProperty, TONE_ORDER } from "@/lib/wiki/db";
 import { PageIcon } from "../WikiTree";
 import { PROP_ICONS, PropIcon } from "./cells";
 
@@ -257,8 +257,12 @@ function TypeSettings({ db, prop, save }: { db: Database; prop: DbProperty; save
           <input defaultValue={prop.prefix ?? ""} maxLength={10} onBlur={(e) => save({ prefix: e.target.value.trim().toUpperCase() || undefined })} placeholder="TASK" className="h-7 min-w-0 flex-1 rounded-md border border-line bg-surface px-2 text-[12.5px] uppercase outline-none focus:border-fg-3" />
         </label>
       );
-    case "relation":
+    case "relation": {
+      // Sub-items and dependencies relate the database to itself, two properties in step.
+      const partner = db.properties.find((p) => p.id === pairsOf(db).get(prop.id)?.partner);
+      if (partner) return <p className="px-2 py-1.5 text-[12px] leading-[17px] text-fg-3">{t("db.pairedWith", { name: partner.name })}</p>;
       return <RelationTarget prop={prop} save={save} />;
+    }
     case "rollup":
       return <RollupSettings db={db} prop={prop} save={save} />;
     case "formula":

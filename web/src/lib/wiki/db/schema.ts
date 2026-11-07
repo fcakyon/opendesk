@@ -6,6 +6,7 @@ import type { Database, DbFilterGroup, DbOption, DbProperty, DbPropType, DbTone,
 import { CALCS_FOR } from "./calc";
 import type { DbContext } from "./context";
 import { FILTER_OPS } from "./filter";
+import { askable, defaultForm } from "./form";
 
 /** Colours new options take in turn. */
 export const TONE_ORDER: readonly DbTone[] = ["blue", "green", "yellow", "orange", "red", "purple", "pink", "brown", "gray"];
@@ -44,7 +45,7 @@ export function addOption(prop: DbProperty, name: string): { prop: DbProperty; o
   return { prop: { ...prop, options: [...(prop.options ?? []), option] }, option };
 }
 
-const VIEW_NAMES: Record<DbViewType, string> = { table: "Table", board: "Board", list: "List", gallery: "Gallery", calendar: "Calendar", timeline: "Timeline", chart: "Chart" };
+const VIEW_NAMES: Record<DbViewType, string> = { table: "Table", board: "Board", list: "List", gallery: "Gallery", calendar: "Calendar", timeline: "Timeline", chart: "Chart", form: "Form" };
 
 const firstOf = (db: Database, ...types: DbPropType[]) => types.map((t) => db.properties.find((p) => p.type === t)).find(Boolean);
 
@@ -71,6 +72,9 @@ export function defaultView(type: DbViewType, db: Database, name = VIEW_NAMES[ty
       settings.chart = { kind: "column", x: x?.id ?? "title" };
       break;
     }
+    case "form":
+      settings.form = defaultForm(db);
+      break;
   }
   return { id: newViewId(db), name, type, ...(Object.keys(settings).length ? { settings } : {}) };
 }
@@ -150,8 +154,16 @@ export function changePropertyType(db: Database, propId: string, type: DbPropTyp
   const properties = db.properties.map((p) => (p.id === propId ? next : p));
   // A relation that becomes something else takes its rollups with it.
   const gone = old.type === "relation" ? dependentRollups(db, propId) : new Set<string>();
-  const kept = { ...db, properties: properties.filter((p) => !gone.has(p.id)) };
+  const kept = withoutPairs({ ...db, properties: properties.filter((p) => !gone.has(p.id)) }, new Set([...gone, propId]));
   return { ...kept, views: kept.views.map((v) => tidyView(scrubView(v, gone), next)) };
+}
+
+/** A database without the sub-items or dependencies that name a property gone or changed. */
+function withoutPairs(db: Database, gone: Set<string>): Database {
+  const next = { ...db };
+  if (next.sub_items && (gone.has(next.sub_items.parent) || gone.has(next.sub_items.children))) delete next.sub_items;
+  if (next.dependencies && (gone.has(next.dependencies.blocked_by) || gone.has(next.dependencies.blocking))) delete next.dependencies;
+  return next;
 }
 
 function dependentRollups(db: Database, relationId: string): Set<string> {
@@ -163,7 +175,7 @@ export function removeProperty(db: Database, propId: string): Database {
   const prop = db.properties.find((p) => p.id === propId);
   if (!prop || prop.type === "title") return db;
   const gone = new Set([propId, ...dependentRollups(db, propId)]);
-  return { ...db, properties: db.properties.filter((p) => !gone.has(p.id)), views: db.views.map((v) => scrubView(v, gone)) };
+  return withoutPairs({ ...db, properties: db.properties.filter((p) => !gone.has(p.id)), views: db.views.map((v) => scrubView(v, gone)) }, gone);
 }
 
 function isGroup(r: DbFilterGroup["rules"][number]): r is DbFilterGroup {
@@ -200,6 +212,7 @@ function scrubView(view: DbView, gone: Set<string>): DbView {
     date_property: s.date_property && gone.has(s.date_property) ? undefined : s.date_property,
     end_property: s.end_property && gone.has(s.end_property) ? undefined : s.end_property,
     chart: s.chart && gone.has(s.chart.x) ? undefined : s.chart && s.chart.y && gone.has(s.chart.y.property) ? { ...s.chart, y: undefined } : s.chart,
+    form: s.form && { ...s.form, fields: s.form.fields.filter((f) => !gone.has(f.property)) },
   };
   return { ...view, settings: compact(next) };
 }
@@ -212,7 +225,9 @@ function tidyView(view: DbView, prop: DbProperty): DbView {
   const calc = s.calculations?.[prop.id];
   const calculations = calc && !CALCS_FOR[prop.type].includes(calc) ? without(s.calculations, new Set([prop.id])) : s.calculations;
   const filter = s.filter && filterRules(s.filter, (p, op) => p !== prop.id || ops.includes(op));
-  return { ...view, settings: compact({ ...s, filter, calculations }) };
+  // A form asks only what a row stores.
+  const form = s.form && !askable(prop) ? { ...s.form, fields: s.form.fields.filter((f) => f.property !== prop.id) } : s.form;
+  return { ...view, settings: compact({ ...s, filter, calculations, form }) };
 }
 
 function compact(s: DbViewSettings): DbViewSettings {
@@ -242,4 +257,39 @@ export function defaultValueFor(prop: DbProperty, _ctx?: DbContext): DbValue {
     default:
       return null;
   }
+}
+
+/** What the properties of a relation pair are called; the UI passes its translations. */
+export type PairNames = { first: string; second: string };
+
+/**
+ * Turns on sub-items or dependencies: two relations of the database (dbId) to itself, kept in
+ * step. Two such relations already named so (left from turning it off) are taken up again.
+ * Sub-items' properties are hidden in the views, which show the nesting instead.
+ */
+export function enablePair(db: Database, dbId: string, kind: "sub_items" | "dependencies", names: PairNames): Database {
+  if (db[kind]) return db;
+  const other = kind === "sub_items" ? db.dependencies && [db.dependencies.blocked_by, db.dependencies.blocking] : db.sub_items && [db.sub_items.parent, db.sub_items.children];
+  const reuse = (name: string) => db.properties.find((p) => p.type === "relation" && p.database_id === dbId && p.name.toLowerCase() === name.toLowerCase() && !other?.includes(p.id));
+  let next = db;
+  const take = (name: string): string => {
+    const found = reuse(name);
+    if (found) return found.id;
+    const made = addProperty(next, "relation", name);
+    next = { ...made.db, properties: made.db.properties.map((p) => (p.id === made.id ? { ...p, database_id: dbId } : p)) };
+    return made.id;
+  };
+  const a = take(names.first);
+  const b = take(names.second);
+  if (a === b) return db;
+  if (kind === "dependencies") return { ...next, dependencies: { blocked_by: a, blocking: b } };
+  const hide = (v: DbView): DbView => (v.type === "table" || v.type === "list" ? { ...v, settings: { ...v.settings, hidden: [...new Set([...(v.settings?.hidden ?? []), a, b])] } } : v);
+  return { ...next, sub_items: { parent: a, children: b }, views: next.views.map(hide) };
+}
+
+/** Turns sub-items or dependencies off; the two relations stay, as plain relations. */
+export function disablePair(db: Database, kind: "sub_items" | "dependencies"): Database {
+  const next = { ...db };
+  delete next[kind];
+  return next;
 }

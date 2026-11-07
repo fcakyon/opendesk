@@ -26,6 +26,7 @@ import { folderById, listQuery, parseInboxSearch, teamQuery } from "./lib/folder
 import { withRememberedSort } from "./lib/listSort";
 import { isMailRouteBox, mailListQuery, parseMailSearch } from "./lib/collab/boxes";
 import { parsePrintSearch } from "./lib/ticketPrint";
+import { parseBeside, type PageSearch } from "./lib/wiki/split";
 
 export type RouterContext = { queryClient: QueryClient };
 
@@ -590,8 +591,9 @@ const wikiTrashRoute = createRoute({
 const wikiPageRoute = createRoute({
   getParentRoute: () => wikiLayout,
   path: "$pageId",
-  // ?comment=<thread id> opens that thread (notifications link there; contracts/wiki.md "Comments").
-  validateSearch: (s: Record<string, unknown>): { comment?: string } => ({ comment: str(s.comment) }),
+  // ?comment=<thread id> opens that thread (notifications link there; contracts/wiki.md "Comments");
+  // ?beside=<page id> opens a second page beside it ("Split view").
+  validateSearch: (s: Record<string, unknown>): PageSearch => ({ comment: str(s.comment), beside: parseBeside(s.beside) }),
   loader: ({ context, params }) => context.queryClient.ensureQueryData(q.wikiPage(params.pageId)).catch(() => undefined),
   component: page(() => import("./pages/wiki/WikiPageView")),
   staticData: { title: "wikiPage" },

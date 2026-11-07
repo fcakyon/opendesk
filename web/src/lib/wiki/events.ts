@@ -50,6 +50,8 @@ export function applyWikiEvent(qc: QueryClient, verb: string, d: Record<string, 
   // A new look (contracts/wiki.md "Page settings") or verification has no version: it is taken as it comes.
   const settings = d.settings as WikiPageSettings | undefined;
   if (settings) qc.setQueryData<WikiPage>(qk.wikiPage(node.id), (old) => (old ? { ...old, ...settings } : old));
+  // Aliases have no version either (contracts/wiki.md "Aliases").
+  if (Array.isArray(d.aliases)) qc.setQueryData<WikiPage>(qk.wikiPage(node.id), (old) => (old ? { ...old, aliases: d.aliases as string[] } : old));
   if ("verification" in d) qc.setQueryData<WikiPage>(qk.wikiPage(node.id), (old) => (old ? { ...old, verification: d.verification as WikiPage["verification"] } : old));
   // A canvas has no version either (contracts/wiki.md "Canvas"): the open canvas takes it when idle.
   if (d.canvas) qc.setQueryData<WikiPage>(qk.wikiPage(node.id), (old) => (old ? { ...old, canvas: d.canvas as WikiPage["canvas"] } : old));

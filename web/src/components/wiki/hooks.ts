@@ -31,6 +31,7 @@ export const nodeOf = (p: WikiPage): WikiNode => ({
   updated_at: p.updated_at,
   created_by_id: p.created_by?.id ?? null,
   tags: p.tags ?? [],
+  ...(p.aliases?.length ? { aliases: p.aliases } : {}),
 });
 
 /** A page's title for display: "Untitled" until it has one. */

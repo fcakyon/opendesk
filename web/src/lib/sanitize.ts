@@ -68,15 +68,18 @@ let hooked = false;
 function ensureHook() {
   if (hooked) return;
   hooked = true;
+  // The hooks are on DOMPurify's shared instance: they act only inside run(), never on
+  // another library's sanitizing (Mermaid's diagrams keep the classes their styles need).
   DOMPurify.addHook("afterSanitizeElements", (node) => {
-    if (!(node instanceof Element) || node.tagName !== "STYLE") return;
+    if (!pass || !(node instanceof Element) || node.tagName !== "STYLE") return;
     const css = node.textContent ?? "";
     // As with style attributes: stored CSS has no escapes, so a sheet with one is dropped.
     if (css.includes("\\")) node.textContent = "";
     else if (pass?.blockRemote) node.textContent = holdBackCSS(css.replace(/@import[^;]*;?/gi, ""), pass);
   });
   DOMPurify.addHook("afterSanitizeAttributes", (node) => {
-    if (!pass?.keepClasses && node.hasAttribute("class")) {
+    if (!pass) return;
+    if (!pass.keepClasses && node.hasAttribute("class")) {
       const kept = (node.getAttribute("class") ?? "").split(/\s+/).filter((c) => APP_CLASSES.has(c));
       if (kept.length) node.setAttribute("class", kept.join(" "));
       else node.removeAttribute("class");

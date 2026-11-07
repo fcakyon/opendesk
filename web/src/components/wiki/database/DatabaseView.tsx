@@ -1,12 +1,13 @@
 // A wiki database on its page or inside another page (contracts/wiki.md "Databases"): its
-// views as tabs (table, board, list, gallery, calendar, timeline, chart), the controls of
-// the view that is open, and the view itself. Every layout gets the same rows, already
+// views as tabs (table, board, list, gallery, calendar, timeline, chart, form), the controls
+// of the view that is open, and the view itself. On its own page, ?view=<id> opens a view
+// (a form's link). Every layout gets the same rows, already
 // searched, filtered and sorted, and the same writes (ViewProps).
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "@tanstack/react-router";
-import { BarChart3, CalendarDays, ChevronDown, Copy, GanttChart, KanbanSquare, LayoutGrid, List, MoreHorizontal, Pencil, Plus, Search, Table2, Trash2, X, Repeat2, ArrowUpRight, FilePlus2 } from "lucide-react";
+import { useLocation, useNavigate } from "@tanstack/react-router";
+import { BarChart3, CalendarDays, ChevronDown, ClipboardList, Copy, GanttChart, KanbanSquare, LayoutGrid, List, MoreHorizontal, Pencil, Plus, Search, Table2, Trash2, X, Repeat2, ArrowUpRight, FilePlus2 } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import { menuItemCls, MenuSeparator } from "@/components/ui/menu";
@@ -28,6 +29,8 @@ import "./database.css";
 
 /** What every layout of a database gets. */
 export type ViewProps = {
+  /** The database page's id. */
+  databaseId: string;
   db: Database;
   view: DbView;
   /** The view's rows: searched, filtered and sorted. */
@@ -59,10 +62,11 @@ const LAYOUTS: Record<DbViewType, ComponentType<ViewProps>> = {
   calendar: lazy(() => import("./views/CalendarView")),
   timeline: lazy(() => import("./views/TimelineView")),
   chart: lazy(() => import("./views/ChartView")),
+  form: lazy(() => import("./views/FormView")),
 };
 
-export const VIEW_ICONS: Record<DbViewType, typeof Table2> = { table: Table2, board: KanbanSquare, list: List, gallery: LayoutGrid, calendar: CalendarDays, timeline: GanttChart, chart: BarChart3 };
-const VIEW_TYPES: DbViewType[] = ["table", "board", "list", "gallery", "calendar", "timeline", "chart"];
+export const VIEW_ICONS: Record<DbViewType, typeof Table2> = { table: Table2, board: KanbanSquare, list: List, gallery: LayoutGrid, calendar: CalendarDays, timeline: GanttChart, chart: BarChart3, form: ClipboardList };
+const VIEW_TYPES: DbViewType[] = ["table", "board", "list", "gallery", "calendar", "timeline", "chart", "form"];
 const GROUPED: DbViewType[] = ["table", "board", "list", "gallery"];
 
 export function DatabaseView({ databaseId, viewId, onViewChange, inline }: { databaseId: string; viewId?: string; onViewChange?: (id: string) => void; inline?: boolean }) {
@@ -72,7 +76,12 @@ export function DatabaseView({ databaseId, viewId, onViewChange, inline }: { dat
   const canEdit = atLeast(useRole(), "agent");
   const { page, db, rows, templates, ctx, isLoading, isError } = useDatabase(databaseId);
   const act = useDatabaseActions(databaseId);
-  const [localView, setLocalView] = useState<string | undefined>(viewId);
+  // A view's link (a form shared with teammates) opens it on the database's own page.
+  const linked = useLocation({ select: (l) => (inline ? undefined : (l.search as Record<string, unknown>).view) });
+  const [localView, setLocalView] = useState<string | undefined>(viewId ?? (typeof linked === "string" ? linked : undefined));
+  useEffect(() => {
+    if (typeof linked === "string") setLocalView(linked);
+  }, [linked]);
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -133,7 +142,10 @@ export function DatabaseView({ databaseId, viewId, onViewChange, inline }: { dat
     return row;
   };
   const Layout = LAYOUTS[view.type];
+  // A form asks for a new row: no filters, sorts, search or new button around it.
+  const isForm = view.type === "form";
   const props: ViewProps = {
+    databaseId,
     db,
     view,
     rows: shown,
@@ -223,12 +235,12 @@ export function DatabaseView({ databaseId, viewId, onViewChange, inline }: { dat
           )}
         </div>
         <div className="flex shrink-0 items-center gap-0.5 pb-1">
-          <FilterMenu db={db} view={view} onChange={onSettings} canEdit={canEdit} open={filterOpen} onOpenChange={setFilterOpen} />
-          <SortMenu db={db} view={view} onChange={onSettings} canEdit={canEdit} />
+          {!isForm && <FilterMenu db={db} view={view} onChange={onSettings} canEdit={canEdit} open={filterOpen} onOpenChange={setFilterOpen} />}
+          {!isForm && <SortMenu db={db} view={view} onChange={onSettings} canEdit={canEdit} />}
           {GROUPED.includes(view.type) && <GroupMenu db={db} view={view} onChange={onSettings} required={view.type === "board"} />}
-          {view.type !== "chart" && <PropertiesMenu db={db} view={view} onChange={onSettings} />}
-          {canEdit && <LayoutMenu db={db} view={view} onChange={onSettings} />}
-          {searching ? (
+          {view.type !== "chart" && !isForm && <PropertiesMenu db={db} view={view} onChange={onSettings} />}
+          {canEdit && <LayoutMenu db={db} view={view} databaseId={databaseId} onChange={onSettings} onSchema={(next) => void act.saveSchema(next)} />}
+          {isForm ? null : searching ? (
             <span className="flex h-7 items-center gap-1 rounded-md border border-line bg-surface px-1.5">
               <Search className="size-3.5 text-fg-4" />
               <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Escape" && (setQuery(""), setSearching(false))} placeholder={t("db.searchRows")} className="w-32 bg-transparent text-[12.5px] outline-none" />
@@ -241,7 +253,7 @@ export function DatabaseView({ databaseId, viewId, onViewChange, inline }: { dat
               <Search />
             </button>
           )}
-          {canEdit && (
+          {canEdit && !isForm && (
             <span className="ml-1 flex">
               <Button
                 size="sm"
@@ -300,7 +312,7 @@ export function DatabaseView({ databaseId, viewId, onViewChange, inline }: { dat
         </div>
       </div>
       <div className="pt-2">
-        <ActiveChips db={db} view={view} onChange={onSettings} onOpenFilter={() => setFilterOpen(true)} />
+        {!isForm && <ActiveChips db={db} view={view} onChange={onSettings} onOpenFilter={() => setFilterOpen(true)} />}
         <Suspense fallback={<Spinner className="m-4 size-4" />}>
           <Layout {...props} />
         </Suspense>

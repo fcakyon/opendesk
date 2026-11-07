@@ -688,6 +688,7 @@ export const api = {
     setFavorites: (page_ids: string[]) => http.put<T.Page<T.WikiNode>>("/v1/wiki/favorites", { page_ids }),
     recent: () => http.get<T.Page<T.WikiNode>>("/v1/wiki/recent"),
     views: (id: string) => http.get<T.WikiPageViews>(`/v1/wiki/pages/${id}/views`),
+    analytics: (id: string, days = 28) => http.get<T.WikiPageAnalytics>(`/v1/wiki/pages/${id}/analytics`, { query: { days } }),
     rows: (id: string) => http.get<T.DbRows>(`/v1/wiki/databases/${id}/rows`),
     dailyNotes: (from: string, to: string) => http.get<T.Page<T.WikiDailyNote>>("/v1/wiki/daily", { query: { from, to } }),
     openDaily: (b: { date: string; title: string; journal_title: string; body_html?: string }) => http.post<T.WikiPage>("/v1/wiki/daily", b),

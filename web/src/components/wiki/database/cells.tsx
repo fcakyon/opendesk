@@ -41,7 +41,7 @@ import { api } from "@/lib/api/endpoints";
 import type { Database, DbDate, DbFile, DbOption, DbProperty, DbPropType, DbRow, DbTone, DbValue } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
-import { cellText, cellValue, isEmpty, newOptionId, TONE_ORDER, type DbContext } from "@/lib/wiki/db";
+import { cellText, cellValue, isEmpty, newOptionId, pairChoices, pairsOf, TONE_ORDER, type DbContext } from "@/lib/wiki/db";
 import { PageIcon } from "../WikiTree";
 
 export const PROP_ICONS: Record<DbPropType, typeof Type> = {
@@ -460,7 +460,9 @@ export function ValuePicker({ prop, row, ctx, onChange, onAddOption, trigger, op
   const search = q.search(ticketQuery);
   const tickets = useQuery({ ...search, enabled: prop.type === "ticket" && open && search.enabled !== false });
   const cur = row.props[prop.id];
-  const multi = prop.type === "multi_select" || prop.type === "person" || prop.type === "relation" || prop.type === "ticket";
+  // A paired relation (sub-items, dependencies) never names its own row or loops; a parent item is one row.
+  const pair = prop.type === "relation" ? pairsOf(ctx.db).get(prop.id) : undefined;
+  const multi = prop.type === "multi_select" || prop.type === "person" || (prop.type === "relation" && !pair?.single) || prop.type === "ticket";
   let items: PickerItem[] = [];
   if (prop.type === "select" || prop.type === "multi_select") items = (prop.options ?? []).map((o) => ({ value: o.id, label: o.name, icon: <span className={cn("size-2.5 rounded-full", `db-dot-${o.color}`)} /> }));
   if (prop.type === "status") {
@@ -471,8 +473,10 @@ export function ValuePicker({ prop, row, ctx, onChange, onAddOption, trigger, op
     });
   }
   if (prop.type === "person") items = [...ctx.members.values()].map((u) => ({ value: u.id, label: u.name, keywords: [u.email], icon: <Avatar name={u.name} src={u.avatar_url} size="xs" /> }));
-  if (prop.type === "relation")
-    items = (ctx.rowsByDb.get(prop.database_id ?? "") ?? []).map((r) => ({ value: r.id, label: r.title.trim() || t("untitled"), icon: <PageIcon icon={r.icon} /> }));
+  if (prop.type === "relation") {
+    const target = ctx.rowsByDb.get(prop.database_id ?? "") ?? [];
+    items = (pair ? pairChoices(ctx.db, target, row.id, prop.id) : target).map((r) => ({ value: r.id, label: r.title.trim() || t("untitled"), icon: <PageIcon icon={r.icon} /> }));
+  }
   if (prop.type === "ticket") {
     const found = tickets.data?.tickets ?? [];
     const chosen = (Array.isArray(cur) ? (cur as string[]) : []).map((id) => ({ value: id, label: `#…`, hint: <TicketChip id={id} /> }));
@@ -498,7 +502,7 @@ export function ValuePicker({ prop, row, ctx, onChange, onAddOption, trigger, op
     createLabel: t("db.createOption"),
     onQueryChange: prop.type === "ticket" ? setTicketQuery : undefined,
   };
-  return multi ? <Picker {...common} multi values={values} onChange={(v) => onChange(v.length ? v : null)} /> : <Picker {...common} value={values[0] ?? null} onSelect={(v) => onChange(v === values[0] ? null : v)} />;
+  return multi ? <Picker {...common} multi values={values} onChange={(v) => onChange(v.length ? v : null)} /> : <Picker {...common} value={values[0] ?? null} onSelect={(v) => onChange(v === values[0] ? null : prop.type === "relation" ? [v] : v)} />;
 }
 
 /** A new option for a property, in the next tone. */

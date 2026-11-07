@@ -11,7 +11,7 @@ import { api } from "@/lib/api/endpoints";
 import type { Database, DbRow, DbRows, DbValue, UserRef, WikiNode, WikiPage } from "@/lib/api/types";
 import { q, qk } from "@/lib/queries";
 import { patchTree } from "../hooks";
-import type { DbContext } from "@/lib/wiki/db";
+import { pairedWrites, type DbContext } from "@/lib/wiki/db";
 
 export type DatabaseData = {
   page: WikiPage | undefined;
@@ -60,11 +60,52 @@ export function useDatabase(id: string): DatabaseData {
   };
 }
 
+const merged = (props: Record<string, DbValue>, values: Record<string, DbValue>) => {
+  const next = { ...props };
+  for (const [k, v] of Object.entries(values)) {
+    if (v === null) delete next[k];
+    else next[k] = v;
+  }
+  return next;
+};
+
 /** The writes a database's views make. */
 export function useDatabaseActions(id: string) {
   const qc = useQueryClient();
   const { t } = useTranslation("wiki");
   const patchRows = (fn: (rows: DbRow[]) => DbRow[]) => qc.setQueryData<DbRows>(qk.wikiRows(id), (old) => (old ? { ...old, data: fn(old.data) } : old));
+  const schema = () => qc.getQueryData<WikiPage>(qk.wikiPage(id))?.database ?? undefined;
+  const cachedRows = () => qc.getQueryData<DbRows>(qk.wikiRows(id))?.data ?? [];
+
+  /**
+   * Saves values on rows: one row's change and what its paired relations (sub-items,
+   * dependencies) mirror on the rows they name (contracts/wiki.md "Databases"). Shown at
+   * once; put back and read again if any is refused.
+   */
+  const writeRows = async (writes: Map<string, Record<string, DbValue>>) => {
+    const before = qc.getQueryData<DbRows>(qk.wikiRows(id));
+    patchRows((rows) => rows.map((r) => (writes.has(r.id) ? { ...r, props: merged(r.props, writes.get(r.id)!) } : r)));
+    try {
+      const saved = await Promise.all([...writes].map(([rowId, props]) => api.wiki.update(rowId, { props })));
+      const byId = new Map(saved.map((s) => [s.id, s]));
+      patchRows((rows) => rows.map((r) => (byId.has(r.id) ? { ...r, props: byId.get(r.id)!.props, updated_at: byId.get(r.id)!.updated_at, updated_by: byId.get(r.id)!.updated_by } : r)));
+      for (const s of saved) qc.setQueryData<WikiPage>(qk.wikiPage(s.id), (old) => (old ? { ...old, props: s.props } : old));
+    } catch (e) {
+      if (before) qc.setQueryData(qk.wikiRows(id), before);
+      if (writes.size > 1) void qc.invalidateQueries({ queryKey: qk.wikiRows(id) });
+      toast.error(e, t("db.saveFailed"));
+    }
+  };
+
+  /** The other side of a new row's paired relations, once the row is made with its values. */
+  const mirrorNew = async (rowId: string, props: Record<string, DbValue>) => {
+    const db = schema();
+    if (!db || (!db.sub_items && !db.dependencies)) return;
+    const rows = [...cachedRows().filter((r) => r.id !== rowId), { id: rowId, props: {} }];
+    const writes = pairedWrites(db, rows, rowId, props);
+    writes.delete(rowId);
+    await Promise.all([...writes].map(([other, values]) => api.wiki.update(other, { props: values })));
+  };
 
   return {
     /** Replaces the schema (properties and views); shown at once, put back if refused. */
@@ -82,28 +123,10 @@ export function useDatabaseActions(id: string) {
         toast.error(e, t("db.saveFailed"));
       }
     },
-    /** Merges values into a row (null takes one away). */
-    updateRow: async (rowId: string, props: Record<string, DbValue>) => {
-      const before = qc.getQueryData<DbRows>(qk.wikiRows(id));
-      patchRows((rows) =>
-        rows.map((r) => {
-          if (r.id !== rowId) return r;
-          const next = { ...r.props };
-          for (const [k, v] of Object.entries(props)) {
-            if (v === null) delete next[k];
-            else next[k] = v;
-          }
-          return { ...r, props: next };
-        }),
-      );
-      try {
-        const saved = await api.wiki.update(rowId, { props });
-        patchRows((rows) => rows.map((r) => (r.id === rowId ? { ...r, props: saved.props, updated_at: saved.updated_at, updated_by: saved.updated_by } : r)));
-        qc.setQueryData<WikiPage>(qk.wikiPage(rowId), (old) => (old ? { ...old, props: saved.props } : old));
-      } catch (e) {
-        if (before) qc.setQueryData(qk.wikiRows(id), before);
-        toast.error(e, t("db.saveFailed"));
-      }
+    /** Merges values into a row (null takes one away), and mirrors its paired relations. */
+    updateRow: (rowId: string, props: Record<string, DbValue>) => {
+      const db = schema();
+      return writeRows(db ? pairedWrites(db, cachedRows(), rowId, props) : new Map([[rowId, props]]));
     },
     /** Renames a row (its page title). */
     renameRow: async (rowId: string, title: string) => {
@@ -124,6 +147,7 @@ export function useDatabaseActions(id: string) {
           ? await api.wiki.duplicate(opts.template, { parent_id: id, template: false, title: opts.title })
           : await api.wiki.create({ parent_id: id, title: opts.title ?? "", props, position: opts.position });
         if (opts.template && Object.keys(props).length) await api.wiki.update(page.id, { props });
+        await mirrorNew(page.id, props);
         await qc.invalidateQueries({ queryKey: qk.wikiRows(id) });
         void qc.invalidateQueries({ queryKey: qk.wikiTree });
         const row = qc.getQueryData<DbRows>(qk.wikiRows(id))?.data.find((r) => r.id === page.id);

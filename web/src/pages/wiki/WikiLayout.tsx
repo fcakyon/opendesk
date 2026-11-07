@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/dialog";
 import { WikiTree } from "@/components/wiki/WikiTree";
 import { ImportDialogHost } from "@/components/wiki/ImportDialog";
+import { useBesideClicks } from "@/components/wiki/split";
 
 const SheetCtx = createContext<() => void>(() => {});
 
@@ -26,6 +27,8 @@ export function PagesButton() {
 export default function WikiLayout() {
   const { t } = useTranslation("wiki");
   const [sheet, setSheet] = useState(false);
+  // Alt-click on a link to a page opens it beside the open one (contracts/wiki.md "Split view").
+  useBesideClicks();
 
   return (
     <SheetCtx.Provider value={() => setSheet(true)}>

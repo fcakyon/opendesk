@@ -11,7 +11,7 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import type { Database, DbFilterGroup, DbFilterRule, DbProperty, DbSort, DbView, DbViewSettings } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
-import { FILTER_OPS, visibleProps } from "@/lib/wiki/db";
+import { disablePair, enablePair, FILTER_OPS, visibleProps } from "@/lib/wiki/db";
 import { PropIcon } from "./cells";
 
 /** A tool's word, shown once the database is wide enough for it; the icon stays. */
@@ -330,8 +330,9 @@ export function ActiveChips({ db, view, onChange, onOpenFilter }: { db: Database
 }
 
 /** A layout's own settings: the dates a calendar or timeline places rows by, a timeline's
- * scale, what cards show, a chart's kind and axes. */
-export function LayoutMenu({ db, view, onChange }: { db: Database; view: DbView; onChange: (s: DbViewSettings) => void }) {
+ * scale, what cards show, a chart's kind and axes; then the database's own: sub-items and
+ * dependencies. */
+export function LayoutMenu({ db, view, databaseId, onChange, onSchema }: { db: Database; view: DbView; databaseId: string; onChange: (s: DbViewSettings) => void; onSchema: (db: Database) => void }) {
   const { t } = useTranslation("wiki");
   const s = view.settings ?? {};
   const set = (patch: Partial<DbViewSettings>) => onChange({ ...s, ...patch });
@@ -346,7 +347,16 @@ export function LayoutMenu({ db, view, onChange }: { db: Database; view: DbView;
   const sel = <V extends string>(label: string, value: V | undefined, options: { value: V; label: string }[], pick: (v: V) => void) =>
     row(label, <Select size="sm" className="w-40" aria-label={label} value={value} onChange={pick} options={options} placeholder={t("db.noValue")} />);
   const type = view.type;
-  if (type === "table" || type === "list") return null;
+  const own = type !== "table" && type !== "list" && type !== "form";
+  const pair = (kind: "sub_items" | "dependencies", label: string, hint: string, names: { first: string; second: string }) => (
+    <label className="flex cursor-pointer items-start justify-between gap-3 rounded-md px-1.5 py-2 hover:bg-hover">
+      <span className="min-w-0">
+        <span className="block text-[12.5px] text-fg">{label}</span>
+        <span className="block text-[11.5px] leading-[16px] text-fg-3">{db[kind] ? `${hint} ${t("db.pairOffHint")}` : hint}</span>
+      </span>
+      <Switch checked={!!db[kind]} onCheckedChange={(on) => onSchema(on ? enablePair(db, databaseId, kind, names) : disablePair(db, kind))} />
+    </label>
+  );
   return (
     <Pop
       width={300}
@@ -356,7 +366,7 @@ export function LayoutMenu({ db, view, onChange }: { db: Database; view: DbView;
         </button>
       }
     >
-      <div className="label-caps px-1.5 pb-1 pt-0.5">{t(`db.view.${type}`)}</div>
+      {own && <div className="label-caps px-1.5 pb-1 pt-0.5">{t(`db.view.${type}`)}</div>}
       {(type === "calendar" || type === "timeline") && sel(t("db.dateProperty"), s.date_property, dates, (v) => set({ date_property: v }))}
       {type === "timeline" && sel(t("db.endProperty"), s.end_property, [{ value: "", label: t("db.noValue") }, ...dates], (v) => set({ end_property: v || undefined }))}
       {type === "timeline" &&
@@ -395,6 +405,9 @@ export function LayoutMenu({ db, view, onChange }: { db: Database; view: DbView;
             )}
         </>
       )}
+      <div className={cn("label-caps px-1.5 pb-1 pt-0.5", own && "mt-1 border-t border-line pt-2")}>{t("db.thisDatabase")}</div>
+      {pair("sub_items", t("db.subItems.setting"), t("db.subItems.hint"), { first: t("db.subItems.parent"), second: t("db.subItems.children") })}
+      {pair("dependencies", t("db.dependencies.setting"), t("db.dependencies.hint"), { first: t("db.dependencies.blockedBy"), second: t("db.dependencies.blocking") })}
     </Pop>
   );
 }

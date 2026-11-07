@@ -261,7 +261,7 @@ export function BlockHandle({ editor, onCopyLink }: { editor: Editor; onCopyLink
   };
 
   return (
-    <div ref={wrap} contentEditable={false} className="pointer-events-none absolute inset-0 z-10" aria-hidden={!block}>
+    <div ref={wrap} contentEditable={false} data-print="hide" className="pointer-events-none absolute inset-0 z-10" aria-hidden={!block}>
       {block && pos && (
         <div className="wiki-handle pointer-events-auto absolute z-10 flex items-center gap-px" style={{ top: pos.top, left: pos.left }}>
           <Tooltip content={<TwoLines a={t("editor.handle.add")} b={t("editor.handle.addHint")} />}>

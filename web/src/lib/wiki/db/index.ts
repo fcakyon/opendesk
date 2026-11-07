@@ -33,6 +33,8 @@ export {
   changePropertyType,
   defaultValueFor,
   defaultView,
+  disablePair,
+  enablePair,
   newOptionId,
   newPropId,
   newViewId,
@@ -40,5 +42,10 @@ export {
   removeProperty,
   TONE_ORDER,
   visibleProps,
+  type PairNames,
   type StatusNames,
 } from "./schema";
+export { ancestorIds, buildTree, descendantIds, flattenTree, parentsOf, type FlatRow, type RowRef, type TreeRow } from "./tree";
+export { pairChoices, pairedWrites, pairsOf, type Pair } from "./pairs";
+export { dependencyEdges, isLate, lateBlockers, type DepEdge, type Span } from "./deps";
+export { answers, askable, defaultForm, formQuestions, missingAnswers, setFields, unasked, type FormQuestion } from "./form";

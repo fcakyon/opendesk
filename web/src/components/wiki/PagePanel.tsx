@@ -2,7 +2,7 @@
 // (pages linking here, pages naming it without a link, pages it links to, tickets it
 // mentions), its local graph,
 // its comments (comments/CommentsPanel.tsx) and what it holds (words, reading time, tags,
-// who made it). Kept open per browser.
+// aliases, its views over the last weeks, who made it). Kept open per browser.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -26,7 +26,9 @@ import { useNow } from "@/lib/useNow";
 import { scrollToBlock } from "./editor/views";
 import { TicketLine } from "./editor/desk";
 import type { PanelTab } from "./editor/prefs";
+import { AliasChips } from "./Aliases";
 import { WikiGraph } from "./Graph";
+import { PageAnalytics } from "./PageAnalytics";
 import { useTitle, useWikiTree } from "./hooks";
 import { PageIcon } from "./WikiTree";
 
@@ -148,7 +150,7 @@ export function PagePanel({
           {comments}
         </TabsContent>
         <TabsContent value="info" className="min-h-0 flex-1 overflow-y-auto p-3">
-          <PageInfo page={page} editor={editor} />
+          <PageInfo page={page} editor={editor} canEdit={canEdit} />
         </TabsContent>
       </Tabs>
     </aside>
@@ -258,7 +260,9 @@ function Links({ page, editor, canEdit }: { page: WikiPage; editor: Editor | nul
     setLinking(m.id);
     try {
       const other = await api.wiki.get(m.id);
-      const html = linkFirstMention(other.body_html, page.title, page.id);
+      // It may name this page by its title or by one of its aliases.
+      let html: string | null = null;
+      for (const name of [page.title, ...(page.aliases ?? [])]) if ((html = linkFirstMention(other.body_html, name, page.id))) break;
       if (!html) throw new Error(t("panel.mentionGone"));
       const saved = await api.wiki.update(m.id, { body_html: html, version: other.version });
       qc.setQueryData(qk.wikiPage(m.id), saved);
@@ -368,8 +372,9 @@ function countWords(text: string): number {
   return n;
 }
 
-function PageInfo({ page, editor }: { page: WikiPage; editor: Editor | null }) {
+function PageInfo({ page, editor, canEdit }: { page: WikiPage; editor: Editor | null; canEdit: boolean }) {
   const { t } = useTranslation("wiki");
+  const [adding, setAdding] = useState(false);
   const now = useNow();
   const [text, setText] = useState(() => editor?.getText() ?? "");
   useEffect(() => {
@@ -422,6 +427,12 @@ function PageInfo({ page, editor }: { page: WikiPage; editor: Editor | null }) {
           <p className="text-[12px] leading-5 text-fg-4">{t("panel.tagsEmpty")}</p>
         )}
       </div>
+      <div className="mt-4">
+        <h3 className="label-caps pb-1">{t("aliases.label")}</h3>
+        <AliasChips page={page} canEdit={canEdit} adding={adding} onAdding={setAdding} variant="panel" />
+        <p className="mt-1 text-[11.5px] leading-4 text-fg-4">{t("aliases.hint")}</p>
+      </div>
+      <PageAnalytics pageId={page.id} />
       <Readers pageId={page.id} />
       <div className="mt-4 divide-y divide-line-soft">
         {row(t("panel.created"), page.created_by ? t("panel.by", { name: page.created_by.name, when: relLong(page.created_at, now) }) : relLong(page.created_at, now), fullDate(page.created_at))}
@@ -433,16 +444,15 @@ function PageInfo({ page, editor }: { page: WikiPage; editor: Editor | null }) {
   );
 }
 
-/** Who reads the page, as Notion's page analytics: views, people, the latest readers. */
+/** Who read the page lately (the counts are PageAnalytics's): the latest readers. */
 function Readers({ pageId }: { pageId: string }) {
   const { t } = useTranslation("wiki");
   const now = useNow();
   const { data } = useQuery(q.wikiViews(pageId));
-  if (!data) return null;
+  if (!data?.readers.length) return null;
   return (
     <div className="mt-4">
       <h3 className="label-caps pb-1">{t("panel.readers")}</h3>
-      <p className="text-[12.5px] text-fg-2">{t("panel.viewsLine", { views: number(data.views), count: data.people })}</p>
       {data.readers.length > 0 && (
         <ul className="mt-1.5 flex flex-col">
           {data.readers.slice(0, 6).map((r) => (

@@ -21,7 +21,7 @@ import { useTitle, useWikiTree } from "../hooks";
 import { PageIcon } from "../WikiTree";
 import { heldComment } from "./comment";
 import { turnIntoOptions, type TurnId } from "./handle";
-import { rank } from "./menu";
+import { bestName, rank } from "./menu";
 import { TONES, type Tone } from "./tones";
 import { OllieMark } from "@/components/assistant/OllieMark";
 
@@ -188,7 +188,7 @@ function LinkPopover({ editor, open, onOpenChange }: { editor: Editor; open: boo
   const { tree } = useWikiTree();
   const [v, setV] = useState("");
   const active = editor.isActive("link");
-  const pages = v.trim() && !/^(https?:|mailto:|www\.)/i.test(v.trim()) ? rank(v, [...tree.byId.values()], (n) => [title(n.title)]).slice(0, 5) : [];
+  const pages = v.trim() && !/^(https?:|mailto:|www\.)/i.test(v.trim()) ? rank(v, [...tree.byId.values()], (n) => [bestName(v, title(n.title), n.aliases)]).slice(0, 5) : [];
   const apply = (href: string) => {
     const url = /^(https?:|mailto:|tel:|\/)/i.test(href) ? href : `https://${href}`;
     editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();

@@ -2,17 +2,19 @@
 // sideways at the view's zoom (days, weeks, months or quarters), each row's dates as a bar
 // coloured by its first status or select. Bars are dragged to move and stretched by their
 // edges, a click on the empty track of a row without dates gives it some, and a line marks today.
+// With dependencies, an arrow runs from each blocking row to the row it blocks, red when the
+// blocked row starts before its blocker ends, and that row is marked.
 
 import { addDays, isSameDay, isWeekend, startOfDay } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { DbProperty, DbRow } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
-import { cellText, cellValue } from "@/lib/wiki/db";
+import { cellText, cellValue, dependencyEdges, isLate, lateBlockers, type DepEdge } from "@/lib/wiki/db";
 import type { ViewProps } from "../DatabaseView";
 import { PageIcon } from "../../WikiTree";
 import { NeedsDate } from "./NeedsDate";
@@ -73,6 +75,14 @@ export default function TimelineView(p: ViewProps) {
   }, [axis.from, scale, todayX, dayW]);
 
   if (!startProp) return <NeedsDate p={p} />;
+
+  // Dependencies, with the bar being dragged where it is now.
+  const live = (id: string) => {
+    const s = spans.get(id);
+    return s && drag?.id === id ? moveSpan(s, drag) : s;
+  };
+  const edges = dependencyEdges(db, rows);
+  const titleOf = (id: string) => rows.find((r) => r.id === id)?.title.trim() || t("untitled");
 
   const page = (dir: -1 | 1) => {
     const el = scroller.current;
@@ -204,10 +214,12 @@ export default function TimelineView(p: ViewProps) {
             <span className="absolute inset-y-0 w-px bg-tone-red-solid" style={{ left: Math.round(todayX + dayW / 2) }} />
           </div>
 
+          {edges.length > 0 && <DependencyArrows edges={edges} rows={rows} live={live} axis={axis} dayW={dayW} width={width} />}
           <div role="list" aria-label={view.name}>
             {rows.map((row) => (
               <TimelineRow
                 key={row.id}
+                late={lateBlockers(row.id, edges, live).map(titleOf)}
                 row={row}
                 span={spans.get(row.id)}
                 drag={drag?.id === row.id ? drag : null}
@@ -267,7 +279,9 @@ function TimelineRow({
   placeDays,
   onGrab,
   onPlace,
+  late,
 }: {
+  late: string[];
   row: DbRow;
   span?: DaySpan;
   drag: Drag | null;
@@ -304,6 +318,7 @@ function TimelineRow({
         <button type="button" onClick={() => p.onOpen(row)} className={cn("min-w-0 flex-1 truncate text-left text-[13px] font-medium underline-offset-[3px] outline-none hover:underline focus-visible:underline", span ? "text-fg" : "text-fg-2")}>
           {title || <span className="font-normal text-fg-4">{t("untitled")}</span>}
         </button>
+        {late.length > 0 && <LateMark names={late} />}
       </div>
       <div
         className={cn("relative", !span && editable && "cursor-pointer")}
@@ -443,4 +458,63 @@ function NewRow({ p }: { p: ViewProps }) {
       )}
     </div>
   );
+}
+
+/** A row that starts before a row blocking it ends. */
+export function LateMark({ names }: { names: string[] }) {
+  const { t } = useTranslation("wiki");
+  const text = t("db.dependencies.late", { names: names.join(", ") });
+  return (
+    <Tooltip content={text}>
+      <span role="img" aria-label={text} tabIndex={0} className="flex size-5 shrink-0 items-center justify-center rounded text-tone-red outline-none focus-visible:shadow-[0_0_0_2px_var(--focus)]">
+        <AlertTriangle className="size-3.5" />
+      </span>
+    </Tooltip>
+  );
+}
+
+/** An arrow from each blocking row's bar to the bar of the row it blocks, over the tracks. */
+function DependencyArrows({ edges, rows, live, axis, dayW, width }: { edges: DepEdge[]; rows: DbRow[]; live: (id: string) => DaySpan | undefined; axis: Axis; dayW: number; width: number }) {
+  const id = useId().replace(/:/g, "");
+  const index = new Map(rows.map((r, i) => [r.id, i]));
+  const paths = edges.flatMap((e) => {
+    const a = live(e.from);
+    const b = live(e.to);
+    if (!a || !b) return [];
+    const from = barOf(a, axis, dayW);
+    const to = barOf(b, axis, dayW);
+    const x1 = from.x + Math.max(from.width, 8);
+    const x2 = to.x;
+    const y1 = index.get(e.from)! * ROW_H + ROW_H / 2;
+    const y2 = index.get(e.to)! * ROW_H + ROW_H / 2;
+    return [{ key: `${e.from}>${e.to}`, d: arrowPath(x1, y1, x2, y2), late: isLate(e, live) }];
+  });
+  return (
+    <svg className="pointer-events-none absolute overflow-visible" style={{ left: TITLE_W, top: HEAD_TOP + HEAD_BOTTOM + 1, width, height: rows.length * ROW_H }} aria-hidden>
+      <defs>
+        {(["on", "late"] as const).map((k) => (
+          <marker key={k} id={`${id}-${k}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M1 1 7 4 1 7Z" fill={k === "late" ? "var(--tone-red-solid)" : "var(--fg-4)"} />
+          </marker>
+        ))}
+      </defs>
+      {paths.map((p) => (
+        <path key={p.key} d={p.d} fill="none" stroke={p.late ? "var(--tone-red-solid)" : "var(--fg-4)"} strokeWidth={1.25} strokeLinejoin="round" markerEnd={`url(#${id}-${p.late ? "late" : "on"})`} />
+      ))}
+    </svg>
+  );
+}
+
+/**
+ * From the end of a blocking bar to the start of the blocked one: a soft curve when there's
+ * room ahead, else out, along the gap between the rows, and back in.
+ */
+export function arrowPath(x1: number, y1: number, x2: number, y2: number): string {
+  const gap = 10;
+  if (x2 - x1 >= gap * 2) {
+    const dx = Math.min(40, (x2 - x1) / 2);
+    return `M${x1} ${y1} C${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2 - 1} ${y2}`;
+  }
+  const mid = y2 === y1 ? y1 + ROW_H / 2 : y1 + (Math.sign(y2 - y1) * ROW_H) / 2;
+  return `M${x1} ${y1} H${x1 + gap} V${mid} H${x2 - gap} V${y2} H${x2 - 1}`;
 }

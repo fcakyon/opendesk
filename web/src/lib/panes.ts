@@ -1,12 +1,12 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { useSession } from "./session";
 
-// Pane widths a person dragged (the sidebar, the ticket list, the ticket's details), remembered
+// Pane widths a person dragged (the sidebar, the ticket list, the ticket's details, the wiki's side page), remembered
 // per person in this browser. No width stored means the layout's own default, so a reset is
 // the layout as it ships. A stored width still gives way to the window: each pane takes at most
 // a share of the room it sits in, and grows back once the window is wide again.
 
-export type Pane = "nav" | "list" | "details";
+export type Pane = "nav" | "list" | "details" | "beside";
 
 export type PaneLimits = {
   min: number;
@@ -20,6 +20,8 @@ export const paneLimits: Record<Pane, PaneLimits> = {
   nav: { min: 200, max: 360, share: 0.3 },
   list: { min: 280, max: 640, share: 0.5 },
   details: { min: 260, max: 560, share: 0.5 },
+  // A wiki page opened beside another (contracts/wiki.md "Split view"): the room is both pages.
+  beside: { min: 360, max: 1400, share: 0.65 },
 };
 
 /** One arrow press moves the edge this far; with shift, `BIG_STEP`. */

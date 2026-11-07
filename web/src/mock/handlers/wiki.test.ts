@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
-import type { Database, DbProperty, DbRows, Notification, WikiComments, WikiDailyNote, WikiNode, WikiPage, WikiPageViews, WikiRevision, WikiSearchHit, WikiThread, WikiTrashed } from "@/lib/api/types";
+import type { Database, DbProperty, DbRows, Notification, WikiComments, WikiDailyNote, WikiNode, WikiPage, WikiPageAnalytics, WikiPageViews, WikiRevision, WikiSearchHit, WikiThread, WikiTrashed } from "@/lib/api/types";
 import { qk } from "@/lib/queries";
 import { applyWikiCommentEvent, applyWikiEvent } from "@/lib/wiki/events";
 import { resetSavers, saverFor } from "@/lib/wiki/saver";
@@ -519,6 +519,40 @@ describe("mock wiki databases", () => {
     expect(ca!.props.num).toBe(1);
     expect((await rowsOf(d.id)).data.map((r) => r.id)).toEqual([a.id, b.id]);
   });
+
+  it("keeps form views, and sub-items and dependencies naming two relations of the database to itself", async () => {
+    const d = await create({ title: "Tasks", kind: "database" });
+    const customers = await create({ title: "Customers", kind: "database" });
+    const rel = (id: string, name: string, target = d.id): DbProperty => ({ id, name, type: "relation", database_id: target });
+    const props: DbProperty[] = [{ id: "title", name: "Name", type: "title" }, rel("parent", "Parent item"), rel("subs", "Sub-items"), rel("blocked", "Blocked by"), rel("blocking", "Blocking"), rel("customer", "Customer", customers.id)];
+    const views: Database["views"] = [
+      { id: "table", name: "Table", type: "table" },
+      { id: "form", name: "Report", type: "form", settings: { form: { title: "Report a task", fields: [{ property: "title", required: true }, { property: "customer", help: "Who asked" }], submitted: "Thanks" } } },
+    ];
+    const good: Database = { properties: props, views, next_id: 1, sub_items: { parent: "parent", children: "subs" }, dependencies: { blocked_by: "blocked", blocking: "blocking" } };
+    const saved = (await call("PATCH", `/v1/wiki/pages/${d.id}`, { database: good })).body as WikiPage;
+    expect(saved.database).toMatchObject({ sub_items: good.sub_items, dependencies: good.dependencies });
+    expect(saved.database?.views[1]).toEqual(views[1]);
+
+    for (const bad of [
+      { sub_items: { parent: "parent", children: "parent" } },
+      { sub_items: { parent: "parent", children: "title" } },
+      { sub_items: { parent: "parent", children: "nothing" } },
+      { sub_items: { parent: "parent", children: "customer" } },
+      { sub_items: { parent: "parent", children: "subs" }, dependencies: { blocked_by: "subs", blocking: "blocking" } },
+      { views: [{ id: "x", name: "X", type: "survey" }] },
+    ])
+      expect(await call("PATCH", `/v1/wiki/pages/${d.id}`, { database: { properties: props, views, next_id: 1, ...bad } }), JSON.stringify(bad)).toMatchObject({ status: 422, body: { code: "invalid_database" } });
+
+    // One parent item at most; sub-items and dependencies take many; rows of this database only.
+    const a = await create({ title: "A", parent_id: d.id });
+    const b = await create({ title: "B", parent_id: d.id });
+    const c = await create({ title: "C", parent_id: d.id, props: { parent: [a.id], blocked: [a.id, b.id] } });
+    expect(c.props).toEqual({ parent: [a.id], blocked: [a.id, b.id] });
+    expect((await call("PATCH", `/v1/wiki/pages/${c.id}`, { props: { parent: [a.id, b.id] } })).status).toBe(422);
+    expect((await call("PATCH", `/v1/wiki/pages/${a.id}`, { props: { subs: [b.id, c.id] } })).status).toBe(200);
+    expect((await call("PATCH", `/v1/wiki/pages/${a.id}`, { props: { subs: [customers.id] } })).status).toBe(422);
+  });
 });
 
 const tree = async () => (await call("GET", "/v1/wiki/pages")).body.data as WikiNode[];
@@ -968,5 +1002,44 @@ describe("mock wiki import and export", () => {
     const p = (await call("POST", "/v1/wiki/pages", { title: "Gone soon" })).body as WikiPage;
     await call("POST", `/v1/wiki/pages/${p.id}/trash`, {});
     expect((await fetchRaw(`/v1/wiki/pages/${p.id}/export`)).status).toBe(404);
+  });
+});
+
+describe("mock wiki aliases and analytics", () => {
+  installMock();
+
+  it("keeps aliases cleaned, without a new version, and finds pages by them", async () => {
+    const p = (await call("POST", "/v1/wiki/pages", { title: "Chargeback policy", aliases: [" Card  disputes ", "card disputes", ""] })).body as WikiPage;
+    expect(p.aliases).toEqual(["Card disputes"]);
+    const saved = (await call("PATCH", `/v1/wiki/pages/${p.id}`, { aliases: ["Card disputes", "Bank reversals"] })).body as WikiPage;
+    expect(saved).toMatchObject({ aliases: ["Card disputes", "Bank reversals"], version: p.version });
+    expect((await call("PATCH", `/v1/wiki/pages/${p.id}`, { aliases: Array.from({ length: 11 }, (_, i) => `name ${i}`) })).status).toBe(422);
+    expect((await call("PATCH", `/v1/wiki/pages/${p.id}`, { aliases: ["x".repeat(101)] })).status).toBe(422);
+    const node = ((await call("GET", "/v1/wiki/pages")).body.data as WikiNode[]).find((n) => n.id === p.id);
+    expect(node?.aliases).toEqual(["Card disputes", "Bank reversals"]);
+    const hits = (await call("GET", "/v1/wiki/search?q=reversal")).body.data as WikiSearchHit[];
+    expect(hits[0]?.id).toBe(p.id);
+
+    const named = (await call("POST", "/v1/wiki/pages", { title: "Billing FAQ", body_html: "<p>Bank reversals take a week.</p>" })).body as WikiPage;
+    const unlinked = (await call("GET", `/v1/wiki/pages/${p.id}/mentions`)).body.data as { id: string; snippet: string }[];
+    expect(unlinked.find((m) => m.id === named.id)?.snippet).toContain("Bank reversals");
+  });
+
+  it("counts views per day and person, a quick reread once, and edits per day", async () => {
+    const p = (await call("POST", "/v1/wiki/pages", { title: "Read me" })).body as WikiPage;
+    await call("GET", `/v1/wiki/pages/${p.id}`);
+    await call("GET", `/v1/wiki/pages/${p.id}`);
+    const a = (await call("GET", `/v1/wiki/pages/${p.id}/analytics`)).body as WikiPageAnalytics;
+    expect(a.days).toHaveLength(28);
+    expect(a.days[27]).toMatchObject({ views: 1, viewers: 1 });
+    expect(a).toMatchObject({ total_views: 1, total_viewers: 1 });
+    expect(a.edits[27].count).toBeGreaterThan(0);
+    expect((await call("GET", `/v1/wiki/pages/${p.id}/analytics?days=91`)).status).toBe(422);
+    expect((await call("GET", `/v1/wiki/pages/00000000-0000-4000-8000-000000000000/analytics`)).status).toBe(404);
+    // The handbook has its teammates' reads of the last weeks.
+    const refunds = ((await call("GET", "/v1/wiki/pages")).body.data as WikiNode[]).find((n) => n.title === "Refund policy")!;
+    expect(refunds.aliases).toContain("Money back");
+    const seeded = (await call("GET", `/v1/wiki/pages/${refunds.id}/analytics`)).body as WikiPageAnalytics;
+    expect(seeded.total_views).toBeGreaterThan(0);
   });
 });

@@ -3,13 +3,14 @@
 // the live tree; "Last edited" ticks in its own small component. When someone else saves
 // first, the page keeps what was typed and asks whose version stays. A version loaded
 // from the server (theirs, a restored one) is shown silently: loading is not an edit, and
-// only someone who may edit ever saves.
+// only someone who may edit ever saves. With `?beside=` a second page opens beside it (split
+// view, components/wiki/split.tsx): a full page of its own, its editor and saver apart.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/react";
-import { AlertTriangle, Check, CloudOff, FileUp, FolderInput, History, Link2, MoreHorizontal, Plus, SmilePlus, Type, ImageIcon, PanelRight, Link2 as BacklinkIcon, Star, Copy, LayoutTemplate, Lock, BookOpenCheck } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
+import { AlertTriangle, ArrowLeftRight, Check, CloudOff, Columns2, FileUp, FolderInput, History, Link2, Maximize2, MoreHorizontal, Plus, SmilePlus, Tag, Type, ImageIcon, PanelRight, Link2 as BacklinkIcon, Star, Copy, LayoutTemplate, Lock, BookOpenCheck, Printer, X } from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "@/app/RootLayout";
 import { usePageCrumb } from "@/app/useBreadcrumbs";
@@ -22,6 +23,8 @@ import { Morph } from "@/components/motion";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { copyText } from "@/components/ui/copy-button";
+import { Drawer } from "@/components/ui/dialog";
+import { ResizeHandle } from "@/components/ui/resize-handle";
 import { EmptyState } from "@/components/ui/empty";
 import { Menu, MenuCheckItem, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,6 +43,9 @@ import { AddToSpace } from "@/components/wiki/AddToSpace";
 import { PublishDialog } from "@/components/wiki/PublishDialog";
 import { ExportPageItems } from "@/components/wiki/Export";
 import { openImport } from "@/components/wiki/ImportDialog";
+import { AliasChips } from "@/components/wiki/Aliases";
+import { printWikiPage } from "@/components/wiki/editor/print";
+import { BESIDE_ATTR, OpenBesideDialog, useSplit, useWideScreen } from "@/components/wiki/split";
 
 const CanvasView = lazy(() => import("@/components/wiki/canvas/CanvasView"));
 import { DatabaseView } from "@/components/wiki/database/DatabaseView";
@@ -52,6 +58,7 @@ import { errorMessage, isApiError } from "@/lib/api/client";
 import type { WikiPage } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { fullDate, relLong } from "@/lib/format";
+import { clampWidth, setLiveWidth, usePaneWidth } from "@/lib/panes";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole, useSession } from "@/lib/session";
 import { useNow } from "@/lib/useNow";
@@ -63,10 +70,11 @@ import { PageStyleItems, useLook, LockedBar } from "@/components/wiki/PageStyle"
 
 const route = getRouteApi("/app/wiki/$pageId");
 
-export default function WikiPageView() {
+export default function WikiPageView(): ReactNode {
   const { t } = useTranslation("wiki");
   const { pageId } = route.useParams();
-  const { comment } = route.useSearch();
+  const { comment, beside: besideParam } = route.useSearch();
+  const beside = besideParam && besideParam !== pageId ? besideParam : undefined;
   const navigate = useNavigate();
   const page = useQuery(q.wikiPage(pageId));
   if (page.isLoading)
@@ -102,14 +110,134 @@ export default function WikiPageView() {
         />
       </div>
     );
-  return (
+  const main = (
     <PageScreen
       key={pageId}
       page={page.data}
       openThread={comment}
-      // The link has done its work: the address goes back to the page's own.
-      onThreadOpened={() => void navigate({ to: "/wiki/$pageId", params: { pageId }, search: {}, replace: true })}
+      beside={beside}
+      // The link has done its work: the address goes back to the page's own (and its side page).
+      onThreadOpened={() => void navigate({ to: "/wiki/$pageId", params: { pageId }, search: { beside }, replace: true })}
     />
+  );
+  return beside ? <Split main={main} beside={beside} /> : main;
+}
+
+/**
+ * The open page and the one beside it, the edge between them dragged to resize the side page
+ * (kept per person in this browser). On a narrow screen the side page is a peek over the page.
+ */
+function Split({ main, beside }: { main: ReactNode; beside: string }) {
+  const { t } = useTranslation("wiki");
+  const wide = useWideScreen();
+  const split = useSplit();
+  const [width, setWidth] = usePaneWidth("beside");
+  const rowRef = useRef<HTMLDivElement>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
+  const [room, setRoom] = useState<number>();
+  useEffect(() => {
+    const el = rowRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => setRoom(el.clientWidth));
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+  if (!wide)
+    return (
+      <>
+        {main}
+        <Drawer open onOpenChange={(o) => !o && split.close()} title={t("split.label")} width={820} header={<BesideBar id={beside} inDrawer />}>
+          <BesidePane id={beside} />
+        </Drawer>
+      </>
+    );
+  return (
+    <div ref={rowRef} className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">{main}</div>
+      <ResizeHandle
+        pane="beside"
+        side="after"
+        label={t("split.resize")}
+        target={paneRef}
+        room={() => rowRef.current?.clientWidth}
+        width={width}
+        onLive={(px) => setLiveWidth(paneRef.current, "beside", px === null ? null : `${px}px`)}
+        onWidth={setWidth}
+      />
+      <section
+        ref={paneRef}
+        aria-label={t("split.label")}
+        className="flex min-h-0 w-[var(--pane-beside-live,var(--pane-beside,50%))] shrink-0 flex-col border-l border-line animate-slide-in-right motion-reduce:animate-none"
+        style={width === null ? undefined : ({ "--pane-beside": `${clampWidth("beside", width, room)}px` } as CSSProperties)}
+      >
+        <header className="flex h-12 shrink-0 items-center gap-1 border-b border-line px-3">
+          <BesideBar id={beside} />
+        </header>
+        <BesidePane id={beside} />
+      </section>
+    </div>
+  );
+}
+
+/** The side page's own bar: its title, and swap, open as the main page, close (a drawer has its own). */
+function BesideBar({ id, inDrawer }: { id: string; inDrawer?: boolean }) {
+  const { t } = useTranslation("wiki");
+  const title = useTitle();
+  const split = useSplit();
+  const { data } = useQuery(q.wikiPage(id));
+  const { tree } = useWikiTree();
+  const node = tree.byId.get(id);
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-1">
+      <span className="flex min-w-0 flex-1 items-center gap-1.5 px-1 text-[12.5px] font-medium text-fg">
+        <PageIcon icon={node?.icon ?? data?.icon ?? ""} kind={node?.kind} />
+        <span className="truncate">{title(node?.title ?? data?.title)}</span>
+      </span>
+      <Tooltip content={t("split.swap")}>
+        <Button square variant="ghost" size="sm" aria-label={t("split.swap")} onClick={split.swap} disabled={!data}>
+          <ArrowLeftRight className="size-4" />
+        </Button>
+      </Tooltip>
+      <Tooltip content={t("split.openMain")}>
+        <Button square variant="ghost" size="sm" aria-label={t("split.openMain")} onClick={split.promote} disabled={!data}>
+          <Maximize2 className="size-3.5" />
+        </Button>
+      </Tooltip>
+      {!inDrawer && (
+        <Tooltip content={t("split.close")}>
+          <Button square variant="ghost" size="sm" aria-label={t("split.close")} onClick={split.close}>
+            <X className="size-4" />
+          </Button>
+        </Tooltip>
+      )}
+    </div>
+  );
+}
+
+/** The side page: a full page with its own editor and saves, without the main page's chrome. */
+function BesidePane({ id }: { id: string }) {
+  const { t } = useTranslation("wiki");
+  const page = useQuery(q.wikiPage(id));
+  if (page.isLoading)
+    return (
+      <div className="mx-auto w-full max-w-[760px] px-6 pt-10">
+        <Skeleton className="h-7 w-2/3" />
+        <Skeleton className="mt-4 h-3 w-full" />
+        <Skeleton className="mt-3 h-3 w-5/6" />
+      </div>
+    );
+  if (!page.data) return <EmptyState art="wiki" title={t("split.gone")} description={isApiError(page.error, "not_found") ? t("page.notFoundHint") : errorMessage(page.error)} />;
+  return (
+    <div {...{ [BESIDE_ATTR]: "" }} className="flex min-h-0 flex-1 flex-col">
+      <PageScreen key={id} page={page.data} peek />
+    </div>
   );
 }
 
@@ -136,7 +264,21 @@ function useSaver(saver: PageSaver) {
   }, [saver]);
 }
 
-export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: WikiPage; peek?: boolean; openThread?: string; onThreadOpened?: () => void }) {
+export function PageScreen({
+  page,
+  peek,
+  beside,
+  openThread,
+  onThreadOpened,
+}: {
+  page: WikiPage;
+  /** Shown inside another view (a database row's peek, the side page of a split): no header, panel, comments or presence of its own. */
+  peek?: boolean;
+  /** The page open beside this one, if any. */
+  beside?: string;
+  openThread?: string;
+  onThreadOpened?: () => void;
+}) {
   const { t } = useTranslation("wiki");
   const { t: ui } = useTranslation("ui");
   const qc = useQueryClient();
@@ -196,8 +338,9 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
   const [showToolbar, setShowToolbar] = useToolbarPref();
   const [panel, setPanel] = usePanelPref();
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
-  // Mod+Shift+; opens and closes the page panel.
+  // Mod+Shift+; opens and closes the page panel (the main page's: a peek has none).
   useEffect(() => {
+    if (peek) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === "Semicolon") {
         e.preventDefault();
@@ -206,7 +349,7 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [panel, setPanel]);
+  }, [panel, setPanel, peek]);
   // Comments (contracts/wiki.md "Comments"): agents write them on a page that isn't in the
   // trash; a thread on selected text also needs the right to edit the text it marks.
   const canComment = canEdit && !live.deleted_at;
@@ -331,6 +474,9 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
   const [history, setHistory] = useState(false);
   const [moving, setMoving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [aliasing, setAliasing] = useState(false);
+  const [pickBeside, setPickBeside] = useState(false);
+  const split = useSplit();
   // A help center article is made from a plain page: not a template, a journal or a database.
   const canPublish = !live.template && !live.journal && !live.daily_date && !wide;
   const crumbs = tree.byId.has(page.id) ? ancestorsOf(tree, page.id) : page.breadcrumbs;
@@ -435,7 +581,7 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
               </Button>
             </Tooltip>
             <Tooltip content={t("panel.open")} shortcut="mod shift ;">
-              <Button square variant="ghost" size="sm" aria-label={t("panel.open")} aria-pressed={!!panel} onClick={() => setPanel(panel ? null : "outline")} className={cn("hidden lg:inline-flex", panel && "bg-hover text-fg")}>
+              <Button square variant="ghost" size="sm" aria-label={t("panel.open")} aria-pressed={!!panel} onClick={() => setPanel(panel ? null : "outline")} className={cn("hidden", beside ? "2xl:inline-flex" : "lg:inline-flex", panel && "bg-hover text-fg")}>
                 <PanelRight className="size-4" />
               </Button>
             </Tooltip>
@@ -475,6 +621,14 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
                   <MenuItem icon={<Link2 />} onSelect={copyLink}>
                     {t("page.copyLink")}
                   </MenuItem>
+                  <MenuItem icon={<Columns2 />} onSelect={() => setPickBeside(true)}>
+                    {t("split.openPageBeside")}
+                  </MenuItem>
+                  {beside && (
+                    <MenuItem icon={<X />} onSelect={split.close}>
+                      {t("split.close")}
+                    </MenuItem>
+                  )}
                   {canEdit && !live.template && <AddToSpace pageId={page.id} />}
                   {canEdit && canPublish && (
                     <MenuItem icon={<BookOpenCheck />} onSelect={() => setPublishing(true)}>
@@ -487,6 +641,9 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
                   </MenuItem>
                   <MenuSeparator />
                   <ExportPageItems page={live} hasSubpages={kids.length > 0} />
+                  <MenuItem icon={<Printer />} shortcut="mod p" onSelect={() => printWikiPage(scrollEl)}>
+                    {t("editor.print.menu")}
+                  </MenuItem>
                   {canEdit && !live.template && live.kind !== "database" && (
                     <MenuItem icon={<FileUp />} onSelect={() => openImport(page.id)}>
                       {t("import.here")}
@@ -557,10 +714,14 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
       )}
 
       <div className="flex min-h-0 flex-1">
-        <div ref={setScrollEl} className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto", live.font !== "default" && `wiki-font-${live.font}`, live.small_text && "wiki-small")}>
+        <div ref={setScrollEl} data-wiki-print className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto", live.font !== "default" && `wiki-font-${live.font}`, live.small_text && "wiki-small")}>
           <PageCover cover={live.cover} coverY={live.cover_y} canEdit={canWrite} onChange={look.set} />
           <article className={cn("mx-auto w-full px-6 pb-32 md:px-10", wide ? "max-w-none md:px-16" : live.full_width ? "max-w-none md:px-24" : "max-w-[760px]", live.cover ? "pt-6" : "pt-10 md:pt-14")}>
-            {live.daily_date && <DayNav page={live} />}
+            {live.daily_date && (
+              <div data-print="hide">
+                <DayNav page={live} />
+              </div>
+            )}
           <div className="group/head">
               {draft.icon && (
                 <div className={cn("relative -ml-2 mb-2", live.cover && "-mt-[60px]")}>
@@ -573,14 +734,25 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
                   )}
                 </div>
               )}
-              {canWrite && (!draft.icon || !live.cover) && (
+              {canWrite && (!draft.icon || !live.cover || !(live.aliases ?? []).length) && (
                 <div
+                  data-print="hide"
                   className={cn(
                     "-ml-2 mb-1 flex h-7 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/head:opacity-100 [@media(hover:none)]:opacity-100",
                     (coverOpen || iconOpen) && "opacity-100",
                   )}
                 >
                   {!draft.icon && <IconPicker value="" onChange={(icon) => saver.edit({ icon })} trigger={iconTrigger} open={iconOpen} onOpenChange={setIconOpen} />}
+                  {!(live.aliases ?? []).length && !aliasing && (
+                    <button
+                      type="button"
+                      onClick={() => setAliasing(true)}
+                      className="flex h-7 items-center gap-1.5 rounded-lg px-2 text-[12.5px] text-fg-3 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)]"
+                    >
+                      <Tag className="size-3.5" />
+                      {t("aliases.add")}
+                    </button>
+                  )}
                   {!live.cover && (
                     <CoverPicker
                       value=""
@@ -614,7 +786,8 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
                 aria-label={ui("title")}
                 className="wiki-title field-sizing-content w-full resize-none bg-transparent text-[30px] font-semibold leading-[36px] tracking-[-0.03em] text-fg outline-none placeholder:text-fg-4 focus-visible:shadow-none"
               />
-              <div className="flex flex-wrap items-center gap-x-3">
+              <AliasChips page={live} canEdit={canWrite} adding={aliasing} onAdding={setAliasing} variant="title" />
+              <div data-print="hide" className="flex flex-wrap items-center gap-x-3">
                 <EditedLine page={current} />
                 <BacklinkCount pageId={page.id} onOpen={() => setPanel("links")} />
                 {!peek && <CommentCount count={comments.count} canComment={canComment} onOpen={canComment ? comments.addComment : openComments} />}
@@ -624,7 +797,7 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
 
             {isRow && <RowProperties page={live} canEdit={canWrite} />}
           {canWrite && editor && showToolbar && !wide && (
-              <div className="sticky top-3 z-10 -mx-3 mt-6 rounded-lg border border-line bg-surface/95 pt-1.5 shadow-xs backdrop-blur">
+              <div data-print="hide" className="sticky top-3 z-10 -mx-3 mt-6 rounded-lg border border-line bg-surface/95 pt-1.5 shadow-xs backdrop-blur">
                 <Toolbar editor={editor} full onImage={() => fileRef.current?.click()} end={uploading ? <span className="pr-2 text-xs text-fg-4">{t("page.uploading")}</span> : undefined} />
               </div>
             )}
@@ -670,7 +843,7 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
             />
 
             {!wide && (kids.length > 0 || canEdit) && (
-              <section className="mt-14 border-t border-line-soft pt-6" aria-labelledby="wiki-subpages">
+              <section data-print="hide" className="mt-14 border-t border-line-soft pt-6" aria-labelledby="wiki-subpages">
                 <h2 id="wiki-subpages" className="label-caps mb-2">
                   {t("page.subpages")}
                 </h2>
@@ -704,7 +877,16 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
         </div>
         {panel && !peek && (
           // Comments also open on a narrow screen, over the page.
-          <div className={panel === "comments" ? "fixed inset-y-0 right-0 z-40 flex max-w-full shadow-float lg:static lg:z-auto lg:shadow-none" : "hidden lg:flex"}>
+          // With a page beside, the panel sits beside the text only on the widest screens; comments then open over it.
+          <div
+            className={
+              panel === "comments"
+                ? cn("fixed inset-y-0 right-0 z-40 flex max-w-full shadow-float", beside ? "2xl:static 2xl:z-auto 2xl:shadow-none" : "lg:static lg:z-auto lg:shadow-none")
+                : beside
+                  ? "hidden 2xl:flex"
+                  : "hidden lg:flex"
+            }
+          >
             <PagePanel
               page={live}
               editor={editor}
@@ -741,6 +923,7 @@ export function PageScreen({ page, peek, openThread, onThreadOpened }: { page: W
         onRestored={take}
       />
       <MoveDialog node={node} open={moving} onOpenChange={setMoving} />
+      {!peek && <OpenBesideDialog open={pickBeside} onOpenChange={setPickBeside} exclude={[page.id, ...(beside ? [beside] : [])]} />}
       {canPublish && <PublishDialog pageId={page.id} pageTitle={draft.title} open={publishing} onOpenChange={setPublishing} beforePublish={() => saver.flush()} />}
     </div>
   );

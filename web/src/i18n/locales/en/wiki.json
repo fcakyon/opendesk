@@ -255,7 +255,12 @@
       "dbGallery": "Gallery",
       "dbCalendar": "Calendar",
       "dbTimeline": "Timeline",
-      "dbLinked": "Linked view of a database"
+      "dbLinked": "Linked view of a database",
+      "toggleHeading": "Toggle heading {{level}}",
+      "synced": "Synced block",
+      "mermaid": "Mermaid diagram",
+      "button": "Button",
+      "footnote": "Footnote"
     },
     "mark": {
       "bold": "Bold",
@@ -326,7 +331,70 @@
     "linkPlaceholder": "Paste a link or search pages",
     "linkToPage": "Link to a page",
     "unlink": "Remove link",
-    "blockLinkCopied": "Link to block copied"
+    "blockLinkCopied": "Link to block copied",
+    "synced": {
+      "label": "Synced block",
+      "menu": "Show a page here",
+      "section": "Section",
+      "edit": "Edit original",
+      "hidden": "You can't see the page this block shows, or it was deleted.",
+      "loop": "This synced block can't show here: it would show itself.",
+      "tooDeep": "This synced block can't show here: too many synced blocks inside each other.",
+      "blockGone": "The block this shows was moved or deleted.",
+      "empty": "Nothing here yet.",
+      "block": "Block",
+      "wholePage": "Whole page",
+      "pickSection": "Show which part?",
+      "search": "Search for a page to show"
+    },
+    "mermaid": {
+      "showDiagram": "Show diagram",
+      "editSource": "Edit source",
+      "label": "Diagram",
+      "error": "Can't draw this diagram."
+    },
+    "footnote": {
+      "ref": "Footnote {{n}}",
+      "empty": "No note yet.",
+      "title": "Notes",
+      "back": "Back to the text",
+      "placeholder": "Write the note"
+    },
+    "button": {
+      "untitled": "New button",
+      "settings": "Button settings",
+      "readOnly": "Only people who can edit this page can use this button.",
+      "label": "Label",
+      "action": "When pressed",
+      "pickAction": "Choose what it does",
+      "actions": {
+        "template": "Insert a template",
+        "todo": "Add a to-do",
+        "link": "Open a link",
+        "row": "Add a database row"
+      },
+      "template": "Template",
+      "pickTemplate": "Choose a template",
+      "loading": "Loading",
+      "noTemplates": "No templates yet. Save a page as a template first.",
+      "todoText": "To-do text",
+      "url": "Link",
+      "database": "Database",
+      "pickDatabase": "Choose a database",
+      "noDatabases": "No databases yet.",
+      "rowTitle": "Name of the new row",
+      "presets": "Set values",
+      "noValue": "No value",
+      "done": "Done",
+      "templateFailed": "Couldn't insert the template.",
+      "rowAdded": "Row added to {{database}}.",
+      "rowFailed": "Couldn't add the row.",
+      "openRow": "Open"
+    },
+    "print": {
+      "menu": "Print or save as PDF",
+      "shortcut": "Mod+P"
+    }
   },
   "cover": {
     "add": "Add cover",
@@ -708,7 +776,8 @@
       "gallery": "Gallery",
       "calendar": "Calendar",
       "timeline": "Timeline",
-      "chart": "Chart"
+      "chart": "Chart",
+      "form": "Form"
     },
     "statusGroup": {
       "todo": "To do",
@@ -846,7 +915,60 @@
       "pickGroupHint": "A board makes a column for each value of a property, such as a status. Choose one in Group."
     },
     "description": "Add a description",
-    "name": "Database name"
+    "name": "Database name",
+    "thisDatabase": "This database",
+    "pairedWith": "Kept in step with {{name}}",
+    "form": {
+      "untitled": "Untitled form",
+      "titlePlaceholder": "Form title",
+      "descriptionPlaceholder": "What is this form for?",
+      "required": "Required",
+      "answer": "Your answer",
+      "submit": "Send",
+      "submitHint": "to send",
+      "submittedTitle": "Submitted",
+      "submittedDefault": "Thanks, your answer is in.",
+      "another": "Submit another",
+      "openRow": "Open the new row",
+      "missing_one": "One question needs an answer.",
+      "missing_other": "{{count}} questions need an answer.",
+      "viewerNote": "You can read this form, but sending it needs agent access. Ask an admin of the workspace if you need to.",
+      "copyLink": "Copy form link",
+      "linkCopied": "Form link copied",
+      "shareHint": "Teammates with the link open this form. It is never public.",
+      "builder": "Form builder",
+      "editForm": "Edit form",
+      "hideBuilder": "Hide builder",
+      "details": "Title and description",
+      "questions": "Questions",
+      "addQuestion": "Add a question",
+      "allAsked": "Every property is asked.",
+      "help": "Hint",
+      "helpPlaceholder": "A hint under the question",
+      "removeQuestion": "Remove question",
+      "moveQuestion": "Drag to move",
+      "titleAlways": "Always asked and required",
+      "afterSubmit": "After sending",
+      "noQuestions": "Add a question from the builder."
+    },
+    "subItems": {
+      "setting": "Sub-items",
+      "hint": "Nest rows under a parent item in tables and lists.",
+      "parent": "Parent item",
+      "children": "Sub-items",
+      "add": "Add sub-item",
+      "expand": "Show sub-items",
+      "collapse": "Hide sub-items"
+    },
+    "dependencies": {
+      "setting": "Dependencies",
+      "hint": "Mark rows that wait on others. The timeline draws an arrow for each.",
+      "blockedBy": "Blocked by",
+      "blocking": "Blocking",
+      "late": "Starts before {{names}} ends",
+      "arrow": "{{from}} blocks {{to}}"
+    },
+    "pairOffHint": "Turning it off keeps both properties as plain relations."
   },
   "comments": {
     "tab": "Comments",
@@ -1208,5 +1330,47 @@
     "wiki": "Export the wiki",
     "started": "Preparing the download",
     "failed": "Couldn't export."
+  },
+  "aliases": {
+    "label": "Aliases",
+    "alsoCalled": "Also called",
+    "add": "Add alias",
+    "addShort": "Alias",
+    "placeholder": "Another name",
+    "remove": "Remove the alias {{alias}}",
+    "hint": "Links, page search and unlinked mentions find the page by these names too.",
+    "empty": "No other names yet.",
+    "full": "A page has up to 10 aliases.",
+    "failed": "Couldn't save the aliases."
+  },
+  "split": {
+    "openBeside": "Open beside",
+    "openPageBeside": "Open a page beside",
+    "pickTitle": "Open a page beside this one",
+    "pickDescription": "Both pages stay open, each with its own editing. Alt-click a page link to do the same.",
+    "search": "Find a page",
+    "none": "No pages match.",
+    "label": "Side page",
+    "close": "Close the side page",
+    "swap": "Swap the pages",
+    "openMain": "Open as the main page",
+    "resize": "Resize the side page",
+    "gone": "This page was deleted, or you can't see it."
+  },
+  "analytics": {
+    "title": "Views",
+    "range": "Last 28 days",
+    "views_one": "{{n}} view",
+    "views_other": "{{n}} views",
+    "by_one": "by {{n}} person",
+    "by_other": "by {{n}} people",
+    "edits_one": "{{n}} edit",
+    "edits_other": "{{n}} edits",
+    "empty": "Nobody opened it in the last 28 days.",
+    "chart": "Views per day over the last 28 days",
+    "date": "Day",
+    "people": "People",
+    "today": "Today",
+    "failed": "Couldn't load the views."
   }
 }

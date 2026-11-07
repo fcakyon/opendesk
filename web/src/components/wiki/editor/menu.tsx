@@ -216,6 +216,13 @@ export function rank<T>(query: string, list: T[], key: (x: T) => [string, string
     .map((r) => r.x);
 }
 
+/** What a query finds a page by: its title or the alias it matches best (contracts/wiki.md "Aliases"). */
+export function bestName(query: string, label: string, aliases: string[] = []): string {
+  let best = label;
+  for (const a of aliases) if (score(query, a) > score(query, best)) best = a;
+  return best;
+}
+
 /** The floating list; mount once beside the editor. */
 export function WikiMenuPopup() {
   const st = useWikiMenu();

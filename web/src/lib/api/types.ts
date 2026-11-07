@@ -1618,6 +1618,8 @@ export type WikiNode = {
   verified?: boolean;
   /** "database": its subpages are its rows (contracts/wiki.md "Databases"); "canvas": cards on a board ("Canvas"). */
   kind?: WikiKind;
+  /** Other names the page goes by (contracts/wiki.md "Aliases"); left out when it has none. */
+  aliases?: string[];
 };
 
 export type WikiKind = "page" | "database" | "canvas";
@@ -1724,7 +1726,7 @@ export type DbProperty = {
   description?: string;
 };
 
-export type DbViewType = "table" | "board" | "list" | "gallery" | "calendar" | "timeline" | "chart";
+export type DbViewType = "table" | "board" | "list" | "gallery" | "calendar" | "timeline" | "chart" | "form";
 export type DbView = { id: string; name: string; type: DbViewType; settings?: DbViewSettings };
 
 export type DbFilterRule = { property: string; op: string; value?: unknown };
@@ -1776,9 +1778,23 @@ export type DbViewSettings = {
   chart?: { kind: "bar" | "column" | "donut" | "line"; x: string; y?: { property: string; fn: "count" | "sum" | "avg" } };
   /** A linked view shows rows of this database but filters on its own (the block's). */
   open_in?: "peek" | "page";
+  /** A form: what it asks, in order, and what it says. */
+  form?: DbFormSettings;
 };
 
-export type Database = { properties: DbProperty[]; views: DbView[]; next_id: number };
+/** A question of a form: a property, whether it must be answered, and a hint under it. */
+export type DbFormField = { property: string; required?: boolean; help?: string };
+export type DbFormSettings = { title?: string; description?: string; fields: DbFormField[]; submitted?: string };
+
+export type Database = {
+  properties: DbProperty[];
+  views: DbView[];
+  next_id: number;
+  /** Rows nest under a parent item: two relations of the database to itself, kept in step by the app. */
+  sub_items?: { parent: string; children: string };
+  /** Rows wait on other rows: two relations of the database to itself, kept in step by the app. */
+  dependencies?: { blocked_by: string; blocking: string };
+};
 
 export type DbDate = { start: string; end?: string };
 export type DbFile = { url: string; name: string };
@@ -1805,6 +1821,14 @@ export type WikiVerification = { by: UserRef | null; at: string; until: string |
 export type WikiTrashed = WikiNode & { deleted_at: string; deleted_by: UserRef | null; purge_at: string; subpages: number; path: WikiRef[] };
 
 export type WikiPageViews = { views: number; people: number; readers: { user: UserRef; visits: number; last_at: string }[] };
+
+/** How a page was read and edited per day, UTC, oldest first (contracts/wiki.md "Page analytics"). Counts only. */
+export type WikiPageAnalytics = {
+  days: { date: string; views: number; viewers: number }[];
+  total_views: number;
+  total_viewers: number;
+  edits: { date: string; count: number }[];
+};
 
 /** One emoji on a comment and who added it, oldest first (contracts/wiki.md "Comments"). */
 export type WikiReaction = { emoji: string; users: string[] };
@@ -1902,7 +1926,7 @@ export type WikiSearchHit = {
   updated_at: string;
 };
 
-export type WikiPagePatch = Partial<WikiPageSettings> & { title?: string; icon?: string; body_html?: string; version?: number; verified?: boolean; verified_days?: number; database?: Database; props?: Record<string, DbValue>; canvas?: Canvas };
+export type WikiPagePatch = Partial<WikiPageSettings> & { title?: string; icon?: string; body_html?: string; version?: number; verified?: boolean; verified_days?: number; database?: Database; props?: Record<string, DbValue>; canvas?: Canvas; aliases?: string[] };
 
 export type ReportsOverview = {
   created: number;

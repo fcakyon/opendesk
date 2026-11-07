@@ -59,6 +59,7 @@
     "katex": "0.16.22",
     "lowlight": "3.3.0",
     "lucide-react": "^1.64.0",
+    "mermaid": "^12.3.0",
     "motion": "^14.7.1",
     "phoenix": "^1.8.16",
     "posthog-js": "^1.441.2",

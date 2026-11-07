@@ -91,9 +91,13 @@ type Row = WikiPageSettings & {
   props: Record<string, DbValue>;
   /** Creation order, for rows made in the same millisecond (numberRows: oldest first). */
   seq: number;
+  /** Other names the page goes by (contracts/wiki.md "Aliases"). */
+  aliases: string[];
 };
 type Rev = { id: string; page_id: string; title: string; icon: string; body_html: string; author: string | null; created_at: string; updated_at: string };
 type Visit = { user_id: string; page_id: string; visits: number; last_at: string; seq: number };
+/** A person's views of a page on a day (UTC), as wiki_page_views keeps them (contracts/wiki.md "Page analytics"). */
+type ViewDay = { user_id: string; page_id: string; day: string; views: number };
 /** A comment; a thread is its first comment (thread_id = id), which holds the quote and the resolution. */
 type CommentRow = {
   id: string;
@@ -116,6 +120,7 @@ type State = {
   revisions: Rev[];
   favorites: Map<string, string[]>;
   visits: Visit[];
+  views: ViewDay[];
   comments: CommentRow[];
   reactions: Reaction[];
   /** Explicit follows and unfollows, by page then user; without one, a page's creator follows it. */
@@ -137,7 +142,7 @@ let rowSeq = 0;
 function stateOf(ws: WsData): State {
   let st = states.get(ws);
   if (!st) {
-    st = { pages: [], revisions: [], favorites: new Map(), visits: [], comments: [], reactions: [], follows: new Map() };
+    st = { pages: [], revisions: [], favorites: new Map(), visits: [], views: [], comments: [], reactions: [], follows: new Map() };
     states.set(ws, st);
     if (ws === db.workspaces[0]) seedHandbook(ws, st);
   }
@@ -192,6 +197,7 @@ const node = (r: Row): WikiNode => ({
   ...(r.template ? { template: true } : {}),
   ...(verifiedNow(r) ? { verified: true } : {}),
   kind: r.kind,
+  ...(r.aliases.length ? { aliases: [...r.aliases] } : {}),
 });
 const refOf = (r: Pick<Row, "id" | "title" | "icon">): WikiRef => ({ id: r.id, title: r.title, icon: r.icon });
 const settingsOf = (r: Row): WikiPageSettings => ({ cover: r.cover, cover_y: r.cover_y, full_width: r.full_width, small_text: r.small_text, font: r.font, locked: r.locked });
@@ -238,6 +244,7 @@ function removeRows(st: State, ids: string[]) {
   st.pages = st.pages.filter((r) => !gone.has(r.id));
   st.revisions = st.revisions.filter((x) => !gone.has(x.page_id));
   st.visits = st.visits.filter((x) => !gone.has(x.page_id));
+  st.views = st.views.filter((x) => !gone.has(x.page_id));
   const comments = new Set(st.comments.filter((c) => gone.has(c.page_id)).map((c) => c.id));
   st.comments = st.comments.filter((c) => !comments.has(c.id));
   st.reactions = st.reactions.filter((x) => !comments.has(x.comment_id));
@@ -264,6 +271,7 @@ function pageOut(st: State, r: Row): WikiPage {
     ...node(r),
     ...settingsOf(r),
     body_html: r.body_html,
+    aliases: [...r.aliases],
     template: r.template,
     journal: r.journal,
     kind: r.kind,
@@ -495,6 +503,7 @@ function newRow(fields: Partial<Row> & Pick<Row, "id" | "parent_id" | "title" | 
     props: {},
     canvas: null,
     seq: ++rowSeq,
+    aliases: [],
     ...DEFAULT_LOOK,
     ...fields,
   };
@@ -509,7 +518,7 @@ export function searchWiki(ws: WsData, q: string, limit = 20): WikiSearchHit[] {
   const scored = st.pages
     .filter((r) => live(v, r))
     .map((r) => {
-      const title = r.title.toLowerCase();
+      const title = [r.title, ...r.aliases].join(" ").toLowerCase();
       const text = stripHtml(r.body_html + canvasHtml(r));
       const lower = text.toLowerCase();
       const has = (w: string, s: string) => new RegExp(`(^|[^\\p{L}\\p{N}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "u").test(s);
@@ -537,6 +546,7 @@ export function registerWiki() {
   registerDesk();
   registerTicketWiki();
   registerPort();
+  registerAnalytics();
 }
 
 function registerPages() {
@@ -563,6 +573,7 @@ function registerPages() {
     const title = cleanTitle(ctx.body.title);
     const icon = cleanIcon(ctx.body.icon);
     const body = cleanBody(ctx.body.body_html);
+    const aliases = ctx.body.aliases === undefined ? [] : cleanAliases(ctx.body.aliases);
     roomFor(st, 1);
     const par = parentRef(ctx, st, ctx.body.parent_id);
     let space: { owner: string | null; team: string | null };
@@ -603,6 +614,7 @@ function registerPages() {
       database,
       props,
       canvas,
+      aliases,
     });
     st.pages.push(r);
     place(st, r.parent_id, r.private_to, r.team_id, r.template, r.id, typeof ctx.body.position === "number" ? ctx.body.position : undefined);
@@ -630,6 +642,8 @@ function registerPages() {
     const verify = verificationPatch(ctx.body);
     const data = dataPatch(ctx, st, r);
     const nextCanvas = canvasPatch(ctx, st, r);
+    const nextAliases = "aliases" in ctx.body ? cleanAliases(ctx.body.aliases) : r.aliases;
+    const aliasesChanged = nextAliases.join("\u0000") !== r.aliases.join("\u0000");
     if (textChanged) {
       const before = r.body_html;
       Object.assign(r, next, { version: r.version + 1, updated_by: db.meId, updated_at: nowIso() });
@@ -640,7 +654,9 @@ function registerPages() {
     const verifyChanged = applyVerification(r, verify);
     const dataChanged = applyData(st, r, data);
     const canvasChanged = applyCanvas(r, nextCanvas);
-    if (textChanged || lookChanged || verifyChanged || dataChanged || canvasChanged) {
+    // Aliases keep the version, like the look (contracts/wiki.md "Aliases").
+    if (aliasesChanged) r.aliases = nextAliases;
+    if (textChanged || lookChanged || verifyChanged || dataChanged || canvasChanged || aliasesChanged) {
       const ev = eventPage(r);
       // Readers of the page take the new look as it comes: it has no version to compare.
       if (lookChanged) ev.settings = look;
@@ -652,6 +668,7 @@ function registerPages() {
       }
       // A canvas has no version either.
       if (canvasChanged) ev.canvas = structuredClone(r.canvas);
+      if (aliasesChanged) ev.aliases = [...r.aliases];
       pageEvent(ctx.ws, r, "wiki_page.updated", ev);
     }
     return pageOut(st, r);
@@ -783,7 +800,7 @@ const PROP_TYPES: readonly DbPropType[] = [
 ];
 /** Types whose value is computed, never stored on a row. */
 const COMPUTED_TYPES: readonly DbPropType[] = ["title", "rollup", "formula", "created_time", "created_by", "edited_time", "edited_by", "unique_id"];
-const VIEW_TYPES: readonly string[] = ["table", "board", "list", "gallery", "calendar", "timeline", "chart"];
+const VIEW_TYPES: readonly string[] = ["table", "board", "list", "gallery", "calendar", "timeline", "chart", "form"];
 const TONES: readonly string[] = ["gray", "brown", "orange", "yellow", "green", "blue", "purple", "pink", "red"];
 const ROLLUP_FNS: readonly string[] = [
   "show_original",
@@ -898,6 +915,14 @@ function cleanDatabase(raw: unknown, prev: Database | null): Database {
   const o = readObj(raw, "database");
   if (o.next_id !== undefined && o.next_id !== null && !Number.isInteger(o.next_id)) throw shapeError("next_id");
   const db: Database = { properties: readList(o.properties, "properties", readProperty), views: readList(o.views, "views", readView), next_id: 1 };
+  if (o.sub_items !== undefined && o.sub_items !== null) {
+    const x = readObj(o.sub_items, "sub_items");
+    db.sub_items = { parent: readStr(x.parent, "sub_items.parent"), children: readStr(x.children, "sub_items.children") };
+  }
+  if (o.dependencies !== undefined && o.dependencies !== null) {
+    const x = readObj(o.dependencies, "dependencies");
+    db.dependencies = { blocked_by: readStr(x.blocked_by, "dependencies.blocked_by"), blocking: readStr(x.blocking, "dependencies.blocking") };
+  }
   if (db.properties.length === 0 || db.properties.length > MAX_PROPERTIES) throw dbInvalid("A database has 1 to 100 properties.");
   if (db.views.length === 0 || db.views.length > MAX_VIEWS) throw dbInvalid("A database has 1 to 50 views.");
   const seen = new Set<string>();
@@ -950,6 +975,7 @@ function cleanDatabase(raw: unknown, prev: Database | null): Database {
     const rel = db.properties.find((x) => x.id === p.rollup?.relation);
     if (rel?.type !== "relation") throw dbInvalid("A rollup's relation is a relation property of the database.");
   }
+  checkPairs(db);
   const views = new Set<string>();
   for (const v of db.views) {
     v.name = fields(v.name);
@@ -959,6 +985,27 @@ function cleanDatabase(raw: unknown, prev: Database | null): Database {
   }
   db.next_id = prev ? Math.max(prev.next_id, 1) : 1;
   return db;
+}
+
+/**
+ * checkPairs: sub-items and dependencies each name two different relation properties of the
+ * database that relate to the same database, none of them used twice.
+ */
+function checkPairs(db: Database) {
+  const pairs: [string, string][] = [];
+  if (db.sub_items) pairs.push([db.sub_items.parent, db.sub_items.children]);
+  if (db.dependencies) pairs.push([db.dependencies.blocked_by, db.dependencies.blocking]);
+  const used = new Set<string>();
+  for (const pair of pairs) {
+    let target: string | undefined;
+    for (const id of pair) {
+      const p = db.properties.find((x) => x.id === id);
+      if (p?.type !== "relation" || used.has(id)) throw dbInvalid("Sub-items and dependencies each name two relation properties of the database.");
+      used.add(id);
+      if (target !== undefined && target !== p.database_id) throw dbInvalid("Sub-items and dependencies relate the database to itself.");
+      target = p.database_id;
+    }
+  }
 }
 
 /** The people, related pages (by the database they must be rows of) and tickets a row's values name. */
@@ -983,7 +1030,9 @@ function cleanProps(raw: unknown, database: Database, cur: Record<string, DbValu
       delete out[id];
       continue;
     }
-    out[id] = cleanValue(p, v, refs);
+    const value = cleanValue(p, v, refs);
+    if (database.sub_items && id === database.sub_items.parent && Array.isArray(value) && value.length > 1) throw dbInvalid(`${p.name} names one parent item at most.`);
+    out[id] = value;
   }
   // Values of properties the database no longer has are dropped.
   for (const k of Object.keys(out)) if (!byId.has(k)) delete out[k];
@@ -1534,6 +1583,7 @@ function registerTemplates() {
 
 function recordVisit(st: State, user: string, page: string) {
   const v = st.visits.find((x) => x.user_id === user && x.page_id === page);
+  countView(st, user, page, v?.last_at);
   if (v) Object.assign(v, { visits: v.visits + 1, last_at: nowIso(), seq: ++visitSeq });
   else st.visits.push({ user_id: user, page_id: page, visits: 1, last_at: nowIso(), seq: ++visitSeq });
 }
@@ -1663,11 +1713,16 @@ function registerLinks() {
     const st = stateOf(ctx.ws);
     const v = viewerOf(ctx.ws);
     const target = find(ctx, st);
-    const title = target.title.trim().toLowerCase();
-    if (!title) return pageOf([]);
+    // Its title and its aliases (contracts/wiki.md "Aliases"): the first the text has shows in the snippet.
+    const names = [target.title, ...target.aliases].map((n) => n.trim()).filter(Boolean);
+    if (!names.length) return pageOf([]);
     const linked = new Set(linksOf(st).filter((l) => l.to === target.id).map((l) => l.from));
-    const out = st.pages.filter((r) => r.id !== target.id && live(v, r) && !linked.has(r.id) && stripHtml(r.body_html).toLowerCase().includes(title)).sort(newestFirst);
-    return pageOf(out.slice(0, 100).map((r) => mentionOut(r, target.title)));
+    const named = (r: Row) => {
+      const text = stripHtml(r.body_html).toLowerCase();
+      return names.find((n) => text.includes(n.toLowerCase()));
+    };
+    const out = st.pages.filter((r) => r.id !== target.id && live(v, r) && !linked.has(r.id) && named(r)).sort(newestFirst);
+    return pageOf(out.slice(0, 100).map((r) => mentionOut(r, named(r) ?? target.title)));
   });
 
   get("/v1/wiki/graph", (ctx) => {
@@ -2115,6 +2170,37 @@ function seedDesk(ws: WsData, st: State) {
     refunds.body_html += `<p>Example: ${ticketLink(twice)}${who ? `, from <a data-type="contact" data-id="${who.id}" href="/contacts/${who.id}">${escapeHtml(who.name || who.email || "")}</a>` : ""}, a duplicate charge refunded the same day.</p>`;
 }
 
+// ─── Editor blocks: synced blocks, diagrams, footnotes, toggle headings, buttons ─
+
+/**
+ * The handbook uses the editor's newer blocks as a team would: the on-call page shows the
+ * escalation steps as a synced block, the escalation process draws who gets a ticket as a
+ * Mermaid diagram and cites a source in a footnote, and buttons log a known issue or add a
+ * follow-up (contracts/wiki.md "Blocks").
+ */
+function seedEditorBlocks(st: State) {
+  const page = (title: string) => st.pages.find((p) => p.title === title && !p.template && !p.deleted_at);
+  const escalation = page("Escalation process");
+  const oncall = page("Business hours and on-call");
+  if (!escalation || !oncall) return;
+  const steps = uuid();
+  const note = uuid();
+  escalation.body_html =
+    escalation.body_html
+      .replace("<h2>Steps</h2>", `<h2 data-block-id="${steps}">Steps</h2>`)
+      .replace("every 30 minutes", `every 30 minutes<sup data-type="footnote" data-note="${note}">1</sup>`) +
+    `<h2>Who gets it</h2><pre><code class="language-mermaid">flowchart LR\n  A[Customer blocked] --&gt; B{Money at stake?}\n  B -- yes --&gt; C[On-call lead]\n  B -- no --&gt; D{Tried twice?}\n  D -- yes --&gt; C\n  D -- no --&gt; E[Keep working it]</code></pre>` +
+    `<div data-type="footnotes"><div data-type="footnote" data-note="${note}"><p>Customers asked for it in last year's survey: silence felt worse than a slow fix.</p></div></div>`;
+  const issues = st.pages.find((p) => p.kind === "database" && p.title === "Known issues");
+  const review = st.pages.find((p) => p.template && !p.parent_id && p.title === "Incident review");
+  oncall.body_html +=
+    `<h2>When it can't wait</h2><div data-type="transclusion" data-id="${escalation.id}" data-block="${steps}"></div>` +
+    `<details data-heading="2"><summary>Holiday cover</summary><div data-type="detailsContent"><p>Swap shifts in the team channel at least a week ahead, and update the rota here.</p></div></details>` +
+    `<div data-type="button" data-label="Add a follow-up" data-action="todo" data-title="Follow up with the customer"></div>` +
+    (issues ? `<div data-type="button" data-label="Log a known issue" data-action="row" data-database="${issues.id}" data-title="New issue"></div>` : "") +
+    (review ? `<div data-type="button" data-label="Start an incident review" data-action="template" data-template="${review.id}"></div>` : "");
+}
+
 // ─── The starter handbook ──────────────────────────────────────────────────
 
 type Seed = { title: string; icon: string; body: string; days: number; by: number; cover?: string; verified?: { by: number; days: number; for: number }; children?: Seed[] };
@@ -2255,6 +2341,7 @@ function seedHandbook(ws: WsData, st: State) {
     const sub = st.pages.filter((c) => c.parent_id === r.id).sort(byPosition)[0];
     r.body_html = sub ? r.body_html.replace("{sub}", sub.id) : r.body_html.replace(/<div data-type="subpage"[^>]*><\/div>/, "");
   }
+  seedEditorBlocks(st);
   // Teammates read the handbook, so its readers aren't empty; the person's own visits fill recent pages.
   const handbook = st.pages.filter((p) => !p.template);
   handbook.forEach((p, i) => {
@@ -2264,6 +2351,7 @@ function seedHandbook(ws: WsData, st: State) {
       st.visits.push({ user_id: u, page_id: p.id, visits, last_at: ago(((i + 1) * (j + 2) * 5 * HOUR) % (20 * DAY)), seq: ++visitSeq });
     });
   });
+  seedAliasesAndViews(st, people);
 }
 
 // ─── The starter databases ─────────────────────────────────────────────────
@@ -3036,4 +3124,75 @@ export function storedZip(files: ZipFile[]): Uint8Array {
     at += p.length;
   }
   return out;
+}
+
+// ─── Aliases and page analytics (aliases.go, analytics.go) ─────────────────
+
+const MAX_ALIASES = 10;
+const MAX_ALIAS = 100;
+const VIEW_GAP = 30 * MIN;
+const VIEW_DAYS = 90;
+
+/** Aliases as the API keeps them: whitespace folded, empty and repeated (any case) left out, 10 of 100 characters at most. */
+export function cleanAliases(raw: unknown): string[] {
+  if (!Array.isArray(raw)) throw invalid("aliases must be a list of names");
+  const out: string[] = [];
+  for (const x of raw) {
+    if (typeof x !== "string") throw invalid("aliases must be a list of names");
+    const a = x.split(/\s+/).filter(Boolean).join(" ");
+    if (!a) continue;
+    if ([...a].length > MAX_ALIAS) throw invalid("an alias is at most 100 characters");
+    if (!out.some((o) => o.toLowerCase() === a.toLowerCase())) out.push(a);
+  }
+  if (out.length > MAX_ALIASES) throw invalid("a page has at most 10 aliases");
+  return out;
+}
+
+const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+/** A view of the day, once per person and VIEW_GAP: `last` is their read before this one. */
+function countView(st: State, user: string, page: string, last: string | undefined) {
+  const today = utcDay(Date.now());
+  const same = !!last && Date.now() - Date.parse(last) < VIEW_GAP;
+  const v = st.views.find((x) => x.user_id === user && x.page_id === page && x.day === today);
+  if (v) v.views += same ? 0 : 1;
+  else st.views.push({ user_id: user, page_id: page, day: today, views: 1 });
+}
+
+/** A few aliases on the handbook, and its readers' views over the last weeks. */
+function seedAliasesAndViews(st: State, people: string[]) {
+  const named: Record<string, string[]> = { "Refund policy": ["Money back", "Returns"], "Escalation process": ["Escalating a ticket"] };
+  for (const r of st.pages) if (!r.template && named[r.title]) r.aliases = named[r.title];
+  st.pages
+    .filter((p) => !p.template && !p.private_to)
+    .forEach((p, i) => {
+      for (let d = 0; d < 40; d++) {
+        people.forEach((u, j) => {
+          // A busy start of the week, quieter weekends, and some pages read more than others.
+          const n = (i * 7 + j * 3 + d * 5) % (i % 3 === 0 ? 4 : 9);
+          if (n > 2) return;
+          st.views.push({ user_id: u, page_id: p.id, day: utcDay(NOW - d * DAY), views: 1 + ((i + j + d) % 3) });
+        });
+      }
+    });
+}
+
+function registerAnalytics() {
+  get("/v1/wiki/pages/:id/analytics", (ctx) => {
+    const st = stateOf(ctx.ws);
+    const r = find(ctx, st);
+    const raw = ctx.query.get("days");
+    const days = raw === null || raw === "" ? 28 : Number(raw);
+    if (!Number.isInteger(days) || days < 0 || days > VIEW_DAYS) throw invalid("days must be from 1 to 90");
+    const n = days || 28;
+    const range = Array.from({ length: n }, (_, i) => utcDay(Date.now() - (n - 1 - i) * DAY));
+    const inRange = new Set(range);
+    const views = st.views.filter((x) => x.page_id === r.id && inRange.has(x.day));
+    const out = range.map((date) => {
+      const of = views.filter((x) => x.day === date);
+      return { date, views: of.reduce((t, x) => t + x.views, 0), viewers: of.length };
+    });
+    const edits = range.map((date) => ({ date, count: st.revisions.filter((x) => x.page_id === r.id && utcDay(Date.parse(x.created_at)) === date).length }));
+    return { days: out, total_views: out.reduce((t, x) => t + x.views, 0), total_viewers: new Set(views.map((x) => x.user_id)).size, edits };
+  });
 }

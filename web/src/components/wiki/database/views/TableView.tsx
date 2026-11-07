@@ -1,7 +1,8 @@
 // The table layout: a column per property (resized and reordered by dragging, each with its
 // menu), a row per page with its title opening it beside the database, cells edited in place,
 // rows dragged into order when the view has no sort, picked to delete together, grouped when
-// the view groups, and a calculation under each column (count, sum, average…).
+// the view groups, sub-items nested under their parent item, and a calculation under each
+// column (count, sum, average…).
 
 import { ChevronRight, GripVertical, Maximize2, Plus, Trash2, X } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
@@ -10,10 +11,12 @@ import { useTranslation } from "react-i18next";
 import { menuItemCls } from "@/components/ui/menu";
 import { floatingPanel } from "@/components/ui/popover";
 import type { DbCalc, DbProperty, DbRow, DbValue } from "@/lib/api/types";
+import type { FlatRow } from "@/lib/wiki/db";
 import { cn } from "@/lib/cn";
 import { addProperty, calculate, CALCS_FOR, groupRows, type Group } from "@/lib/wiki/db";
 import type { ViewProps } from "../DatabaseView";
-import { ROW_TYPE } from "./cards";
+import { Composer, ROW_TYPE } from "./cards";
+import { AddSubItem, Disclosure, INDENT, useNesting, type Nesting } from "./nesting";
 import { Cell } from "../Cell";
 import { OptionPill, PropIcon, StatusPill } from "../cells";
 import { PropertyMenu } from "../PropertyMenu";
@@ -28,6 +31,7 @@ export default function TableView(p: ViewProps) {
   const { db, view, props, rows, canEdit, onSettings } = p;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dragCol, setDragCol] = useState<string | null>(null);
+  const nest = useNesting(p);
   const widths = view.settings?.widths ?? {};
   const width = (prop: DbProperty) => widths[prop.id] ?? (prop.type === "title" ? TITLE_W : CELL_W);
   const cols = `${SELECT_W}px ${props.map((x) => `${width(x)}px`).join(" ")} minmax(80px,1fr)`;
@@ -68,9 +72,15 @@ export default function TableView(p: ViewProps) {
 
   const body = (list: DbRow[], groupValue?: Record<string, DbValue>) => (
     <>
-      {list.map((r, i) => (
-        <TableRow key={r.id} row={r} index={i} p={p} cols={cols} selected={selected.has(r.id)} onSelect={() => toggleSelect(r.id)} />
-      ))}
+      {nest.lines(list).map((l, i) =>
+        l.kind === "row" ? (
+          <TableRow key={l.line.row.id} row={l.line.row} line={l.line} nest={nest} index={i} p={p} cols={cols} selected={selected.has(l.line.row.id)} onSelect={() => toggleSelect(l.line.row.id)} />
+        ) : (
+          <div key={`add-${l.parentId}`} className="flex h-9 items-center border-b border-line-soft pr-2" style={{ paddingLeft: SELECT_W + 8 + l.depth * INDENT + 26 }}>
+            <Composer className="h-7 flex-1" onClose={nest.stopAdding} onSubmit={(title) => nest.create(l.parentId, title, groupValue)} />
+          </div>
+        ),
+      )}
       {canEdit && <NewRow p={p} values={groupValue} />}
     </>
   );
@@ -229,7 +239,7 @@ function SelectBox({ checked, partial, onChange, label }: { checked: boolean; pa
   );
 }
 
-function TableRow({ row, index, p, cols, selected, onSelect }: { row: DbRow; index: number; p: ViewProps; cols: string; selected: boolean; onSelect: () => void }) {
+function TableRow({ row, line, nest, index, p, cols, selected, onSelect }: { row: DbRow; line: FlatRow; nest: Nesting; index: number; p: ViewProps; cols: string; selected: boolean; onSelect: () => void }) {
   const { t } = useTranslation("wiki");
   const [editing, setEditing] = useState(false);
   const [dragOver, setDragOver] = useState<"above" | "below" | null>(null);
@@ -239,6 +249,7 @@ function TableRow({ row, index, p, cols, selected, onSelect }: { row: DbRow; ind
     <div
       role="row"
       aria-rowindex={index + 2}
+      aria-level={nest.on ? line.depth + 1 : undefined}
       onDragOver={(e) => {
         if (!draggable || !e.dataTransfer.types.includes(ROW_TYPE)) return;
         e.preventDefault();
@@ -280,7 +291,8 @@ function TableRow({ row, index, p, cols, selected, onSelect }: { row: DbRow; ind
       </span>
       {p.props.map((prop) =>
         prop.type === "title" ? (
-          <div key={prop.id} role="gridcell" className="group/title relative flex h-9 min-w-0 items-center gap-1.5 border-l border-line-soft px-2 first-of-type:border-l-0">
+          <div key={prop.id} role="gridcell" className="group/title relative flex h-9 min-w-0 items-center gap-1.5 border-l border-line-soft px-2 first-of-type:border-l-0" style={nest.on ? { paddingLeft: 4 + line.depth * INDENT } : undefined}>
+            {nest.on && <Disclosure line={line} onToggle={() => nest.toggle(row.id)} />}
             <PageIcon icon={row.icon} />
             {editing ? (
               <input
@@ -304,14 +316,17 @@ function TableRow({ row, index, p, cols, selected, onSelect }: { row: DbRow; ind
               </button>
             )}
             {!editing && (
-              <button
-                type="button"
-                onClick={() => p.onOpen(row)}
-                className="absolute right-1.5 flex h-6 items-center gap-1 rounded-md border border-line bg-surface px-1.5 text-[11px] font-medium uppercase tracking-wide text-fg-3 opacity-0 shadow-xs transition-opacity hover:text-fg group-hover/title:opacity-100"
-              >
-                <Maximize2 className="size-3" />
-                {t("db.open")}
-              </button>
+              <span className="absolute right-1.5 flex items-center gap-1">
+                {nest.on && p.canEdit && <AddSubItem group="title" onAdd={() => nest.addUnder(row.id)} />}
+                <button
+                  type="button"
+                  onClick={() => p.onOpen(row)}
+                  className="flex h-6 items-center gap-1 rounded-md border border-line bg-surface px-1.5 text-[11px] font-medium uppercase tracking-wide text-fg-3 opacity-0 shadow-xs transition-opacity hover:text-fg focus-visible:opacity-100 group-hover/title:opacity-100"
+                >
+                  <Maximize2 className="size-3" />
+                  {t("db.open")}
+                </button>
+              </span>
             )}
           </div>
         ) : (

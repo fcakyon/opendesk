@@ -400,6 +400,8 @@ export function headingsOf(editor: NodeViewProps["editor"]): Heading[] {
   const out: Heading[] = [];
   editor.state.doc.descendants((n) => {
     if (n.type.name === "heading") out.push({ level: n.attrs.level as number, text: n.textContent, id: (n.attrs["block-id"] as string) ?? "" });
+    // A toggle heading is a heading too; what it folds may hold more.
+    else if (n.type.name === "details" && n.attrs.heading) out.push({ level: n.attrs.heading as number, text: n.firstChild?.textContent ?? "", id: (n.attrs["block-id"] as string) ?? "" });
     return n.type.name !== "heading";
   });
   return out;

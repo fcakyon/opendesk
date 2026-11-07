@@ -25,14 +25,16 @@ type Props = {
   onLive: (px: number | null) => void;
   /** Saves a width, or goes back to the default with null. */
   onWidth: (px: number | null) => void;
+  /** What the handle resizes, for screen readers, when the pane has no name of its own here. */
+  label?: string;
   className?: string;
 };
 
 const RESIZING = "paneResizing";
 
-export function ResizeHandle({ pane, target, room, side, width, onLive, onWidth, className }: Props) {
+export function ResizeHandle({ pane, target, room, side, width, onLive, onWidth, label: named, className }: Props) {
   const { t } = useTranslation("ui");
-  const label = { nav: t("resizeSidebar"), list: t("resizeTicketList"), details: t("resizeTicketDetails") }[pane];
+  const label = named ?? { nav: t("resizeSidebar"), list: t("resizeTicketList"), details: t("resizeTicketDetails"), beside: undefined }[pane];
   const self = useRef<HTMLDivElement>(null);
   const drag = useRef<{ id: number; x: number; w: number; room: number | undefined; grow: 1 | -1; px: number; raf: number; moved: boolean } | null>(null);
   // The latest writer, for a drag cut short by the handle going away (b, ], Escape).

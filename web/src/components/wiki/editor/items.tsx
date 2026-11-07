@@ -44,6 +44,10 @@ import {
   Database as DatabaseIcon,
   Hash,
   ListChecks,
+  MousePointerClick,
+  Repeat2,
+  Superscript,
+  Workflow,
 } from "lucide-react";
 import type { Contact, DbViewType, Member, SearchResults, Ticket, WikiNode } from "@/lib/api/types";
 import { OllieMark } from "@/components/assistant/OllieMark";
@@ -53,7 +57,7 @@ import { parseTicketQuery, ticketsForNumber } from "@/lib/wiki/desk";
 import { newReminderId } from "@/lib/wiki/reminder";
 import { openViewPickerNext } from "./desk";
 import { EMOJI, searchEmoji } from "../emoji";
-import { rank, type MenuItem } from "./menu";
+import { bestName, rank, type MenuItem } from "./menu";
 import { TONES } from "./tones";
 
 export type MenuSources = {
@@ -100,7 +104,7 @@ export function pageItems(query: string, s: MenuSources, insert: (editor: Editor
   const all = s.pages().filter((n) => n.id !== s.pageId());
   const byId = new Map(all.map((n) => [n.id, n]));
   const recent = query.trim() ? all : [...all].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-  return rank(query, recent, (n) => [pageLabel(n, s), pathOf(n, byId, s)])
+  return rank(query, recent, (n) => [bestName(query, pageLabel(n, s), n.aliases), pathOf(n, byId, s)])
     .slice(0, opts.limit ?? 8)
     .map((n) => ({
       id: `page-${n.id}`,
@@ -116,6 +120,13 @@ const linkPage = (editor: Editor, range: Range, n: WikiNode) =>
   clear(editor, range)
     .insertContent([{ type: "pageLink", attrs: { id: n.id, label: n.title } }, { type: "text", text: " " }])
     .run();
+
+const embedPage = (editor: Editor, range: Range, n: WikiNode) => clear(editor, range).insertContent({ type: "transclusion", attrs: { id: n.id } }).run();
+
+/** "![[": a page to show in place (a synced block); its heading can be picked on the block. */
+export function embedItems(query: string, s: MenuSources): MenuItem[] {
+  return pageItems(query.replace(/\]+$/, "").replace(/#.*$/, ""), s, embedPage, { limit: 10 });
+}
 
 /** "[[": pages, and a new page named as typed. */
 export function linkItems(query: string, s: MenuSources): MenuItem[] {
@@ -278,6 +289,14 @@ export function slashItems(query: string, s: MenuSources): MenuItem[] {
     { id: "h1", group: basic, label: t("editor.block.h1"), icon: <Heading1 />, hint: "#", words: "title big heading", run: (e, r) => clear(e, r).setHeading({ level: 1 }).run() },
     { id: "h2", group: basic, label: t("editor.block.h2"), icon: <Heading2 />, hint: "##", words: "heading subtitle", run: (e, r) => clear(e, r).setHeading({ level: 2 }).run() },
     { id: "h3", group: basic, label: t("editor.block.h3"), icon: <Heading3 />, hint: "###", words: "heading small", run: (e, r) => clear(e, r).setHeading({ level: 3 }).run() },
+    ...([1, 2, 3] as const).map<Def>((level) => ({
+      id: `toggleH${level}`,
+      group: basic,
+      label: t("editor.block.toggleHeading", { level }),
+      icon: <ListCollapse />,
+      words: `toggle heading collapse fold section h${level}`,
+      run: (e, r) => clear(e, r).setToggleHeading(level).run(),
+    })),
     { id: "bullet", group: basic, label: t("editor.block.bullet"), icon: <List />, hint: "-", words: "unordered bullets list", run: (e, r) => clear(e, r).toggleBulletList().run() },
     { id: "ordered", group: basic, label: t("editor.block.ordered"), icon: <ListOrdered />, hint: "1.", words: "numbers ordered list", run: (e, r) => clear(e, r).toggleOrderedList().run() },
     { id: "todo", group: basic, label: t("editor.block.todo"), icon: <ListTodo />, hint: "[]", words: "task checkbox check checklist", run: (e, r) => clear(e, r).toggleTaskList().run() },
@@ -296,6 +315,15 @@ export function slashItems(query: string, s: MenuSources): MenuItem[] {
         const id = await s.createSubpage();
         if (id) e.chain().focus().insertContent({ type: "subpage", attrs: { id } }).run();
       },
+    },
+    {
+      id: "synced",
+      group: basic,
+      label: t("editor.block.synced"),
+      icon: <Repeat2 />,
+      hint: "![[",
+      words: "embed page transclusion transclude synced block mirror include note heading section",
+      run: (e, r) => clear(e, r).insertContent({ type: "transclusion" }).run(),
     },
     {
       id: "link",
@@ -344,10 +372,27 @@ export function slashItems(query: string, s: MenuSources): MenuItem[] {
     { id: "col4", group: advanced, label: t("editor.block.columns", { count: 4 }), icon: <Columns4 />, words: "layout columns", run: (e, r) => clear(e, r).setColumns(4).run() },
     { id: "code", group: advanced, label: t("editor.block.code"), icon: <Code2 />, hint: "```", words: "snippet pre programming", run: (e, r) => clear(e, r).setCodeBlock().run() },
     { id: "math", group: advanced, label: t("editor.block.math"), icon: <Sigma />, hint: "$$$", words: "equation latex katex formula tex", run: (e, r) => clear(e, r).insertBlockMath({ latex: "" }).run() },
+    {
+      id: "mermaid",
+      group: advanced,
+      label: t("editor.block.mermaid"),
+      icon: <Workflow />,
+      words: "diagram flowchart chart sequence graph gantt mermaid",
+      run: (e, r) => clear(e, r).setCodeBlock({ language: "mermaid" }).run(),
+    },
+    {
+      id: "button",
+      group: advanced,
+      label: t("editor.block.button"),
+      icon: <MousePointerClick />,
+      words: "button action template insert todo link row automation",
+      run: (e, r) => clear(e, r).insertContent({ type: "button" }).run(),
+    },
     { id: "toc", group: advanced, label: t("editor.block.toc"), icon: <ListTree />, words: "table of contents outline headings index", run: (e, r) => clear(e, r).insertContent({ type: "toc" }).run() },
     { id: "mention", group: inline, label: t("editor.block.mention"), icon: <AtSign />, hint: "@", words: "person user teammate", run: (e, r) => clear(e, r).insertContent("@").run() },
     { id: "date", group: inline, label: t("editor.block.date"), icon: <CalendarDays />, words: "today day reminder when", run: insertDate(today(0)) },
     { id: "remind", group: inline, label: t("reminder.remindMe"), icon: <BellRing />, words: "remind reminder alarm notify tomorrow", run: insertReminder },
+    { id: "footnote", group: inline, label: t("editor.block.footnote"), icon: <Superscript />, hint: "[^", words: "footnote note reference citation source", run: (e, r) => clear(e, r).insertFootnote().run() },
     { id: "inlineMath", group: inline, label: t("editor.block.inlineMath"), icon: <Sigma />, hint: "$$", words: "equation latex inline formula", run: (e, r) => clear(e, r).insertInlineMath({ latex: "x" }).run() },
     { id: "emoji", group: inline, label: t("editor.block.emoji"), icon: <Smile />, hint: ":", words: "emoticon smiley icon", run: (e, r) => clear(e, r).insertContent(":").run() },
     ...TONES.map<Def>((tone) => ({

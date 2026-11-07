@@ -814,3 +814,269 @@ a.wiki-contact:hover {
 .wiki-prose .wiki-tickets a {
   text-decoration: none;
 }
+
+/* ─── Toggle headings ────────────────────────────────────────────────────── */
+
+.wiki-prose .wiki-toggle[data-heading] > div > summary {
+  font-weight: 600;
+  color: var(--fg);
+}
+.wiki-prose .wiki-toggle[data-heading="1"] {
+  margin-top: 1.1em;
+}
+.wiki-prose .wiki-toggle[data-heading="1"] > div > summary {
+  font-size: 1.85em;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+.wiki-prose .wiki-toggle[data-heading="2"] {
+  margin-top: 1em;
+}
+.wiki-prose .wiki-toggle[data-heading="2"] > div > summary {
+  font-size: 1.45em;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+.wiki-prose .wiki-toggle[data-heading="3"] {
+  margin-top: 0.85em;
+}
+.wiki-prose .wiki-toggle[data-heading="3"] > div > summary {
+  font-size: 1.18em;
+  line-height: 1.35;
+}
+/* The arrow sits on the heading's first line, whatever its size. */
+.wiki-prose .wiki-toggle[data-heading="1"] > button {
+  margin-top: 0.62em;
+}
+.wiki-prose .wiki-toggle[data-heading="2"] > button {
+  margin-top: 0.42em;
+}
+.wiki-prose .wiki-toggle[data-heading="3"] > button {
+  margin-top: 0.26em;
+}
+.wiki-prose > .wiki-toggle[data-heading]:first-child {
+  margin-top: 0;
+}
+
+/* ─── Synced blocks ──────────────────────────────────────────────────────── */
+
+.wiki-synced .wiki-synced-body {
+  font-size: 0.94em;
+}
+.wiki-synced .wiki-synced-body > :first-child {
+  margin-top: 0;
+}
+/* A synced block's own blocks need no handle room and no "/" hint. */
+.wiki-synced .wiki-synced-body p.is-empty::before {
+  content: none;
+}
+
+/* ─── Mermaid ────────────────────────────────────────────────────────────── */
+
+.wiki-mermaid {
+  overflow-x: auto;
+  padding: 0.75em 0.5em;
+  border-radius: 8px;
+  background: var(--surface);
+  animation: wiki-fade-in 160ms var(--ease-out-soft);
+}
+.wiki-code pre:not(.hidden) + .wiki-mermaid {
+  margin-top: 0.35em;
+  border: 1px dashed var(--line);
+}
+.wiki-mermaid-svg {
+  width: 100%;
+  text-align: center;
+}
+.wiki-mermaid-svg svg {
+  display: inline-block;
+  height: auto;
+}
+@keyframes wiki-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wiki-mermaid {
+    animation: none;
+  }
+}
+
+/* ─── Footnotes ──────────────────────────────────────────────────────────── */
+
+.wiki-prose .wiki-fnref-wrap {
+  display: inline;
+}
+.wiki-prose .wiki-fnref {
+  display: inline-block;
+  min-width: 1.15em;
+  padding: 0 0.2em;
+  margin: 0 0.05em;
+  border-radius: 4px;
+  font-size: 0.72em;
+  font-weight: 600;
+  line-height: 1.3;
+  vertical-align: super;
+  color: var(--tone-blue);
+  font-variant-numeric: tabular-nums;
+  transition: background 120ms;
+}
+.wiki-prose .wiki-fnref:hover,
+.wiki-prose .ProseMirror-selectednode > .wiki-fnref {
+  background: var(--tone-blue-soft);
+}
+.wiki-prose .wiki-footnotes {
+  margin-top: 2.5em;
+  padding-top: 0.75em;
+  border-top: 1px solid var(--line-soft);
+  font-size: 0.9em;
+  color: var(--fg-2);
+  counter-reset: wiki-footnote;
+}
+.wiki-prose .wiki-footnotes-head {
+  margin-bottom: 0.35em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-4);
+  user-select: none;
+}
+.wiki-prose .wiki-footnote {
+  display: flex;
+  gap: 0.4em;
+  align-items: baseline;
+  counter-increment: wiki-footnote;
+  border-radius: 4px;
+}
+.wiki-prose .wiki-footnote-marker {
+  flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.15em;
+  min-width: 2.4em;
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+.wiki-prose .wiki-footnote-marker::before {
+  content: counter(wiki-footnote) ".";
+  font-weight: 500;
+}
+.wiki-prose .wiki-footnote-back {
+  padding: 0 0.2em;
+  border-radius: 4px;
+  font-size: 0.85em;
+  color: var(--fg-4);
+  transition:
+    color 120ms,
+    background 120ms;
+}
+.wiki-prose .wiki-footnote-back:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+.wiki-prose .wiki-footnote-text {
+  flex: 1;
+  min-width: 0;
+}
+.wiki-prose .wiki-footnote-text > p {
+  min-height: 1.5em;
+}
+.wiki-prose .wiki-footnote-text > p.is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--fg-4);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* ─── Paper (print.ts) ───────────────────────────────────────────────────── */
+
+@media screen {
+  #wiki-print {
+    display: none;
+  }
+}
+@media print {
+  @page {
+    margin: 16mm 15mm;
+  }
+  html.wiki-printing,
+  html.wiki-printing body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  html.wiki-printing body > :not(#wiki-print) {
+    display: none !important;
+  }
+  #wiki-print {
+    display: block;
+    color: var(--fg);
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  #wiki-print *,
+  #wiki-print *::before,
+  #wiki-print *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  /* Everything the screen scrolls or clips flows onto paper. */
+  #wiki-print,
+  #wiki-print * {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  #wiki-print article {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  #wiki-print .wiki-print-title {
+    margin: 0.2em 0 0.6em;
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.03em;
+  }
+  #wiki-print .opacity-0 {
+    display: none !important;
+  }
+  #wiki-print a {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--line-strong);
+  }
+  #wiki-print h1,
+  #wiki-print h2,
+  #wiki-print h3,
+  #wiki-print summary {
+    break-after: avoid;
+  }
+  #wiki-print pre,
+  #wiki-print blockquote,
+  #wiki-print figure,
+  #wiki-print img,
+  #wiki-print table,
+  #wiki-print .wiki-callout,
+  #wiki-print .wiki-mermaid,
+  #wiki-print .wiki-synced {
+    break-inside: avoid;
+  }
+  #wiki-print.break-h1 .wiki-prose > h1:not(:first-child),
+  #wiki-print.break-h1 .wiki-prose > .wiki-toggle[data-heading="1"]:not(:first-child) {
+    break-before: page;
+  }
+  #wiki-print .wiki-toggle > button {
+    visibility: hidden;
+  }
+  #wiki-print .wiki-toggle [data-type="detailsContent"] {
+    display: block !important;
+  }
+  #wiki-print .wiki-pagelink,
+  #wiki-print .wiki-fnref {
+    background: none !important;
+  }
+}
