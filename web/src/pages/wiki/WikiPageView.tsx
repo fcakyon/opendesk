@@ -604,7 +604,7 @@ export function PageScreen({
           </nav>
           <div className="flex shrink-0 items-center gap-0.5">
             {!live.deleted_at && !live.template && (
-              <Tooltip content={fav.has(page.id) ? t("favorites.remove") : t("favorites.add")}>
+              <Tooltip content={fav.has(page.id) ? t("favorites.remove") : t("favorites.add")} shortcut="page.favorite">
                 <Button square variant="ghost" size="sm" aria-label={fav.has(page.id) ? t("favorites.remove") : t("favorites.add")} aria-pressed={fav.has(page.id)} onClick={() => fav.toggle(node)}>
                   <Star className={cn("size-4", fav.has(page.id) && "fill-tone-amber-solid text-tone-amber-solid")} />
                 </Button>
@@ -612,7 +612,7 @@ export function PageScreen({
             )}
             <WikiViewers pageId={page.id} />
             {!live.deleted_at && <FollowButton pageId={page.id} />}
-            <Tooltip content={t("page.copyLink")}>
+            <Tooltip content={t("page.copyLink")} shortcut="page.copyLink">
               <Button square variant="ghost" size="sm" aria-label={t("page.copyLink")} onClick={copyLink}>
                 <Link2 className="size-4" />
               </Button>
@@ -622,7 +622,7 @@ export function PageScreen({
                 <PanelRight className="size-4" />
               </Button>
             </Tooltip>
-            <Tooltip content={t("history.open")}>
+            <Tooltip content={t("history.open")} shortcut="page.history">
               <Button square variant="ghost" size="sm" aria-label={t("history.open")} onClick={() => setHistory(true)}>
                 <History className="size-4" />
               </Button>
@@ -636,12 +636,12 @@ export function PageScreen({
                 </MenuTrigger>
                 <MenuContent align="end">
                   {canEdit && (
-                    <MenuItem icon={<Plus />} onSelect={() => create.mutate({ parent_id: page.id })}>
+                    <MenuItem icon={<Plus />} shortcut="page.newSubpage" onSelect={() => create.mutate({ parent_id: page.id })}>
                       {t("tree.addSubpage")}
                     </MenuItem>
                   )}
                   {canEdit && !live.journal && (
-                    <MenuItem icon={<FolderInput />} onSelect={() => setMoving(true)}>
+                    <MenuItem icon={<FolderInput />} shortcut="page.move" onSelect={() => setMoving(true)}>
                       {t("tree.moveTo")}
                     </MenuItem>
                   )}
@@ -651,7 +651,7 @@ export function PageScreen({
                     </MenuItem>
                   )}
                   {canEdit && !live.journal && (
-                    <MenuItem icon={<Copy />} onSelect={() => void duplicatePage(false)}>
+                    <MenuItem icon={<Copy />} shortcut="page.duplicate" onSelect={() => void duplicatePage(false)}>
                       {t("duplicate.action")}
                     </MenuItem>
                   )}
@@ -660,10 +660,10 @@ export function PageScreen({
                       {t("templatesPage.saveAs")}
                     </MenuItem>
                   )}
-                  <MenuItem icon={<Link2 />} onSelect={copyLink}>
+                  <MenuItem icon={<Link2 />} shortcut="page.copyLink" onSelect={copyLink}>
                     {t("page.copyLink")}
                   </MenuItem>
-                  <MenuItem icon={<Columns2 />} onSelect={() => setPickBeside(true)}>
+                  <MenuItem icon={<Columns2 />} shortcut="page.beside" onSelect={() => setPickBeside(true)}>
                     {t("split.openPageBeside")}
                   </MenuItem>
                   {beside && (
@@ -673,12 +673,12 @@ export function PageScreen({
                   )}
                   {canEdit && !live.template && <AddToSpace pageId={page.id} />}
                   {canEdit && canPublish && (
-                    <MenuItem icon={<BookOpenCheck />} onSelect={() => setPublishing(true)}>
+                    <MenuItem icon={<BookOpenCheck />} shortcut="page.publish" onSelect={() => setPublishing(true)}>
                       {t("publish.action")}
                     </MenuItem>
                   )}
                   <FollowItem pageId={page.id} />
-                  <MenuItem icon={<History />} onSelect={() => setHistory(true)}>
+                  <MenuItem icon={<History />} shortcut="page.history" onSelect={() => setHistory(true)}>
                     {t("history.open")}
                   </MenuItem>
                   <MenuSeparator />
