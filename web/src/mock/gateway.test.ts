@@ -7,6 +7,11 @@ import { installMock } from "./index";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Waits for the mock's timers to deliver what a check needs, however slow the machine. */
+async function until(ok: () => boolean, ms = 3000) {
+  for (const end = Date.now() + ms; !ok() && Date.now() < end; ) await wait(10);
+}
+
 async function connected() {
   const socket = socketFactory("mock://gateway", () => ({}));
   socket.connect();
@@ -37,11 +42,11 @@ describe("mock gateway wiki page presence", () => {
     const a = await connected();
     const b = await connected();
     const first = joinTopic(a, `wiki_page:${wid}:${page}`, { state: "editing" });
-    await wait(60);
+    await until(() => !!first.got.state);
     expect(first.got.state?.[db.meId]?.metas[0].state).toBe("editing");
 
     const watcher = joinTopic(b, `wiki_page:${wid}:${page}`, { watch: true });
-    await wait(60);
+    await until(() => !!watcher.got.state);
     expect(watcher.got.state?.[db.meId]).toBeDefined();
 
     first.ch.push("presence", { state: "idle" });
@@ -57,15 +62,16 @@ describe("mock gateway wiki page presence", () => {
   it("has a teammate on some pages, the same ones every time, and passes their comings and goings", async () => {
     const wid = db.workspaces[0].workspace.id;
     const socket = await connected();
-    const pages = Array.from({ length: 9 }, () => crypto.randomUUID());
+    // About two pages in three have a teammate: enough pages that some have none.
+    const pages = Array.from({ length: 60 }, () => crypto.randomUUID());
     const joined = pages.map((p) => joinTopic(socket, `wiki_page:${wid}:${p}`, { state: "viewing" }));
-    await wait(60);
+    await until(() => joined.every((j) => !!j.got.state));
     const others = joined.map((j) => viewers(j.got.state ?? {}, db.meId));
     expect(others.some((v) => v.length === 1)).toBe(true);
     expect(others.some((v) => v.length === 0)).toBe(true);
 
     const again = joinTopic(await connected(), `wiki_page:${wid}:${pages[0]}`, { watch: true });
-    await wait(60);
+    await until(() => !!again.got.state);
     expect(viewers(again.got.state ?? {}, db.meId)).toEqual(others[0]);
 
     const mate = db.users.find((u) => u.id !== db.meId)!;

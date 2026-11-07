@@ -581,7 +581,9 @@ describe("mock wiki comments", () => {
     ws()
       .events.slice(mark)
       .filter((e) => e.type === "notification.created")
-      .map((e) => [(e.data.notification as Notification).type, e.topics?.find((x) => x.startsWith("user:"))?.slice(5)]);
+      .map((e) => [(e.data.notification as Notification).type, e.topics?.find((x) => x.startsWith("user:"))?.slice(5)])
+      // The mock's own activity sends other notifications on a timer.
+      .filter(([type]) => type?.startsWith("wiki_"));
   const asRole = async <T,>(role: "viewer" | "agent", fn: () => Promise<T>) => {
     const me = ws().members.find((m) => m.user_id === db.meId)!;
     const was = me.role;
