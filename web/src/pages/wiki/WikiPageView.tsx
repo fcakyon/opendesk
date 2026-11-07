@@ -10,11 +10,11 @@ import { sidebarDragProps } from "@/lib/collab/sidebarDrag";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/react";
-import { AlertTriangle, ArrowLeftRight, Check, CloudOff, Columns2, FileUp, FolderInput, History, Link2, Maximize2, MoreHorizontal, Plus, SmilePlus, Tag, Type, ImageIcon, PanelRight, Link2 as BacklinkIcon, Star, Copy, LayoutTemplate, Lock, BookOpenCheck, Printer, X } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Check, CloudOff, Columns2, FileUp, FolderInput, History, Link2, Maximize2, MoreHorizontal, Plus, SmilePlus, Tag, Type, ImageIcon, PanelRight, Link2 as BacklinkIcon, Star, Copy, LayoutTemplate, BookOpenCheck, Printer, X } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "@/app/RootLayout";
-import { usePageCrumb } from "@/app/useBreadcrumbs";
+import { usePageCrumb, usePageTrail } from "@/app/useBreadcrumbs";
 import { Toolbar, type RichEditorHandle } from "@/components/editor/RichEditor";
 import { WikiEditor } from "@/components/wiki/editor/WikiEditor";
 import type { WikiEditorEnv } from "@/components/wiki/editor/context";
@@ -52,6 +52,7 @@ import { DatabaseView } from "@/components/wiki/database/DatabaseView";
 import { RowProperties } from "@/components/wiki/database/RowProperties";
 import { UnsentBanner } from "@/components/wiki/Unsent";
 import { PageIcon, pageUrl } from "@/components/wiki/PageTree";
+import { PageCrumbs } from "@/components/wiki/PageCrumbs";
 import { freshPages, nodeOf, patchTree, useCreatePage, useDeleteRule, useFavorites, useMovePage, useTitle, useUseTemplate, useWikiTree } from "@/components/wiki/hooks";
 import { useProducts } from "@/lib/products";
 import { areaHome, areaOf, pageTo, useArea } from "@/lib/wiki/area";
@@ -486,6 +487,8 @@ export function PageScreen({
   // A help center article is made from a plain page: not a template, a journal or a database.
   const canPublish = !live.template && !live.journal && !live.daily_date && !wide;
   const crumbs = tree.byId.has(page.id) ? ancestorsOf(tree, page.id) : page.breadcrumbs;
+  // The header's breadcrumbs carry the same path, each parent a link.
+  usePageTrail(peek ? null : crumbs.map((c) => ({ label: title(c.title), ...pageTo({ id: c.id, area: live.area }) })));
   const kids = tree.byId.has(page.id) ? childrenOf(tree, page.id) : page.children;
   const current = latest;
   const node = tree.byId.get(page.id) ?? nodeOf(current);
@@ -555,27 +558,7 @@ export function PageScreen({
         <header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-line px-3 sm:px-4">
           <PagesButton />
           <nav aria-label={t("page.breadcrumbs")} className="flex min-w-0 flex-1 items-center gap-1 text-[12.5px]">
-            <Link to={areaHome(areaOf(live))} className="hidden shrink-0 rounded-md px-1.5 py-0.5 text-fg-3 transition-colors hover:bg-hover hover:text-fg sm:inline">
-              {areaOf(live) === "pages" ? t("pages.title") : t("title")}
-            </Link>
-            {live.private && (
-              <span className="hidden shrink-0 items-center gap-1 sm:flex">
-                <span className="text-fg-4">/</span>
-                <span className="flex items-center gap-1 px-1.5 text-fg-3">
-                  <Lock className="size-3" />
-                  {t("sidebar.private")}
-                </span>
-              </span>
-            )}
-            {crumbs.map((c) => (
-              <span key={c.id} className="hidden min-w-0 items-center gap-1 sm:flex">
-                <span className="text-fg-4">/</span>
-                <Link {...pageTo({ id: c.id, area: live.area })} className="flex min-w-0 max-w-[180px] items-center gap-1 rounded-md px-1.5 py-0.5 text-fg-3 transition-colors hover:bg-hover hover:text-fg">
-                  {c.icon && <span aria-hidden>{c.icon}</span>}
-                  <span className="truncate">{title(c.title)}</span>
-                </Link>
-              </span>
-            ))}
+            <PageCrumbs area={areaOf(live)} isPrivate={!!live.private} parents={crumbs} />
             <span className="hidden text-fg-4 sm:inline">/</span>
             <span
               className="flex min-w-0 items-center gap-1 px-1.5 font-medium text-fg"

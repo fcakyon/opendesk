@@ -39,6 +39,9 @@
   },
   "page": {
     "breadcrumbs": "Wo diese Seite liegt",
+    "backTo": "Zurück zu {{title}}",
+    "morePath_one": "{{count}} weitere Seite im Pfad",
+    "morePath_other": "{{count}} weitere Seiten im Pfad",
     "more": "Weitere Aktionen",
     "copyLink": "Link kopieren",
     "delete": "Seite löschen",

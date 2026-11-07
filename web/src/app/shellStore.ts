@@ -48,5 +48,7 @@ export function toggleNav(next = !useNav.getState().collapsed) {
   }
 }
 
-// The last header crumb a page names itself (a ticket subject, an article title).
-export const useCrumbStore = create<{ label: string | null }>(() => ({ label: null }));
+// The last header crumb a page names itself (a ticket subject, an article title), and the
+// crumbs it adds before it (a wiki page's parents, each a link).
+export type TrailCrumb = { label: string; to: string; params?: Record<string, string | undefined> };
+export const useCrumbStore = create<{ label: string | null; trail: TrailCrumb[] }>(() => ({ label: null, trail: [] }));

@@ -67,6 +67,7 @@
     "logoutAll": "Von allen Konten abmelden"
   },
   "breadcrumb": "Brotkrumennavigation",
+  "crumbs": { "more_one": "{{count}} weitere Seite im Pfad", "more_other": "{{count}} weitere Seiten im Pfad" },
   "search": {
     "open": "Suche und Befehle",
     "label": "Suche"

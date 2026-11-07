@@ -67,6 +67,7 @@
     "logoutAll": "Log out of all accounts"
   },
   "breadcrumb": "Breadcrumb",
+  "crumbs": { "more_one": "{{count}} more page in the path", "more_other": "{{count}} more pages in the path" },
   "search": {
     "open": "Search and commands",
     "label": "Search"

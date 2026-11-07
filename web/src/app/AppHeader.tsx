@@ -5,7 +5,7 @@
 // The brand zone spans the sidebar column and narrows with the rail, so the
 // crumbs always start where the work panel does.
 
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronDown, ChevronRight, FileText, FileUp, Menu as MenuIcon, Search, SquarePen } from "lucide-react";
 import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
@@ -26,7 +26,35 @@ import { WorkspaceSwitcher } from "./Sidebar";
 import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
 import { openImport, quickAdd } from "./quickAdd";
 import { shell, useNav } from "./shellStore";
-import { useBreadcrumbs } from "./useBreadcrumbs";
+import { useBreadcrumbs, type Crumb } from "./useBreadcrumbs";
+
+/** A deep path keeps its first crumb and last two; the ones between fold into a menu. */
+function foldCrumbs(crumbs: Crumb[]): (Crumb | { fold: Crumb[] })[] {
+  if (crumbs.length <= 4) return crumbs;
+  return [crumbs[0], { fold: crumbs.slice(1, -2) }, ...crumbs.slice(-2)];
+}
+
+function FoldedCrumbs({ crumbs }: { crumbs: Crumb[] }) {
+  const { t } = useTranslation("shell");
+  const navigate = useNavigate();
+  return (
+    <Menu>
+      <MenuTrigger asChild>
+        <button type="button" aria-label={t("crumbs.more", { count: crumbs.length })} className="flex h-5 items-center rounded px-1 text-[12.5px] text-fg-3 transition-colors hover:bg-chrome-hover hover:text-fg">
+          …
+        </button>
+      </MenuTrigger>
+      <MenuContent align="start">
+        {crumbs.map((c, i) => (
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          <MenuItem key={`${c.label}-${i}`} disabled={!c.to} onSelect={() => c.to && void navigate({ to: c.to as any, params: c.params as any })}>
+            {c.label}
+          </MenuItem>
+        ))}
+      </MenuContent>
+    </Menu>
+  );
+}
 
 export function AppHeader() {
   const crumbs = useBreadcrumbs();
@@ -83,8 +111,19 @@ export function AppHeader() {
                 </li>
               </>
             )}
-            {crumbs.map((c, i) => {
-              const last = i === crumbs.length - 1;
+            {foldCrumbs(crumbs).map((c, i, all) => {
+              const last = i === all.length - 1;
+              if ("fold" in c)
+                return (
+                  <Fragment key={`fold-${i}`}>
+                    <li aria-hidden>
+                      <ChevronRight className="size-3.5 shrink-0 text-fg-4" />
+                    </li>
+                    <li className="shrink-0">
+                      <FoldedCrumbs crumbs={c.fold} />
+                    </li>
+                  </Fragment>
+                );
               return (
                 <Fragment key={`${c.label}-${i}`}>
                   <li aria-hidden>

@@ -70,6 +70,7 @@
     "logoutAll": "Se déconnecter de tous les comptes"
   },
   "breadcrumb": "Fil d’Ariane",
+  "crumbs": { "more_one": "{{count}} autre page dans le chemin", "more_many": "{{count}} autres pages dans le chemin", "more_other": "{{count}} autres pages dans le chemin" },
   "search": {
     "open": "Recherche et commandes",
     "label": "Rechercher"
