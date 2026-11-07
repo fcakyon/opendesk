@@ -419,7 +419,7 @@ func search(ctx context.Context, q db.Querier, p *auth.Principal, query string, 
 		if err != nil {
 			return res, err
 		}
-		pages, err := wiki.Search(ctx, q, v, p.WorkspaceID, query, 5)
+		pages, err := wiki.Search(ctx, q, v, p.WorkspaceID, query, "", 5)
 		if err != nil {
 			return res, err
 		}

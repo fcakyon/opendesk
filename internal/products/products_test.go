@@ -50,3 +50,24 @@ func TestEvaluate(t *testing.T) {
 		})
 	}
 }
+
+// Pages is the workspace's own flag: the instance and the plan never turn it off.
+func TestEvaluatePages(t *testing.T) {
+	t.Parallel()
+	for settings, want := range map[string]bool{`{}`: true, `{"pages_enabled":true}`: true, `{"pages_enabled":false}`: false} {
+		var s Settings
+		if err := json.Unmarshal([]byte(settings), &s); err != nil {
+			t.Fatal(err)
+		}
+		for _, instance := range []bool{true, false} {
+			state := Evaluate(s, instance, false)
+			if state.Pages != want {
+				t.Fatalf("%s instance %v: pages %v", settings, instance, state.Pages)
+			}
+			var disabled *DisabledError
+			if err := state.RequirePages(); want != (err == nil) || (!want && (!errors.As(err, &disabled) || disabled.Product != Pages)) {
+				t.Fatalf("%s: %v", settings, err)
+			}
+		}
+	}
+}

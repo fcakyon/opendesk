@@ -52,6 +52,7 @@ type importForm struct {
 	ParentID string          `form:"parent_id" required:"false" doc:"The page to import under; left out, the top level of space"`
 	Space    string          `form:"space" required:"false" doc:"workspace (default), private or team: where top-level pages go"`
 	TeamID   string          `form:"team_id" required:"false" doc:"The teamspace, with space team"`
+	Area     string          `form:"area" required:"false" enum:"wiki,pages" doc:"wiki (default) or pages (contracts/pages.md): the tree top-level pages go in; under parent_id, the parent's"`
 }
 
 // ImportResult is what an import made.
@@ -165,18 +166,24 @@ func registerPort(d *deps.Deps, api huma.API) {
 
 	huma.Register(api, huma.Operation{OperationID: "export-wiki", Method: http.MethodGet, Path: "/v1/wiki/export",
 		Summary: "Export the wiki", Tags: tags,
-		Description: "A zip of every page of the caller's tree (the workspace's pages, the teamspaces they may see and their own private pages; not the trash, not templates), " +
+		Description: "A zip of every page of the caller's tree of one area (the workspace's pages, the teamspaces they may see and their own private pages; not the trash, not templates), " +
 			"databases with their rows and the workspace's files the pages use. Any member exports what they may read."},
-		func(ctx context.Context, in *exportInput) (*huma.StreamResponse, error) {
+		func(ctx context.Context, in *struct {
+			Format string `query:"format" enum:"markdown,html" default:"markdown" doc:"markdown: an Obsidian-friendly vault; html: standalone pages"`
+			Area   string `query:"area" enum:"wiki,pages" default:"wiki" doc:"Whose pages: the wiki's or Pages' (contracts/pages.md)"`
+		}) (*huma.StreamResponse, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeWikiRead)
 			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if err := requireArea(ctx, d.DB.Pool, p.WorkspaceID, in.Area); err != nil {
 				return nil, httpx.Wrap(err)
 			}
 			v, err := viewerFor(ctx, d, p)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			pages, err := treePages(ctx, d.DB.Pool, v, p.WorkspaceID)
+			pages, err := treePages(ctx, d.DB.Pool, v, p.WorkspaceID, in.Area)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -184,7 +191,11 @@ func registerPort(d *deps.Deps, api huma.API) {
 				return nil, httpx.E(http.StatusUnprocessableEntity, "wiki_empty", "There are no pages to export yet.")
 			}
 			ex := newExport(d, p, v, wikiport.Format(in.Format))
-			return ex.zip(ctx, "Wiki "+time.Now().UTC().Format(time.DateOnly)+".zip", pages, nil)
+			name := "Wiki"
+			if in.Area == AreaPages {
+				name = "Pages"
+			}
+			return ex.zip(ctx, name+" "+time.Now().UTC().Format(time.DateOnly)+".zip", pages, nil)
 		})
 }
 
@@ -270,6 +281,7 @@ type importDest struct {
 	parent      *uuid.UUID
 	owner, team *uuid.UUID
 	template    bool
+	area        string
 	depth       int // levels above the import's top pages
 }
 
@@ -283,8 +295,15 @@ func resolveDest(ctx context.Context, q db.Querier, v Viewer, wid uuid.UUID, for
 		if par.database != nil {
 			return dest, httpx.E(http.StatusUnprocessableEntity, "import_into_database", "Pages can't be imported into a database. Pick a page, or the top level.")
 		}
-		dest = importDest{parent: &par.id, owner: par.owner, team: par.team, template: par.template, depth: len(par.up) + 1}
+		dest = importDest{parent: &par.id, owner: par.owner, team: par.team, template: par.template, area: par.area, depth: len(par.up) + 1}
 	} else {
+		dest.area = AreaWiki
+		if form.Area == AreaPages {
+			dest.area = AreaPages
+		}
+		if err := requireArea(ctx, q, wid, dest.area); err != nil {
+			return dest, err
+		}
 		var team *string
 		if form.TeamID != "" {
 			team = &form.TeamID
@@ -495,13 +514,13 @@ func (im *importer) create(pg *wikiport.Page, parent *uuid.UUID, db *Database, a
 	}
 	// Each page is created a moment after the one before: what orders by creation (rows' unique
 	// ids) follows the import's order.
-	if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, team_id, template, kind, database, props, canvas, created_at, updated_at, aliases)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, $15, clock_timestamp(), clock_timestamp(), $16)`, id, wid, parent, title, icon, body, position, im.p.ActorUserID(),
-		im.dest.owner, im.dest.team, im.dest.template, kind, dbValue, props, canvas, importAliases(pg.Aliases)); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, team_id, template, kind, database, props, canvas, created_at, updated_at, aliases, area)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, $15, clock_timestamp(), clock_timestamp(), $16, $17)`, id, wid, parent, title, icon, body, position, im.p.ActorUserID(),
+		im.dest.owner, im.dest.team, im.dest.template, kind, dbValue, props, canvas, importAliases(pg.Aliases), im.dest.area); err != nil {
 		return id, err
 	}
 	if at < 0 {
-		if err := place(ctx, tx, wid, parent, im.dest.owner, im.dest.team, im.dest.template, &id, nil); err != nil {
+		if err := place(ctx, tx, wid, im.dest.area, parent, im.dest.owner, im.dest.team, im.dest.template, &id, nil); err != nil {
 			return id, err
 		}
 	}
@@ -691,10 +710,10 @@ func subtreePages(ctx context.Context, q db.Querier, v Viewer, wid, id uuid.UUID
 
 // treePages are the pages of the viewer's tree (contracts/wiki.md "Access"): the workspace's,
 // the teamspaces they may see, their own; siblings in order.
-func treePages(ctx context.Context, q db.Querier, v Viewer, wid uuid.UUID) ([]wikiport.ExportPage, error) {
+func treePages(ctx context.Context, q db.Querier, v Viewer, wid uuid.UUID, area string) ([]wikiport.ExportPage, error) {
 	me, hidden := v.args()
-	return scanExport(q.Query(ctx, `SELECT `+exportCols+` FROM wiki_pages p WHERE p.workspace_id = $1 AND `+liveSQL("p", 2, 3)+`
-		ORDER BY p.private_to IS NOT NULL, p.team_id NULLS FIRST, p.parent_id NULLS FIRST, p.position, p.id`, wid, me, hidden))
+	return scanExport(q.Query(ctx, `SELECT `+exportCols+` FROM wiki_pages p WHERE p.workspace_id = $1 AND p.area = $4 AND `+liveSQL("p", 2, 3)+`
+		ORDER BY p.private_to IS NOT NULL, p.team_id NULLS FIRST, p.parent_id NULLS FIRST, p.position, p.id`, wid, me, hidden, area))
 }
 
 // export writes pages for a caller.

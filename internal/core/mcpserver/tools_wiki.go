@@ -18,18 +18,20 @@ import (
 
 // --- wiki ----------------------------------------------------------------------------
 
-// The team's internal pages (contracts/wiki.md): runbooks, policies, how-tos. Never
-// for customers; an AI client reads them as the member or key it acts for.
+// The team's internal pages (contracts/wiki.md): runbooks, policies, how-tos, and the
+// workspace's own pages, databases and canvases in Pages (contracts/pages.md). Never for
+// customers; an AI client reads them as the member or key it acts for.
 
 func wikiTools() []*tool {
 	return []*tool{
 		{
 			Name: "search_wiki", Title: "Search the wiki", Scopes: []string{auth.ScopeWikiRead}, ReadOnly: true, Idempotent: true,
-			Description: "Search the team's internal wiki (runbooks, policies, escalation steps, how-tos) by text. " +
-				"Returns the best matching pages with where they sit and a passage around the match; read one with get_wiki_page.",
+			Description: "Search the team's internal wiki (runbooks, policies, escalation steps, how-tos) and Pages (the workspace's own docs, notes and databases) by text. " +
+				"Returns the best matching pages with where they sit, which of the two they are in and a passage around the match; read one with get_wiki_page.",
 			Schema: obj(map[string]any{
 				"query": strN("What to search for.", 1, 200),
 				"limit": integer("How many pages to return.", 1, 20, 8),
+				"area":  enum("Only the wiki's pages or only Pages'; left out, both.", "wiki", "pages"),
 			}, "query"),
 			Run: searchWiki,
 		},
@@ -41,11 +43,12 @@ func wikiTools() []*tool {
 		},
 		{
 			Name: "create_wiki_page", Title: "Create a wiki page", Scopes: []string{auth.ScopeWikiWrite},
-			Description: "Add a page to the team's internal wiki, at the top level or under another page. Markdown body.",
+			Description: "Add a page to the team's internal wiki or to Pages, at the top level or under another page (where it goes in that page's). Markdown body.",
 			Schema: obj(map[string]any{
 				"title":  strN("The page title.", 1, 200),
 				"body":   strN("The page, in markdown.", 0, 50000),
 				"parent": str("Put it under this page (an id; optional)."),
+				"area":   enum("At the top level, the wiki (default) or Pages.", "wiki", "pages"),
 			}, "title"),
 			Run: createWikiPage,
 		},
@@ -80,6 +83,7 @@ type apiWikiRef struct {
 type apiWikiPage struct {
 	ID          string       `json:"id"`
 	Title       string       `json:"title"`
+	Area        string       `json:"area"`
 	BodyHTML    string       `json:"body_html"`
 	Version     int          `json:"version"`
 	UpdatedAt   time.Time    `json:"updated_at"`
@@ -98,6 +102,7 @@ type outWikiRef struct {
 type outWikiPage struct {
 	ID        string       `json:"id"`
 	Title     string       `json:"title"`
+	Area      string       `json:"area,omitempty"`
 	Path      string       `json:"path,omitempty"`
 	Text      string       `json:"text,omitempty"`
 	Subpages  []outWikiRef `json:"subpages,omitempty"`
@@ -122,7 +127,7 @@ func wikiPath(refs []apiWikiRef) string {
 }
 
 func compactWikiPage(p apiWikiPage, text bool) outWikiPage {
-	o := outWikiPage{ID: p.ID, Title: untitled(p.Title), Path: wikiPath(p.Breadcrumbs), Version: p.Version, UpdatedAt: p.UpdatedAt}
+	o := outWikiPage{ID: p.ID, Title: untitled(p.Title), Area: p.Area, Path: wikiPath(p.Breadcrumbs), Version: p.Version, UpdatedAt: p.UpdatedAt}
 	if text {
 		o.Text = clip(fileSignature.ReplaceAllString(wikiconv.Markdown(p.BodyHTML, wikiconv.MarkdownOptions{}), ""), pageChars)
 		for _, c := range p.Children {
@@ -139,6 +144,7 @@ func searchWiki(ctx context.Context, c *caller, raw json.RawMessage) (any, error
 	a, err := decode[struct {
 		Query string `json:"query"`
 		Limit int    `json:"limit"`
+		Area  string `json:"area"`
 	}](raw)
 	if err != nil {
 		return nil, err
@@ -157,13 +163,19 @@ func searchWiki(ctx context.Context, c *caller, raw json.RawMessage) (any, error
 		Snippet   string       `json:"snippet"`
 		Path      []apiWikiRef `json:"path"`
 		UpdatedAt time.Time    `json:"updated_at"`
+		Area      string       `json:"area"`
 	}]
-	if err := c.get(ctx, "/v1/wiki/search", url.Values{"q": {clip(query, 200)}, "limit": {strconv.Itoa(min(limit, 20))}}, &pg); err != nil {
+	params := url.Values{"q": {clip(query, 200)}, "limit": {strconv.Itoa(min(limit, 20))}}
+	if a.Area == "wiki" || a.Area == "pages" {
+		params.Set("area", a.Area)
+	}
+	if err := c.get(ctx, "/v1/wiki/search", params, &pg); err != nil {
 		return nil, err
 	}
 	type hit struct {
 		ID        string    `json:"id"`
 		Title     string    `json:"title"`
+		Area      string    `json:"area"`
 		Path      string    `json:"path,omitempty"`
 		Snippet   string    `json:"snippet,omitempty"`
 		UpdatedAt time.Time `json:"updated_at"`
@@ -172,7 +184,7 @@ func searchWiki(ctx context.Context, c *caller, raw json.RawMessage) (any, error
 		Pages []hit `json:"pages"`
 	}{Pages: []hit{}}
 	for _, h := range pg.Data {
-		out.Pages = append(out.Pages, hit{ID: h.ID, Title: untitled(h.Title), Path: wikiPath(h.Path), Snippet: clip(h.Snippet, 400), UpdatedAt: h.UpdatedAt})
+		out.Pages = append(out.Pages, hit{ID: h.ID, Title: untitled(h.Title), Area: h.Area, Path: wikiPath(h.Path), Snippet: clip(h.Snippet, 400), UpdatedAt: h.UpdatedAt})
 	}
 	return out, nil
 }
@@ -219,6 +231,7 @@ func createWikiPage(ctx context.Context, c *caller, raw json.RawMessage) (any, e
 		Title  string `json:"title"`
 		Body   string `json:"body"`
 		Parent string `json:"parent"`
+		Area   string `json:"area"`
 	}](raw)
 	if err != nil {
 		return nil, err
@@ -232,6 +245,9 @@ func createWikiPage(ctx context.Context, c *caller, raw json.RawMessage) (any, e
 		return nil, err
 	}
 	req := map[string]any{"title": title, "body_html": html}
+	if a.Area == "pages" {
+		req["area"] = "pages"
+	}
 	if strings.TrimSpace(a.Parent) != "" {
 		if req["parent_id"], err = idRef(a.Parent, "parent"); err != nil {
 			return nil, err

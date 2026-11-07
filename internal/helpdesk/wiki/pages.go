@@ -30,6 +30,7 @@ type pageCreate struct {
 	BodyHTML string   `json:"body_html,omitempty" doc:"Rich text, sanitized like an article's; up to 512 KB"`
 	Position *int     `json:"position,omitempty" minimum:"0" doc:"Where among its siblings, from 0; the end when left out"`
 	Aliases  []string `json:"aliases,omitempty" maxItems:"10" doc:"Other names the page goes by: up to 10 of 100 characters"`
+	Area     string   `json:"area,omitempty" enum:"wiki,pages" doc:"Whose tree a top-level page goes in: the wiki's (default) or Pages' (contracts/pages.md); a subpage goes in its parent's"`
 	Template bool     `json:"template,omitempty" doc:"A new template at the top level of space, or a database's own template under it (contracts/wiki.md \"Templates\"); a subpage is a template when its parent is"`
 	Kind     string   `json:"kind,omitempty" enum:"page,database,canvas" doc:"database makes a database (contracts/wiki.md \"Databases\"), canvas a canvas (\"Canvas\"); default page"`
 	// A database's properties and views; left out, a title and tags in a table.
@@ -98,6 +99,7 @@ type pageMove struct {
 	Position int     `json:"position" minimum:"0" doc:"Where among the new siblings, from 0; past the end puts it last"`
 	Space    string  `json:"space,omitempty" enum:"workspace,private,team" doc:"At the top level, the space to move it to; left out, it stays in its own"`
 	TeamID   *string `json:"team_id,omitempty" doc:"The teamspace, with space team"`
+	Area     string  `json:"area,omitempty" enum:"wiki,pages" doc:"At the top level, the tree to move it to with its subpages (contracts/pages.md); left out, it stays in its own. Under a parent it goes in the parent's"`
 }
 
 type pageOut struct{ Body WikiPage }
@@ -115,10 +117,13 @@ func viewerFor(ctx context.Context, d *deps.Deps, p *auth.Principal) (Viewer, er
 
 func registerPages(d *deps.Deps, api huma.API) {
 	huma.Register(api, huma.Operation{OperationID: "list-wiki-pages", Method: http.MethodGet, Path: "/v1/wiki/pages",
-		Summary: "List the wiki's pages", Description: "Every page of the tree the caller may see, without bodies, ordered by parent and position: the workspace's, the caller's own private pages and the teamspaces they may see. Not the trash, not templates.", Tags: tags},
-		func(ctx context.Context, _ *struct{}) (*struct{ Body httpx.Page[WikiNode] }, error) {
+		Summary: "List the wiki's pages", Description: "Every page of the tree the caller may see, without bodies, ordered by parent and position: the workspace's, the caller's own private pages and the teamspaces they may see. Not the trash, not templates. One area at a time: the wiki's, or Pages' with area=pages.", Tags: tags},
+		func(ctx context.Context, in *areaIn) (*struct{ Body httpx.Page[WikiNode] }, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeWikiRead)
 			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if err := requireArea(ctx, d.DB.Pool, p.WorkspaceID, in.Area); err != nil {
 				return nil, httpx.Wrap(err)
 			}
 			v, err := viewerFor(ctx, d, p)
@@ -126,8 +131,8 @@ func registerPages(d *deps.Deps, api huma.API) {
 				return nil, httpx.Wrap(err)
 			}
 			me, hidden := v.args()
-			out, err := collectNodes(d.DB.Pool.Query(ctx, nodeSelect+` WHERE p.workspace_id = $1 AND `+liveSQL("p", 2, 3)+`
-				ORDER BY p.parent_id NULLS FIRST, p.position, p.id`, p.WorkspaceID, me, hidden))
+			out, err := collectNodes(d.DB.Pool.Query(ctx, nodeSelect+` WHERE p.workspace_id = $1 AND p.area = $4 AND `+liveSQL("p", 2, 3)+`
+				ORDER BY p.parent_id NULLS FIRST, p.position, p.id`, p.WorkspaceID, me, hidden, in.Area))
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -200,17 +205,25 @@ func registerPages(d *deps.Deps, api huma.API) {
 				}
 				var owner, team *uuid.UUID
 				template := false
+				area := AreaWiki
 				if par != nil {
 					if len(par.up)+2 > maxDepth {
 						return tooDeep()
 					}
 					// A template under a database is that database's own (a new row starts as a copy).
 					owner, team, template = par.owner, par.team, par.template || (b.Template && par.database != nil)
+					area = par.area
 				} else {
 					if owner, team, err = spaceRef(ctx, tx, v, p.WorkspaceID, b.Space, b.TeamID); err != nil {
 						return err
 					}
 					template = b.Template
+					if b.Area == AreaPages {
+						area = AreaPages
+					}
+					if err := requireArea(ctx, tx, p.WorkspaceID, area); err != nil {
+						return err
+					}
 				}
 				id := ids.New()
 				kind := "page"
@@ -262,12 +275,12 @@ func registerPages(d *deps.Deps, api huma.API) {
 				} else if len(b.Props) > 0 {
 					return dbInvalid("props go with a page in a database.")
 				}
-				if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, team_id, template, kind, database, props, canvas, aliases)
-					VALUES ($1, $2, $3, $4, $5, $6, 2147483647, $7, $7, $8, $9, $10, $11, $12, $13, $14, $15)`, id, p.WorkspaceID, parentID(par), title, icon, body, p.ActorUserID(), owner, team, template,
-					kind, database, props, canvas, aliases); err != nil {
+				if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, team_id, template, kind, database, props, canvas, aliases, area)
+					VALUES ($1, $2, $3, $4, $5, $6, 2147483647, $7, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`, id, p.WorkspaceID, parentID(par), title, icon, body, p.ActorUserID(), owner, team, template,
+					kind, database, props, canvas, aliases, area); err != nil {
 					return err
 				}
-				if err := place(ctx, tx, p.WorkspaceID, parentID(par), owner, team, template, &id, b.Position); err != nil {
+				if err := place(ctx, tx, p.WorkspaceID, area, parentID(par), owner, team, template, &id, b.Position); err != nil {
 					return err
 				}
 				if err := recordRevision(ctx, tx, p, id, title, icon, body, false); err != nil {
@@ -463,8 +476,9 @@ func registerPages(d *deps.Deps, api huma.API) {
 				var old, oldOwner, oldTeam *uuid.UUID
 				var deleted *time.Time
 				var template, journal bool
-				err := tx.QueryRow(ctx, `SELECT parent_id, private_to, team_id, deleted_at, template, journal FROM wiki_pages WHERE workspace_id = $1 AND id = $2 FOR UPDATE`,
-					p.WorkspaceID, id).Scan(&old, &oldOwner, &oldTeam, &deleted, &template, &journal)
+				var oldArea string
+				err := tx.QueryRow(ctx, `SELECT parent_id, private_to, team_id, deleted_at, template, journal, area FROM wiki_pages WHERE workspace_id = $1 AND id = $2 FOR UPDATE`,
+					p.WorkspaceID, id).Scan(&old, &oldOwner, &oldTeam, &deleted, &template, &journal, &oldArea)
 				if err != nil {
 					return err
 				}
@@ -478,7 +492,7 @@ func registerPages(d *deps.Deps, api huma.API) {
 				if err != nil {
 					return err
 				}
-				owner, team, nextTemplate := oldOwner, oldTeam, template
+				owner, team, nextTemplate, area := oldOwner, oldTeam, template, oldArea
 				if par != nil {
 					if par.id == id {
 						return cycle()
@@ -488,9 +502,17 @@ func registerPages(d *deps.Deps, api huma.API) {
 							return cycle()
 						}
 					}
-					owner, team, nextTemplate = par.owner, par.team, par.template
-				} else if in.Body.Space != "" {
-					if owner, team, err = spaceRef(ctx, tx, v, p.WorkspaceID, in.Body.Space, in.Body.TeamID); err != nil {
+					owner, team, nextTemplate, area = par.owner, par.team, par.template, par.area
+				} else {
+					if in.Body.Space != "" {
+						if owner, team, err = spaceRef(ctx, tx, v, p.WorkspaceID, in.Body.Space, in.Body.TeamID); err != nil {
+							return err
+						}
+					}
+					if in.Body.Area != "" {
+						area = in.Body.Area
+					}
+					if err := requireArea(ctx, tx, p.WorkspaceID, area); err != nil {
 						return err
 					}
 				}
@@ -512,25 +534,31 @@ func registerPages(d *deps.Deps, api huma.API) {
 				if _, err := tx.Exec(ctx, `UPDATE wiki_pages SET parent_id = $3 WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, id, parentID(par)); err != nil {
 					return err
 				}
-				// The pages under it live where it does now; a daily note out of its journal is a page.
-				if _, err := tx.Exec(ctx, `UPDATE wiki_pages SET private_to = $3, team_id = $4, template = $5,
-					daily_date = CASE WHEN $6::boolean THEN daily_date END
-					WHERE workspace_id = $1 AND id = ANY($2)`, p.WorkspaceID, gone, owner, team, nextTemplate, par != nil && par.journal); err != nil {
+				// The pages under it live where it does now; a daily note out of its journal (or its
+				// area) is a page.
+				if _, err := tx.Exec(ctx, `UPDATE wiki_pages SET private_to = $3, team_id = $4, template = $5, area = $7,
+					daily_date = CASE WHEN $6::boolean AND area = $7 THEN daily_date END
+					WHERE workspace_id = $1 AND id = ANY($2)`, p.WorkspaceID, gone, owner, team, nextTemplate, par != nil && par.journal, area); err != nil {
 					return err
 				}
 				pos := in.Body.Position
-				if err := place(ctx, tx, p.WorkspaceID, parentID(par), owner, team, nextTemplate, &id, &pos); err != nil {
+				if err := place(ctx, tx, p.WorkspaceID, area, parentID(par), owner, team, nextTemplate, &id, &pos); err != nil {
 					return err
 				}
-				if !samePtr(old, parentID(par)) || !samePtr(oldOwner, owner) || !samePtr(oldTeam, team) {
-					if err := place(ctx, tx, p.WorkspaceID, old, oldOwner, oldTeam, template, nil, nil); err != nil {
+				if !samePtr(old, parentID(par)) || !samePtr(oldOwner, owner) || !samePtr(oldTeam, team) || oldArea != area {
+					if err := place(ctx, tx, p.WorkspaceID, oldArea, old, oldOwner, oldTeam, template, nil, nil); err != nil {
 						return err
 					}
 				}
 				if pg, err = loadPage(ctx, tx, p.WorkspaceID, id); err != nil {
 					return err
 				}
-				if !samePtr(oldOwner, owner) || !samePtr(oldTeam, team) {
+				if oldArea != area {
+					if err := audit.Log(ctx, tx, p, p.WorkspaceID, "wiki_page.moved_area", "wiki_page", &id, map[string]any{"from": oldArea, "to": area}); err != nil {
+						return err
+					}
+				}
+				if !samePtr(oldOwner, owner) || !samePtr(oldTeam, team) || oldArea != area {
 					// Readers of the old space drop it; readers of the new one fetch the tree again.
 					before := pg
 					before.owner, before.TeamID = oldOwner, oldTeam
@@ -594,7 +622,7 @@ func registerPages(d *deps.Deps, api huma.API) {
 					return err
 				}
 				if pg.DeletedAt == nil {
-					if err := place(ctx, tx, p.WorkspaceID, pg.ParentID, pg.owner, pg.TeamID, pg.Template, nil, nil); err != nil {
+					if err := place(ctx, tx, p.WorkspaceID, pg.Area, pg.ParentID, pg.owner, pg.TeamID, pg.Template, nil, nil); err != nil {
 						return err
 					}
 				}

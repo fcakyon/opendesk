@@ -25,12 +25,13 @@ type pageCopy struct {
 	Template *bool   `json:"template,omitempty" doc:"true makes the copy a template, false a page of the tree; left out, as the page is (a copy of a template under a page is a page)"`
 	Title    *string `json:"title,omitempty" maxLength:"200" doc:"The copy's title; left out, the page's"`
 	Position *int    `json:"position,omitempty" minimum:"0"`
+	Area     string  `json:"area,omitempty" enum:"wiki,pages" doc:"At the top level, the copy's area (contracts/pages.md); left out, the page's own. Under a parent, the parent's"`
 }
 
 func registerTemplates(d *deps.Deps, api huma.API) {
 	huma.Register(api, huma.Operation{OperationID: "list-wiki-templates", Method: http.MethodGet, Path: "/v1/wiki/templates",
 		Summary: "List the wiki's templates", Tags: tags,
-		Description: "The templates the caller may see (contracts/wiki.md \"Templates\"): pages copied into new pages, kept out of the tree. Their own subpages are copied with them and are not listed."},
+		Description: "The templates the caller may see (contracts/wiki.md \"Templates\"): pages copied into new pages, kept out of the tree. Their own subpages are copied with them and are not listed. The wiki and Pages share them."},
 		func(ctx context.Context, _ *struct{}) (*struct{ Body httpx.Page[WikiNode] }, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeWikiRead)
 			if err != nil {
@@ -96,9 +97,9 @@ func registerTemplates(d *deps.Deps, api huma.API) {
 				if err != nil {
 					return err
 				}
-				owner, team, template := src.owner, src.TeamID, src.Template
+				owner, team, template, area := src.owner, src.TeamID, src.Template, src.Area
 				if par != nil {
-					owner, team, template = par.owner, par.team, par.template
+					owner, team, template, area = par.owner, par.team, par.template, par.area
 					if par.template && b.Template != nil && !*b.Template {
 						return httpx.Validation("a page under a template is part of the template")
 					}
@@ -120,6 +121,12 @@ func registerTemplates(d *deps.Deps, api huma.API) {
 					}
 					if b.Template != nil {
 						template = *b.Template
+					}
+					if b.Area != "" {
+						area = b.Area
+					}
+					if err := requireArea(ctx, tx, p.WorkspaceID, area); err != nil {
+						return err
 					}
 				}
 				if height > maxDepth {
@@ -188,10 +195,10 @@ func registerTemplates(d *deps.Deps, api huma.API) {
 						canvas = json.RawMessage(remap(string(row.canvas)))
 					}
 					if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by,
-							private_to, team_id, template, cover, cover_y, full_width, small_text, font, locked, kind, database, props, canvas)
-						VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
+							private_to, team_id, template, cover, cover_y, full_width, small_text, font, locked, kind, database, props, canvas, area)
+						VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
 						nid, p.WorkspaceID, newParent, title, row.icon, body, row.position, p.ActorUserID(), owner, team, template,
-						row.cover, row.coverY, row.fullWidth, row.small, row.font, row.locked, row.kind, database, json.RawMessage(remap(string(row.props))), canvas); err != nil {
+						row.cover, row.coverY, row.fullWidth, row.small, row.font, row.locked, row.kind, database, json.RawMessage(remap(string(row.props))), canvas, area); err != nil {
 						return err
 					}
 					// A row copied into a database is a new row: it gets its own unique id.
@@ -221,7 +228,7 @@ func registerTemplates(d *deps.Deps, api huma.API) {
 					}
 				}
 				root := fresh[id]
-				if err := place(ctx, tx, p.WorkspaceID, parentID(par), owner, team, template, &root, b.Position); err != nil {
+				if err := place(ctx, tx, p.WorkspaceID, area, parentID(par), owner, team, template, &root, b.Position); err != nil {
 					return err
 				}
 				if pg, err = loadPage(ctx, tx, p.WorkspaceID, root); err != nil {

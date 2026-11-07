@@ -3,6 +3,7 @@ package wiki
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/events"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 	"github.com/useopendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/products"
 )
 
 // Limits (contracts/wiki.md "Limits").
@@ -29,6 +31,13 @@ const (
 	coalesceSpan = time.Hour
 	// Pages stay in the trash this long, then go for good.
 	trashKeep = 30 * 24 * time.Hour
+)
+
+// Areas are whose tree a page is in (contracts/pages.md): the wiki's, or Pages', the
+// product of the workspace's own pages beside it. A subpage is in its parent's area.
+const (
+	AreaWiki  = "wiki"
+	AreaPages = "pages"
 )
 
 // Space is where a page lives (contracts/wiki.md "Private pages and teamspaces"): shared
@@ -55,6 +64,7 @@ type WikiNode struct {
 	Template  bool    `json:"template,omitempty" doc:"A template (or a page of one): copied into new pages, never in the tree"`
 	Verified  bool    `json:"verified,omitempty" doc:"Verified, and not past the day it was verified until"`
 	Kind      string  `json:"kind" enum:"page,database,canvas" doc:"A database's subpages are its rows; a canvas holds cards"`
+	Area      string  `json:"area" enum:"wiki,pages" doc:"Whose tree it is in: the wiki's or Pages' (contracts/pages.md)"`
 	// Aliases are left out where a list reads only nodeCols (a database's rows, the trash).
 	Aliases []string `json:"aliases,omitempty" doc:"Other names the page goes by (contracts/wiki.md \"Aliases\")"`
 }
@@ -100,6 +110,7 @@ type WikiPage struct {
 	Aliases      []string        `json:"aliases" doc:"Other names the page goes by: links, page search and unlinked mentions find it by them"`
 	Template     bool            `json:"template"`
 	Kind         string          `json:"kind" enum:"page,database,canvas"`
+	Area         string          `json:"area" enum:"wiki,pages" doc:"Whose tree it is in: the wiki's or Pages' (contracts/pages.md)"`
 	Database     *Database       `json:"database" doc:"A database's properties and views; null for a page"`
 	Props        map[string]any  `json:"props" doc:"A database row's values, by property id"`
 	Canvas       *Canvas         `json:"canvas" doc:"A canvas's cards and connections; null for a page"`
@@ -121,7 +132,7 @@ type WikiPage struct {
 
 func (p WikiPage) node() WikiNode {
 	n := WikiNode{ID: p.ID, ParentID: p.ParentID, Title: p.Title, Icon: p.Icon, Position: p.Position, Version: p.Version, UpdatedAt: p.UpdatedAt,
-		Tags: p.Tags, Space: p.Space, Journal: p.Journal, DailyDate: p.DailyDate, Template: p.Template, Verified: p.Verification != nil && !p.Verification.Expired, Kind: p.Kind, Aliases: p.Aliases}
+		Tags: p.Tags, Space: p.Space, Journal: p.Journal, DailyDate: p.DailyDate, Template: p.Template, Verified: p.Verification != nil && !p.Verification.Expired, Kind: p.Kind, Area: p.Area, Aliases: p.Aliases}
 	if p.CreatedBy != nil {
 		n.CreatedBy = &p.CreatedBy.ID
 	}
@@ -132,14 +143,14 @@ func (p WikiPage) node() WikiNode {
 // and scanNode reads both.
 const nodeCols = `p.id, p.parent_id, p.title, p.icon, p.position, p.version, p.updated_at, p.created_by, p.tags,
 	p.private_to IS NOT NULL, p.team_id, p.journal, to_char(p.daily_date, 'YYYY-MM-DD'), p.template,
-	p.verified_at IS NOT NULL AND (p.verified_until IS NULL OR p.verified_until > now()), p.kind`
+	p.verified_at IS NOT NULL AND (p.verified_until IS NULL OR p.verified_until > now()), p.kind, p.area`
 
 const nodeSelect = `SELECT ` + nodeCols + `, p.aliases FROM wiki_pages p`
 
 func scanNode(row pgx.Row) (WikiNode, error) {
 	var n WikiNode
 	err := row.Scan(&n.ID, &n.ParentID, &n.Title, &n.Icon, &n.Position, &n.Version, &n.UpdatedAt, &n.CreatedBy, &n.Tags,
-		&n.Private, &n.TeamID, &n.Journal, &n.DailyDate, &n.Template, &n.Verified, &n.Kind, &n.Aliases)
+		&n.Private, &n.TeamID, &n.Journal, &n.DailyDate, &n.Template, &n.Verified, &n.Kind, &n.Area, &n.Aliases)
 	return n, err
 }
 
@@ -157,7 +168,7 @@ func collectNodes(rows pgx.Rows, err error) ([]WikiNode, error) {
 const pageSelect = `SELECT p.id, p.parent_id, p.title, p.icon, p.body_html, p.position, p.version, p.created_at, p.updated_at,
 	p.cover, p.cover_y, p.full_width, p.small_text, p.font, p.locked, p.tags,
 	p.private_to, p.team_id, p.template, p.journal, to_char(p.daily_date, 'YYYY-MM-DD'), p.deleted_at, p.trashed_with,
-	p.verified_at, p.verified_until, p.kind, p.database, p.props, p.canvas, p.aliases,
+	p.verified_at, p.verified_until, p.kind, p.database, p.props, p.canvas, p.aliases, p.area,
 	c.id, c.name, c.email, c.avatar_url, u.id, u.name, u.email, u.avatar_url,
 	v.id, v.name, v.email, v.avatar_url, x.id, x.name, x.email, x.avatar_url
 FROM wiki_pages p LEFT JOIN users c ON c.id = p.created_by LEFT JOIN users u ON u.id = p.updated_by
@@ -195,7 +206,7 @@ func loadPage(ctx context.Context, q db.Querier, wid, id uuid.UUID) (WikiPage, e
 		&p.ID, &p.ParentID, &p.Title, &p.Icon, &p.BodyHTML, &p.Position, &p.Version, &p.CreatedAt, &p.UpdatedAt,
 		&p.Cover, &p.CoverY, &p.FullWidth, &p.SmallText, &p.Font, &p.Locked, &p.Tags,
 		&p.owner, &p.TeamID, &p.Template, &p.Journal, &p.DailyDate, &p.DeletedAt, &trashedWith,
-		&verifiedAt, &verifiedUntil, &p.Kind, &database, &p.Props, &canvas, &p.Aliases,
+		&verifiedAt, &verifiedUntil, &p.Kind, &database, &p.Props, &canvas, &p.Aliases, &p.Area,
 		&c.id, &c.name, &c.email, &c.avatar, &u.id, &u.name, &u.email, &u.avatar,
 		&v.id, &v.name, &v.email, &v.avatar, &x.id, &x.name, &x.email, &x.avatar)
 	if err != nil {
@@ -248,16 +259,45 @@ func loadVisible(ctx context.Context, q db.Querier, v Viewer, wid, id uuid.UUID)
 // mustSee answers not found for a page the viewer may not see, as if it didn't exist.
 func mustSee(ctx context.Context, q db.Querier, v Viewer, wid, id uuid.UUID) error {
 	me, hidden := v.args()
-	var ok bool
-	err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM wiki_pages p WHERE p.workspace_id = $1 AND p.id = $2 AND `+seesSQL("p", 3, 4)+`)`,
-		wid, id, me, hidden).Scan(&ok)
+	var area string
+	err := q.QueryRow(ctx, `SELECT p.area FROM wiki_pages p WHERE p.workspace_id = $1 AND p.id = $2 AND `+seesSQL("p", 3, 4),
+		wid, id, me, hidden).Scan(&area)
+	if db.IsNotFound(err) {
+		return httpx.NotFound("Page")
+	}
 	if err != nil {
 		return err
 	}
-	if !ok {
-		return httpx.NotFound("Page")
+	return requireArea(ctx, q, wid, area)
+}
+
+// requireArea refuses Pages' pages while the workspace has Pages off (contracts/pages.md):
+// they stay stored, out of reach until it is on again.
+func requireArea(ctx context.Context, q db.Querier, wid uuid.UUID, area string) error {
+	if area != AreaPages {
+		return nil
 	}
-	return nil
+	return products.RequirePages(ctx, q, wid)
+}
+
+// areasOn are the areas the workspace has on, for lists across both (favorites, search):
+// the wiki's always, Pages' unless the workspace has Pages off.
+func areasOn(ctx context.Context, q db.Querier, wid uuid.UUID) ([]string, error) {
+	err := products.RequirePages(ctx, q, wid)
+	var disabled *products.DisabledError
+	switch {
+	case err == nil:
+		return []string{AreaWiki, AreaPages}, nil
+	case errors.As(err, &disabled):
+		return []string{AreaWiki}, nil
+	default:
+		return nil, err
+	}
+}
+
+// areaIn names the tree a list reads; the wiki's when left out.
+type areaIn struct {
+	Area string `query:"area" enum:"wiki,pages" default:"wiki" doc:"Whose pages: the wiki's or Pages' (contracts/pages.md)"`
 }
 
 // LoadPage reads a page the viewer may see in the tree, for workspace-side reads such as
@@ -273,7 +313,11 @@ func LoadPage(ctx context.Context, q db.Querier, v Viewer, wid, id uuid.UUID) (W
 	if !ok {
 		return WikiPage{}, pgx.ErrNoRows
 	}
-	return loadPage(ctx, q, wid, id)
+	pg, err := loadPage(ctx, q, wid, id)
+	if err != nil {
+		return pg, err
+	}
+	return pg, requireArea(ctx, q, wid, pg.Area)
 }
 
 // pageEvent publishes an event about a page to the people who may see it: a private page's
@@ -366,6 +410,7 @@ type parent struct {
 	team     *uuid.UUID
 	template bool
 	journal  bool
+	area     string
 	// database: the parent is a database, and a page under it is one of its rows.
 	database *Database
 }
@@ -383,8 +428,8 @@ func parentRef(ctx context.Context, q db.Querier, v Viewer, wid uuid.UUID, raw *
 	me, hidden := v.args()
 	par := parent{id: id}
 	var database []byte
-	err = q.QueryRow(ctx, `SELECT p.private_to, p.team_id, p.template, p.journal, p.database FROM wiki_pages p
-		WHERE p.workspace_id = $1 AND p.id = $2 AND p.deleted_at IS NULL AND `+seesSQL("p", 3, 4), wid, id, me, hidden).Scan(&par.owner, &par.team, &par.template, &par.journal, &database)
+	err = q.QueryRow(ctx, `SELECT p.private_to, p.team_id, p.template, p.journal, p.database, p.area FROM wiki_pages p
+		WHERE p.workspace_id = $1 AND p.id = $2 AND p.deleted_at IS NULL AND `+seesSQL("p", 3, 4), wid, id, me, hidden).Scan(&par.owner, &par.team, &par.template, &par.journal, &database, &par.area)
 	if db.IsNotFound(err) {
 		return nil, httpx.Validation("parent page not found in this workspace")
 	}
@@ -396,6 +441,9 @@ func parentRef(ctx context.Context, q db.Querier, v Viewer, wid uuid.UUID, raw *
 		if err := json.Unmarshal(database, par.database); err != nil {
 			return nil, err
 		}
+	}
+	if err := requireArea(ctx, q, wid, par.area); err != nil {
+		return nil, err
 	}
 	if par.up, err = ancestors(ctx, q, wid, id); err != nil {
 		return nil, err
@@ -436,12 +484,13 @@ func spaceRef(ctx context.Context, q db.Querier, v Viewer, wid uuid.UUID, space 
 
 // place puts id at index among the children of parent in the tree (the end when index is
 // past it, or nil) and numbers them from 0. With id nil it only renumbers them. Top-level
-// pages are numbered within their space; trashed pages and templates keep their numbers.
-func place(ctx context.Context, tx pgx.Tx, wid uuid.UUID, par *uuid.UUID, owner, team *uuid.UUID, template bool, id *uuid.UUID, index *int) error {
+// pages are numbered within their area and space (templates, shared by both areas, within
+// their space); trashed pages and templates keep their numbers.
+func place(ctx context.Context, tx pgx.Tx, wid uuid.UUID, area string, par *uuid.UUID, owner, team *uuid.UUID, template bool, id *uuid.UUID, index *int) error {
 	rows, err := tx.Query(ctx, `SELECT id FROM wiki_pages WHERE workspace_id = $1 AND parent_id IS NOT DISTINCT FROM $2
 		AND deleted_at IS NULL AND template = $5
-		AND ($2::uuid IS NOT NULL OR (private_to IS NOT DISTINCT FROM $3 AND team_id IS NOT DISTINCT FROM $4))
-		AND ($6::uuid IS NULL OR id <> $6) ORDER BY position, created_at, id FOR UPDATE`, wid, par, owner, team, template, id)
+		AND ($2::uuid IS NOT NULL OR (private_to IS NOT DISTINCT FROM $3 AND team_id IS NOT DISTINCT FROM $4 AND ($5 OR area = $7)))
+		AND ($6::uuid IS NULL OR id <> $6) ORDER BY position, created_at, id FOR UPDATE`, wid, par, owner, team, template, id, area)
 	if err != nil {
 		return err
 	}

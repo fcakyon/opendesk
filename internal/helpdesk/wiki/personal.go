@@ -61,7 +61,8 @@ func registerPersonal(d *deps.Deps, api huma.API) {
 	}
 
 	huma.Register(api, huma.Operation{OperationID: "list-wiki-favorites", Method: http.MethodGet, Path: "/v1/wiki/favorites",
-		Summary: "List your favorite wiki pages", Tags: tags},
+		Summary: "List your favorite wiki pages", Tags: tags,
+		Description: "Favorites of both areas, the wiki's and Pages' (contracts/pages.md), in your order; Pages' only while the workspace has Pages on."},
 		func(ctx context.Context, _ *struct{}) (*nodesOut, error) {
 			p, err := person(ctx)
 			if err != nil {
@@ -71,9 +72,13 @@ func registerPersonal(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
+			areas, err := areasOn(ctx, d.DB.Pool, p.WorkspaceID)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
 			me, hidden := v.args()
 			out, err := collectNodes(d.DB.Pool.Query(ctx, nodeSelect+` JOIN wiki_favorites f ON f.workspace_id = p.workspace_id AND f.page_id = p.id
-				WHERE p.workspace_id = $1 AND f.user_id = $4 AND `+liveSQL("p", 2, 3)+` ORDER BY f.position, p.title`, p.WorkspaceID, me, hidden, p.UserID))
+				WHERE p.workspace_id = $1 AND f.user_id = $4 AND p.area = ANY($5) AND `+liveSQL("p", 2, 3)+` ORDER BY f.position, p.title`, p.WorkspaceID, me, hidden, p.UserID, areas))
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -132,11 +137,15 @@ func registerPersonal(d *deps.Deps, api huma.API) {
 	huma.Register(api, huma.Operation{OperationID: "list-wiki-recent", Method: http.MethodGet, Path: "/v1/wiki/recent",
 		Summary: "List the wiki pages you opened lately", Tags: tags},
 		func(ctx context.Context, in *struct {
-			Limit int `query:"limit" minimum:"0" maximum:"50" doc:"Default 15"`
+			Limit int    `query:"limit" minimum:"0" maximum:"50" doc:"Default 15"`
+			Area  string `query:"area" enum:"wiki,pages" default:"wiki" doc:"Whose pages: the wiki's or Pages' (contracts/pages.md)"`
 		}) (*nodesOut, error) {
 			p, err := person(ctx)
 			if err != nil {
 				return nil, err
+			}
+			if err := requireArea(ctx, d.DB.Pool, p.WorkspaceID, in.Area); err != nil {
+				return nil, httpx.Wrap(err)
 			}
 			v, err := viewerFor(ctx, d, p)
 			if err != nil {
@@ -148,7 +157,7 @@ func registerPersonal(d *deps.Deps, api huma.API) {
 			}
 			me, hidden := v.args()
 			out, err := collectNodes(d.DB.Pool.Query(ctx, nodeSelect+` JOIN wiki_visits w ON w.workspace_id = p.workspace_id AND w.page_id = p.id
-				WHERE p.workspace_id = $1 AND w.user_id = $4 AND `+liveSQL("p", 2, 3)+` ORDER BY w.last_at DESC LIMIT $5`, p.WorkspaceID, me, hidden, p.UserID, limit))
+				WHERE p.workspace_id = $1 AND w.user_id = $4 AND p.area = $6 AND `+liveSQL("p", 2, 3)+` ORDER BY w.last_at DESC LIMIT $5`, p.WorkspaceID, me, hidden, p.UserID, limit, in.Area))
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -207,10 +216,14 @@ func registerPersonal(d *deps.Deps, api huma.API) {
 		func(ctx context.Context, in *struct {
 			From string `query:"from" pattern:"^\\d{4}-\\d{2}-\\d{2}$" doc:"YYYY-MM-DD, default 60 days ago"`
 			To   string `query:"to" pattern:"^\\d{4}-\\d{2}-\\d{2}$" doc:"YYYY-MM-DD, default 60 days ahead"`
+			Area string `query:"area" enum:"wiki,pages" default:"wiki" doc:"Whose pages: the wiki's or Pages' (contracts/pages.md)"`
 		}) (*struct{ Body httpx.Page[DailyNote] }, error) {
 			p, err := person(ctx)
 			if err != nil {
 				return nil, err
+			}
+			if err := requireArea(ctx, d.DB.Pool, p.WorkspaceID, in.Area); err != nil {
+				return nil, httpx.Wrap(err)
 			}
 			from, to := in.From, in.To
 			if from == "" {
@@ -220,8 +233,8 @@ func registerPersonal(d *deps.Deps, api huma.API) {
 				to = time.Now().AddDate(0, 0, 60).Format(time.DateOnly)
 			}
 			rows, err := d.DB.Pool.Query(ctx, `SELECT to_char(daily_date, 'YYYY-MM-DD'), id FROM wiki_pages
-				WHERE workspace_id = $1 AND private_to = $2 AND daily_date BETWEEN $3::date AND $4::date AND deleted_at IS NULL ORDER BY daily_date`,
-				p.WorkspaceID, p.UserID, from, to)
+				WHERE workspace_id = $1 AND private_to = $2 AND area = $5 AND daily_date BETWEEN $3::date AND $4::date AND deleted_at IS NULL ORDER BY daily_date`,
+				p.WorkspaceID, p.UserID, from, to, in.Area)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -248,6 +261,7 @@ func registerPersonal(d *deps.Deps, api huma.API) {
 				Title        string `json:"title" maxLength:"200" doc:"The day as you read it, e.g. Friday, 6 November 2026"`
 				JournalTitle string `json:"journal_title,omitempty" maxLength:"200" doc:"The journal's title when it is made; default Journal"`
 				BodyHTML     string `json:"body_html,omitempty" doc:"The new note's text"`
+				Area         string `json:"area,omitempty" enum:"wiki,pages" doc:"Whose journal: the wiki's (default) or Pages' (contracts/pages.md)"`
 			}
 		}) (*pageOut, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleAgent, auth.ScopeWikiWrite)
@@ -265,14 +279,21 @@ func registerPersonal(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, err
 			}
+			area := AreaWiki
+			if in.Body.Area == AreaPages {
+				area = AreaPages
+			}
 			var pg WikiPage
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
 				if err := lockTree(ctx, tx, p.WorkspaceID); err != nil {
 					return err
 				}
+				if err := requireArea(ctx, tx, p.WorkspaceID, area); err != nil {
+					return err
+				}
 				var existing uuid.UUID
-				err := tx.QueryRow(ctx, `SELECT id FROM wiki_pages WHERE workspace_id = $1 AND private_to = $2 AND daily_date = $3 AND deleted_at IS NULL`,
-					p.WorkspaceID, p.UserID, day).Scan(&existing)
+				err := tx.QueryRow(ctx, `SELECT id FROM wiki_pages WHERE workspace_id = $1 AND private_to = $2 AND daily_date = $3 AND area = $4 AND deleted_at IS NULL`,
+					p.WorkspaceID, p.UserID, day, area).Scan(&existing)
 				if err == nil {
 					pg, err = loadPage(ctx, tx, p.WorkspaceID, existing)
 					return err
@@ -281,7 +302,7 @@ func registerPersonal(d *deps.Deps, api huma.API) {
 					return err
 				}
 				var journal uuid.UUID
-				err = tx.QueryRow(ctx, `SELECT id FROM wiki_pages WHERE workspace_id = $1 AND private_to = $2 AND journal AND deleted_at IS NULL`, p.WorkspaceID, p.UserID).Scan(&journal)
+				err = tx.QueryRow(ctx, `SELECT id FROM wiki_pages WHERE workspace_id = $1 AND private_to = $2 AND journal AND area = $3 AND deleted_at IS NULL`, p.WorkspaceID, p.UserID, area).Scan(&journal)
 				if db.IsNotFound(err) {
 					if err := roomFor(ctx, tx, p.WorkspaceID, 2); err != nil {
 						return err
@@ -291,11 +312,11 @@ func registerPersonal(d *deps.Deps, api huma.API) {
 					if title == "" {
 						title = "Journal"
 					}
-					if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, title, icon, position, created_by, updated_by, private_to, journal)
-						VALUES ($1, $2, $3, '📓', 0, $4, $4, $4, true)`, journal, p.WorkspaceID, title, p.UserID); err != nil {
+					if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, title, icon, position, created_by, updated_by, private_to, journal, area)
+						VALUES ($1, $2, $3, '📓', 0, $4, $4, $4, true, $5)`, journal, p.WorkspaceID, title, p.UserID, area); err != nil {
 						return err
 					}
-					if err := place(ctx, tx, p.WorkspaceID, nil, &p.UserID, nil, false, &journal, new(int)); err != nil {
+					if err := place(ctx, tx, p.WorkspaceID, area, nil, &p.UserID, nil, false, &journal, new(int)); err != nil {
 						return err
 					}
 					if err := recordRevision(ctx, tx, p, journal, title, "📓", "", false); err != nil {
@@ -318,12 +339,12 @@ func registerPersonal(d *deps.Deps, api huma.API) {
 				if title == "" {
 					title = in.Body.Date
 				}
-				if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, daily_date)
-					VALUES ($1, $2, $3, $4, '', $5, 0, $6, $6, $6, $7)`, id, p.WorkspaceID, journal, title, body, p.UserID, day); err != nil {
+				if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, daily_date, area)
+					VALUES ($1, $2, $3, $4, '', $5, 0, $6, $6, $6, $7, $8)`, id, p.WorkspaceID, journal, title, body, p.UserID, day, area); err != nil {
 					return err
 				}
 				// Newest day first, as a journal reads.
-				if err := place(ctx, tx, p.WorkspaceID, &journal, &p.UserID, nil, false, &id, new(int)); err != nil {
+				if err := place(ctx, tx, p.WorkspaceID, area, &journal, &p.UserID, nil, false, &id, new(int)); err != nil {
 					return err
 				}
 				if err := recordRevision(ctx, tx, p, id, title, "", body, false); err != nil {

@@ -78,7 +78,7 @@ func registerRows(d *deps.Deps, api huma.API) {
 				var r DbRow
 				var c, u userCols
 				if err := rows.Scan(&r.ID, &r.ParentID, &r.Title, &r.Icon, &r.Position, &r.Version, &r.UpdatedAt, &r.CreatedBy, &r.Tags,
-					&r.Private, &r.TeamID, &r.Journal, &r.DailyDate, &r.Template, &r.Verified, &r.Kind,
+					&r.Private, &r.TeamID, &r.Journal, &r.DailyDate, &r.Template, &r.Verified, &r.Kind, &r.Area,
 					&r.Props, &r.Cover, &r.CoverY, &r.Excerpt, &r.CreatedAt,
 					&c.id, &c.name, &c.email, &c.avatar, &u.id, &u.name, &u.email, &u.avatar); err != nil {
 					return nil, httpx.Wrap(err)

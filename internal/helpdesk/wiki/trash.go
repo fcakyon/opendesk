@@ -81,7 +81,7 @@ func registerTrash(d *deps.Deps, api huma.API) {
 				if err := dropHiddenNotifications(ctx, tx, p.WorkspaceID, gone); err != nil {
 					return err
 				}
-				if err := place(ctx, tx, p.WorkspaceID, before.ParentID, before.owner, before.TeamID, before.Template, nil, nil); err != nil {
+				if err := place(ctx, tx, p.WorkspaceID, before.Area, before.ParentID, before.owner, before.TeamID, before.Template, nil, nil); err != nil {
 					return err
 				}
 				if pg, err = loadPage(ctx, tx, p.WorkspaceID, id); err != nil {
@@ -170,12 +170,12 @@ func registerTrash(d *deps.Deps, api huma.API) {
 				}
 				// A journal or a daily note restored next to a live one becomes a plain page.
 				if _, err := tx.Exec(ctx, `UPDATE wiki_pages p SET journal = false, daily_date = NULL WHERE p.workspace_id = $1 AND p.id = ANY($2)
-					AND ((p.journal AND EXISTS (SELECT 1 FROM wiki_pages o WHERE o.workspace_id = p.workspace_id AND o.private_to = p.private_to AND o.journal AND o.deleted_at IS NULL AND o.id <> p.id))
-					  OR (p.daily_date IS NOT NULL AND EXISTS (SELECT 1 FROM wiki_pages o WHERE o.workspace_id = p.workspace_id AND o.private_to = p.private_to AND o.daily_date = p.daily_date AND o.deleted_at IS NULL AND o.id <> p.id)))`,
+					AND ((p.journal AND EXISTS (SELECT 1 FROM wiki_pages o WHERE o.workspace_id = p.workspace_id AND o.private_to = p.private_to AND o.area = p.area AND o.journal AND o.deleted_at IS NULL AND o.id <> p.id))
+					  OR (p.daily_date IS NOT NULL AND EXISTS (SELECT 1 FROM wiki_pages o WHERE o.workspace_id = p.workspace_id AND o.private_to = p.private_to AND o.area = p.area AND o.daily_date = p.daily_date AND o.deleted_at IS NULL AND o.id <> p.id)))`,
 					p.WorkspaceID, back); err != nil {
 					return err
 				}
-				if err := place(ctx, tx, p.WorkspaceID, par, before.owner, before.TeamID, before.Template, &id, nil); err != nil {
+				if err := place(ctx, tx, p.WorkspaceID, before.Area, par, before.owner, before.TeamID, before.Template, &id, nil); err != nil {
 					return err
 				}
 				if pg, err = loadPage(ctx, tx, p.WorkspaceID, id); err != nil {
@@ -194,10 +194,13 @@ func registerTrash(d *deps.Deps, api huma.API) {
 
 	huma.Register(api, huma.Operation{OperationID: "list-wiki-trash", Method: http.MethodGet, Path: "/v1/wiki/trash",
 		Summary: "List the wiki's trash", Tags: tags,
-		Description: "The pages moved to the trash that the caller may see, last trashed first, each with how many pages went with it."},
-		func(ctx context.Context, _ *struct{}) (*struct{ Body httpx.Page[TrashedPage] }, error) {
+		Description: "The pages of one area moved to the trash that the caller may see, last trashed first, each with how many pages went with it."},
+		func(ctx context.Context, in *areaIn) (*struct{ Body httpx.Page[TrashedPage] }, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeWikiRead)
 			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if err := requireArea(ctx, d.DB.Pool, p.WorkspaceID, in.Area); err != nil {
 				return nil, httpx.Wrap(err)
 			}
 			v, err := viewerFor(ctx, d, p)
@@ -209,8 +212,8 @@ func registerTrash(d *deps.Deps, api huma.API) {
 					x.id, x.name, x.email, x.avatar_url,
 					(SELECT count(*) - 1 FROM wiki_pages s WHERE s.workspace_id = p.workspace_id AND s.trashed_with = p.id)
 				FROM wiki_pages p LEFT JOIN users x ON x.id = p.deleted_by
-				WHERE p.workspace_id = $1 AND p.trashed_with = p.id AND `+seesSQL("p", 2, 3)+`
-				ORDER BY p.deleted_at DESC LIMIT 500`, p.WorkspaceID, me, hidden)
+				WHERE p.workspace_id = $1 AND p.trashed_with = p.id AND p.area = $4 AND `+seesSQL("p", 2, 3)+`
+				ORDER BY p.deleted_at DESC LIMIT 500`, p.WorkspaceID, me, hidden, in.Area)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -220,7 +223,7 @@ func registerTrash(d *deps.Deps, api huma.API) {
 				var t TrashedPage
 				var x userCols
 				if err := rows.Scan(&t.ID, &t.ParentID, &t.Title, &t.Icon, &t.Position, &t.Version, &t.UpdatedAt, &t.CreatedBy, &t.Tags,
-					&t.Private, &t.TeamID, &t.Journal, &t.DailyDate, &t.Template, &t.Verified, &t.Kind,
+					&t.Private, &t.TeamID, &t.Journal, &t.DailyDate, &t.Template, &t.Verified, &t.Kind, &t.Area,
 					&t.DeletedAt, &x.id, &x.name, &x.email, &x.avatar, &t.Subpages); err != nil {
 					return nil, httpx.Wrap(err)
 				}

@@ -173,6 +173,9 @@ func registerLinks(d *deps.Deps, api huma.API) {
 		if err != nil {
 			return nil, Viewer{}, uuid.Nil, "", httpx.Wrap(err)
 		}
+		if err := mustSee(ctx, d.DB.Pool, v, p.WorkspaceID, id); err != nil {
+			return nil, Viewer{}, uuid.Nil, "", httpx.Wrap(err)
+		}
 		return p, v, id, title, nil
 	}
 	collect := func(rows pgx.Rows, title string) ([]WikiMention, error) {
@@ -290,10 +293,14 @@ func registerLinks(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
+			areas, err := areasOn(ctx, d.DB.Pool, p.WorkspaceID)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
 			me, hidden := v.args()
 			out, err := collectNodes(d.DB.Pool.Query(ctx, nodeSelect+` JOIN wiki_ticket_links l ON l.workspace_id = p.workspace_id AND l.page_id = p.id
-				WHERE l.workspace_id = $1 AND l.ticket_id = $2 AND `+liveSQL("p", 3, 4)+` ORDER BY p.updated_at DESC, p.id LIMIT 50`,
-				p.WorkspaceID, tid, me, hidden))
+				WHERE l.workspace_id = $1 AND l.ticket_id = $2 AND p.area = ANY($5) AND `+liveSQL("p", 3, 4)+` ORDER BY p.updated_at DESC, p.id LIMIT 50`,
+				p.WorkspaceID, tid, me, hidden, areas))
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -302,10 +309,13 @@ func registerLinks(d *deps.Deps, api huma.API) {
 
 	huma.Register(api, huma.Operation{OperationID: "get-wiki-graph", Method: http.MethodGet, Path: "/v1/wiki/graph",
 		Summary: "List every link between the wiki's pages", Tags: tags,
-		Description: "The pages are the tree's (`GET /v1/wiki/pages`); this adds the links between them."},
-		func(ctx context.Context, _ *struct{}) (*struct{ Body httpx.Page[WikiLink] }, error) {
+		Description: "The pages are the tree's (`GET /v1/wiki/pages`, of the same area); this adds the links between them."},
+		func(ctx context.Context, in *areaIn) (*struct{ Body httpx.Page[WikiLink] }, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeWikiRead)
 			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if err := requireArea(ctx, d.DB.Pool, p.WorkspaceID, in.Area); err != nil {
 				return nil, httpx.Wrap(err)
 			}
 			v, err := viewerFor(ctx, d, p)
@@ -316,7 +326,7 @@ func registerLinks(d *deps.Deps, api huma.API) {
 			rows, err := d.DB.Pool.Query(ctx, `SELECT l.from_id, l.to_id FROM wiki_links l
 				JOIN wiki_pages a ON a.workspace_id = l.workspace_id AND a.id = l.from_id
 				JOIN wiki_pages b ON b.workspace_id = l.workspace_id AND b.id = l.to_id
-				WHERE l.workspace_id = $1 AND `+liveSQL("a", 2, 3)+` AND `+liveSQL("b", 2, 3), p.WorkspaceID, me, hidden)
+				WHERE l.workspace_id = $1 AND a.area = $4 AND b.area = $4 AND `+liveSQL("a", 2, 3)+` AND `+liveSQL("b", 2, 3), p.WorkspaceID, me, hidden, in.Area)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}

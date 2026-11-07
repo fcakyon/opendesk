@@ -38,6 +38,7 @@ import (
 type CoreWorkspaceSettings struct {
 	TicketsEnabled    *bool   `json:"tickets_enabled,omitempty" doc:"Whether ticketing is enabled for this workspace (default true)"`
 	MailEnabled       *bool   `json:"mail_enabled,omitempty" doc:"Whether Mail is enabled for this workspace (default true)"`
+	PagesEnabled      *bool   `json:"pages_enabled,omitempty" doc:"Whether Pages is enabled for this workspace (default true; contracts/pages.md)"`
 	BrandColor        *string `json:"brand_color,omitempty" doc:"Hex colour, #RRGGBB"`
 	Timezone          *string `json:"timezone,omitempty" doc:"IANA time zone"`
 	HelpCenterEnabled *bool   `json:"help_center_enabled,omitempty"`
@@ -176,8 +177,8 @@ func loadWorkspace(ctx context.Context, q db.Querier, wid uuid.UUID) (CoreWorksp
 }
 
 func defaultWorkspaceSettings() CoreWorkspaceSettings {
-	tickets, mail := true, true
-	return CoreWorkspaceSettings{TicketsEnabled: &tickets, MailEnabled: &mail}
+	tickets, mail, pages := true, true, true
+	return CoreWorkspaceSettings{TicketsEnabled: &tickets, MailEnabled: &mail, PagesEnabled: &pages}
 }
 
 func (s *svc) loadWorkspace(ctx context.Context, q db.Querier, wid uuid.UUID) (CoreWorkspace, error) {
@@ -191,19 +192,17 @@ func (s *svc) loadWorkspace(ctx context.Context, q db.Querier, wid uuid.UUID) (C
 	return w, nil
 }
 
-func workspaceProductFlags(settings map[string]json.RawMessage) (tickets, mail bool) {
-	tickets, mail = true, true
-	if b, ok := settings["tickets_enabled"]; ok {
-		if err := json.Unmarshal(b, &tickets); err != nil {
-			tickets = true
+func workspaceProductFlags(settings map[string]json.RawMessage) (tickets, mail, pages bool) {
+	flag := func(key string) bool {
+		on := true
+		if b, ok := settings[key]; ok {
+			if err := json.Unmarshal(b, &on); err != nil {
+				on = true
+			}
 		}
+		return on
 	}
-	if b, ok := settings["mail_enabled"]; ok {
-		if err := json.Unmarshal(b, &mail); err != nil {
-			mail = true
-		}
-	}
-	return tickets, mail
+	return flag("tickets_enabled"), flag("mail_enabled"), flag("pages_enabled")
 }
 
 func (s *svc) applyEffectiveMail(ctx context.Context, q db.Querier, w *CoreWorkspace) error {
@@ -255,6 +254,9 @@ func validateSettings(s *CoreWorkspaceSettings) (map[string]any, error) {
 	}
 	if s.MailEnabled != nil {
 		out["mail_enabled"] = *s.MailEnabled
+	}
+	if s.PagesEnabled != nil {
+		out["pages_enabled"] = *s.PagesEnabled
 	}
 	if s.BrandColor != nil {
 		if *s.BrandColor != "" && !hexColorRe.MatchString(*s.BrandColor) {
@@ -413,7 +415,7 @@ func (s *svc) createWorkspace(ctx context.Context, tx pgx.Tx, p *auth.Principal,
 		slug = strings.Trim(base[:min(len(base), 39-len(suffix))], "-") + "-" + suffix
 	}
 	settings := map[string]any{"timezone": "UTC", "help_center_enabled": true, "help_center_title": name + " help center",
-		"tickets_enabled": true, "mail_enabled": true,
+		"tickets_enabled": true, "mail_enabled": true, "pages_enabled": true,
 		"csat_enabled": false, "auto_assign": "none"}
 	if utf8.RuneCountInString(settings["help_center_title"].(string)) > 100 {
 		settings["help_center_title"] = "Help center"
@@ -640,12 +642,13 @@ func (s *svc) registerWorkspaces(api huma.API) {
 				ticketsWasOff := false
 				_, ticketPatch := patch["tickets_enabled"]
 				_, mailPatch := patch["mail_enabled"]
-				if ticketPatch || mailPatch {
+				_, pagesPatch := patch["pages_enabled"]
+				if ticketPatch || mailPatch || pagesPatch {
 					// JSON merge semantics are applied below; check the resulting pair while holding
-					// the workspace row lock so concurrent settings writes cannot disable both.
+					// the workspace row lock so concurrent settings writes cannot disable them all.
 					var current map[string]json.RawMessage
 					_ = json.Unmarshal(rawSettings, &current)
-					tickets, mail := workspaceProductFlags(current)
+					tickets, mail, pages := workspaceProductFlags(current)
 					ticketsWasOff = !tickets
 					if v, ok := patch["tickets_enabled"].(bool); ok {
 						tickets = v
@@ -653,7 +656,10 @@ func (s *svc) registerWorkspaces(api huma.API) {
 					if v, ok := patch["mail_enabled"].(bool); ok {
 						mail = v
 					}
-					if !tickets {
+					if v, ok := patch["pages_enabled"].(bool); ok {
+						pages = v
+					}
+					if !tickets && !pages {
 						state, err := products.Resolve(ctx, tx, s.d.Plan, s.d.Cfg.Collab, p.WorkspaceID,
 							products.Settings{TicketsEnabled: &tickets, MailEnabled: &mail})
 						if err != nil {

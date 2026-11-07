@@ -400,7 +400,7 @@ func (r *procedureRun) call(ctx context.Context, name string, in json.RawMessage
 		if err != nil {
 			return "", false, err
 		}
-		hits, err := wiki.Search(ctx, r.s.d.DB.Pool, v, wid, clip(text("query"), 200), 8)
+		hits, err := wiki.Search(ctx, r.s.d.DB.Pool, v, wid, clip(text("query"), 200), "", 8)
 		if err != nil {
 			return "", false, err
 		}

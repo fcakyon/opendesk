@@ -28,9 +28,9 @@ func TestWorkspaceProductSettingsDefaultAndPatch(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"timezone":"UTC"}`), &old); err != nil {
 		t.Fatal(err)
 	}
-	tickets, mail := workspaceProductFlags(old)
-	if !tickets || !mail {
-		t.Fatalf("old workspace defaults: tickets=%v mail=%v", tickets, mail)
+	tickets, mail, pages := workspaceProductFlags(old)
+	if !tickets || !mail || !pages {
+		t.Fatalf("old workspace defaults: tickets=%v mail=%v pages=%v", tickets, mail, pages)
 	}
 	off := false
 	patch, err := validateSettings(&CoreWorkspaceSettings{TicketsEnabled: &off})
@@ -42,12 +42,16 @@ func TestWorkspaceProductSettingsDefaultAndPatch(t *testing.T) {
 		t.Fatalf("mail patch: %v, %v", patch, err)
 	}
 	var explicit map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(`{"tickets_enabled":false,"mail_enabled":true}`), &explicit); err != nil {
+	if err := json.Unmarshal([]byte(`{"tickets_enabled":false,"mail_enabled":true,"pages_enabled":false}`), &explicit); err != nil {
 		t.Fatal(err)
 	}
-	tickets, mail = workspaceProductFlags(explicit)
-	if tickets || !mail {
-		t.Fatalf("explicit settings: tickets=%v mail=%v", tickets, mail)
+	tickets, mail, pages = workspaceProductFlags(explicit)
+	if tickets || !mail || pages {
+		t.Fatalf("explicit settings: tickets=%v mail=%v pages=%v", tickets, mail, pages)
+	}
+	patch, err = validateSettings(&CoreWorkspaceSettings{PagesEnabled: &off})
+	if err != nil || patch["pages_enabled"] != false {
+		t.Fatalf("pages patch: %v, %v", patch, err)
 	}
 }
 
