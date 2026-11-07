@@ -2,7 +2,7 @@
 // import takes, its skipped list grouped by reason, and saving an export under the name the
 // API gives it (or the same name made here, when the browser may not read the header).
 
-import type { WikiExportFormat, WikiImportResult, WikiImportSkipReason, WikiKind } from "@/lib/api/types";
+import type { WikiExportFormat, WikiImportResult, WikiImportSkipReason, WikiKind, WikiArea } from "@/lib/api/types";
 
 /** What the import reads: one zip, or page sources (Obsidian canvases too). */
 export const IMPORT_EXTENSIONS = [".zip", ".md", ".markdown", ".txt", ".html", ".htm", ".csv", ".canvas"] as const;
@@ -63,8 +63,8 @@ export function pageExportName(page: { title: string; kind?: WikiKind }, format:
 }
 
 /** The name of the whole wiki's export, dated in UTC as the API dates it. */
-export function wikiExportName(now = new Date()): string {
-  return `Wiki ${now.toISOString().slice(0, 10)}.zip`;
+export function wikiExportName(now = new Date(), area: WikiArea = "wiki"): string {
+  return `${area === "pages" ? "Pages" : "Wiki"} ${now.toISOString().slice(0, 10)}.zip`;
 }
 
 /** Hands a downloaded file to the browser to save. */

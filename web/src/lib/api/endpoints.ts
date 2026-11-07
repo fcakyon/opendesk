@@ -672,26 +672,27 @@ export const api = {
     categories: () => http.get<T.ChangelogCategory[]>("/v1/changelog/categories"),
   },
   wiki: {
-    tree: () => http.get<T.Page<T.WikiNode>>("/v1/wiki/pages"),
+    /** One area's tree (contracts/pages.md); the wiki's when left out. */
+    tree: (area?: T.WikiArea) => http.get<T.Page<T.WikiNode>>("/v1/wiki/pages", area ? { query: { area } } : undefined),
     get: (id: string) => http.get<T.WikiPage>(`/v1/wiki/pages/${id}`),
-    create: (b: { parent_id?: string | null; space?: T.WikiSpace; team_id?: string; template?: boolean; kind?: T.WikiKind; database?: T.Database; canvas?: T.Canvas; props?: Record<string, T.DbValue>; title?: string; icon?: string; body_html?: string; position?: number }) => http.create<T.WikiPage>("/v1/wiki/pages", b),
+    create: (b: { parent_id?: string | null; space?: T.WikiSpace; team_id?: string; template?: boolean; kind?: T.WikiKind; database?: T.Database; canvas?: T.Canvas; props?: Record<string, T.DbValue>; title?: string; icon?: string; body_html?: string; position?: number; area?: T.WikiArea }) => http.create<T.WikiPage>("/v1/wiki/pages", b),
     /** `keepalive` lets a save started as the page closes finish (contracts/wiki.md "Editing together"). */
     update: (id: string, b: T.WikiPagePatch, opts?: { keepalive?: boolean }) => http.patch<T.WikiPage>(`/v1/wiki/pages/${id}`, b, opts),
-    move: (id: string, b: { parent_id: string | null; position: number; space?: T.WikiSpace; team_id?: string }) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/move`, b),
+    move: (id: string, b: { parent_id: string | null; position: number; space?: T.WikiSpace; team_id?: string; area?: T.WikiArea }) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/move`, b),
     trash: (id: string) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/trash`, {}),
     untrash: (id: string) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/restore`, {}),
-    trashList: () => http.get<T.Page<T.WikiTrashed>>("/v1/wiki/trash"),
-    duplicate: (id: string, b: { parent_id?: string | null; space?: T.WikiSpace; team_id?: string; template?: boolean; title?: string; position?: number }) =>
+    trashList: (area?: T.WikiArea) => http.get<T.Page<T.WikiTrashed>>("/v1/wiki/trash", area ? { query: { area } } : undefined),
+    duplicate: (id: string, b: { parent_id?: string | null; space?: T.WikiSpace; team_id?: string; template?: boolean; title?: string; position?: number; area?: T.WikiArea }) =>
       http.create<T.WikiPage>(`/v1/wiki/pages/${id}/duplicate`, b),
     templates: () => http.get<T.Page<T.WikiNode>>("/v1/wiki/templates"),
     favorites: () => http.get<T.Page<T.WikiNode>>("/v1/wiki/favorites"),
     setFavorites: (page_ids: string[]) => http.put<T.Page<T.WikiNode>>("/v1/wiki/favorites", { page_ids }),
-    recent: () => http.get<T.Page<T.WikiNode>>("/v1/wiki/recent"),
+    recent: (area: T.WikiArea = "wiki") => http.get<T.Page<T.WikiNode>>("/v1/wiki/recent", { query: { area } }),
     views: (id: string) => http.get<T.WikiPageViews>(`/v1/wiki/pages/${id}/views`),
     analytics: (id: string, days = 28) => http.get<T.WikiPageAnalytics>(`/v1/wiki/pages/${id}/analytics`, { query: { days } }),
     rows: (id: string) => http.get<T.DbRows>(`/v1/wiki/databases/${id}/rows`),
-    dailyNotes: (from: string, to: string) => http.get<T.Page<T.WikiDailyNote>>("/v1/wiki/daily", { query: { from, to } }),
-    openDaily: (b: { date: string; title: string; journal_title: string; body_html?: string }) => http.post<T.WikiPage>("/v1/wiki/daily", b),
+    dailyNotes: (from: string, to: string, area: T.WikiArea = "wiki") => http.get<T.Page<T.WikiDailyNote>>("/v1/wiki/daily", { query: { from, to, area } }),
+    openDaily: (b: { date: string; title: string; journal_title: string; body_html?: string; area?: T.WikiArea }) => http.post<T.WikiPage>("/v1/wiki/daily", b),
     remove: (id: string) => http.del(`/v1/wiki/pages/${id}`),
     revisions: (id: string) => http.get<T.Page<T.WikiRevision>>(`/v1/wiki/pages/${id}/revisions`),
     revision: (id: string, rid: string) => http.get<T.WikiRevision>(`/v1/wiki/pages/${id}/revisions/${rid}`),
@@ -701,7 +702,7 @@ export const api = {
     unfurl: (url: string) => http.post<T.LinkCard>("/v1/wiki/unfurl", { url }),
     backlinks: (id: string) => http.get<T.Page<T.WikiMention>>(`/v1/wiki/pages/${id}/backlinks`),
     mentions: (id: string) => http.get<T.Page<T.WikiMention>>(`/v1/wiki/pages/${id}/mentions`),
-    graph: () => http.get<T.Page<T.WikiLink>>("/v1/wiki/graph"),
+    graph: (area: T.WikiArea = "wiki") => http.get<T.Page<T.WikiLink>>("/v1/wiki/graph", { query: { area } }),
     /** A page's discussions (contracts/wiki.md "Comments"): every write answers with the whole thread. */
     comments: {
       list: (pageId: string) => http.get<T.WikiComments>(`/v1/wiki/pages/${pageId}/comments`),
@@ -729,8 +730,8 @@ export const api = {
     },
     /** One page as a file, or with subpages a zip of the page and the subpages the caller sees. */
     exportPage: (id: string, format: T.WikiExportFormat, subpages: boolean) => download(`/v1/wiki/pages/${id}/export`, { query: { format, subpages } }),
-    /** Every page of the caller's tree as a zip. */
-    exportAll: (format: T.WikiExportFormat) => download("/v1/wiki/export", { query: { format } }),
+    /** Every page of the caller's tree of an area as a zip. */
+    exportAll: (format: T.WikiExportFormat, area: T.WikiArea = "wiki") => download("/v1/wiki/export", { query: { format, area } }),
   },
   search: (q: string) => http.get<T.SearchResults>("/v1/search", { query: { q } }),
   reports: {

@@ -1,5 +1,6 @@
-// The Pages section of the main sidebar (contracts/wiki.md "In the main sidebar"): the
-// workspace's pages, databases and canvases as a live tree, each teamspace and the member's
+// The Pages section of the main sidebar (contracts/wiki.md "In the main sidebar"): Pages'
+// (contracts/pages.md) pages, databases and canvases as a live tree, shown while the workspace
+// has Pages on, each teamspace and the member's
 // private pages under a row that folds, then today's note, templates and the trash. Rows nest,
 // fold, drag and have the wiki's own menu (PageTree); "+" opens the new page popup and files
 // dropped on the section open the import with them. What shows is the member's: the whole
@@ -22,7 +23,9 @@ import { hid, setHidden, type PagesPart } from "@/lib/collab/sidebarPrefs";
 import { cn } from "@/lib/cn";
 import { atLeast, useRole, useSession } from "@/lib/session";
 import { buildTree, childrenOf, spaceBody, type SpaceKey } from "@/lib/wiki/tree";
-import { useCreatePage, useFavorites, useTitle, useWikiTree } from "./hooks";
+import { useProducts } from "@/lib/products";
+import { AreaProvider, pageTo } from "@/lib/wiki/area";
+import { useAreaTree, useCreatePage, useFavorites, useTitle, useWikiTree } from "./hooks";
 import { useOpenToday } from "./journal";
 import { DragProvider, EmptyRow, PageIcon, TreeView, useSpaceView } from "./PageTree";
 
@@ -62,11 +65,20 @@ function useHide(prefs: SidebarPrefs) {
   return (id: string) => save.mutate(setHidden(prefs, id, true), { onError: (e) => toast.error(e, t("customize.saveFailed")) });
 }
 
-export function PagesSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail: boolean; first: boolean }) {
+export function PagesSection(props: { prefs: SidebarPrefs; rail: boolean; first: boolean }) {
+  if (!useProducts().pages) return null;
+  return (
+    <AreaProvider area="pages">
+      <PagesTree {...props} />
+    </AreaProvider>
+  );
+}
+
+function PagesTree({ prefs, rail, first }: { prefs: SidebarPrefs; rail: boolean; first: boolean }) {
   const { t } = useTranslation("shell");
   const { t: tw } = useTranslation("wiki");
   const canEdit = atLeast(useRole(), "agent");
-  const { data = [], isLoading } = useWikiTree();
+  const { data = [], isLoading } = useAreaTree();
   const teams = useTeamsCtx();
   const hide = useHide(prefs);
   const { folded, toggle } = useFolds();
@@ -89,7 +101,7 @@ export function PagesSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail
     return (
       <Section id="pages" label={t("nav.pages")} rail first={first}>
         <NavTip rail label={t("nav.pages")}>
-          <Link to="/wiki" className={cn(rowBase, rowShape(true), rowIdle)} activeProps={{ className: rowActive }} aria-label={t("nav.pages")}>
+          <Link to="/pages" className={cn(rowBase, rowShape(true), rowIdle)} activeProps={{ className: rowActive }} aria-label={t("nav.pages")}>
             {withPill(<FileText />)}
           </Link>
         </NavTip>
@@ -109,7 +121,7 @@ export function PagesSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail
       action={
         canEdit ? (
           <Tooltip content={tw("tree.newPage")}>
-            <button type="button" aria-label={tw("tree.newPage")} onClick={() => quickAdd.page()} className={tool}>
+            <button type="button" aria-label={tw("tree.newPage")} onClick={() => quickAdd.page(undefined, "pages")} className={tool}>
               <Plus className="size-3.5" />
             </button>
           </Tooltip>
@@ -131,7 +143,7 @@ export function PagesSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail
           if (!files(e)) return;
           e.preventDefault();
           setDropping(false);
-          openImport(null, { files: [...e.dataTransfer.files] });
+          openImport(null, { files: [...e.dataTransfer.files], area: "pages" });
         }}
       >
         <DragProvider>
@@ -175,7 +187,7 @@ export function PagesSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail
           </button>
         )}
         {shown("templates") && (
-          <Link to="/wiki/templates" className={cn(rowBase, rowShape(false), rowIdle, placeRow)} activeProps={{ className: rowActive }}>
+          <Link to="/pages/templates" className={cn(rowBase, rowShape(false), rowIdle, placeRow)} activeProps={{ className: rowActive }}>
             {withPill(
               <>
                 <LayoutTemplate />
@@ -185,7 +197,7 @@ export function PagesSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail
           </Link>
         )}
         {shown("trash") && (
-          <Link to="/wiki/trash" className={cn(rowBase, rowShape(false), rowIdle, placeRow)} activeProps={{ className: rowActive }}>
+          <Link to="/pages/trash" className={cn(rowBase, rowShape(false), rowIdle, placeRow)} activeProps={{ className: rowActive }}>
             {withPill(
               <>
                 <Trash2 />
@@ -235,8 +247,16 @@ export function TeamspaceGroup({
 
 /** A Space's teamspace row of the open workspace: the teamspace and its pages, as in Pages. */
 export function SpaceTeamspace({ team }: { team: Team }) {
+  return (
+    <AreaProvider area="pages">
+      <SpaceTeamspaceTree team={team} />
+    </AreaProvider>
+  );
+}
+
+function SpaceTeamspaceTree({ team }: { team: Team }) {
   const canEdit = atLeast(useRole(), "agent");
-  const { data = [] } = useWikiTree();
+  const { data = [] } = useAreaTree();
   const full = useMemo(() => buildTree(data), [data]);
   const { folded, toggle } = useFolds();
   return (
@@ -336,8 +356,7 @@ export function FavoritePageRows({ rail }: { rail: boolean }) {
           <div key={n.id} className="group/row relative">
             <NavTip rail={rail} label={label}>
               <Link
-                to="/wiki/$pageId"
-                params={{ pageId: n.id }}
+                {...pageTo(n)}
                 className={cn(rowBase, rowShape(rail), rowIdle, !rail && "group-hover/row:pr-8")}
                 activeProps={{ className: rowActive, "data-status": "active" } as Record<string, string>}
                 aria-label={rail ? label : undefined}

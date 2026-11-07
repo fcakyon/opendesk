@@ -10,6 +10,7 @@ import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage, isApiError, type Download } from "@/lib/api/client";
 import type { WikiExportFormat, WikiKind } from "@/lib/api/types";
+import { useArea } from "@/lib/wiki/area";
 import { pageExportName, saveBlob, wikiExportName } from "@/lib/wiki/port";
 
 /** Runs a download and saves it; a zip says it is being put together, since it can take a while. */
@@ -55,13 +56,14 @@ export function ExportPageItems({ page, hasSubpages }: { page: { id: string; tit
   );
 }
 
-/** "Export the wiki": every page the person sees, as a zip. */
+/** "Export the wiki" (or Pages, in Pages' area): every page of the area the person sees, as a zip. */
 export function ExportWikiItems() {
   const { t } = useTranslation("wiki");
   const download = useDownload();
-  const run = (format: WikiExportFormat) => void download(() => api.wiki.exportAll(format), wikiExportName(), true);
+  const area = useArea();
+  const run = (format: WikiExportFormat) => void download(() => api.wiki.exportAll(format, area), wikiExportName(new Date(), area), true);
   return (
-    <MenuSub icon={<DownloadIcon />} label={t("export.wiki")}>
+    <MenuSub icon={<DownloadIcon />} label={area === "pages" ? t("export.pages") : t("export.wiki")}>
       <MenuItem icon={<FileText />} onSelect={() => run("markdown")}>
         {t("export.markdown")}
       </MenuItem>

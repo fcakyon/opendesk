@@ -87,7 +87,10 @@
     "wikiGraph": "Graph",
     "wikiTags": "Tags",
     "wikiTemplates": "Vorlagen",
-    "wikiTrash": "Papierkorb"
+    "wikiTrash": "Papierkorb",
+    "pages": "Seiten",
+    "pagesPage": "Seite",
+    "pagesSettings": "Seiten"
   },
   "folders": {
     "unassigned": "Nicht zugewiesen",
@@ -147,7 +150,8 @@
     "aiClients": "KI-Clients",
     "webhooks": "Webhooks",
     "auditLog": "Audit-Log",
-    "phone": "Telefon"
+    "phone": "Telefon",
+    "pages": "Seiten"
   },
   "settingsPage": "Einstellungsseite",
   "command": {
@@ -181,7 +185,9 @@
     "aiKnowledge": "KI-Agent: Wissen",
     "aiTools": "KI-Agent: Tools",
     "aiPlayground": "KI-Agent: Testbereich",
-    "importHistory": "Verlauf aus Zendesk, Help Scout, Freshdesk, Intercom, Front oder CSV importieren"
+    "importHistory": "Verlauf aus Zendesk, Help Scout, Freshdesk, Intercom, Front oder CSV importieren",
+    "pages": "Seiten",
+    "newPage": "Neue Seite"
   },
   "shortcuts": {
     "general": "Allgemein",

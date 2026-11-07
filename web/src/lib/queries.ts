@@ -3,9 +3,9 @@
 // its component reads.
 
 import { infiniteQueryOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
-import { scopeWorkspace } from "./api/client";
+import { isApiError, scopeWorkspace } from "./api/client";
 import { api, rows, type ChangelogListQuery, type CollabThreadQuery, type TicketListQuery, type TicketSummaryQuery } from "./api/endpoints";
-import type { Page, ReportsQuery, ReportsRange, SpacesResponse } from "./api/types";
+import type { Page, ReportsQuery, ReportsRange, SpacesResponse, WikiArea } from "./api/types";
 import { normalizeSpace, normalizeSpaces } from "./spaces/model";
 
 /** The changelog list's filters, as its key holds them. */
@@ -231,7 +231,7 @@ export const qk = {
     return w(["changelog", "categories"] as const);
   },
   search: (q: string) => w(["search", q] as const),
-  /** The wiki's tree: every page without its body (contracts/wiki.md). */
+  /** Both trees, the wiki's and Pages' (contracts/pages.md): every page without its body; each says its area. */
   get wikiTree() {
     return w(["wiki", "tree"] as const);
   },
@@ -256,11 +256,12 @@ export const qk = {
   get wikiRecent() {
     return w(["wiki", "recent"] as const);
   },
+  wikiRecentOf: (area: WikiArea) => w(["wiki", "recent", area] as const),
   wikiViews: (id: string) => w(["wiki", "views", id] as const),
   wikiAnalytics: (id: string) => w(["wiki", "analytics", id] as const),
   wikiComments: (id: string) => w(["wiki", "comments", id] as const),
   wikiRows: (id: string) => w(["wiki", "rows", id] as const),
-  wikiDaily: (from: string, to: string) => w(["wiki", "daily", from, to] as const),
+  wikiDaily: (from: string, to: string, area: WikiArea) => w(["wiki", "daily", from, to, area] as const),
   reports: (r: ReportsQuery) => w(["reports", r] as const),
   reportAgents: (r: ReportsQuery) => w(["reports", "agents", r] as const),
   get widgetSettings() {
@@ -369,6 +370,23 @@ export const qk = {
 
 const list = <R>(key: readonly unknown[], fn: () => Promise<R[] | Page<R> | { data: R[] }>, opts: { staleTime?: number } = {}) =>
   queryOptions({ queryKey: key, queryFn: async () => rows(await fn()), ...opts });
+
+/**
+ * A list of the wiki's and Pages' together (contracts/pages.md), each item marked with its
+ * area: Pages' is empty while the workspace has Pages off, which the API answers with
+ * feature_disabled.
+ */
+async function bothAreas<R extends object>(fn: (area: WikiArea) => Promise<{ data: R[] }>, mark = true): Promise<{ data: R[] }> {
+  const [wiki, pages] = await Promise.all([
+    fn("wiki"),
+    fn("pages").catch((e: unknown) => {
+      if (isApiError(e, "feature_disabled")) return { data: [] as R[] };
+      throw e;
+    }),
+  ]);
+  if (!mark) return { data: [...wiki.data, ...pages.data] };
+  return { data: [...wiki.data, ...pages.data.map((n) => ({ ...n, area: "pages" as const }))] };
+}
 
 async function allPages<R>(fn: (q: { limit: number; cursor: string | null }) => Promise<Page<R>>) {
   const all: R[] = [];
@@ -513,22 +531,22 @@ export const q = {
     }),
   changelogEntry: (id: string) => queryOptions({ queryKey: qk.changelogEntry(id), queryFn: () => api.changelog.entries.get(id) }),
   changelogCategories: () => list(qk.changelogCategories, () => api.changelog.categories()),
-  wikiTree: () => list(qk.wikiTree, () => api.wiki.tree()),
+  wikiTree: () => list(qk.wikiTree, () => bothAreas((area) => api.wiki.tree(area))),
   wikiPage: (id: string) => queryOptions({ queryKey: qk.wikiPage(id), queryFn: () => api.wiki.get(id) }),
   wikiRevisions: (id: string) => list(qk.wikiRevisions(id), () => api.wiki.revisions(id)),
   wikiRevision: (id: string, rid: string) => queryOptions({ queryKey: qk.wikiRevision(id, rid), queryFn: () => api.wiki.revision(id, rid), staleTime: Infinity }),
   wikiBacklinks: (id: string) => list(qk.wikiBacklinks(id), () => api.wiki.backlinks(id)),
   wikiMentions: (id: string) => list(qk.wikiMentions(id), () => api.wiki.mentions(id)),
-  wikiGraph: () => list(qk.wikiGraph, () => api.wiki.graph()),
-  wikiTrash: () => list(qk.wikiTrash, () => api.wiki.trashList()),
+  wikiGraph: () => list(qk.wikiGraph, () => bothAreas((area) => api.wiki.graph(area), false)),
+  wikiTrash: () => list(qk.wikiTrash, () => bothAreas((area) => api.wiki.trashList(area))),
   wikiTemplates: () => list(qk.wikiTemplates, () => api.wiki.templates()),
   wikiFavorites: () => list(qk.wikiFavorites, () => api.wiki.favorites()),
-  wikiRecent: () => list(qk.wikiRecent, () => api.wiki.recent()),
+  wikiRecent: (area: WikiArea = "wiki") => list(qk.wikiRecentOf(area), () => api.wiki.recent(area)),
   wikiViews: (id: string) => queryOptions({ queryKey: qk.wikiViews(id), queryFn: () => api.wiki.views(id) }),
   wikiAnalytics: (id: string) => queryOptions({ queryKey: qk.wikiAnalytics(id), queryFn: () => api.wiki.analytics(id) }),
   wikiComments: (id: string) => queryOptions({ queryKey: qk.wikiComments(id), queryFn: () => api.wiki.comments.list(id) }),
   wikiRows: (id: string) => queryOptions({ queryKey: qk.wikiRows(id), queryFn: () => api.wiki.rows(id) }),
-  wikiDaily: (from: string, to: string) => list(qk.wikiDaily(from, to), () => api.wiki.dailyNotes(from, to)),
+  wikiDaily: (from: string, to: string, area: WikiArea = "wiki") => list(qk.wikiDaily(from, to, area), () => api.wiki.dailyNotes(from, to, area)),
   wikiSearch: (term: string) =>
     queryOptions({ queryKey: qk.wikiSearch(term), queryFn: async () => (await api.wiki.search(term)).data, enabled: term.trim().length > 0, staleTime: 5_000 }),
   search: (term: string) =>

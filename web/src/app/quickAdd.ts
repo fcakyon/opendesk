@@ -3,17 +3,21 @@
 // Settings, which keeps its full pages. QuickAddRoot draws them.
 
 import { create } from "zustand";
+import type { WikiArea } from "@/lib/api/types";
 import type { SpaceKey } from "@/lib/wiki/tree";
 
 /** A view's editor: a new one, one to change, or a copy of one. */
 export type ViewEdit = { kind: "new" } | { kind: "edit"; id: string } | { kind: "duplicate"; id: string };
 
-/** Where an import starts: under a page or at the top of a space, with files dropped elsewhere. */
-export type ImportStart = { parentId: string | null; files: File[]; space?: SpaceKey };
+/**
+ * Where an import starts: under a page or at the top of a space of an area (Pages', unless
+ * the workspace has Pages off or it says; contracts/pages.md), with files dropped elsewhere.
+ */
+export type ImportStart = { parentId: string | null; files: File[]; space?: SpaceKey; area?: WikiArea };
 
 type QuickAdd = {
-  /** The new page popup, with the space it adds to. */
-  newPage: { space?: SpaceKey } | null;
+  /** The new page popup, with the space and area it adds to (Pages' when it says none). */
+  newPage: { space?: SpaceKey; area?: WikiArea } | null;
   importing: ImportStart | null;
   /** Each opening of the import dialog starts afresh. */
   importNonce: number;
@@ -28,7 +32,7 @@ export const useQuickAdd = create<QuickAdd>(() => ({ newPage: null, importing: n
 export const quickAddOpen = (s: QuickAdd) => !!(s.newPage || s.importing || s.team || s.view || s.mail);
 
 export const quickAdd = {
-  page: (space?: SpaceKey) => useQuickAdd.setState({ newPage: { space } }),
+  page: (space?: SpaceKey, area?: WikiArea) => useQuickAdd.setState({ newPage: { space, area } }),
   closePage: () => useQuickAdd.setState({ newPage: null }),
   team: (open = true) => useQuickAdd.setState({ team: open }),
   view: (edit: ViewEdit | null) => useQuickAdd.setState({ view: edit }),
@@ -40,6 +44,6 @@ export const quickAdd = {
  * Opens the import dialog, offering to put the pages under parentId (the page the person is on),
  * or at the top of a space; files dropped somewhere else (the sidebar's Pages) come along.
  */
-export function openImport(parentId: string | null = null, from: { files?: File[]; space?: SpaceKey } = {}) {
-  useQuickAdd.setState((s) => ({ newPage: null, importing: { parentId, files: from.files ?? [], space: from.space }, importNonce: s.importNonce + 1 }));
+export function openImport(parentId: string | null = null, from: { files?: File[]; space?: SpaceKey; area?: WikiArea } = {}) {
+  useQuickAdd.setState((s) => ({ newPage: null, importing: { parentId, files: from.files ?? [], space: from.space, area: from.area }, importNonce: s.importNonce + 1 }));
 }

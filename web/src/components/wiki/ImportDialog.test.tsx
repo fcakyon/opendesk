@@ -116,7 +116,8 @@ describe("wiki import dialog", () => {
     expect(dialog()?.querySelector("[role=alert]")?.textContent).toContain("run.exe can't be imported");
     await act(async () => button("Import")!.click());
     expect(spy.mock.calls[0][0].map((f) => f.name)).toEqual(["a.md"]);
-    expect(spy.mock.calls[0][1]).toEqual({ space: "team", team_id: "t1" });
+    // Dropped from no page: Pages', while the workspace has it on (contracts/pages.md).
+    expect(spy.mock.calls[0][1]).toEqual({ space: "team", team_id: "t1", area: "pages" });
   });
 
   it("refuses more than 100 MB before uploading", async () => {

@@ -2,8 +2,7 @@
 // carry it, nested tags (#process/billing) under their parents, and the pages of the one
 // picked (?tag=).
 
-import { useQuery } from "@tanstack/react-query";
-import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { Hash } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -12,15 +11,14 @@ import { usePageCrumb } from "@/app/useBreadcrumbs";
 import { SearchInput } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty";
 import { PageIcon } from "@/components/wiki/PageTree";
-import { useTitle, useWikiTree } from "@/components/wiki/hooks";
+import { useAreaTree, useTitle } from "@/components/wiki/hooks";
+import { areaPath, pageTo, useArea } from "@/lib/wiki/area";
 import { cn } from "@/lib/cn";
 import { relLong } from "@/lib/format";
-import { q } from "@/lib/queries";
 import { useNow } from "@/lib/useNow";
 import { ancestorsOf } from "@/lib/wiki/tree";
 import { PagesButton } from "./WikiLayout";
 
-const route = getRouteApi("/app/wiki/tags");
 
 /** A tag and its nested ones ("process/billing" under "process"), each counted with everything under it. */
 export function tagCounts(tags: string[][]): { tag: string; count: number; depth: number }[] {
@@ -41,9 +39,9 @@ export default function WikiTagsPage() {
   const title = useTitle();
   const now = useNow();
   const navigate = useNavigate();
-  const { tag } = route.useSearch();
-  const { data: nodes = [] } = useQuery(q.wikiTree());
-  const { tree } = useWikiTree();
+  const { tag } = useSearch({ strict: false }) as { tag?: string };
+  const area = useArea();
+  const { data: nodes = [], tree } = useAreaTree();
   const [filter, setFilter] = useState("");
   useDocumentTitle(tag ? `#${tag}` : t("tags.title"));
   usePageCrumb(tag ? `#${tag}` : t("tags.title"));
@@ -74,7 +72,7 @@ export default function WikiTagsPage() {
                   type="button"
                   role="option"
                   aria-selected={tag === x.tag}
-                  onClick={() => void navigate({ to: "/wiki/tags", search: { tag: x.tag }, replace: true })}
+                  onClick={() => void navigate({ to: areaPath(area, "tags"), search: { tag: x.tag }, replace: true })}
                   className={cn("flex h-8 w-full items-center gap-1.5 rounded-md pr-2 text-left text-[12.5px] transition-colors", tag === x.tag ? "bg-active text-fg" : "text-fg-2 hover:bg-hover hover:text-fg")}
                   style={{ paddingLeft: 8 + x.depth * 14 }}
                 >
@@ -99,7 +97,7 @@ export default function WikiTagsPage() {
                   {pages.map((n) => {
                     const path = tree.byId.has(n.id) ? ancestorsOf(tree, n.id) : [];
                     return (
-                      <Link key={n.id} to="/wiki/$pageId" params={{ pageId: n.id }} className="flex items-center gap-3 border-b border-line-soft bg-surface px-4 py-3 transition-colors last:border-b-0 hover:bg-hover">
+                      <Link key={n.id} {...pageTo(n)} className="flex items-center gap-3 border-b border-line-soft bg-surface px-4 py-3 transition-colors last:border-b-0 hover:bg-hover">
                         <PageIcon icon={n.icon} className="size-5 text-[16px]" />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-[13.5px] font-medium text-fg">{title(n.title)}</span>

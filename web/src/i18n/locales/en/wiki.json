@@ -1332,7 +1332,8 @@
     "subpages": "Include subpages",
     "wiki": "Export the wiki",
     "started": "Preparing the download",
-    "failed": "Couldn't export."
+    "failed": "Couldn't export.",
+    "pages": "Export Pages"
   },
   "aliases": {
     "label": "Aliases",
@@ -1387,5 +1388,21 @@
     "canvasHint": "Cards, notes and links on a board",
     "fromTemplate": "From a template",
     "import": "Import"
+  },
+  "pages": {
+    "title": "Pages",
+    "intro": "Your team's docs, notes, plans and databases in one place. Only members see them; customers never do.",
+    "importHint": "Markdown, HTML, or a Notion or Obsidian export",
+    "emptyTitle": "Start your team's pages",
+    "emptyBody": "Write docs and notes, plan in databases, or map ideas on a canvas. Every page shows in the sidebar, where you arrange it.",
+    "emptyViewer": "Nobody has added a page yet. Pages your team writes show up here.",
+    "tipSidebar": "Arrange pages in the sidebar, or hide the ones you don't need",
+    "databases": "Databases",
+    "rows_one": "{{count}} row",
+    "rows_other": "{{count}} rows",
+    "moveToPages": "Move to Pages",
+    "moveToWiki": "Move to the wiki",
+    "movedToPages": "Moved {{title}} to Pages",
+    "movedToWiki": "Moved {{title}} to the wiki"
   }
 }

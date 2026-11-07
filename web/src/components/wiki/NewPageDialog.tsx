@@ -1,7 +1,8 @@
 // The new page popup (contracts/wiki.md "In the main sidebar"), from the Pages section's "+",
 // the header's New menu and the command menu: where it goes (the workspace, a teamspace or
 // private), then a page, a database or a canvas, one of the team's templates or a starter, or
-// files to import, dropped or picked, which open the import dialog with them.
+// files to import, dropped or picked, which open the import dialog with them. It adds to Pages
+// (contracts/pages.md), or to the wiki when opened from the wiki or while Pages is off.
 
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -14,6 +15,7 @@ import { Select, type SelectOption } from "@/components/ui/select";
 import { TeamDot } from "@/components/tickets/teams";
 import { q } from "@/lib/queries";
 import { useSession } from "@/lib/session";
+import { AreaProvider, areaPath, useArea, useDefaultArea } from "@/lib/wiki/area";
 import { spaceBody, type SpaceKey } from "@/lib/wiki/tree";
 import { useCreatePage, useTitle, useUseTemplate, type NewPage } from "./hooks";
 import { Drop } from "./ImportDialog";
@@ -25,8 +27,19 @@ import { TEMPLATES, templatePage } from "./templates";
 const SHOWN_TEMPLATES = 5;
 
 export function NewPageDialog() {
+  const start = useQuickAdd((s) => s.newPage);
+  const area = useDefaultArea(start?.area);
+  return (
+    <AreaProvider area={area}>
+      <NewPage />
+    </AreaProvider>
+  );
+}
+
+function NewPage() {
   const { t } = useTranslation("wiki");
   const title = useTitle();
+  const area = useArea();
   const start = useQuickAdd((s) => s.newPage);
   const create = useCreatePage();
   const fromTemplate = useUseTemplate();
@@ -72,7 +85,7 @@ export function NewPageDialog() {
             <h3 id="new-page-templates" className="label-caps">
               {t("newPage.fromTemplate")}
             </h3>
-            <Link to="/wiki/templates" onClick={close} className="ml-auto flex items-center gap-1 text-[12px] text-fg-3 transition-colors hover:text-fg">
+            <Link to={areaPath(area, "templates")} onClick={close} className="ml-auto flex items-center gap-1 text-[12px] text-fg-3 transition-colors hover:text-fg">
               {t("templatesPage.all")}
               <ArrowRight className="size-3" />
             </Link>
@@ -99,7 +112,7 @@ export function NewPageDialog() {
           <h3 id="new-page-import" className="label-caps mb-1.5">
             {t("newPage.import")}
           </h3>
-          <Drop compact invalid={false} onFiles={(list) => list?.length && openImport(null, { files: [...list], space })} />
+          <Drop compact invalid={false} onFiles={(list) => list?.length && openImport(null, { files: [...list], space, area })} />
         </section>
       </div>
     </Dialog>

@@ -9,16 +9,27 @@ import { useTranslation } from "react-i18next";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api/endpoints";
-import type { Database, WikiKind, WikiNode, WikiPage, WikiSpace } from "@/lib/api/types";
+import type { Database, WikiArea, WikiKind, WikiNode, WikiPage, WikiSpace } from "@/lib/api/types";
+import { areaHome, areaOf, inArea, pageTo, useArea } from "@/lib/wiki/area";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole, useSession } from "@/lib/session";
 import { forgetSaver } from "@/lib/wiki/saver";
 import { applyMove, buildTree, descendantsOf, ownership, removeSubtree, spaceBody, upsertNode, type Drop, type Ownership } from "@/lib/wiki/tree";
 
+/** Both areas' pages (contracts/pages.md), for finding any page by id. */
 export function useWikiTree() {
   const query = useQuery(q.wikiTree());
   const tree = useMemo(() => buildTree(query.data ?? []), [query.data]);
   return { ...query, tree };
+}
+
+/** The pages of the area the view is in (useArea), for its tree, home and lists. */
+export function useAreaTree() {
+  const area = useArea();
+  const query = useQuery(q.wikiTree());
+  const data = useMemo(() => (query.data ? query.data.filter(inArea(area)) : undefined), [query.data, area]);
+  const tree = useMemo(() => buildTree(data ?? []), [data]);
+  return { ...query, data, tree };
 }
 
 export const nodeOf = (p: WikiPage): WikiNode => ({
@@ -32,6 +43,7 @@ export const nodeOf = (p: WikiPage): WikiNode => ({
   created_by_id: p.created_by?.id ?? null,
   tags: p.tags ?? [],
   ...(p.aliases?.length ? { aliases: p.aliases } : {}),
+  ...(p.area ? { area: p.area } : {}),
 });
 
 /** A page's title for display: "Untitled" until it has one. */
@@ -40,9 +52,9 @@ export function useTitle() {
   return (title: string | undefined | null) => title?.trim() || t("untitled");
 }
 
-/** The open page's id, from the URL. */
+/** The open page's id, from the URL: a page of the wiki or of Pages. */
 export function useOpenPageId(): string | undefined {
-  return useRouterState({ select: (s) => s.location.pathname.match(/^\/wiki\/([0-9a-f-]{36})/i)?.[1] });
+  return useRouterState({ select: (s) => s.location.pathname.match(/^\/(?:wiki|pages)\/([0-9a-f-]{36})/i)?.[1] });
 }
 
 // ─── Open pages in the tree ─────────────────────────────────────────────────
@@ -102,23 +114,25 @@ export function patchTree(qc: QueryClient, fn: (nodes: WikiNode[]) => WikiNode[]
 /** Pages just made here: their title takes the focus when they open. */
 export const freshPages = new Set<string>();
 
-export type NewPage = { parent_id?: string | null; space?: WikiSpace; team_id?: string; template?: boolean; kind?: WikiKind; database?: Database; title?: string; icon?: string; body_html?: string; position?: number };
+export type NewPage = { parent_id?: string | null; space?: WikiSpace; team_id?: string; template?: boolean; kind?: WikiKind; database?: Database; title?: string; icon?: string; body_html?: string; position?: number; area?: WikiArea };
 
 export function useCreatePage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { open } = useExpanded();
   const { t } = useTranslation("wiki");
+  // A top-level page goes in the area the view is in, unless it says; a subpage in its parent's.
+  const area = useArea();
   return useMutation({
     // `navigate: false` stays on the page: a subpage made from the editor ("/page", "[[new").
-    mutationFn: ({ navigate: _stay, ...b }: NewPage & { navigate?: boolean }) => api.wiki.create(b),
+    mutationFn: ({ navigate: _stay, ...b }: NewPage & { navigate?: boolean }) => api.wiki.create(b.parent_id ? b : { area, ...b }),
     onSuccess: (page, vars) => {
       qc.setQueryData(qk.wikiPage(page.id), page);
       patchTree(qc, (nodes) => upsertNode(nodes, nodeOf(page)));
       if (page.parent_id) open([page.parent_id]);
       if (vars.navigate === false) return;
       freshPages.add(page.id);
-      void navigate({ to: "/wiki/$pageId", params: { pageId: page.id } });
+      void navigate(pageTo(page));
     },
     onError: (e) => toast.error(e, t("toast.createFailed")),
   });
@@ -128,14 +142,15 @@ export function useMovePage() {
   const qc = useQueryClient();
   const { t } = useTranslation("wiki");
   return useMutation({
-    mutationFn: ({ id, drop }: { id: string; drop: Drop }) => api.wiki.move(id, { parent_id: drop.parent, position: drop.position, ...(drop.space ? spaceBody(drop.space) : {}) }),
+    mutationFn: ({ id, drop }: { id: string; drop: Drop }) =>
+      api.wiki.move(id, { parent_id: drop.parent, position: drop.position, ...(drop.space ? spaceBody(drop.space) : {}), ...(drop.area ? { area: drop.area } : {}) }),
     onMutate: ({ id, drop }) => {
       const before = qc.getQueryData<WikiNode[]>(qk.wikiTree);
       patchTree(qc, (nodes) => applyMove(nodes, id, drop));
       return { before };
     },
     onSuccess: (page) => {
-      qc.setQueryData<WikiPage>(qk.wikiPage(page.id), (old) => (old ? { ...old, parent_id: page.parent_id, position: page.position, breadcrumbs: page.breadcrumbs } : old));
+      qc.setQueryData<WikiPage>(qk.wikiPage(page.id), (old) => (old ? { ...old, parent_id: page.parent_id, position: page.position, breadcrumbs: page.breadcrumbs, area: page.area } : old));
       // Breadcrumbs of the pages under it moved too.
       void qc.invalidateQueries({ queryKey: qk.of("wiki", "page"), refetchType: "none" });
     },
@@ -168,7 +183,7 @@ export function useDeletePage() {
           qc.removeQueries({ queryKey: qk.wikiPage(id) });
         }
         if (openId && gone.includes(openId))
-          void navigate(node.parent_id ? { to: "/wiki/$pageId", params: { pageId: node.parent_id } } : { to: "/wiki" });
+          void navigate(node.parent_id ? pageTo({ id: node.parent_id, area: node.area }) : { to: areaHome(areaOf(node)) });
         toast.success(t("toast.deleted", { title: title(node.title) }));
       },
       { title: t("delete.title", { title: title(node.title) }), confirmLabel: under.length ? t("delete.confirmAll", { count: under.length + 1 }) : t("delete.confirm"), danger: true },
@@ -209,7 +224,7 @@ export function useTrashPage() {
     const tree = buildTree(before ?? [node]);
     const gone = [node.id, ...descendantsOf(tree, node.id).map((n) => n.id)];
     patchTree(qc, (nodes) => removeSubtree(nodes, gone));
-    if (openId && gone.includes(openId)) void navigate(node.parent_id ? { to: "/wiki/$pageId", params: { pageId: node.parent_id } } : { to: "/wiki" });
+    if (openId && gone.includes(openId)) void navigate(node.parent_id ? pageTo({ id: node.parent_id, area: node.area }) : { to: areaHome(areaOf(node)) });
     try {
       const page = await api.wiki.trash(node.id);
       qc.setQueryData(qk.wikiPage(node.id), page);
@@ -279,12 +294,13 @@ export function useUseTemplate() {
   const navigate = useNavigate();
   const title = useTitle();
   const { t } = useTranslation("wiki");
+  const area = useArea();
   return async (tpl: WikiNode, parent?: string | null) => {
     try {
-      const page = await api.wiki.duplicate(tpl.id, { template: false, parent_id: parent ?? null, title: title(tpl.title) });
+      const page = await api.wiki.duplicate(tpl.id, { template: false, parent_id: parent ?? null, title: title(tpl.title), ...(parent ? {} : { area }) });
       qc.setQueryData(qk.wikiPage(page.id), page);
       void qc.invalidateQueries({ queryKey: qk.wikiTree });
-      void navigate({ to: "/wiki/$pageId", params: { pageId: page.id } });
+      void navigate(pageTo(page));
     } catch (e) {
       toast.error(e, t("templatesPage.failed"));
     }

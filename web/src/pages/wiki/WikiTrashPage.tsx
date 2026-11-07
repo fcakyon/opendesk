@@ -18,6 +18,7 @@ import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
 import { PageIcon } from "@/components/wiki/PageTree";
 import { useDeleteRule, useRestorePage, useTitle } from "@/components/wiki/hooks";
+import { inArea, pageTo, useArea } from "@/lib/wiki/area";
 import { api } from "@/lib/api/endpoints";
 import type { WikiTrashed } from "@/lib/api/types";
 import { fullDate, relLong, shortDate } from "@/lib/format";
@@ -28,7 +29,9 @@ import { PagesButton } from "./WikiLayout";
 
 export default function WikiTrashPage() {
   const { t } = useTranslation("wiki");
-  const { data, isLoading } = useQuery(q.wikiTrash());
+  const area = useArea();
+  const { data: both, isLoading } = useQuery(q.wikiTrash());
+  const data = both?.filter(inArea(area));
   const [term, setTerm] = useState("");
   const title = useTitle();
   useDocumentTitle(t("trash.title"));
@@ -95,7 +98,7 @@ function TrashRow({ page }: { page: WikiTrashed }) {
   return (
     <li className="group flex items-center gap-3 px-3.5 py-2.5">
       <PageIcon icon={page.icon} className="size-5 text-[16px]" />
-      <button type="button" onClick={() => void navigate({ to: "/wiki/$pageId", params: { pageId: page.id } })} className="min-w-0 flex-1 text-left">
+      <button type="button" onClick={() => void navigate(pageTo(page))} className="min-w-0 flex-1 text-left">
         <span className="block truncate text-[13px] font-medium text-fg">
           {title(page.title)}
           {page.subpages > 0 && <span className="ml-1.5 font-normal text-fg-3">{t("trash.subpages", { count: page.subpages })}</span>}

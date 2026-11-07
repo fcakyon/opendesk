@@ -63,6 +63,9 @@ export function useBreadcrumbs(): Crumb[] {
   } else if (path.startsWith("/wiki")) {
     crumbs.push({ label: t("titles.wiki"), to: "/wiki" });
     if (params.pageId) crumbs.push({ label: t("titles.wikiPage") });
+  } else if (path.startsWith("/pages")) {
+    crumbs.push({ label: t("titles.pages"), to: "/pages" });
+    if (params.pageId) crumbs.push({ label: t("titles.pagesPage") });
   } else if (path.startsWith("/reports")) {
     crumbs.push({ label: t("titles.reports"), to: "/reports" });
   } else if (path.startsWith("/settings")) {

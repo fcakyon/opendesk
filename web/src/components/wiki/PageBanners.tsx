@@ -147,12 +147,14 @@ export function Verification({ page, canEdit, onChange }: { page: WikiPage; canE
 /** A daily note's days: the one before, a calendar with dots on days that have notes, the one after. */
 export function DayNav({ page }: { page: WikiPage }) {
   const { t } = useTranslation("wiki");
-  const open = useOpenDay();
+  // The days of the journal the note is in: the wiki's, or Pages'.
+  const area = page.area ?? "wiki";
+  const open = useOpenDay(area);
   const [cal, setCal] = useState(false);
   const day = parseDay(page.daily_date ?? null);
   const from = day ? isoDay(new Date(day.getFullYear(), day.getMonth() - 2, 1)) : "";
   const to = day ? isoDay(new Date(day.getFullYear(), day.getMonth() + 3, 0)) : "";
-  const { data: notes = [] } = useQuery({ ...q.wikiDaily(from, to), enabled: !!day });
+  const { data: notes = [] } = useQuery({ ...q.wikiDaily(from, to, area), enabled: !!day });
   if (!day) return null;
   const shift = (by: number) => open(new Date(day.getFullYear(), day.getMonth(), day.getDate() + by));
   const has = new Set(notes.map((n) => n.date));

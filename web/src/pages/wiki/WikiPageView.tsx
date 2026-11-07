@@ -7,7 +7,7 @@
 // view, components/wiki/split.tsx): a full page of its own, its editor and saver apart.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/react";
 import { AlertTriangle, ArrowLeftRight, Check, CloudOff, Columns2, FileUp, FolderInput, History, Link2, Maximize2, MoreHorizontal, Plus, SmilePlus, Tag, Type, ImageIcon, PanelRight, Link2 as BacklinkIcon, Star, Copy, LayoutTemplate, Lock, BookOpenCheck, Printer, X } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type ReactNode } from "react";
@@ -51,10 +51,13 @@ import { DatabaseView } from "@/components/wiki/database/DatabaseView";
 import { RowProperties } from "@/components/wiki/database/RowProperties";
 import { UnsentBanner } from "@/components/wiki/Unsent";
 import { PageIcon, pageUrl } from "@/components/wiki/PageTree";
-import { freshPages, nodeOf, patchTree, useCreatePage, useDeleteRule, useFavorites, useTitle, useUseTemplate, useWikiTree } from "@/components/wiki/hooks";
+import { freshPages, nodeOf, patchTree, useCreatePage, useDeleteRule, useFavorites, useMovePage, useTitle, useUseTemplate, useWikiTree } from "@/components/wiki/hooks";
+import { useProducts } from "@/lib/products";
+import { areaHome, areaOf, pageTo, useArea } from "@/lib/wiki/area";
+import type { PageSearch } from "@/lib/wiki/split";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage, isApiError } from "@/lib/api/client";
-import type { WikiPage } from "@/lib/api/types";
+import type { WikiArea, WikiPage } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { fullDate, relLong } from "@/lib/format";
 import { clampWidth, setLiveWidth, usePaneWidth } from "@/lib/panes";
@@ -67,12 +70,13 @@ import { PagesButton } from "./WikiLayout";
 import { CoverPicker, PageCover } from "@/components/wiki/PageCover";
 import { PageStyleItems, useLook, LockedBar } from "@/components/wiki/PageStyle";
 
-const route = getRouteApi("/app/wiki/$pageId");
 
 export default function WikiPageView(): ReactNode {
   const { t } = useTranslation("wiki");
-  const { pageId } = route.useParams();
-  const { comment, beside: besideParam } = route.useSearch();
+  // A page of the wiki or of Pages: the same view under /wiki/<id> and /pages/<id>.
+  const { pageId } = useParams({ strict: false }) as { pageId: string };
+  const { comment, beside: besideParam } = useSearch({ strict: false }) as PageSearch;
+  const area = useArea();
   const beside = besideParam && besideParam !== pageId ? besideParam : undefined;
   const navigate = useNavigate();
   const page = useQuery(q.wikiPage(pageId));
@@ -103,7 +107,7 @@ export default function WikiPageView(): ReactNode {
           description={isApiError(page.error, "not_found") ? t("page.notFoundHint") : errorMessage(page.error)}
           action={
             <Button asChild>
-              <Link to="/wiki">{t("page.backHome")}</Link>
+              <Link to={areaHome(area)}>{t("page.backHome")}</Link>
             </Button>
           }
         />
@@ -116,7 +120,7 @@ export default function WikiPageView(): ReactNode {
       openThread={comment}
       beside={beside}
       // The link has done its work: the address goes back to the page's own (and its side page).
-      onThreadOpened={() => void navigate({ to: "/wiki/$pageId", params: { pageId }, search: { beside }, replace: true })}
+      onThreadOpened={() => void navigate({ ...pageTo({ id: pageId, area }), search: { beside }, replace: true })}
     />
   );
   return beside ? <Split main={main} beside={beside} /> : main;
@@ -286,6 +290,8 @@ export function PageScreen({
   const me = useSession((s) => s.user?.id ?? null);
   const canEdit = atLeast(role, "agent");
   const create = useCreatePage();
+  const moveTree = useMovePage();
+  const pagesOn = useProducts().pages;
   const navigate = useNavigate();
   const { tree } = useWikiTree();
 
@@ -489,11 +495,23 @@ export function PageScreen({
       qc.setQueryData(qk.wikiPage(copy.id), copy);
       void qc.invalidateQueries({ queryKey: asTemplate ? qk.wikiTemplates : qk.wikiTree });
       if (asTemplate) toast.success(t("templatesPage.saved", { title: title(live.title) }));
-      void navigate({ to: "/wiki/$pageId", params: { pageId: copy.id } });
+      void navigate(pageTo(copy));
     } catch (e) {
       toast.error(e, t("duplicate.failed"));
     }
   };
+  // Pages and the wiki are trees of their own (contracts/pages.md): the page moves with its
+  // subpages to the top of the other one, and opens there.
+  const moveArea = (to: WikiArea) =>
+    moveTree.mutate(
+      { id: page.id, drop: { parent: null, position: Number.MAX_SAFE_INTEGER, area: to } },
+      {
+        onSuccess: (moved) => {
+          toast.success(to === "pages" ? t("pages.movedToPages", { title: title(live.title) }) : t("pages.movedToWiki", { title: title(live.title) }));
+          void navigate({ ...pageTo(moved), replace: true });
+        },
+      },
+    );
   const verify = async (verified: boolean, days?: number) => {
     try {
       const saved = await api.wiki.update(page.id, verified ? { verified: true, ...(days ? { verified_days: days } : {}) } : { verified: false });
@@ -536,8 +554,8 @@ export function PageScreen({
         <header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-line px-3 sm:px-4">
           <PagesButton />
           <nav aria-label={t("page.breadcrumbs")} className="flex min-w-0 flex-1 items-center gap-1 text-[12.5px]">
-            <Link to="/wiki" className="hidden shrink-0 rounded-md px-1.5 py-0.5 text-fg-3 transition-colors hover:bg-hover hover:text-fg sm:inline">
-              {t("title")}
+            <Link to={areaHome(areaOf(live))} className="hidden shrink-0 rounded-md px-1.5 py-0.5 text-fg-3 transition-colors hover:bg-hover hover:text-fg sm:inline">
+              {areaOf(live) === "pages" ? t("pages.title") : t("title")}
             </Link>
             {live.private && (
               <span className="hidden shrink-0 items-center gap-1 sm:flex">
@@ -551,7 +569,7 @@ export function PageScreen({
             {crumbs.map((c) => (
               <span key={c.id} className="hidden min-w-0 items-center gap-1 sm:flex">
                 <span className="text-fg-4">/</span>
-                <Link to="/wiki/$pageId" params={{ pageId: c.id }} className="flex min-w-0 max-w-[180px] items-center gap-1 rounded-md px-1.5 py-0.5 text-fg-3 transition-colors hover:bg-hover hover:text-fg">
+                <Link {...pageTo({ id: c.id, area: live.area })} className="flex min-w-0 max-w-[180px] items-center gap-1 rounded-md px-1.5 py-0.5 text-fg-3 transition-colors hover:bg-hover hover:text-fg">
                   {c.icon && <span aria-hidden>{c.icon}</span>}
                   <span className="truncate">{title(c.title)}</span>
                 </Link>
@@ -605,6 +623,11 @@ export function PageScreen({
                   {canEdit && !live.journal && (
                     <MenuItem icon={<FolderInput />} onSelect={() => setMoving(true)}>
                       {t("tree.moveTo")}
+                    </MenuItem>
+                  )}
+                  {canEdit && !live.journal && !live.template && (pagesOn || areaOf(live) === "pages") && (
+                    <MenuItem icon={<ArrowLeftRight />} onSelect={() => moveArea(areaOf(live) === "pages" ? "wiki" : "pages")}>
+                      {areaOf(live) === "pages" ? t("pages.moveToWiki") : t("pages.moveToPages")}
                     </MenuItem>
                   )}
                   {canEdit && !live.journal && (
@@ -689,7 +712,7 @@ export function PageScreen({
           onDiscard={() => {
             if (saver.status === "forbidden") return take(latest);
             forgetSaver(page.id);
-            void navigate({ to: "/wiki" });
+            void navigate({ to: areaHome(areaOf(live)) });
           }}
         />
       )}
@@ -850,8 +873,7 @@ export function PageScreen({
                   {kids.map((k) => (
                     <Link
                       key={k.id}
-                      to="/wiki/$pageId"
-                      params={{ pageId: k.id }}
+                      {...pageTo({ id: k.id, area: live.area })}
                       className="-mx-2 flex h-8 items-center gap-2 rounded-md px-2 text-[13px] text-fg-2 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:bg-hover"
                     >
                       <PageIcon icon={k.icon} />

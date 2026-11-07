@@ -367,15 +367,15 @@ page dropped at the top level of another space moves to it). A page can also be 
 
 Pages, databases and canvases are part of the app, not only the wiki: the main sidebar has a built-in
 **Pages** section (`SidebarPrefs` section id `pages`, contracts/collab.md), ordered, hidden and
-numbered like the others. It shows the same live tree as the wiki's own sidebar (the `wiki_page`
-events keep it current): the workspace's pages at the top level, each teamspace the member sees under a
+numbered like the others, while the workspace has Pages on. It shows the tree of Pages' area
+(contracts/pages.md "Areas"), live like the wiki's own sidebar (the `wiki_page` events keep it current): the workspace's pages at the top level, each teamspace the member sees under a
 row that folds, their private pages under Private, then Today's note, Templates and Trash. Rows nest,
 fold, drag and have the wiki's page menu (favorite, add a subpage, duplicate, move, copy a link, open
 beside, add to a Space, move to the trash), plus Hide from sidebar on a top-level page or a teamspace.
 What shows is the member's (`SidebarPrefs.hidden`): `section:pages` (the whole section),
 `pages:<part>` for a part (`workspace`, `teamspaces`, `private`, `today`, `templates`, `trash`),
 `wiki_page:<id>` for a top-level page and `wiki_space:<team id>` for a teamspace. The collapsed rail
-shows one Pages row to the wiki. Folded rows are kept per member in the browser.
+shows one Pages row to `/pages`. Folded rows are kept per member in the browser.
 
 The member's favorite pages (`/v1/wiki/favorites`, one list) are also rows of the main Favorites, after
 its pins, with the page's live title and icon.

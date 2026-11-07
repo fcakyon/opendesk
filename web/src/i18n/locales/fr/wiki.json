@@ -1362,7 +1362,8 @@
     "subpages": "Inclure les sous-pages",
     "wiki": "Exporter le wiki",
     "started": "Préparation du téléchargement",
-    "failed": "Impossible d’exporter."
+    "failed": "Impossible d’exporter.",
+    "pages": "Exporter Pages"
   },
   "aliases": {
     "label": "Alias",
@@ -1420,5 +1421,22 @@
     "canvasHint": "Des cartes, notes et liens sur un tableau",
     "fromTemplate": "À partir d’un modèle",
     "import": "Importer"
+  },
+  "pages": {
+    "title": "Pages",
+    "intro": "Les documents, notes, plans et bases de données de votre équipe, au même endroit. Seuls les membres les voient, jamais les clients.",
+    "importHint": "Markdown, HTML, ou un export Notion ou Obsidian",
+    "emptyTitle": "Lancez les pages de votre équipe",
+    "emptyBody": "Rédigez des documents et des notes, planifiez dans des bases de données ou organisez vos idées sur un canevas. Chaque page apparaît dans la barre latérale, où vous l’organisez.",
+    "emptyViewer": "Personne n’a encore ajouté de page. Les pages de votre équipe apparaîtront ici.",
+    "tipSidebar": "Organisez les pages dans la barre latérale, ou masquez celles dont vous n’avez pas besoin",
+    "databases": "Bases de données",
+    "rows_one": "{{count}} ligne",
+    "rows_many": "{{count}} lignes",
+    "rows_other": "{{count}} lignes",
+    "moveToPages": "Déplacer vers Pages",
+    "moveToWiki": "Déplacer vers le wiki",
+    "movedToPages": "{{title}} déplacé vers Pages",
+    "movedToWiki": "{{title}} déplacé vers le wiki"
   }
 }

@@ -87,7 +87,10 @@
     "wikiGraph": "Graph",
     "wikiTags": "Tags",
     "wikiTemplates": "Templates",
-    "wikiTrash": "Trash"
+    "wikiTrash": "Trash",
+    "pages": "Pages",
+    "pagesPage": "Page",
+    "pagesSettings": "Pages"
   },
   "folders": {
     "unassigned": "Unassigned",
@@ -147,7 +150,8 @@
     "aiClients": "AI clients",
     "webhooks": "Webhooks",
     "auditLog": "Audit log",
-    "phone": "Phone"
+    "phone": "Phone",
+    "pages": "Pages"
   },
   "settingsPage": "Settings page",
   "command": {
@@ -181,7 +185,9 @@
     "aiKnowledge": "AI agent knowledge",
     "aiTools": "AI agent tools",
     "aiPlayground": "AI agent playground",
-    "importHistory": "Import history from Zendesk, Help Scout, Freshdesk, Intercom, Front or CSV"
+    "importHistory": "Import history from Zendesk, Help Scout, Freshdesk, Intercom, Front or CSV",
+    "pages": "Pages",
+    "newPage": "New page"
   },
   "shortcuts": {
     "general": "General",

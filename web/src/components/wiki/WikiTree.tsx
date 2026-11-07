@@ -45,7 +45,8 @@ import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { buildTree, childrenOf, spaceBody, type SpaceKey, type Tree } from "@/lib/wiki/tree";
-import { useCreatePage, useFavorites, useOpenPageId, useTitle, useWikiTree } from "./hooks";
+import { areaPath, inArea, pageTo, useArea } from "@/lib/wiki/area";
+import { useAreaTree, useCreatePage, useFavorites, useOpenPageId, useTitle } from "./hooks";
 import { DragProvider, EmptyRow, PageIcon, TreeView, useSpaceView } from "./PageTree";
 
 import { useOpenToday } from "./journal";
@@ -57,7 +58,7 @@ import { openImport } from "@/app/quickAdd";
 
 /** The sections a member can have, in their default order: teamspaces first, as Notion does. */
 export function useSections(): { key: SectionKey; team?: Team }[] {
-  const { data } = useWikiTree();
+  const { data } = useAreaTree();
   const { data: teams = [] } = useQuery(q.teams());
   return useMemo(() => {
     const withPages = new Set((data ?? []).map((n) => n.team_id).filter((x): x is string => !!x));
@@ -75,7 +76,8 @@ export function useSections(): { key: SectionKey; team?: Team }[] {
 
 export function WikiTree({ onNavigate, autoFocusSearch }: { onNavigate?: () => void; autoFocusSearch?: boolean }) {
   const { t } = useTranslation("wiki");
-  const { isLoading } = useWikiTree();
+  const area = useArea();
+  const { isLoading } = useAreaTree();
   const canEdit = atLeast(useRole(), "agent");
   const create = useCreatePage();
   const openId = useOpenPageId();
@@ -127,7 +129,7 @@ export function WikiTree({ onNavigate, autoFocusSearch }: { onNavigate?: () => v
               <MenuSeparator />
               <MenuItem icon={<FileUp />} onSelect={() => {
                   onNavigate?.();
-                  openImport(openId ?? null);
+                  openImport(openId ?? null, { area });
                 }}
               >
                 {t("import.action")}
@@ -160,7 +162,10 @@ export function WikiTree({ onNavigate, autoFocusSearch }: { onNavigate?: () => v
 
 function SearchResults({ term, onNavigate }: { term: string; onNavigate?: () => void }) {
   const { t } = useTranslation("wiki");
-  const { data, isFetching, isError } = useQuery(q.wikiSearch(term));
+  const area = useArea();
+  const { data: hits, isFetching, isError } = useQuery(q.wikiSearch(term));
+  // The search finds both areas' pages; the column lists its own.
+  const data = hits?.filter(inArea(area));
   const title = useTitle();
   const openId = useOpenPageId();
   if (!data) return <p className="px-2.5 pt-2 text-[12.5px] text-fg-3">{isError ? t("tree.searchFailed") : t("tree.searching")}</p>;
@@ -170,8 +175,7 @@ function SearchResults({ term, onNavigate }: { term: string; onNavigate?: () => 
       {data.map((h) => (
         <li key={h.id}>
           <Link
-            to="/wiki/$pageId"
-            params={{ pageId: h.id }}
+            {...pageTo(h)}
             onClick={onNavigate}
             data-wiki-row
             className={cn(
@@ -236,7 +240,7 @@ function moveFocus(e: KeyboardEvent<HTMLElement>) {
 
 /** The page being dragged, shared by every section so a page drops into another space. */
 function Sections({ canEdit, onNavigate, onSearch }: { canEdit: boolean; onNavigate?: () => void; onSearch: () => void }) {
-  const { data = [] } = useWikiTree();
+  const { data = [] } = useAreaTree();
   const full = useMemo(() => buildTree(data), [data]);
   const sections = useSections();
   const { layout, toggleFold, setHidden } = useSidebarLayout();
@@ -375,7 +379,7 @@ function FlatRow({ node, onNavigate, actions }: { node: WikiNode; onNavigate?: (
   const openId = useOpenPageId();
   return (
     <div className={cn("group relative flex h-7 items-center gap-1.5 rounded-md pl-[26px] pr-1 text-[12.5px]", node.id === openId ? "bg-active font-medium text-fg" : "text-fg-2 hover:bg-hover hover:text-fg")}>
-      <Link to="/wiki/$pageId" params={{ pageId: node.id }} onClick={onNavigate} data-wiki-row className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch outline-none focus-visible:underline">
+      <Link {...pageTo(node)} onClick={onNavigate} data-wiki-row className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch outline-none focus-visible:underline">
         <PageIcon icon={node.icon} />
         <span className={cn("truncate", !node.title.trim() && "text-fg-3")}>{title(node.title)}</span>
       </Link>
@@ -387,13 +391,16 @@ function FlatRow({ node, onNavigate, actions }: { node: WikiNode; onNavigate?: (
 function FavoritesSection({ head, folded, onNavigate }: { head: (label: ReactNode, extra?: ReactNode) => ReactNode; folded: boolean; onNavigate?: () => void }) {
   const { t } = useTranslation("wiki");
   const fav = useFavorites();
+  const area = useArea();
   const [dragging, setDragging] = useState<string | null>(null);
-  if (!fav.list.length) return null;
+  // The column's own area's favorites; the main sidebar's Favorites has both.
+  const list = fav.list.filter(inArea(area));
+  if (!list.length) return null;
   return (
     <section>
       {head(t("favorites.title"))}
       {!folded &&
-        fav.list.map((n) => (
+        list.map((n) => (
           <div
             key={n.id}
             draggable
@@ -430,7 +437,7 @@ function FavoritesSection({ head, folded, onNavigate }: { head: (label: ReactNod
 
 function RecentSection({ head, folded, onNavigate }: { head: (label: ReactNode, extra?: ReactNode) => ReactNode; folded: boolean; onNavigate?: () => void }) {
   const { t } = useTranslation("wiki");
-  const { data = [] } = useQuery(q.wikiRecent());
+  const { data = [] } = useQuery(q.wikiRecent(useArea()));
   if (!data.length) return null;
   return (
     <section>
@@ -449,6 +456,7 @@ function RecentSection({ head, folded, onNavigate }: { head: (label: ReactNode, 
 function Places({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useTranslation("wiki");
   const openToday = useOpenToday();
+  const area = useArea();
   const canEdit = atLeast(useRole(), "agent");
   const item = "flex h-7 w-full items-center gap-2 rounded-md px-2 text-[12.5px] text-fg-2 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:bg-hover [&_svg]:size-[14px] [&_svg]:text-fg-3";
   const active = { className: "bg-active text-fg" };
@@ -467,20 +475,20 @@ function Places({ onNavigate }: { onNavigate?: () => void }) {
           {t("journal.today")}
         </button>
       )}
-      <Link to="/wiki/templates" className={item} activeProps={active} onClick={onNavigate}>
+      <Link to={areaPath(area, "templates")} className={item} activeProps={active} onClick={onNavigate}>
         <LayoutTemplate />
         {t("templatesPage.title")}
       </Link>
       <div className="grid grid-cols-3 gap-0.5">
-        <Link to="/wiki/graph" className={item} activeProps={active} onClick={onNavigate}>
+        <Link to={areaPath(area, "graph")} className={item} activeProps={active} onClick={onNavigate}>
           <Network />
           {t("graph.title")}
         </Link>
-        <Link to="/wiki/tags" className={item} activeProps={active} onClick={onNavigate}>
+        <Link to={areaPath(area, "tags")} className={item} activeProps={active} onClick={onNavigate}>
           <Hash />
           {t("tags.title")}
         </Link>
-        <Link to="/wiki/trash" className={item} activeProps={active} onClick={onNavigate}>
+        <Link to={areaPath(area, "trash")} className={item} activeProps={active} onClick={onNavigate}>
           <Trash2 />
           {t("trash.title")}
         </Link>

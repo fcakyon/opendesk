@@ -25,6 +25,7 @@ import { q, qk } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { groupSkipped, IMPORT_ACCEPT, importable, MAX_IMPORT_BYTES, SKIP_REASONS, type SkipGroup } from "@/lib/wiki/port";
 import { ancestorsOf, spaceBody, type SpaceKey } from "@/lib/wiki/tree";
+import { areaOf, pageTo, useDefaultArea } from "@/lib/wiki/area";
 import { useExpanded, useTitle, useWikiTree } from "./hooks";
 import { PageIcon } from "./PageTree";
 
@@ -57,6 +58,7 @@ function ImportDialog({ open, start: from, onClose }: { open: boolean; start: Im
   const me = useSession((s) => s.user?.id);
   const { open: expand } = useExpanded();
   const parent = parentId ? tree.byId.get(parentId) : undefined;
+  const area = useDefaultArea(from.area);
   // Pages can't be imported into a database.
   const under = parent && parent.kind !== "database" ? parent : undefined;
 
@@ -96,7 +98,7 @@ function ImportDialog({ open, start: from, onClose }: { open: boolean; start: Im
   };
 
   const start = async () => {
-    const to: WikiImportTarget = target.startsWith("page:") ? { parent_id: target.slice(5) } : spaceBody(target as SpaceKey);
+    const to: WikiImportTarget = target.startsWith("page:") ? { parent_id: target.slice(5) } : { ...spaceBody(target as SpaceKey), area };
     const ctl = new AbortController();
     abort.current = ctl;
     setProblem(null);
@@ -122,7 +124,7 @@ function ImportDialog({ open, start: from, onClose }: { open: boolean; start: Im
 
   const openFirst = (id: string) => {
     close();
-    void navigate({ to: "/wiki/$pageId", params: { pageId: id } });
+    void navigate(pageTo({ id, area: under ? areaOf(under) : area }));
   };
 
   const footer =

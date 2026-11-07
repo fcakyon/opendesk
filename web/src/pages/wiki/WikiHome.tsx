@@ -13,7 +13,7 @@ import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { PageIcon } from "@/components/wiki/PageTree";
-import { useCreatePage, useTitle, useWikiTree } from "@/components/wiki/hooks";
+import { useAreaTree, useCreatePage, useTitle } from "@/components/wiki/hooks";
 import { FIRST_RUN, TEMPLATES, templatePage } from "@/components/wiki/templates";
 import { StarterTemplates } from "@/components/wiki/TemplateCards";
 import { ExportWikiItems } from "@/components/wiki/Export";
@@ -26,7 +26,7 @@ import { PagesButton } from "./WikiLayout";
 
 export default function WikiHome() {
   const { t } = useTranslation("wiki");
-  const { tree, data, isLoading } = useWikiTree();
+  const { tree, data, isLoading } = useAreaTree();
   const canEdit = atLeast(useRole(), "agent");
   const create = useCreatePage();
   const title = useTitle();

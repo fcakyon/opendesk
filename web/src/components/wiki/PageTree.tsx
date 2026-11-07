@@ -17,7 +17,8 @@ import { api } from "@/lib/api/endpoints";
 import type { WikiKind, WikiNode } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { ancestorsOf, childrenOf, dropIn, keyMove, spaceOf, spaceTree, visibleRows, type Drop, type SpaceKey, type Tree, type Zone } from "@/lib/wiki/tree";
-import { useCreatePage, useExpanded, useFavorites, useMovePage, useOpenPageId, useTitle, useWikiTree } from "./hooks";
+import { pageTo, useArea } from "@/lib/wiki/area";
+import { useAreaTree, useCreatePage, useExpanded, useFavorites, useMovePage, useOpenPageId, useTitle } from "./hooks";
 import { MoveDialog, TrashItem } from "./PageMenu";
 import { useSplit } from "./split";
 import { AddToSpace } from "./AddToSpace";
@@ -49,7 +50,7 @@ export function DragProvider({ children }: { children: ReactNode }) {
 
 /** A space's pages; a database's rows are its own, shown in its views, so trees leave them out. */
 export function useSpaceView(space: SpaceKey): Tree {
-  const { data = [] } = useWikiTree();
+  const { data = [] } = useAreaTree();
   return useMemo(() => {
     const databases = new Set(data.filter((n) => n.kind === "database").map((n) => n.id));
     return spaceTree(
@@ -64,6 +65,7 @@ export function EmptyRow({ space, canEdit, onAdd, variant = "wiki" }: { space: S
   const { t } = useTranslation("wiki");
   const { drag, setDrag } = useContext(DragCtx);
   const move = useMovePage();
+  const area = useArea();
   const [over, setOver] = useState(false);
   return (
     <div
@@ -75,7 +77,7 @@ export function EmptyRow({ space, canEdit, onAdd, variant = "wiki" }: { space: S
       onDragLeave={() => setOver(false)}
       onDrop={(e) => {
         e.preventDefault();
-        if (drag) move.mutate({ id: drag, drop: { parent: null, position: 0, space } });
+        if (drag) move.mutate({ id: drag, drop: { parent: null, position: 0, space, area } });
         setDrag(null);
         setOver(false);
       }}
@@ -127,6 +129,7 @@ export function TreeView({
   const openId = useOpenPageId();
   const navigate = useNavigate();
   const move = useMovePage();
+  const area = useArea();
   const { drag, setDrag } = useContext(DragCtx);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [over, setOver] = useState<Over | null>(null);
@@ -214,7 +217,7 @@ export function TreeView({
         break;
       case "Enter":
         e.preventDefault();
-        void navigate({ to: "/wiki/$pageId", params: { pageId: id } });
+        void navigate(pageTo({ id, area: n.area }));
         onNavigate?.();
         break;
     }
@@ -227,7 +230,7 @@ export function TreeView({
     if (y > 0.72) return childrenOf(view, id).length && expanded.has(id) ? "inside" : "after";
     return "inside";
   };
-  const dropOn = (target: string, zone: Zone) => (drag ? dropIn(view, full, drag, target, zone, space) : null);
+  const dropOn = (target: string, zone: Zone) => (drag ? dropIn(view, full, drag, target, zone, space, area) : null);
 
   const dnd = (n: WikiNode) =>
     canEdit
@@ -375,7 +378,7 @@ function TreeRow({
   const duplicate = async () => {
     try {
       const copy = await api.wiki.duplicate(n.id, { parent_id: n.parent_id, title: t("duplicate.title", { title: title(n.title) }), position: n.position + 1 });
-      void navigate({ to: "/wiki/$pageId", params: { pageId: copy.id } });
+      void navigate(pageTo(copy));
     } catch (e) {
       toast.error(e, t("duplicate.failed"));
     }
@@ -445,7 +448,7 @@ function TreeRow({
         <ChevronRight className={cn("size-3 transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")} />
       </button>
       )}
-      <Link to="/wiki/$pageId" params={{ pageId: n.id }} tabIndex={-1} draggable={false} onClick={onNavigate} className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch outline-none">
+      <Link {...pageTo(n)} tabIndex={-1} draggable={false} onClick={onNavigate} className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch outline-none">
         {!nav && <PageIcon icon={n.icon} kind={n.kind} />}
         <span className={cn("truncate", !n.title.trim() && "text-fg-3")}>{title(n.title)}</span>
         {n.verified && <VerifiedMark />}

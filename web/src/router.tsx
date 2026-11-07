@@ -21,7 +21,7 @@ import { atLeast, bootSession, currentMembership, openLinkedWorkspace } from "./
 import { stripWorkspaceParam, workspaceParam } from "./lib/workspaceParam";
 import { queryClient } from "./lib/queryClient";
 import { q } from "./lib/queries";
-import { productHome, requireTickets, TICKET_SETTINGS } from "./lib/products";
+import { productHome, productsOf, requireTickets, TICKET_SETTINGS } from "./lib/products";
 import { folderById, listQuery, parseInboxSearch, teamQuery } from "./lib/folders";
 import { withRememberedSort } from "./lib/listSort";
 import { isMailRouteBox, mailListQuery, parseMailSearch } from "./lib/collab/boxes";
@@ -594,9 +594,81 @@ const wikiPageRoute = createRoute({
   // ?comment=<thread id> opens that thread (notifications link there; contracts/wiki.md "Comments");
   // ?beside=<page id> opens a second page beside it ("Split view").
   validateSearch: (s: Record<string, unknown>): PageSearch => ({ comment: str(s.comment), beside: parseBeside(s.beside) }),
-  loader: ({ context, params }) => context.queryClient.ensureQueryData(q.wikiPage(params.pageId)).catch(() => undefined),
+  // A page of Pages opens at /pages/<id>, wherever the link came from (contracts/pages.md).
+  loader: async ({ context, params }) => {
+    const p = await context.queryClient.ensureQueryData(q.wikiPage(params.pageId)).catch(() => undefined);
+    if (p?.area === "pages") throw redirect({ to: "/pages/$pageId", params, search: true, replace: true });
+    return p;
+  },
   component: page(() => import("./pages/wiki/WikiPageView")),
   staticData: { title: "wikiPage" },
+});
+
+// Pages (contracts/pages.md): the workspace's own pages, databases and canvases, a product of
+// their own with the wiki's engine. The same views as the wiki's, in Pages' area.
+const pagesLayout = createRoute({
+  getParentRoute: () => appLayout,
+  path: "/pages",
+  beforeLoad: async ({ context }) => {
+    if (!productsOf(await context.queryClient.ensureQueryData(q.workspace())).pages) throw await productHome(context.queryClient);
+  },
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.wikiTree()),
+  component: page(() => import("./pages/wiki/PagesLayout")),
+  staticData: { title: "pages" },
+});
+
+const pagesIndexRoute = createRoute({
+  getParentRoute: () => pagesLayout,
+  path: "/",
+  component: page(() => import("./pages/wiki/PagesHome")),
+  staticData: { title: "pages" },
+});
+
+const pagesGraphRoute = createRoute({
+  getParentRoute: () => pagesLayout,
+  path: "graph",
+  validateSearch: (s: Record<string, unknown>): { focus?: string; tag?: string } => ({ focus: str(s.focus), tag: str(s.tag) }),
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.wikiGraph()),
+  component: page(() => import("./pages/wiki/WikiGraphPage")),
+  staticData: { title: "wikiGraph" },
+});
+
+const pagesTagsRoute = createRoute({
+  getParentRoute: () => pagesLayout,
+  path: "tags",
+  validateSearch: (s: Record<string, unknown>): { tag?: string } => ({ tag: str(s.tag) }),
+  component: page(() => import("./pages/wiki/WikiTagsPage")),
+  staticData: { title: "wikiTags" },
+});
+
+const pagesTemplatesRoute = createRoute({
+  getParentRoute: () => pagesLayout,
+  path: "templates",
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.wikiTemplates()),
+  component: page(() => import("./pages/wiki/WikiTemplatesPage")),
+  staticData: { title: "wikiTemplates" },
+});
+
+const pagesTrashRoute = createRoute({
+  getParentRoute: () => pagesLayout,
+  path: "trash",
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.wikiTrash()),
+  component: page(() => import("./pages/wiki/WikiTrashPage")),
+  staticData: { title: "wikiTrash" },
+});
+
+const pagesPageRoute = createRoute({
+  getParentRoute: () => pagesLayout,
+  path: "$pageId",
+  validateSearch: (s: Record<string, unknown>): PageSearch => ({ comment: str(s.comment), beside: parseBeside(s.beside) }),
+  // A page of the wiki opens at /wiki/<id>.
+  loader: async ({ context, params }) => {
+    const p = await context.queryClient.ensureQueryData(q.wikiPage(params.pageId)).catch(() => undefined);
+    if (p && p.area !== "pages") throw redirect({ to: "/wiki/$pageId", params, search: true, replace: true });
+    return p;
+  },
+  component: page(() => import("./pages/wiki/WikiPageView")),
+  staticData: { title: "pagesPage" },
 });
 
 export function defaultRange() {
@@ -690,6 +762,10 @@ const sAgentToAgent = settingsPage("/agent-to-agent", "agentToAgent", () => impo
 });
 const sWorkspaces = settingsPage("/workspaces", "workspaces", () => import("./pages/settings/Workspaces"), (qc) =>
   Promise.all([qc.ensureQueryData(q.workspacePrefs()), qc.prefetchQuery(q.overview())]),
+);
+// Pages (contracts/pages.md): the product's own settings, its import and export, and its trash.
+const sPages = settingsPage("/pages", "pagesSettings", () => import("./pages/settings/PagesSettings"), (qc) =>
+  Promise.all([qc.ensureQueryData(q.workspace()), qc.prefetchQuery(q.teams())]),
 );
 const sWorkspace = settingsPage("/workspace", "general", () => import("./pages/settings/WorkspaceSettings"), (qc) =>
   Promise.all([qc.ensureQueryData(q.workspace()), qc.ensureQueryData(q.members())]),
@@ -1070,6 +1146,7 @@ const routeTree = rootRoute.addChildren([
     changelogRoute,
     changelogEntryRoute,
     wikiLayout.addChildren([wikiIndexRoute, wikiGraphRoute, wikiTagsRoute, wikiTemplatesRoute, wikiTrashRoute, wikiPageRoute]),
+    pagesLayout.addChildren([pagesIndexRoute, pagesGraphRoute, pagesTagsRoute, pagesTemplatesRoute, pagesTrashRoute, pagesPageRoute]),
     reportsRoute,
     settingsLayout.addChildren([
       settingsIndex,
@@ -1079,6 +1156,7 @@ const routeTree = rootRoute.addChildren([
       sAgentToAgent,
       sWorkspaces,
       sWorkspace,
+      sPages,
       sMembers,
       sTeams,
       sTeamDetail,

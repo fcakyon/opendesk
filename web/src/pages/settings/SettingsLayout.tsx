@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/cn";
 import { motion } from "motion/react";
 import {
+  FileText,
   AtSign,
   Bell,
   BookOpen,
@@ -64,6 +65,7 @@ type NavPath =
   | "/settings/workspace"
   | "/settings/members"
   | "/settings/teams"
+  | "/settings/pages"
   | "/settings/mailboxes"
   | "/settings/support-channels"
   | "/settings/phone"
@@ -118,6 +120,7 @@ const groups: { title: keyof typeof navigation.groups; items: { to: NavPath; lab
       { to: "/settings/workspace", label: "general", icon: <Building2 /> },
       { to: "/settings/members", label: "members", icon: <Users /> },
       { to: "/settings/teams", label: "teams", icon: <UsersRound /> },
+      { to: "/settings/pages", label: "pages", icon: <FileText /> },
       { to: "/settings/billing", label: "planAndBilling", icon: <CreditCard /> },
       { to: "/settings/ai", label: "ai", icon: <Bot /> },
       { to: "/settings/integrations", label: "integrations", icon: <Plug /> },

@@ -1332,7 +1332,8 @@
     "subpages": "Mit Unterseiten",
     "wiki": "Wiki exportieren",
     "started": "Download wird vorbereitet",
-    "failed": "Der Export hat nicht geklappt."
+    "failed": "Der Export hat nicht geklappt.",
+    "pages": "Seiten exportieren"
   },
   "aliases": {
     "label": "Aliasse",
@@ -1387,5 +1388,21 @@
     "canvasHint": "Karten, Notizen und Links auf einer Fläche",
     "fromTemplate": "Aus einer Vorlage",
     "import": "Importieren"
+  },
+  "pages": {
+    "title": "Seiten",
+    "intro": "Dokumente, Notizen, Pläne und Datenbanken deines Teams an einem Ort. Nur Mitglieder sehen sie, Kunden nie.",
+    "importHint": "Markdown, HTML oder ein Notion- oder Obsidian-Export",
+    "emptyTitle": "Starte die Seiten deines Teams",
+    "emptyBody": "Schreibe Dokumente und Notizen, plane in Datenbanken oder ordne Ideen auf einer Leinwand. Jede Seite erscheint in der Seitenleiste, wo du sie anordnest.",
+    "emptyViewer": "Noch hat niemand eine Seite angelegt. Die Seiten deines Teams erscheinen hier.",
+    "tipSidebar": "Ordne Seiten in der Seitenleiste an oder blende aus, was du nicht brauchst",
+    "databases": "Datenbanken",
+    "rows_one": "{{count}} Zeile",
+    "rows_other": "{{count}} Zeilen",
+    "moveToPages": "Zu Seiten verschieben",
+    "moveToWiki": "Ins Wiki verschieben",
+    "movedToPages": "{{title}} zu Seiten verschoben",
+    "movedToWiki": "{{title}} ins Wiki verschoben"
   }
 }

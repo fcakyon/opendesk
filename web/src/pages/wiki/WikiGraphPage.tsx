@@ -3,7 +3,7 @@
 // a tag, and centred on a page when one is picked (?focus=).
 
 import { useQuery } from "@tanstack/react-query";
-import { getRouteApi, useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Network, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,19 +14,21 @@ import { Switch } from "@/components/ui/switch";
 import { EmptyState } from "@/components/ui/empty";
 import { WikiGraph } from "@/components/wiki/Graph";
 import { PageIcon } from "@/components/wiki/PageTree";
-import { useTitle } from "@/components/wiki/hooks";
+import { useAreaTree, useTitle } from "@/components/wiki/hooks";
+import { areaPath, pageTo, useArea } from "@/lib/wiki/area";
 import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
 import { PagesButton } from "./WikiLayout";
 
-const route = getRouteApi("/app/wiki/graph");
 
 export default function WikiGraphPage() {
   const { t } = useTranslation("wiki");
   const title = useTitle();
   const navigate = useNavigate();
-  const { focus, tag } = route.useSearch();
-  const { data: nodes = [] } = useQuery(q.wikiTree());
+  // The wiki's graph or Pages', the same view under either route.
+  const { focus, tag } = useSearch({ strict: false }) as { focus?: string; tag?: string };
+  const area = useArea();
+  const { data: nodes = [] } = useAreaTree();
   const { data: links = [] } = useQuery(q.wikiGraph());
   const [query, setQuery] = useState("");
   const [subpages, setSubpages] = useState(true);
@@ -37,7 +39,7 @@ export default function WikiGraphPage() {
 
   const focused = focus ? nodes.find((n) => n.id === focus) : undefined;
   const tags = useMemo(() => [...new Set(nodes.flatMap((n) => n.tags ?? []))].sort(), [nodes]);
-  const setSearch = (next: { focus?: string; tag?: string }) => void navigate({ to: "/wiki/graph", search: { focus: next.focus, tag: next.tag }, replace: true });
+  const setSearch = (next: { focus?: string; tag?: string }) => void navigate({ to: areaPath(area, "graph"), search: { focus: next.focus, tag: next.tag }, replace: true });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -61,7 +63,7 @@ export default function WikiGraphPage() {
             tag={tag}
             query={query}
             height="100%"
-            onOpen={(id) => void navigate({ to: "/wiki/$pageId", params: { pageId: id } })}
+            onOpen={(id) => void navigate(pageTo({ id, area }))}
           />
           <div className="absolute left-3 top-3 flex w-[260px] flex-col gap-2 rounded-xl border border-line bg-raised/95 p-2.5 shadow-pop backdrop-blur">
             <SearchInput value={query} onChange={setQuery} placeholder={t("graph.search")} />

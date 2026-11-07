@@ -18,7 +18,7 @@ const navigate = vi.fn();
 const OPEN = "22222222-2222-4222-8222-222222222222";
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
-  useRouterState: ({ select }: { select: (s: unknown) => unknown }) => select({ location: { pathname: `/wiki/${OPEN}`, search: {} } }),
+  useRouterState: ({ select }: { select: (s: unknown) => unknown }) => select({ location: { pathname: `/pages/${OPEN}`, search: {} } }),
   Link: ({ children, to, params, activeProps: _a, activeOptions: _o, ...rest }: { children: ReactNode | ((s: { isActive: boolean }) => ReactNode); to: string; params?: Record<string, string>; activeProps?: unknown; activeOptions?: unknown }) => (
     <a href={params?.pageId ? to.replace("$pageId", params.pageId) : to} {...rest}>
       {typeof children === "function" ? children({ isActive: false }) : children}
@@ -30,8 +30,10 @@ vi.mock("@tanstack/react-router", () => ({
 // jsdom has no layout: the tree scrolls its open page into view.
 Element.prototype.scrollIntoView ??= () => {};
 
-const node = (over: Partial<WikiNode>): WikiNode => ({ id: "p1", parent_id: null, title: "Runbooks", icon: "", position: 0, version: 1, updated_at: "2026-11-01T00:00:00Z", created_by_id: null, tags: [], ...over });
+const node = (over: Partial<WikiNode>): WikiNode => ({ id: "p1", parent_id: null, title: "Runbooks", icon: "", position: 0, version: 1, updated_at: "2026-11-01T00:00:00Z", created_by_id: null, tags: [], area: "pages", ...over });
+// Pages' tree (contracts/pages.md), and a wiki page the section leaves out.
 const tree = [
+  node({ id: "w1", title: "Wiki runbook", area: "wiki" }),
   node({}),
   node({ id: OPEN, parent_id: "p1", title: "Refunds" }),
   node({ id: "p3", title: "Old notes", position: 1 }),
@@ -93,21 +95,21 @@ describe("the Pages section", () => {
     expect(host.textContent).not.toContain("Trash");
   });
 
-  it("is one link to the wiki in the rail", async () => {
+  it("is one link to Pages in the rail", async () => {
     await render(<PagesSection prefs={defaultSidebarPrefs()} rail first />);
     expect(rows()).toEqual([]);
-    expect(host.querySelector("a")?.getAttribute("href")).toBe("/wiki");
+    expect(host.querySelector("a")?.getAttribute("href")).toBe("/pages");
   });
 
   it("opens the new page popup from its +, and the import with files dropped on it", async () => {
     await render(<PagesSection prefs={defaultSidebarPrefs()} rail={false} first />);
     await act(async () => host.querySelector<HTMLButtonElement>("button[aria-label='New page']")!.click());
-    expect(useQuickAdd.getState().newPage).toEqual({ space: undefined });
+    expect(useQuickAdd.getState().newPage).toEqual({ space: undefined, area: "pages" });
     const file = new File(["# A"], "a.md");
     const drop = new Event("drop", { bubbles: true, cancelable: true });
     Object.defineProperty(drop, "dataTransfer", { value: { types: ["Files"], files: [file] } });
     await act(async () => host.querySelector("[data-wiki-sidebar]")!.dispatchEvent(drop));
-    expect(useQuickAdd.getState().importing).toMatchObject({ parentId: null, files: [file] });
+    expect(useQuickAdd.getState().importing).toMatchObject({ parentId: null, files: [file], area: "pages" });
   });
 });
 
@@ -127,8 +129,9 @@ describe("the new page popup", () => {
     expect(dialog.textContent).toContain("Billing");
     const database = [...dialog.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Database"))!;
     await act(async () => database.click());
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ kind: "database", space: "team", team_id: "t1" }));
+    // It adds to Pages (contracts/pages.md), and the new page opens there.
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ kind: "database", space: "team", team_id: "t1", area: "pages" }));
     expect(useQuickAdd.getState().newPage).toBeNull();
-    expect(navigate).toHaveBeenCalledWith({ to: "/wiki/$pageId", params: { pageId: "new" } });
+    expect(navigate).toHaveBeenCalledWith({ to: "/pages/$pageId", params: { pageId: "new" } });
   });
 });

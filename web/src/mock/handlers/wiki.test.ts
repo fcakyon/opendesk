@@ -1044,4 +1044,27 @@ describe("mock wiki aliases and analytics", () => {
     const seeded = (await call("GET", `/v1/wiki/pages/${refunds.id}/analytics`)).body as WikiPageAnalytics;
     expect(seeded.total_views).toBeGreaterThan(0);
   });
+
+  it("keeps Pages' tree apart from the wiki's, and out of reach while Pages is off", async () => {
+    const pages = (await call("GET", "/v1/wiki/pages?area=pages")).body.data as WikiNode[];
+    expect(pages.some((n) => n.title === "Team home" && n.area === "pages")).toBe(true);
+    expect(((await call("GET", "/v1/wiki/pages")).body.data as WikiNode[]).every((n) => n.area === "wiki")).toBe(true);
+    const top = (await call("POST", "/v1/wiki/pages", { title: "Plan", area: "pages" })).body as WikiPage;
+    const sub = (await call("POST", "/v1/wiki/pages", { title: "Step", parent_id: top.id, area: "wiki" })).body as WikiPage;
+    expect([top.area, sub.area]).toEqual(["pages", "pages"]);
+    const moved = (await call("POST", `/v1/wiki/pages/${top.id}/move`, { parent_id: null, position: 999, area: "wiki" })).body as WikiPage;
+    expect(moved.area).toBe("wiki");
+    expect(((await call("GET", `/v1/wiki/pages/${sub.id}`)).body as WikiPage).area).toBe("wiki");
+    const hits = (await call("GET", "/v1/wiki/search?q=roadmap")).body.data as WikiSearchHit[];
+    expect(hits.some((h) => h.area === "pages")).toBe(true);
+    db.workspaces[0]!.workspace.settings.pages_enabled = false;
+    try {
+      const off = await call("GET", "/v1/wiki/pages?area=pages");
+      expect([off.status, off.body.code, off.body.product]).toEqual([403, "feature_disabled", "pages"]);
+      expect((await call("GET", `/v1/wiki/pages/${pages[0]!.id}`)).status).toBe(403);
+      expect(((await call("GET", "/v1/wiki/search?q=roadmap")).body.data as WikiSearchHit[]).some((h) => h.area === "pages")).toBe(false);
+    } finally {
+      db.workspaces[0]!.workspace.settings.pages_enabled = true;
+    }
+  });
 });

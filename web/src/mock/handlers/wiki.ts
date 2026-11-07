@@ -26,6 +26,7 @@ import type {
   KbArticle,
   Notification,
   Role,
+  WikiArea,
   WikiComments,
   WikiDailyNote,
   WikiNode,
@@ -93,6 +94,8 @@ type Row = WikiPageSettings & {
   seq: number;
   /** Other names the page goes by (contracts/wiki.md "Aliases"). */
   aliases: string[];
+  /** Whose tree it is in (contracts/pages.md): the wiki's or Pages'. */
+  area: WikiArea;
 };
 type Rev = { id: string; page_id: string; title: string; icon: string; body_html: string; author: string | null; created_at: string; updated_at: string };
 type Visit = { user_id: string; page_id: string; visits: number; last_at: string; seq: number };
@@ -198,6 +201,7 @@ const node = (r: Row): WikiNode => ({
   ...(verifiedNow(r) ? { verified: true } : {}),
   kind: r.kind,
   ...(r.aliases.length ? { aliases: [...r.aliases] } : {}),
+  area: r.area,
 });
 const refOf = (r: Pick<Row, "id" | "title" | "icon">): WikiRef => ({ id: r.id, title: r.title, icon: r.icon });
 const settingsOf = (r: Row): WikiPageSettings => ({ cover: r.cover, cover_y: r.cover_y, full_width: r.full_width, small_text: r.small_text, font: r.font, locked: r.locked });
@@ -255,11 +259,12 @@ function removeRows(st: State, ids: string[]) {
 /**
  * Puts id at index among the children of parent in the tree (the end when index is past it,
  * or left out) and numbers them from 0; without id it only renumbers them. Top-level pages
- * are numbered within their space; trashed pages and templates keep their numbers.
+ * are numbered within their area and space (templates, shared by both areas, within their
+ * space); trashed pages and templates keep their numbers.
  */
-function place(st: State, parent: string | null, owner: string | null, team: string | null, template: boolean, id?: string, index?: number) {
+function place(st: State, parent: string | null, owner: string | null, team: string | null, template: boolean, area: WikiArea, id?: string, index?: number) {
   const order = st.pages
-    .filter((r) => r.parent_id === parent && !r.deleted_at && r.template === template && (parent !== null || (r.private_to === owner && r.team_id === team)) && r.id !== id)
+    .filter((r) => r.parent_id === parent && !r.deleted_at && r.template === template && (parent !== null || (r.private_to === owner && r.team_id === team && (template || r.area === area))) && r.id !== id)
     .sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
   const moving = id ? st.pages.find((r) => r.id === id) : undefined;
   if (moving) order.splice(index !== undefined && index >= 0 && index < order.length ? index : order.length, 0, moving);
@@ -299,7 +304,30 @@ function pageOut(st: State, r: Row): WikiPage {
 function find(ctx: Ctx, st = stateOf(ctx.ws)): Row {
   const r = st.pages.find((p) => p.id === ctx.params.id);
   if (!r || !sees(viewerOf(ctx.ws), r)) throw notFound("Page");
+  requireArea(ctx.ws, r.area);
   return r;
+}
+
+/** Pages' pages are out of reach while the workspace has Pages off (contracts/pages.md); kept, not gone. */
+const pagesOn = (ws: WsData) => ws.workspace.settings.pages_enabled !== false;
+
+function requireArea(ws: WsData, area: WikiArea) {
+  if (area === "pages" && !pagesOn(ws))
+    throw new HttpError(403, "feature_disabled", "pages is disabled for this workspace", { product: "pages", reason: "workspace_disabled" });
+}
+
+/** The area a list reads: ?area=pages, else the wiki's. */
+function areaParam(ctx: Ctx): WikiArea {
+  const area: WikiArea = ctx.query.get("area") === "pages" ? "pages" : "wiki";
+  requireArea(ctx.ws, area);
+  return area;
+}
+
+/** A top-level page's area from a body field: Pages' when it says so, else the wiki's. */
+function areaField(ctx: Ctx, raw: unknown): WikiArea {
+  const area: WikiArea = raw === "pages" ? "pages" : "wiki";
+  requireArea(ctx.ws, area);
+  return area;
 }
 
 const inTrash = () => new HttpError(422, "page_in_trash", "This page is in the trash. Restore it to change it.");
@@ -321,6 +349,7 @@ function parentRef(ctx: Ctx, st: State, raw: unknown): Parent | null {
   if (!id) throw invalid("parent_id is not a valid id");
   const row = st.pages.find((r) => r.id === id);
   if (!row || row.deleted_at || !sees(viewerOf(ctx.ws), row)) throw invalid("parent page not found in this workspace");
+  requireArea(ctx.ws, row.area);
   return { row, up: ancestorsOf(st, id) };
 }
 
@@ -504,19 +533,22 @@ function newRow(fields: Partial<Row> & Pick<Row, "id" | "parent_id" | "title" | 
     canvas: null,
     seq: ++rowSeq,
     aliases: [],
+    area: "wiki",
     ...DEFAULT_LOOK,
     ...fields,
   };
 }
 
 /** The best matching pages of the tree the person sees, as GET /v1/wiki/search answers. */
-export function searchWiki(ws: WsData, q: string, limit = 20): WikiSearchHit[] {
+export function searchWiki(ws: WsData, q: string, limit = 20, area?: WikiArea): WikiSearchHit[] {
   const st = stateOf(ws);
   const v = viewerOf(ws);
   const words = q.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
   if (!words.length) return [];
+  // Both areas unless one is asked for; Pages' only while Pages is on.
+  const inArea = (r: Row) => (area ? r.area === area : r.area === "wiki" || pagesOn(ws));
   const scored = st.pages
-    .filter((r) => live(v, r))
+    .filter((r) => live(v, r) && inArea(r))
     .map((r) => {
       const title = [r.title, ...r.aliases].join(" ").toLowerCase();
       const text = stripHtml(r.body_html + canvasHtml(r));
@@ -530,7 +562,7 @@ export function searchWiki(ws: WsData, q: string, limit = 20): WikiSearchHit[] {
     })
     .filter((x): x is { r: Row; score: number; snippet: string } => !!x)
     .sort((a, b) => b.score - a.score || Date.parse(b.r.updated_at) - Date.parse(a.r.updated_at));
-  return scored.slice(0, limit).map(({ r, snippet }) => ({ ...refOf(r), parent_id: r.parent_id, snippet, path: ancestorsOf(st, r.id).map(refOf), updated_at: r.updated_at }));
+  return scored.slice(0, limit).map(({ r, snippet }) => ({ ...refOf(r), parent_id: r.parent_id, snippet, path: ancestorsOf(st, r.id).map(refOf), updated_at: r.updated_at, area: r.area }));
 }
 
 const pageOf = <T>(data: T[]) => ({ data, next_cursor: null });
@@ -553,7 +585,8 @@ function registerPages() {
   get("/v1/wiki/pages", (ctx) => {
     const st = stateOf(ctx.ws);
     const v = viewerOf(ctx.ws);
-    const tree = buildTree(st.pages.filter((r) => live(v, r)).map(node));
+    const area = areaParam(ctx);
+    const tree = buildTree(st.pages.filter((r) => live(v, r) && r.area === area).map(node));
     const out: WikiNode[] = [];
     const walk = (p: string | null) => childrenOf(tree, p).forEach((n) => (out.push(n), walk(n.id)));
     walk(null);
@@ -578,14 +611,18 @@ function registerPages() {
     const par = parentRef(ctx, st, ctx.body.parent_id);
     let space: { owner: string | null; team: string | null };
     let template: boolean;
+    let area: WikiArea;
     if (par) {
       if (par.up.length + 2 > MAX_DEPTH) throw tooDeep();
       space = { owner: par.row.private_to, team: par.row.team_id };
       // A template under a database is that database's own.
       template = par.row.template || (ctx.body.template === true && par.row.kind === "database");
+      // A subpage is in its parent's area.
+      area = par.row.area;
     } else {
       space = spaceRef(ctx, ctx.body.space, ctx.body.team_id);
       template = ctx.body.template === true;
+      area = areaField(ctx, ctx.body.area);
     }
     const kind = ctx.body.kind ?? "";
     if (kind !== "" && kind !== "page" && kind !== "database" && kind !== "canvas") throw invalid("kind must be page, database or canvas");
@@ -615,9 +652,10 @@ function registerPages() {
       props,
       canvas,
       aliases,
+      area,
     });
     st.pages.push(r);
-    place(st, r.parent_id, r.private_to, r.team_id, r.template, r.id, typeof ctx.body.position === "number" ? ctx.body.position : undefined);
+    place(st, r.parent_id, r.private_to, r.team_id, r.template, r.area, r.id, typeof ctx.body.position === "number" ? ctx.body.position : undefined);
     record(st, r, false);
     pageEvent(ctx.ws, r, "wiki_page.created", eventPage(r));
     notifyBodyMentions(ctx.ws, r, "");
@@ -681,29 +719,34 @@ function registerPages() {
     if (r.deleted_at) throw inTrash();
     if (r.journal) throw new HttpError(422, "journal_fixed", "A journal stays at the top of your private pages.");
     const par = parentRef(ctx, st, ctx.body.parent_id);
-    const old = { parent: r.parent_id, owner: r.private_to, team: r.team_id, template: r.template };
+    const old = { parent: r.parent_id, owner: r.private_to, team: r.team_id, template: r.template, area: r.area };
     let owner = old.owner;
     let team = old.team;
     let template = old.template;
+    let area = old.area;
     if (par) {
       if (par.row.id === r.id || par.up.some((a) => a.id === r.id)) throw cycle();
       owner = par.row.private_to;
       team = par.row.team_id;
       template = par.row.template;
-    } else if (typeof ctx.body.space === "string" && ctx.body.space !== "") ({ owner, team } = spaceRef(ctx, ctx.body.space, ctx.body.team_id));
+      area = par.row.area;
+    } else {
+      if (typeof ctx.body.space === "string" && ctx.body.space !== "") ({ owner, team } = spaceRef(ctx, ctx.body.space, ctx.body.team_id));
+      if (ctx.body.area === "wiki" || ctx.body.area === "pages") area = areaField(ctx, ctx.body.area);
+    }
     const { ids: gone, height } = subtree(st, r.id);
     if ((par ? par.up.length + 1 : 0) + height > MAX_DEPTH) throw tooDeep();
     // Only the person a private page belongs to moves it out of their own.
     if (old.owner && old.owner !== owner && old.owner !== db.meId) throw notFound("Page");
     r.parent_id = par?.row.id ?? null;
-    // The pages under it live where it does now; a daily note out of its journal is a page.
+    // The pages under it live where it does now; a daily note out of its journal (or its area) is a page.
     for (const x of st.pages.filter((p) => gone.includes(p.id))) {
-      Object.assign(x, { private_to: owner, team_id: team, template });
-      if (!par?.row.journal) x.daily_date = null;
+      if (!par?.row.journal || x.area !== area) x.daily_date = null;
+      Object.assign(x, { private_to: owner, team_id: team, template, area });
     }
-    place(st, r.parent_id, owner, team, template, r.id, typeof ctx.body.position === "number" ? ctx.body.position : 0);
-    const spaceChanged = old.owner !== owner || old.team !== team;
-    if (old.parent !== r.parent_id || spaceChanged) place(st, old.parent, old.owner, old.team, old.template);
+    place(st, r.parent_id, owner, team, template, area, r.id, typeof ctx.body.position === "number" ? ctx.body.position : 0);
+    const spaceChanged = old.owner !== owner || old.team !== team || old.area !== area;
+    if (old.parent !== r.parent_id || spaceChanged) place(st, old.parent, old.owner, old.team, old.template, old.area);
     if (spaceChanged) {
       // Readers of the old space drop it; readers of the new one fetch the tree again.
       pageEvent(ctx.ws, { private_to: old.owner, team_id: old.team }, "wiki_page.deleted", { wiki_page_id: r.id, wiki_page_ids: gone, moved: true });
@@ -720,7 +763,7 @@ function registerPages() {
     const all = everythingUnder(st, r.id);
     canDelete(ctx, st, all);
     removeRows(st, all);
-    if (!r.deleted_at) place(st, r.parent_id, r.private_to, r.team_id, r.template);
+    if (!r.deleted_at) place(st, r.parent_id, r.private_to, r.team_id, r.template, r.area);
     pageEvent(ctx.ws, r, "wiki_page.deleted", { wiki_page_id: r.id, wiki_page_ids: all });
     return respond(204);
   });
@@ -765,7 +808,7 @@ function registerPages() {
   get("/v1/wiki/search", (ctx) => {
     const q = ctx.query.get("q") ?? "";
     const limit = Math.min(Number(ctx.query.get("limit") ?? 20) || 20, 50);
-    return pageOf(searchWiki(ctx.ws, q, limit));
+    return pageOf(searchWiki(ctx.ws, q, limit, ctx.query.get("area") ? areaParam(ctx) : undefined));
   });
 }
 
@@ -1454,7 +1497,7 @@ function registerTrash() {
     for (const x of st.pages) if (gone.includes(x.id)) Object.assign(x, { deleted_at: at, deleted_by: db.meId, trashed_with: r.id });
     // Favorites of pages in the trash would point nowhere.
     for (const [user, list] of st.favorites) st.favorites.set(user, list.filter((id) => !gone.includes(id)));
-    place(st, r.parent_id, r.private_to, r.team_id, r.template);
+    place(st, r.parent_id, r.private_to, r.team_id, r.template, r.area);
     pageEvent(ctx.ws, r, "wiki_page.deleted", { wiki_page_id: r.id, wiki_page_ids: gone, trashed: true });
     return respond(200, pageOut(st, r));
   });
@@ -1476,10 +1519,10 @@ function registerTrash() {
     const clash = (x: Row) =>
       st.pages.some(
         (o) =>
-          o.id !== x.id && !o.deleted_at && x.private_to !== null && o.private_to === x.private_to && ((x.journal && o.journal) || (x.daily_date !== null && o.daily_date === x.daily_date)),
+          o.id !== x.id && !o.deleted_at && x.private_to !== null && o.private_to === x.private_to && o.area === x.area && ((x.journal && o.journal) || (x.daily_date !== null && o.daily_date === x.daily_date)),
       );
     for (const x of rows.filter(clash)) Object.assign(x, { journal: false, daily_date: null });
-    place(st, par, r.private_to, r.team_id, r.template, r.id);
+    place(st, par, r.private_to, r.team_id, r.template, r.area, r.id);
     pageEvent(ctx.ws, r, "wiki_page.restored", { wiki_page: node(r), wiki_page_ids: back });
     return respond(200, pageOut(st, r));
   });
@@ -1487,8 +1530,9 @@ function registerTrash() {
   get("/v1/wiki/trash", (ctx) => {
     const st = stateOf(ctx.ws);
     const v = viewerOf(ctx.ws);
+    const area = areaParam(ctx);
     const out = st.pages
-      .filter((r): r is Row & { deleted_at: string } => r.trashed_with === r.id && !!r.deleted_at && sees(v, r))
+      .filter((r): r is Row & { deleted_at: string } => r.trashed_with === r.id && !!r.deleted_at && sees(v, r) && r.area === area)
       .sort((a, b) => Date.parse(b.deleted_at) - Date.parse(a.deleted_at))
       .slice(0, 500)
       .map(
@@ -1530,8 +1574,9 @@ function registerTemplates() {
     let owner = src.private_to;
     let team = src.team_id;
     let template = src.template;
+    let area = src.area;
     if (par) {
-      ({ private_to: owner, team_id: team, template } = par.row);
+      ({ private_to: owner, team_id: team, template, area } = par.row);
       if (par.row.template && asTemplate === false) throw invalid("a page under a template is part of the template");
       if (pages.includes(par.row.id)) throw cycle();
       if (par.up.length + 1 + height > MAX_DEPTH) throw tooDeep();
@@ -1539,6 +1584,7 @@ function registerTemplates() {
       if (typeof ctx.body.space === "string" && ctx.body.space !== "") ({ owner, team } = spaceRef(ctx, ctx.body.space, ctx.body.team_id));
       else if (src.private_to && src.private_to !== db.meId) throw notFound("Page");
       if (asTemplate !== undefined) template = asTemplate;
+      if (ctx.body.area === "wiki" || ctx.body.area === "pages") area = areaField(ctx, ctx.body.area);
     }
     if (height > MAX_DEPTH) throw tooDeep();
     const rootTitle = "title" in ctx.body && ctx.body.title !== null ? cleanTitle(ctx.body.title) : src.title;
@@ -1568,12 +1614,13 @@ function registerTemplates() {
         database: x.database ? remapJSON(x.database) : null,
         props,
         canvas: x.canvas ? remapJSON(x.canvas) : null,
+        area,
       });
       st.pages.push(copy);
       record(st, copy, false);
     }
     const root = st.pages.find((p) => p.id === fresh.get(src.id))!;
-    place(st, root.parent_id, owner, team, template, root.id, typeof ctx.body.position === "number" ? ctx.body.position : undefined);
+    place(st, root.parent_id, owner, team, template, area, root.id, typeof ctx.body.position === "number" ? ctx.body.position : undefined);
     pageEvent(ctx.ws, root, "wiki_page.created", { ...eventPage(root), wiki_page_ids: [...fresh.values()] });
     return respond(201, pageOut(st, root));
   });
@@ -1593,7 +1640,9 @@ const lastFirst = (a: Visit, b: Visit) => Date.parse(b.last_at) - Date.parse(a.l
 function registerPersonal() {
   const favoritesOut = (ctx: Ctx, st: State) => {
     const v = viewerOf(ctx.ws);
-    const rows = (st.favorites.get(db.meId) ?? []).map((id) => st.pages.find((r) => r.id === id)).filter((r): r is Row => !!r && live(v, r));
+    const rows = (st.favorites.get(db.meId) ?? [])
+      .map((id) => st.pages.find((r) => r.id === id))
+      .filter((r): r is Row => !!r && live(v, r) && (r.area === "wiki" || pagesOn(ctx.ws)));
     return pageOf(rows.map(node));
   };
 
@@ -1619,11 +1668,12 @@ function registerPersonal() {
     const st = stateOf(ctx.ws);
     const v = viewerOf(ctx.ws);
     const limit = Math.min(Number(ctx.query.get("limit")) || 15, 50);
+    const area = areaParam(ctx);
     const out = st.visits
       .filter((x) => x.user_id === db.meId)
       .sort(lastFirst)
       .map((x) => st.pages.find((r) => r.id === x.page_id))
-      .filter((r): r is Row => !!r && live(v, r))
+      .filter((r): r is Row => !!r && live(v, r) && r.area === area)
       .slice(0, limit);
     return pageOf(out.map(node));
   });
@@ -1648,8 +1698,9 @@ function registerPersonal() {
     const from = ctx.query.get("from") || day(-60);
     const to = ctx.query.get("to") || day(60);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw invalid("from and to must be YYYY-MM-DD");
+    const area = areaParam(ctx);
     const out = st.pages
-      .filter((r): r is Row & { daily_date: string } => r.private_to === db.meId && !!r.daily_date && r.daily_date >= from && r.daily_date <= to && !r.deleted_at)
+      .filter((r): r is Row & { daily_date: string } => r.private_to === db.meId && r.area === area && !!r.daily_date && r.daily_date >= from && r.daily_date <= to && !r.deleted_at)
       .sort((a, b) => a.daily_date.localeCompare(b.daily_date))
       .map((r): WikiDailyNote => ({ date: r.daily_date, id: r.id }));
     return pageOf(out);
@@ -1664,21 +1715,23 @@ function registerPersonal() {
     const title = cleanTitle(ctx.body.title);
     const journalTitle = cleanTitle(ctx.body.journal_title);
     const body = cleanBody(ctx.body.body_html);
-    const existing = st.pages.find((r) => r.private_to === me && r.daily_date === date && !r.deleted_at);
+    // Each area has its own journal (contracts/pages.md).
+    const area = areaField(ctx, ctx.body.area);
+    const existing = st.pages.find((r) => r.private_to === me && r.daily_date === date && r.area === area && !r.deleted_at);
     if (existing) return respond(200, pageOut(st, existing));
-    let journal = st.pages.find((r) => r.private_to === me && r.journal && !r.deleted_at);
+    let journal = st.pages.find((r) => r.private_to === me && r.journal && r.area === area && !r.deleted_at);
     if (!journal) {
       roomFor(st, 2);
-      journal = newRow({ id: uuid(), parent_id: null, title: journalTitle || "Journal", icon: "📓", body_html: "", private_to: me, journal: true });
+      journal = newRow({ id: uuid(), parent_id: null, title: journalTitle || "Journal", icon: "📓", body_html: "", private_to: me, journal: true, area });
       st.pages.push(journal);
-      place(st, null, me, null, false, journal.id, 0);
+      place(st, null, me, null, false, area, journal.id, 0);
       record(st, journal, false);
       pageEvent(ctx.ws, journal, "wiki_page.created", eventPage(journal));
     } else roomFor(st, 1);
-    const note = newRow({ id: uuid(), parent_id: journal.id, title: title || date, icon: "", body_html: body, private_to: me, daily_date: date });
+    const note = newRow({ id: uuid(), parent_id: journal.id, title: title || date, icon: "", body_html: body, private_to: me, daily_date: date, area });
     st.pages.push(note);
     // Newest day first, as a journal reads.
-    place(st, journal.id, me, null, false, note.id, 0);
+    place(st, journal.id, me, null, false, area, note.id, 0);
     record(st, note, false);
     pageEvent(ctx.ws, note, "wiki_page.created", eventPage(note));
     return respond(200, pageOut(st, note));
@@ -1728,7 +1781,8 @@ function registerLinks() {
   get("/v1/wiki/graph", (ctx) => {
     const st = stateOf(ctx.ws);
     const v = viewerOf(ctx.ws);
-    const shown = new Set(st.pages.filter((r) => live(v, r)).map((r) => r.id));
+    const area = areaParam(ctx);
+    const shown = new Set(st.pages.filter((r) => live(v, r) && r.area === area).map((r) => r.id));
     return pageOf(linksOf(st).filter((l) => shown.has(l.from) && shown.has(l.to)));
   });
 }
@@ -2336,6 +2390,7 @@ function seedHandbook(ws: WsData, st: State) {
   seedComments(ws, st, person);
   seedDesk(ws, st);
   seedCanvas(st, person);
+  seedPagesArea(ws, st, person);
   add(TEMPLATES, null, true);
   for (const r of st.pages.filter((p) => p.template && p.body_html.includes("{sub}"))) {
     const sub = st.pages.filter((c) => c.parent_id === r.id).sort(byPosition)[0];
@@ -2352,6 +2407,129 @@ function seedHandbook(ws: WsData, st: State) {
     });
   });
   seedAliasesAndViews(st, people);
+}
+
+// ─── Pages (contracts/pages.md) ────────────────────────────────────────────
+
+/**
+ * Pages' own tree beside the handbook: a team home, a roadmap with its subpages, a projects
+ * database, a brainstorm canvas, a teamspace page and a private note, as a team using Pages
+ * for its own work would have them.
+ */
+function seedPagesArea(ws: WsData, st: State, person: (i: number) => string | null) {
+  const team = ws.teams.find((t) => !t.private);
+  const made: Row[] = [];
+  const page = (fields: Partial<Row> & Pick<Row, "title" | "icon" | "body_html">, days: number, by: number) => {
+    const who = person(by);
+    const r = newRow({
+      id: uuid(),
+      parent_id: null,
+      created_by: who,
+      updated_by: who,
+      created_at: ago((days + 20) * DAY),
+      updated_at: ago(days * DAY),
+      version: 2,
+      area: "pages",
+      ...fields,
+    });
+    st.pages.push(r);
+    st.revisions.push({ id: uuid(), page_id: r.id, title: r.title, icon: r.icon, body_html: r.body_html, author: who, created_at: r.updated_at, updated_at: r.updated_at });
+    made.push(r);
+    return r;
+  };
+  const home = page(
+    {
+      title: "Team home",
+      icon: "🏠",
+      position: 0,
+      body_html:
+        "<p>Everything the team is working on, in one place. Start with the roadmap, add a project to the database, or sketch an idea on the brainstorm canvas.</p><h2>This week</h2><ul data-type=\"taskList\"><li data-type=\"taskItem\" data-checked=\"true\"><label><input type=\"checkbox\" checked><span></span></label><div><p>Agree on the Q4 goals</p></div></li><li data-type=\"taskItem\" data-checked=\"false\"><label><input type=\"checkbox\"><span></span></label><div><p>Draft the launch checklist</p></div></li></ul>",
+      cover: "gradient:dawn",
+    },
+    1,
+    0,
+  );
+  const roadmap = page({ title: "Q4 roadmap", icon: "🗺️", position: 1, body_html: "<p>What we ship before the end of the year, and why.</p><h2>Goals</h2><ol><li><p>Answer every chat within two minutes.</p></li><li><p>Move the help center to the new design.</p></li><li><p>Cut repeat tickets about sign-in by half.</p></li></ol>" }, 2, 1);
+  page({ title: "Launch checklist", icon: "✅", parent_id: roadmap.id, position: 0, body_html: "<p>Before a launch goes out.</p><ul data-type=\"taskList\"><li data-type=\"taskItem\" data-checked=\"false\"><label><input type=\"checkbox\"><span></span></label><div><p>Help center articles updated</p></div></li><li data-type=\"taskItem\" data-checked=\"false\"><label><input type=\"checkbox\"><span></span></label><div><p>Saved replies for the new questions</p></div></li></ul>" }, 3, 1);
+  page({ title: "Planning notes", icon: "📝", parent_id: roadmap.id, position: 1, body_html: "<p>Notes from the planning day: the sign-in work goes first, the redesign after it.</p>" }, 6, 2);
+  const projects = page(
+    {
+      title: "Projects",
+      icon: "📊",
+      position: 2,
+      body_html: "",
+      kind: "database",
+      database: {
+        properties: [
+          { id: "title", name: "Project", type: "title" },
+          {
+            id: "status",
+            name: "Status",
+            type: "status",
+            options: [
+              { id: "planned", name: "Planned", color: "gray" },
+              { id: "doing", name: "In progress", color: "blue" },
+              { id: "done", name: "Done", color: "green" },
+            ],
+            groups: [
+              { id: "todo", option_ids: ["planned"] },
+              { id: "doing", option_ids: ["doing"] },
+              { id: "done", option_ids: ["done"] },
+            ],
+          },
+          { id: "owner", name: "Owner", type: "person" },
+          { id: "due", name: "Due", type: "date" },
+        ],
+        views: [
+          { id: "board", name: "Board", type: "board", settings: { group_by: "status" } },
+          { id: "all", name: "All projects", type: "table" },
+          { id: "timeline", name: "Timeline", type: "calendar", settings: { date_property: "due" } },
+        ],
+        next_id: 1,
+      },
+    },
+    1,
+    0,
+  );
+  const ids = (...i: number[]) => i.map(person).filter((x): x is string => !!x);
+  (
+    [
+      ["Help center redesign", "doing", 0, 21],
+      ["Sign-in troubleshooting guide", "doing", 1, 9],
+      ["Onboarding emails", "planned", 2, 35],
+      ["SLA dashboard", "done", 1, -4],
+    ] as const
+  ).forEach(([title, status, by, due], i) =>
+    page({ title, icon: "", parent_id: projects.id, position: i, body_html: "", props: { status, owner: ids(by), due: { start: day(due) } } }, i + 1, by),
+  );
+  page(
+    {
+      title: "Brainstorm",
+      icon: "💡",
+      position: 3,
+      body_html: "",
+      kind: "canvas",
+      canvas: {
+        nodes: [
+          { id: "idea", x: 0, y: 0, width: 280, height: 120, type: "text", html: "<h3>Fewer repeat tickets</h3><p>What do customers ask twice?</p>", color: "4" },
+          { id: "faq", x: 360, y: -40, width: 240, height: 100, type: "text", html: "<p>A clearer sign-in page</p>" },
+          { id: "bot", x: 360, y: 100, width: 240, height: 100, type: "text", html: "<p>Ollie answers the top ten questions</p>", color: "6" },
+          { id: "home", x: 0, y: 200, width: 280, height: 130, type: "page", page_id: home.id },
+        ],
+        edges: [
+          { id: "e1", fromNode: "idea", fromSide: "right", toNode: "faq", toSide: "left" },
+          { id: "e2", fromNode: "idea", fromSide: "right", toNode: "bot", toSide: "left" },
+        ],
+      },
+    },
+    4,
+    2,
+  );
+  if (team) page({ title: `${team.name} rituals`, icon: "🧑‍🤝‍🧑", team_id: team.id, position: 0, body_html: "<p>Standup at 9:30, ticket review on Fridays, and a retro at the end of each month.</p>" }, 5, 0);
+  page({ title: "My notes", icon: "🗒️", private_to: db.meId, position: 0, body_html: "<p>Ideas to bring up at the next planning day.</p>" }, 2, 0);
+  // The person opened the team home and the roadmap lately, so Pages' recent pages aren't empty.
+  for (const r of [home, roadmap, projects]) st.visits.push({ user_id: db.meId, page_id: r.id, visits: 2, last_at: ago(3 * HOUR), seq: ++visitSeq });
+  st.favorites.set(db.meId, [...(st.favorites.get(db.meId) ?? []), home.id, projects.id]);
 }
 
 // ─── The starter databases ─────────────────────────────────────────────────
@@ -2797,7 +2975,7 @@ function registerTicketWiki() {
     if (!t || !canSeeTicket(ctx.ws, t)) throw notFound("Ticket");
     const v = viewerOf(ctx.ws);
     const out = stateOf(ctx.ws)
-      .pages.filter((r) => live(v, r) && mentionedTickets(r.body_html).has(t.id.toLowerCase()))
+      .pages.filter((r) => live(v, r) && (r.area === "wiki" || pagesOn(ctx.ws)) && mentionedTickets(r.body_html).has(t.id.toLowerCase()))
       .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
     return pageOf(out.slice(0, 50).map(node));
   });
@@ -2901,6 +3079,7 @@ function registerPort() {
     if (par?.row.kind === "database") throw new HttpError(422, "import_into_database", "Pages can't be imported into a database. Pick a page, or the top level.");
     if (par && par.up.length + 2 > MAX_DEPTH) throw tooDeep();
     const space = par ? { owner: par.row.private_to, team: par.row.team_id } : spaceRef(ctx, field("space"), field("team_id"));
+    const area: WikiArea = par ? par.row.area : areaField(ctx, field("area"));
 
     const skipped: Skip[] = [];
     const sources: Source[] = [];
@@ -2954,9 +3133,10 @@ function registerPort() {
         template: par?.row.template ?? false,
         kind: src.canvas ? "canvas" : "page",
         canvas: src.canvas,
+        area,
       });
       st.pages.push(r);
-      place(st, r.parent_id, r.private_to, r.team_id, r.template, r.id);
+      place(st, r.parent_id, r.private_to, r.team_id, r.template, r.area, r.id);
       record(st, r, false);
       pageEvent(ctx.ws, r, "wiki_page.created", eventPage(r));
       root_ids.push(r.id);
@@ -2990,7 +3170,8 @@ function registerPort() {
     const st = stateOf(ctx.ws);
     const format = exportFormat(ctx);
     const v = viewerOf(ctx.ws);
-    const tree = st.pages.filter((r) => live(v, r));
+    const area = areaParam(ctx);
+    const tree = st.pages.filter((r) => live(v, r) && r.area === area);
     if (!tree.length) throw new HttpError(422, "wiki_empty", "There are no pages to export yet.");
     const files: ZipFile[] = [];
     const walk = (parent: string | null, dir: string) => {
@@ -3000,7 +3181,7 @@ function registerPort() {
       }
     };
     walk(null, "");
-    return download("application/zip", `Wiki ${new Date().toISOString().slice(0, 10)}.zip`, storedZip(files));
+    return download("application/zip", `${area === "pages" ? "Pages" : "Wiki"} ${new Date().toISOString().slice(0, 10)}.zip`, storedZip(files));
   });
 }
 

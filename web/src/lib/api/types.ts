@@ -29,6 +29,8 @@ export type WorkspaceSettings = {
   tickets_enabled?: boolean;
   /** Whether Mail is enabled for this workspace. Defaults to true; effective availability is Workspace.mail_available. */
   mail_enabled?: boolean;
+  /** Whether Pages is enabled for this workspace (contracts/pages.md). Defaults to true; no instance option or plan turns it off. */
+  pages_enabled?: boolean;
   brand_color?: string;
   timezone?: string;
   help_center_enabled?: boolean;
@@ -1620,9 +1622,13 @@ export type WikiNode = {
   kind?: WikiKind;
   /** Other names the page goes by (contracts/wiki.md "Aliases"); left out when it has none. */
   aliases?: string[];
+  /** Whose tree it is in (contracts/pages.md); "wiki" when left out. */
+  area?: WikiArea;
 };
 
 export type WikiKind = "page" | "database" | "canvas";
+/** The wiki's tree, or Pages' (contracts/pages.md). */
+export type WikiArea = "wiki" | "pages";
 
 // ─── Wiki canvases (contracts/wiki.md "Canvas") ──────────────────────────────
 
@@ -1924,6 +1930,7 @@ export type WikiSearchHit = {
   snippet: string;
   path: WikiRef[];
   updated_at: string;
+  area?: WikiArea;
 };
 
 export type WikiPagePatch = Partial<WikiPageSettings> & { title?: string; icon?: string; body_html?: string; version?: number; verified?: boolean; verified_days?: number; database?: Database; props?: Record<string, DbValue>; canvas?: Canvas; aliases?: string[] };
@@ -2465,7 +2472,7 @@ export type WikiImportSkipReason =
 /** POST /v1/wiki/import: how many pages it made, its top pages in order, and what it left out by path in the upload. */
 export type WikiImportResult = { pages: number; root_ids: string[]; skipped: { path: string; reason: WikiImportSkipReason | (string & {}) }[] };
 /** Where an import lands: under a page, or at the top of a space. */
-export type WikiImportTarget = { parent_id: string } | { space: WikiSpace; team_id?: string };
+export type WikiImportTarget = { parent_id: string } | { space: WikiSpace; team_id?: string; area?: WikiArea };
 export type WikiExportFormat = "markdown" | "html";
 export type TranslateResult = { html?: string; text?: string; source_language: string };
 export type KBArticleDraft = { title: string; body_html: string; excerpt: string };

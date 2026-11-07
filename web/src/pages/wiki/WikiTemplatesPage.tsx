@@ -15,6 +15,7 @@ import { StarterTemplates } from "@/components/wiki/TemplateCards";
 import { TrashItem } from "@/components/wiki/PageMenu";
 import { PageIcon } from "@/components/wiki/PageTree";
 import { useCreatePage, useTitle, useUseTemplate } from "@/components/wiki/hooks";
+import { pageTo } from "@/lib/wiki/area";
 import { TEMPLATES, templatePage } from "@/components/wiki/templates";
 import { q } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
@@ -57,7 +58,7 @@ export default function WikiTemplatesPage() {
                   <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-sunken">
                     <PageIcon icon={tpl.icon} className="size-4 text-[16px]" />
                   </span>
-                  <Link to="/wiki/$pageId" params={{ pageId: tpl.id }} className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg hover:underline">
+                  <Link {...pageTo(tpl)} className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg hover:underline">
                     {title(tpl.title)}
                   </Link>
                   {canEdit && (
@@ -80,7 +81,7 @@ export default function WikiTemplatesPage() {
                           </Button>
                         </MenuTrigger>
                         <MenuContent align="end">
-                          <MenuItem icon={<Pencil />} onSelect={() => void navigate({ to: "/wiki/$pageId", params: { pageId: tpl.id } })}>
+                          <MenuItem icon={<Pencil />} onSelect={() => void navigate(pageTo(tpl))}>
                             {t("templatesPage.edit")}
                           </MenuItem>
                           <MenuSeparator />
