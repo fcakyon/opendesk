@@ -5,6 +5,8 @@
 // and deletes; rows keep the Space row menu in the sidebar's words. "Add section" sits
 // under the sections, shown on hover.
 
+import { carriesSidebarRow, readSidebarDrag } from "@/lib/collab/sidebarDrag";
+import { dropOnSidebar } from "@/lib/collab/sidebarEditModel";
 import { ArrowDown, ArrowUp, ChevronsDownUp, ChevronsUpDown, Ellipsis, Pencil, Plus, Trash2 } from "lucide-react";
 import { lazy, Suspense, useState, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
@@ -38,7 +40,7 @@ const readDrag = (e: DragEvent): Dragged | null => {
     return null;
   }
 };
-const carries = (e: DragEvent) => e.dataTransfer.types.includes(DRAG_TYPE);
+const carries = (e: DragEvent) => e.dataTransfer.types.includes(DRAG_TYPE) || carriesSidebarRow(e);
 
 const headerBtn =
   "flex size-5 items-center justify-center rounded text-fg-4 opacity-0 transition-opacity hover:bg-chrome-hover hover:text-fg group-hover/section:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100";
@@ -69,6 +71,16 @@ export function OwnSection({ section, first, rail }: { section: SidebarSection; 
   const drop = (e: DragEvent, before: string) => {
     const dragged = readDrag(e);
     setOver(null);
+    // Something dragged in from the page (a page's or a list's title) is added where it lands.
+    const outside = dragged ? null : readSidebarDrag(e);
+    if (outside) {
+      e.preventDefault();
+      const row = { kind: outside.kind, id: outside.id };
+      const r = dropOnSidebar(prefs, wid, { kind: "row", from: "page", key: itemKey({ workspace_id: wid, ...row }), row }, { kind: "row", section: ownKey(section.id), before: before || null }, () => []);
+      if (r && "prefs" in r) change(r.prefs);
+      else if (!sec.items.some((i) => i.kind === row.kind && i.id === row.id)) toast.error(t("ownSections.full"));
+      return;
+    }
     if (!dragged) return;
     e.preventDefault();
     let next = dragged.from === section.id ? space : moveItemTo(space, dragged.key, section.id);

@@ -4,6 +4,7 @@
 
 import { sidebarEdit, useSidebarEdit } from "@/lib/collab/sidebarEdit";
 import { EditHint, SidebarMenu } from "@/components/collab/SidebarMenu";
+import { FavoritesDrop, NewSectionDrop } from "@/components/collab/SidebarDrop";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, Copy, EyeOff, Inbox, Keyboard, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
@@ -572,9 +573,11 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
     case "favorites":
       // Without Collab, favorites are the ticket rows: inbox folders, teams and views.
       return (
-        <Suspense fallback={null}>
-          <LazyFavorites prefs={prefs} rail={rail} first={first} />
-        </Suspense>
+        <FavoritesDrop>
+          <Suspense fallback={null}>
+            <LazyFavorites prefs={prefs} rail={rail} first={first} />
+          </Suspense>
+        </FavoritesDrop>
       );
     case "pages":
       return (
@@ -638,6 +641,7 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
                 }}
               />
               {!rail && <AddSectionButton always={drawer} />}
+              {!rail && <NewSectionDrop />}
             </>
           )}
         </div>

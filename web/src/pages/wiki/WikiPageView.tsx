@@ -6,6 +6,7 @@
 // only someone who may edit ever saves. With `?beside=` a second page opens beside it (split
 // view, components/wiki/split.tsx): a full page of its own, its editor and saver apart.
 
+import { sidebarDragProps } from "@/lib/collab/sidebarDrag";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/react";
@@ -576,7 +577,12 @@ export function PageScreen({
               </span>
             ))}
             <span className="hidden text-fg-4 sm:inline">/</span>
-            <span className="flex min-w-0 items-center gap-1 px-1.5 font-medium text-fg" aria-current="page">
+            <span
+              className="flex min-w-0 items-center gap-1 px-1.5 font-medium text-fg"
+              aria-current="page"
+              // Dragged into the sidebar, the page lands in Favorites or a section of the member's own.
+              {...(live.deleted_at || live.template ? {} : sidebarDragProps({ kind: "wiki_page", id: page.id, label: shown }))}
+            >
               <PageIcon icon={draft.icon} />
               <span className="truncate">{shown}</span>
             </span>

@@ -521,6 +521,7 @@ export default function InboxPage() {
           icon={folder ? folderIcon[folder.id] : team ? <TeamDot team={team} className="size-2.5" /> : teamId ? <Users /> : <ViewIcon icon={view?.icon} size={16} />}
           count={count}
           inTeam={!!teamId}
+          dragItem={{ ...(folder ? { kind: "ticket_folder" as const, id: folder.id } : teamId ? { kind: "team" as const, id: teamId } : { kind: "view" as const, id: params.viewId ?? "" }), label: title }}
           titleAction={
             <AddToSidebarButton
               item={folder ? { kind: "ticket_folder", id: folder.id } : teamId ? { kind: "team", id: teamId } : { kind: "view", id: params.viewId ?? "" }}
