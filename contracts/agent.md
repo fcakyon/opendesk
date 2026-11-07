@@ -642,7 +642,7 @@ no severity to filter on, set or create with.
 | `search_contacts` / `get_contact` | `contacts:read` | |
 | `search_knowledge` | `kb:read` | KB articles and knowledge sources |
 | `create_kb_draft` | `kb:write` | a draft article |
-| `search_wiki` / `get_wiki_page` | `wiki:read` | the team's internal wiki (`contracts/wiki.md`): matching pages with their place and a passage; one page's text, subpages and `version` |
+| `search_wiki` / `get_wiki_page` | `wiki:read` | the team's internal wiki (`contracts/wiki.md`): matching pages with their place and a passage; one page's text in Markdown (as `update_wiki_page` takes it), subpages and `version` |
 | `create_wiki_page` | `wiki:write` | a page (`body` markdown), optionally under `parent` |
 | `update_wiki_page` | `wiki:write` | a new title or text (`body` markdown replaces it); with `version`, a page changed since is refused (`page_changed`). Marked destructive |
 | `get_report` | `tickets:read` + `settings:read` | the overview report for a range |

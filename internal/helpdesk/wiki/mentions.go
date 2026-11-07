@@ -133,10 +133,14 @@ func textOf(n *html.Node) string {
 	return b.String()
 }
 
-// bodySaved is what follows a person saving a page body, beside indexBody: the page's
-// reminders follow the body, and the people it newly mentions hear about it. prev is
-// the body before ("" for a new page or a copy). A template reminds and tells nobody.
+// bodySaved is what follows a person saving a page body, beside indexBody: the files the
+// saver uploaded for it become the page's, the page's reminders follow the body, and the
+// people it newly mentions hear about it. prev is the body before ("" for a new page or a
+// copy). A template reminds and tells nobody.
 func bodySaved(ctx context.Context, tx pgx.Tx, p *auth.Principal, id uuid.UUID, prev, next string) error {
+	if err := claimFiles(ctx, tx, p, id, next); err != nil {
+		return err
+	}
 	head, err := headOf(ctx, tx, p.WorkspaceID, id)
 	if err != nil {
 		return err

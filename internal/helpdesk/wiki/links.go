@@ -73,7 +73,14 @@ func refIDs(re *regexp.Regexp, body string) []uuid.UUID {
 // Links to pages and mentions of tickets that don't exist in the workspace (deleted pages,
 // another workspace's) are left out.
 func indexBody(ctx context.Context, tx pgx.Tx, wid, id uuid.UUID, body string) error {
-	if _, err := tx.Exec(ctx, `UPDATE wiki_pages SET tags = $3 WHERE workspace_id = $1 AND id = $2`, wid, id, pageTags(body)); err != nil {
+	// A canvas's cards count as its text: their links, tags, mentions and words (search).
+	var canvas []byte
+	if err := tx.QueryRow(ctx, `SELECT canvas FROM wiki_pages WHERE workspace_id = $1 AND id = $2`, wid, id).Scan(&canvas); err != nil {
+		return err
+	}
+	body += canvasLinkHTML(canvas)
+	if _, err := tx.Exec(ctx, `UPDATE wiki_pages SET tags = $3, canvas_text = $4 WHERE workspace_id = $1 AND id = $2`,
+		wid, id, pageTags(body), canvasPlain(canvas)); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM wiki_links WHERE workspace_id = $1 AND from_id = $2`, wid, id); err != nil {

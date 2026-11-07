@@ -54,7 +54,7 @@ type WikiNode struct {
 	DailyDate *string `json:"daily_date,omitempty" doc:"The day of a daily note, YYYY-MM-DD"`
 	Template  bool    `json:"template,omitempty" doc:"A template (or a page of one): copied into new pages, never in the tree"`
 	Verified  bool    `json:"verified,omitempty" doc:"Verified, and not past the day it was verified until"`
-	Kind      string  `json:"kind" enum:"page,database" doc:"A database's subpages are its rows"`
+	Kind      string  `json:"kind" enum:"page,database,canvas" doc:"A database's subpages are its rows; a canvas holds cards"`
 }
 
 // WikiRef names a page: breadcrumbs, subpages, search paths.
@@ -96,9 +96,10 @@ type WikiPage struct {
 	Version      int             `json:"version"`
 	Tags         []string        `json:"tags"`
 	Template     bool            `json:"template"`
-	Kind         string          `json:"kind" enum:"page,database"`
+	Kind         string          `json:"kind" enum:"page,database,canvas"`
 	Database     *Database       `json:"database" doc:"A database's properties and views; null for a page"`
 	Props        map[string]any  `json:"props" doc:"A database row's values, by property id"`
+	Canvas       *Canvas         `json:"canvas" doc:"A canvas's cards and connections; null for a page"`
 	Journal      bool            `json:"journal"`
 	DailyDate    *string         `json:"daily_date"`
 	Verification *Verification   `json:"verification"`
@@ -152,7 +153,7 @@ func collectNodes(rows pgx.Rows, err error) ([]WikiNode, error) {
 const pageSelect = `SELECT p.id, p.parent_id, p.title, p.icon, p.body_html, p.position, p.version, p.created_at, p.updated_at,
 	p.cover, p.cover_y, p.full_width, p.small_text, p.font, p.locked, p.tags,
 	p.private_to, p.team_id, p.template, p.journal, to_char(p.daily_date, 'YYYY-MM-DD'), p.deleted_at, p.trashed_with,
-	p.verified_at, p.verified_until, p.kind, p.database, p.props,
+	p.verified_at, p.verified_until, p.kind, p.database, p.props, p.canvas,
 	c.id, c.name, c.email, c.avatar_url, u.id, u.name, u.email, u.avatar_url,
 	v.id, v.name, v.email, v.avatar_url, x.id, x.name, x.email, x.avatar_url
 FROM wiki_pages p LEFT JOIN users c ON c.id = p.created_by LEFT JOIN users u ON u.id = p.updated_by
@@ -185,12 +186,12 @@ func loadPage(ctx context.Context, q db.Querier, wid, id uuid.UUID) (WikiPage, e
 	var c, u, v, x userCols
 	var trashedWith *uuid.UUID
 	var verifiedAt, verifiedUntil *time.Time
-	var database []byte
+	var database, canvas []byte
 	err := q.QueryRow(ctx, pageSelect+` WHERE p.workspace_id = $1 AND p.id = $2`, wid, id).Scan(
 		&p.ID, &p.ParentID, &p.Title, &p.Icon, &p.BodyHTML, &p.Position, &p.Version, &p.CreatedAt, &p.UpdatedAt,
 		&p.Cover, &p.CoverY, &p.FullWidth, &p.SmallText, &p.Font, &p.Locked, &p.Tags,
 		&p.owner, &p.TeamID, &p.Template, &p.Journal, &p.DailyDate, &p.DeletedAt, &trashedWith,
-		&verifiedAt, &verifiedUntil, &p.Kind, &database, &p.Props,
+		&verifiedAt, &verifiedUntil, &p.Kind, &database, &p.Props, &canvas,
 		&c.id, &c.name, &c.email, &c.avatar, &u.id, &u.name, &u.email, &u.avatar,
 		&v.id, &v.name, &v.email, &v.avatar, &x.id, &x.name, &x.email, &x.avatar)
 	if err != nil {
@@ -205,6 +206,15 @@ func loadPage(ctx context.Context, q db.Querier, wid, id uuid.UUID) (WikiPage, e
 	}
 	if p.Props == nil {
 		p.Props = map[string]any{}
+	}
+	if canvas != nil {
+		p.Canvas = new(Canvas)
+		if err := json.Unmarshal(canvas, p.Canvas); err != nil {
+			return p, err
+		}
+	}
+	if p.BodyHTML, err = signFiles(ctx, q, wid, id, p.BodyHTML); err != nil {
+		return p, err
 	}
 	p.CreatedBy, p.UpdatedBy, p.DeletedBy = c.ref(), u.ref(), x.ref()
 	if verifiedAt != nil {
@@ -479,12 +489,13 @@ func cleanCover(s string) (string, error) {
 	return "", httpx.Validation("cover must be a gradient, an https image or an uploaded image")
 }
 
-// cleanBody sanitizes a page body: the rich-text allowlist and the wiki's blocks (contracts/wiki.md "Body").
+// cleanBody sanitizes a page body: the rich-text allowlist and the wiki's blocks (contracts/wiki.md "Body"),
+// with links to our own files kept as their plain path ("Files").
 func cleanBody(raw string) (string, error) {
 	if len(raw) > maxBodyBytes {
 		return "", httpx.E(422, "page_too_large", "A page can hold up to 512 KB of text and formatting. Split it into subpages.")
 	}
-	return hd.SanitizeWiki(raw), nil
+	return plainFiles(hd.SanitizeWiki(raw)), nil
 }
 
 func inTrash() error {

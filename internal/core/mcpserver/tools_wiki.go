@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -12,7 +13,7 @@ import (
 
 	"github.com/useopendesk/opendesk/internal/ai"
 	"github.com/useopendesk/opendesk/internal/auth"
-	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
+	"github.com/useopendesk/opendesk/internal/helpdesk/wikiconv"
 )
 
 // --- wiki ----------------------------------------------------------------------------
@@ -34,7 +35,7 @@ func wikiTools() []*tool {
 		},
 		{
 			Name: "get_wiki_page", Title: "Read a wiki page", Scopes: []string{auth.ScopeWikiRead}, ReadOnly: true, Idempotent: true,
-			Description: "Read one page of the team's internal wiki: its text, where it sits, its subpages, who changed it last and its version.",
+			Description: "Read one page of the team's internal wiki: its text in Markdown (the form update_wiki_page takes), where it sits, its subpages, who changed it last and its version.",
 			Schema:      obj(map[string]any{"page": str("The page id.")}, "page"),
 			Run:         getWikiPage,
 		},
@@ -65,6 +66,10 @@ func wikiTools() []*tool {
 
 // pageChars is the most text get_wiki_page returns.
 const pageChars = 20000
+
+// fileSignature is the signature of a file link the API hands a reader; the page's text names its
+// files by their plain path instead.
+var fileSignature = regexp.MustCompile(`\?exp=\d+(?:&|&amp;)sig=[0-9a-fA-F]+`)
 
 type apiWikiRef struct {
 	ID    string `json:"id"`
@@ -119,7 +124,7 @@ func wikiPath(refs []apiWikiRef) string {
 func compactWikiPage(p apiWikiPage, text bool) outWikiPage {
 	o := outWikiPage{ID: p.ID, Title: untitled(p.Title), Path: wikiPath(p.Breadcrumbs), Version: p.Version, UpdatedAt: p.UpdatedAt}
 	if text {
-		o.Text = clip(hd.HTMLToText(p.BodyHTML), pageChars)
+		o.Text = clip(fileSignature.ReplaceAllString(wikiconv.Markdown(p.BodyHTML, wikiconv.MarkdownOptions{}), ""), pageChars)
 		for _, c := range p.Children {
 			o.Subpages = append(o.Subpages, outWikiRef{ID: c.ID, Title: untitled(c.Title)})
 		}

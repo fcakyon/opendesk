@@ -196,7 +196,7 @@ func AutoClose(ctx context.Context, d *deps.Deps) error {
 	return nil
 }
 
-// PurgeAttachmentsWorker removes uploads never attached to a message within 24h.
+// PurgeAttachmentsWorker removes uploads that no message and no wiki page took within 24h.
 type PurgeAttachmentsWorker struct {
 	river.WorkerDefaults[PurgeAttachmentsArgs]
 	D *deps.Deps
@@ -206,9 +206,10 @@ func (w *PurgeAttachmentsWorker) Work(ctx context.Context, _ *river.Job[PurgeAtt
 	return PurgeAttachments(ctx, w.D)
 }
 
-// PurgeAttachments deletes stale unattached uploads from storage and the database.
+// PurgeAttachments deletes stale unattached uploads from storage and the database. A wiki
+// page's files (contracts/wiki.md "Files") are kept while the page is.
 func PurgeAttachments(ctx context.Context, d *deps.Deps) error {
-	rows, err := d.DB.Pool.Query(ctx, `SELECT id, storage_key FROM attachments WHERE message_id IS NULL
+	rows, err := d.DB.Pool.Query(ctx, `SELECT id, storage_key FROM attachments WHERE message_id IS NULL AND wiki_page_id IS NULL
 		AND created_at < now() - interval '24 hours' ORDER BY created_at LIMIT $1`, scanBatch)
 	if err != nil {
 		return err
@@ -227,7 +228,7 @@ func PurgeAttachments(ctx context.Context, d *deps.Deps) error {
 	}
 	for _, a := range list {
 		// Claim the row first so an upload attached meanwhile is never removed.
-		tag, err := d.DB.Pool.Exec(ctx, `DELETE FROM attachments WHERE id = $1 AND message_id IS NULL`, a.id)
+		tag, err := d.DB.Pool.Exec(ctx, `DELETE FROM attachments WHERE id = $1 AND message_id IS NULL AND wiki_page_id IS NULL`, a.id)
 		if err != nil {
 			return err
 		}

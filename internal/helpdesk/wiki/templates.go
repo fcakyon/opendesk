@@ -155,11 +155,11 @@ func registerTemplates(d *deps.Deps, api huma.API) {
 						cover, font, kind        string
 						coverY                   int
 						fullWidth, small, locked bool
-						database, props          []byte
+						database, props, canvas  []byte
 					}
-					if err := tx.QueryRow(ctx, `SELECT parent_id, title, icon, body_html, position, cover, cover_y, full_width, small_text, font, locked, kind, database, props
+					if err := tx.QueryRow(ctx, `SELECT parent_id, title, icon, body_html, position, cover, cover_y, full_width, small_text, font, locked, kind, database, props, canvas
 						FROM wiki_pages WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, x).Scan(&row.parent, &row.title, &row.icon, &row.body, &row.position,
-						&row.cover, &row.coverY, &row.fullWidth, &row.small, &row.font, &row.locked, &row.kind, &row.database, &row.props); err != nil {
+						&row.cover, &row.coverY, &row.fullWidth, &row.small, &row.font, &row.locked, &row.kind, &row.database, &row.props, &row.canvas); err != nil {
 						return err
 					}
 					// A row copied into a database keeps its values; one copied anywhere else is
@@ -182,11 +182,16 @@ func registerTemplates(d *deps.Deps, api huma.API) {
 					if row.database != nil {
 						database = json.RawMessage(remap(string(row.database)))
 					}
+					// A canvas's cards that show pages of the copy show the copies.
+					var canvas any
+					if row.canvas != nil {
+						canvas = json.RawMessage(remap(string(row.canvas)))
+					}
 					if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by,
-							private_to, team_id, template, cover, cover_y, full_width, small_text, font, locked, kind, database, props)
-						VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+							private_to, team_id, template, cover, cover_y, full_width, small_text, font, locked, kind, database, props, canvas)
+						VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
 						nid, p.WorkspaceID, newParent, title, row.icon, body, row.position, p.ActorUserID(), owner, team, template,
-						row.cover, row.coverY, row.fullWidth, row.small, row.font, row.locked, row.kind, database, json.RawMessage(remap(string(row.props)))); err != nil {
+						row.cover, row.coverY, row.fullWidth, row.small, row.font, row.locked, row.kind, database, json.RawMessage(remap(string(row.props))), canvas); err != nil {
 						return err
 					}
 					// A row copied into a database is a new row: it gets its own unique id.

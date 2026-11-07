@@ -130,6 +130,70 @@ the database's view inside the page, with its controls. "/table", "/board", "/li
 and "/timeline" make a database under the page and show it there; "Linked view of a database" shows one
 that exists. Duplicating a database copies its rows; a row copied into a database gets a new unique id.
 
+## Canvas
+
+A page can be a **canvas** (`kind: "canvas"`, migration `000726`): cards on an endless board and the
+connections between them, the shape of [JSON Canvas 1.0](https://jsoncanvas.org) with the wiki's own
+card types. It keeps `canvas`; its `body_html` is its description (empty from the app) and its subpages
+are pages as anywhere else. Create one with `POST /v1/wiki/pages` `{kind: "canvas", canvas?}` (left out:
+an empty canvas). `PATCH` takes `canvas` (a canvas only), replaced whole: like a database's schema it
+keeps the version and adds no revision, and the last save wins; it does move the page's last edit, and
+`wiki_page.updated` carries `canvas` (or `canvas_changed: true` when the canvas is over 256 KB: read the
+page). The app takes it when it has nothing unsaved and no drag under way. Wrong shapes are
+`422 invalid_canvas`. Duplicate, templates, the trash and restore carry it like the rest of the page; a
+copy's page cards that show pages copied with it show the copies.
+
+```ts
+interface Canvas { nodes: CanvasNode[]; edges: CanvasEdge[] }   // nodes in z order, later above
+interface CanvasNodeBase {
+  id: string                  // [A-Za-z0-9_-]{1,64}, unique among the nodes
+  x: number; y: number        // finite, within ±1,000,000
+  width: number; height: number   // 20..20,000
+  color?: string              // "1".."6" (red, orange, yellow, green, cyan, purple) or "#rrggbb"
+}
+type CanvasNode = CanvasNodeBase & (
+  | { type: "text"; html: string }       // wiki HTML, sanitized like a body (hd.SanitizeWiki)
+  | { type: "page"; page_id: string }    // a page of the workspace
+  | { type: "link"; url: string; title?: string; description?: string; image?: string }   // https; the card from POST /v1/wiki/unfurl
+  | { type: "file"; src: string; name: string }   // one of our attachments (/v1/attachments/<id>) or https; name up to 255
+  | { type: "group"; label?: string }    // label up to 200
+)
+interface CanvasEdge {
+  id: string                  // as a node's, unique among the edges
+  fromNode: string; toNode: string       // nodes of the canvas
+  fromSide?: "top" | "right" | "bottom" | "left"; toSide?: same   // left out: the sides that face each other
+  fromEnd?: "none" | "arrow"  // default none
+  toEnd?: "none" | "arrow"    // default arrow
+  color?: string; label?: string         // label up to 200
+}
+```
+
+- At most 2,000 nodes, 4,000 edges and 1 MB. Fields that don't belong to a node's type are dropped,
+  labels and titles have their whitespace folded, and the default ends are left out.
+- A page card added by a save names a page of the workspace the caller may see (not in the trash); a
+  file card added by a save names an attachment of the workspace. Cards already on the canvas stay as
+  they are, so a teammate saves a canvas holding a page they can't see. Reading a canvas never shows a
+  page's title: the app draws a page card from the reader's own tree, and "A page you can't see" for a
+  page out of their sight or deleted.
+- The cards count as the page's text: page cards and the page links in text cards are its links
+  (backlinks, the graph), `#tags` and ticket mentions in text cards are its tags and ticket links, and
+  the words on the cards (text, labels, link titles and descriptions, file names, connection labels) are
+  searched (`wiki_pages.canvas_text`, kept by the API). Mentions of people and dates in text cards
+  notify and remind nobody.
+- `wiki.JSONCanvas` is a canvas as a JSON Canvas file, for export: text cards in Markdown
+  (`internal/helpdesk/wikiconv`), page cards as `file` nodes naming the exported page (a text node when
+  the page is not exported), https files as links, groups and connections as they are.
+
+The app (`web/src/components/wiki/canvas`) pans (drag empty space, Space and drag, scroll, arrow keys)
+and zooms (Ctrl or Cmd and scroll, pinch, +/−, Shift+1 fits, Shift+2 fits the selection); selects with a
+click, Shift and click, or Shift and drag; moves cards on a 20 point grid (Alt for free), resizes,
+connects from a card's sides (let go on empty space for a new card there), copies, pastes, duplicates
+(Mod+D), groups the selection (Mod+G) and deletes; Mod+Z and Mod+Shift+Z undo and redo this tab's
+own changes (cleared when someone else's canvas arrives). A double-click on empty space makes a text
+card; on a card it edits its text, renames a group, opens a page beside the canvas, or opens a link or
+a file. Viewers pan, zoom and open cards. Pasting a link makes a link card, an image or a file uploads
+it, and text makes a text card.
+
 ## Private pages and teamspaces
 
 A top-level page lives in a **space**, and every page under it lives there too:
@@ -247,11 +311,30 @@ scopes do not reach the wiki, nor `wiki:*` the knowledge base.
 knowledge base uses (`hd.SanitizeRich`: paragraphs, headings, lists, quotes, code, links, images from
 https or our attachments, mentions) and the wiki's blocks below. Pages written before the blocks
 existed are valid as they are. The knowledge base keeps its own allowlist: no block reaches an article.
-Images and files are uploaded as attachments (`POST /v1/attachments`).
+Images and files are uploaded as attachments (`POST /v1/attachments`) and become the page's own as
+it is saved (see "Files").
 People are mentioned with `<span data-type="mention" data-id="<user id>">`, tickets and contacts with a
 link of their kind (see "Desk"); a run of text an inline
 comment is on is `<span data-comment="<thread id>">`, and a date that reminds someone carries
 `data-reminder="<uuid>"` (see "Comments", "Reminders").
+
+## Files
+
+A body names one of our files as `/v1/attachments/<id>` (in `src`, `data-src` or `href`). The API
+stores that plain path: a link to the file at the API's address, signed or not, is stored as its path.
+As a page is saved (created, edited, restored, copied from a template, imported), each upload it
+names that the person or key saving it uploaded, and that no message or page holds yet, becomes the
+page's own (`attachments.wiki_page_id`, migration `000727`, which also gave pages written before the
+uploads they name). A page's files:
+
+- are kept while the page is, in the trash too; the sweep of uploads nobody sent leaves them. A page
+  deleted for good lets go of them, and the sweep removes them a day later;
+- are read by whoever may see the page (`GET /v1/attachments/{id}`: a member, or an API key with
+  `wiki:read`; "Private pages and teamspaces");
+- come signed in a page read: `GET /v1/wiki/pages/{id}` (and every route answering a `WikiPage`)
+  gives each file of the page's space (held by that page or another page of the same space) as a
+  signed link valid for one to two hours, so `<img>` loads without a token. Any other file keeps
+  its plain path.
 
 ## Blocks
 
@@ -473,12 +556,16 @@ is `422`. Every emoji the app's picker offers passes (`TestPickerEmoji`).
 `wiki_page.created`, `wiki_page.updated`, `wiki_page.moved`: `{ wiki_page: WikiNode, updated_by }`;
 `wiki_page.updated` also carries `settings: PageSettings` when the page's look changed (it has no
 version to compare, so a client takes it as it comes).
+`wiki_page.updated` carries `canvas` when a canvas's cards changed, or `canvas_changed: true` when the
+canvas is too large to carry (over 256 KB; read the page) (see "Canvas").
 `wiki_page.deleted`: `{ wiki_page_id, wiki_page_ids }` (the page and every subpage removed with it).
 `wiki_comment.changed`: `{ page_id, thread_id }`: a thread of the page changed (a comment added,
 edited or deleted, a reaction, resolved or reopened); refetch the page's comments.
 Bodies are left out, as they are large and saved often: a client showing the page refetches it.
 The web app patches the tree in place on `created`, `updated` and `deleted`, and refetches it on
-`moved`. Audit: `wiki_page.created` `{title, parent_id}`, `wiki_page.deleted` `{title, subpages}`.
+`moved`. Audit: `wiki_page.created` `{title, parent_id}`, `wiki_page.deleted` `{title, subpages}`,
+`wiki_page.imported` `{pages, files, skipped, parent_id}` (on the import's first top page),
+`wiki.exported` `{pages, format}` (a zip; on the page exported, none for the whole wiki).
 
 ## Limits
 
@@ -491,6 +578,85 @@ The web app patches the tree in place on `created`, `updated` and `deleted`, and
 | revisions per page | 100 |
 | comment | 20,000 characters of HTML, 50 mentions, 20 different reactions; an inline thread's quote 500 characters |
 | reminders per page | 100 (more are not kept) |
+| import | 100 MB uploaded, 200 MB unpacked, 10,000 files, 5,000 pages, 25 MB a file, 4 MB a page source; 20 imports an hour per workspace |
+| export | 200 MB of page text (`422 export_too_large`), 1 GB of files in a zip (files past it link to the app); 30 zips an hour per person or key |
+
+## Import and export
+
+Pages come in from other tools and go out as files (`internal/helpdesk/wikiport` reads and writes
+them; `internal/helpdesk/wiki/port.go` creates and reads the pages). Neither needs a plan.
+
+### Import
+
+`POST /v1/wiki/import` (agent; `wiki:write`, a person or an API key) takes a multipart form:
+
+| field | |
+| --- | --- |
+| `files` | one zip, or several page sources with the files they use; repeat the field for each file. Up to 100 MB in all |
+| `parent_id` | optional: a page of the tree the caller may see (not a database, not in the trash); the import's top pages go last under it, and live where it does |
+| `space`, `team_id` | without `parent_id`: `workspace` (default), `private` (a person only) or `team` with `team_id`, as `POST /v1/wiki/pages` |
+
+→ `201 {pages: number, root_ids: string[], skipped: {path, reason}[]}`: how many pages it made, the
+pages at the top of the import in order, and what it left out or changed by its path in the upload.
+
+What it reads:
+
+| source | becomes |
+| --- | --- |
+| Obsidian vault (a zip with `.obsidian/`, or any Markdown) | a page per note, a page per folder (a folder note `X/X.md` or `X.md` beside `X/` is the folder's page), `[[links]]`, `[[note#heading]]`, `![[embeds]]` of notes and files, callouts, highlights, math, task lists, front matter (`title`, `tags`), `#tags`; comments `%%…%%` are dropped |
+| Notion export (Markdown & CSV, or HTML) | the page tree (Notion's ids leave titles), links between pages and to `notion.so` pages of the export, callouts, toggles, page icons; a database's CSV (the `_all` one when there are two) becomes a database: the first column its title, each other column's type read from its values (checkbox, number, date and date ranges, URL, email, select, multi-select, status; people and relations as text), each record a row with its values, matched by title to the row's own page so it keeps its text and subpages |
+| Confluence, Google Docs or other HTML | a page per HTML file, its title from `<title>` or its first heading, Confluence's info, note and warning panels as callouts |
+| Markdown, text, CSV files | a page each; a CSV a database |
+
+Bodies are wiki HTML (`hd.SanitizeWiki`), as any other. Files the pages use become imported
+attachments of the importer (`attachments.imported`, counted against the plan's import limit,
+contracts/billing.md "Imports") and the pages' own ("Files"); files no page uses are not stored.
+All the pages are made in one transaction, under the tree's lock: ids first (bodies link forward and
+back), then each page in order with its position, a database with its schema checked as
+`POST /v1/wiki/pages` checks one, each row with its values checked as a row's are (a value the
+database refuses is left out). Each page gets its first revision, its links, tags and ticket
+mentions indexed, its files, and its importer as a follower; mentions in it notify nobody. Files are
+stored before the transaction; an import that fails removes them again. One `wiki_page.created` per
+page follows, parents first, to those who may see it, and one audit entry.
+
+It is refused whole, before anything is stored: `422 wiki_full` when its pages don't fit in the
+workspace's 5,000 (the message says how many it makes and how many fit); `422 page_too_deep` under a
+page at the 10th level; `422 import_into_database` under a database; and wikiport's own:
+`413 import_too_large`, `422 import_unsupported`, `import_unreadable`, `import_too_many_files`,
+`import_unsafe_path` (links, absolute paths, `..`), `import_compression` (an entry expanding over
+100 times past 1 MB), `import_empty`. A tree deeper than fits below where it lands is lifted:
+pages past the last level go beside their ancestor there.
+
+`skipped[].reason`:
+
+| reason | |
+| --- | --- |
+| `unsupported` | a kind of file that isn't imported (Obsidian canvases and bases) |
+| `unused` | a file no page uses |
+| `executable` | a program or a script, by its name or its bytes; never imported |
+| `too_large` | a file over 25 MB, or a page source over 4 MB |
+| `unreadable` | a file whose text or table could not be read, or a table the wiki can't keep as a database (its rows stay pages) |
+| `body_too_large` | a page whose text is over 512 KB; the page is made without it |
+| `moved_up` | a page deeper than the wiki holds, placed beside its ancestor at the last level |
+| `columns_dropped` | a table's columns past a database's 100 properties |
+| `nested_archive` | an archive inside the upload |
+| `files_limit` | a file past the plan's import limit; what used it is left out of the page |
+
+### Export
+
+| method | path | | |
+| --- | --- | --- | --- |
+| GET | `/v1/wiki/pages/{id}/export?format=markdown\|html&subpages=false\|true` | viewer; `wiki:read` | a page the caller may see, not in the trash (`404` otherwise). Without subpages (or with none they may see): one file, `<title>.md` (`text/markdown; charset=utf-8`) or `<title>.html` (`text/html; charset=utf-8`), its links to pages and files pointing to the app. With `subpages=true`: `<title>.zip`, the page and every subpage the caller may see, not in the trash |
+| GET | `/v1/wiki/export?format=markdown\|html` | viewer; `wiki:read` | `Wiki <YYYY-MM-DD>.zip`: every page of the caller's tree: the workspace's, the teamspaces they may see, their own private pages; not the trash, not templates. Any member exports what they may read. `422 wiki_empty` without pages |
+
+`format` defaults to `markdown`: an Obsidian vault, a `.md` per page with YAML front matter (title,
+icon, dates, tags, a row's values), its subpages in a folder of the same name beside it, `[[links]]`
+between pages, a database as a table of its rows and a `.csv` beside it. `html` is a standalone page
+per file, linked by relative paths. A zip carries the files its pages use under `attachments/` when
+the caller may read them as `GET /v1/attachments/{id}` would let them (a page's file, their own
+upload not sent yet), up to 1 GB; a link to any other file or to a page it doesn't carry goes to the
+app. Signed links never leave in an export. Every download is `Content-Disposition: attachment`,
+`nosniff`, a sandbox CSP and `no-store`; a zip is streamed and audited (`wiki.exported`).
 
 ## Desk
 

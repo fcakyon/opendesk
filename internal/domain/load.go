@@ -28,6 +28,9 @@ func Configure(publicAPIURL string, secret []byte) {
 	attachmentKey = append([]byte("attachment-url:"), secret...)
 }
 
+// APIURL is the public API base Configure set, without a trailing slash.
+func APIURL() string { return apiURL }
+
 // systemSending: mailboxes with outbound_kind "system" send through the platform mailer
 // (MAILBOX_SYSTEM_SEND).
 var systemSending = true

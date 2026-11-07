@@ -53,7 +53,7 @@ func Search(ctx context.Context, q db.Querier, v Viewer, wid uuid.UUID, query st
 		return []WikiSearchHit{}, nil
 	}
 	rows, err := q.Query(ctx, `SELECT p.id, p.parent_id, p.title, p.icon, p.updated_at,
-			ts_headline('simple', regexp_replace(p.body_html, '<[^>]+>', ' ', 'g'), `+tsq+`,
+			ts_headline('simple', regexp_replace(p.body_html, '<[^>]+>', ' ', 'g') || ' ' || p.canvas_text, `+tsq+`,
 				'MaxFragments=1, MaxWords=28, MinWords=10, ShortWord=2, StartSel="", StopSel=""')
 		FROM wiki_pages p WHERE p.workspace_id = $1 AND p.search @@ `+tsq+` AND `+liveSQL("p", 5, 6)+`
 		ORDER BY ts_rank(p.search, `+tsq+`) DESC, p.updated_at DESC, p.id LIMIT $4`, wid, query, pq, limit, v.Me, v.Hidden)

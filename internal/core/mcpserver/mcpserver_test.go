@@ -565,6 +565,11 @@ func TestWikiTools(t *testing.T) {
 	if len(got.Subpages) != 1 || got.Subpages[0].ID != child.ID {
 		t.Fatalf("get_wiki_page: %+v", got)
 	}
+	// The text is Markdown, as update_wiki_page takes it.
+	call(t, s, "get_wiki_page", map[string]any{"page": child.ID}, &got)
+	if got.Text != "Refunds over **100 euros** go to the team lead." {
+		t.Fatalf("get_wiki_page text: %q", got.Text)
+	}
 	call(t, s, "update_wiki_page", map[string]any{"page": child.ID, "body": "Refunds over 50 euros go to the lead.", "version": 1}, &got)
 	if got.Version != 2 {
 		t.Fatalf("update_wiki_page: %+v", got)

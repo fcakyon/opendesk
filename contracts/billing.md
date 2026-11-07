@@ -34,7 +34,8 @@ Same code, same API.
 
 ## Imports
 
-Imports (contracts/imports.md) copy a source's attachments within the plan's file limits. Every
+Imports (contracts/imports.md) copy a source's attachments within the plan's file limits; a wiki
+import (contracts/wiki.md "Import and export") counts its files toward the workspace's total too. Every
 file is also at most 25 MB, as for any attachment, on every plan.
 
 | plan | files per message | one message's files | all imported files in the workspace |

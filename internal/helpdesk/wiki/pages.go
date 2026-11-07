@@ -30,11 +30,13 @@ type pageCreate struct {
 	BodyHTML string  `json:"body_html,omitempty" doc:"Rich text, sanitized like an article's; up to 512 KB"`
 	Position *int    `json:"position,omitempty" minimum:"0" doc:"Where among its siblings, from 0; the end when left out"`
 	Template bool    `json:"template,omitempty" doc:"A new template at the top level of space, or a database's own template under it (contracts/wiki.md \"Templates\"); a subpage is a template when its parent is"`
-	Kind     string  `json:"kind,omitempty" enum:"page,database" doc:"database makes a database (contracts/wiki.md \"Databases\"); default page"`
+	Kind     string  `json:"kind,omitempty" enum:"page,database,canvas" doc:"database makes a database (contracts/wiki.md \"Databases\"), canvas a canvas (\"Canvas\"); default page"`
 	// A database's properties and views; left out, a title and tags in a table.
 	Database json.RawMessage `json:"database,omitempty"`
 	// A row's values, by property id, when the parent is a database.
 	Props json.RawMessage `json:"props,omitempty"`
+	// A canvas's cards and connections; left out, an empty canvas.
+	Canvas json.RawMessage `json:"canvas,omitempty"`
 }
 
 type pagePatch struct {
@@ -54,7 +56,9 @@ type pagePatch struct {
 	// A database's properties and views, replaced whole (a database only).
 	Database json.RawMessage `json:"database,omitempty"`
 	// A row's values to change, by property id; null takes one away (a database row only).
-	Props        json.RawMessage `json:"props,omitempty"`
+	Props json.RawMessage `json:"props,omitempty"`
+	// A canvas's cards and connections, replaced whole (a canvas only).
+	Canvas       json.RawMessage `json:"canvas,omitempty"`
 	VerifiedDays *int            `json:"verified_days,omitempty" minimum:"1" maximum:"3650" doc:"With verified: for how many days; left out, until someone changes it"`
 }
 
@@ -216,6 +220,22 @@ func registerPages(d *deps.Deps, api huma.API) {
 				} else if len(b.Database) > 0 {
 					return dbInvalid("database goes with kind database.")
 				}
+				var canvas any
+				if b.Kind == "canvas" {
+					kind = "canvas"
+					c := emptyCanvas()
+					if len(b.Canvas) > 0 {
+						if c, err = cleanCanvas(b.Canvas); err != nil {
+							return err
+						}
+						if err := checkCanvasRefs(ctx, tx, v, p.WorkspaceID, c, nil); err != nil {
+							return err
+						}
+					}
+					canvas = c
+				} else if len(b.Canvas) > 0 {
+					return canvasInvalid("canvas goes with kind canvas.")
+				}
 				props := map[string]any{}
 				if par != nil && par.database != nil {
 					var refs propRefs
@@ -235,9 +255,9 @@ func registerPages(d *deps.Deps, api huma.API) {
 				} else if len(b.Props) > 0 {
 					return dbInvalid("props go with a page in a database.")
 				}
-				if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, team_id, template, kind, database, props)
-					VALUES ($1, $2, $3, $4, $5, $6, 2147483647, $7, $7, $8, $9, $10, $11, $12, $13)`, id, p.WorkspaceID, parentID(par), title, icon, body, p.ActorUserID(), owner, team, template,
-					kind, database, props); err != nil {
+				if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, team_id, template, kind, database, props, canvas)
+					VALUES ($1, $2, $3, $4, $5, $6, 2147483647, $7, $7, $8, $9, $10, $11, $12, $13, $14)`, id, p.WorkspaceID, parentID(par), title, icon, body, p.ActorUserID(), owner, team, template,
+					kind, database, props, canvas); err != nil {
 					return err
 				}
 				if err := place(ctx, tx, p.WorkspaceID, parentID(par), owner, team, template, &id, b.Position); err != nil {
@@ -360,10 +380,14 @@ func registerPages(d *deps.Deps, api huma.API) {
 				if err != nil {
 					return err
 				}
+				canvasChanged, err := applyCanvas(ctx, tx, v, p, id, b.Canvas)
+				if err != nil {
+					return err
+				}
 				if pg, err = loadPage(ctx, tx, p.WorkspaceID, id); err != nil {
 					return err
 				}
-				if pg.Version == version && settings == cur && !verifyChanged && !dataChanged {
+				if pg.Version == version && settings == cur && !verifyChanged && !dataChanged && !canvasChanged {
 					return nil
 				}
 				data := eventPage(pg)
@@ -381,6 +405,10 @@ func registerPages(d *deps.Deps, api huma.API) {
 					} else {
 						data["props"] = pg.Props
 					}
+				}
+				if canvasChanged {
+					// A canvas has no version either: viewers take it as it comes.
+					canvasEventData(data, pg.Canvas)
 				}
 				return pageEvent(ctx, tx, p.WorkspaceID, pg, "wiki_page.updated", data)
 			})

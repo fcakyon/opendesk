@@ -23,4 +23,5 @@ func Register(d *deps.Deps, api huma.API, _ chi.Router) {
 	registerRows(d, api)
 	registerComments(d, api)
 	registerFollows(d, api)
+	registerPort(d, api)
 }
