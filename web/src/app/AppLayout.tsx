@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { sidebarEdit, useSidebarEdit } from "@/lib/collab/sidebarEdit";
+import { useSidebarEdit } from "@/lib/collab/sidebarEdit";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWaitingAlerts } from "@/components/tickets/useWaitingAlerts";
 import { Outlet, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
@@ -7,7 +7,8 @@ import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 
 import { Dialog as D } from "radix-ui";
 import { identify } from "@/lib/analytics";
 import { formatUsd } from "@/lib/format";
-import { useHotkeys } from "@/lib/hotkeys";
+import { useShortcuts } from "@/lib/shortcuts";
+import { useGlobalShortcuts } from "./globalShortcuts";
 import { useHeartbeat } from "@/lib/pictures";
 import { playAlertOnce, type AlertSound } from "@/lib/alertSound";
 import { realtime, startRealtime, stopRealtime } from "@/lib/realtime/manager";
@@ -37,7 +38,7 @@ import { notifyDesktop, useDesktopBadge, useDesktopPreferences } from "./useDesk
 import { AiBalanceBanner } from "@/components/billing/AiBalanceBanner";
 import { DesktopUpdateBanner } from "@/components/desktop/UpdateBanner";
 import { AllowNotificationsBanner } from "@/components/notifications/AllowBanner";
-import { NEW_TICKET_PATH, shell, toggleNav, useNav, useShell } from "./shellStore";
+import { NEW_TICKET_PATH, shell, useNav, useShell } from "./shellStore";
 import { quickAddOpen, useQuickAdd } from "./quickAdd";
 import { useCollab } from "@/lib/collab/hooks";
 import { useProducts } from "@/lib/products";
@@ -267,7 +268,6 @@ export function AppLayout() {
   useDesktopBadge();
   useDesktopPreferences();
   useWebPushSubscription();
-  const navigate = useNavigate();
   const newTicketOpen = useShell((s) => s.newTicketOpen);
   const sidebarOpen = useShell((s) => s.sidebarOpen);
   const upgradeReason = useUpgrade((s) => s.reason);
@@ -302,27 +302,15 @@ export function AppLayout() {
     if (onNewTicket && newTicketOpen) shell.newTicket(false);
   }, [onNewTicket, newTicketOpen]);
 
-  useHotkeys({
-    "mod+k": () => shell.palette(!useShell.getState().paletteOpen),
-    "?": () => shell.shortcuts(),
-    "shift+?": () => shell.shortcuts(),
-    c: () => {
+  useShortcuts({
+    "global.palette": () => shell.palette(!useShell.getState().paletteOpen),
+    "global.help": () => shell.shortcuts(),
+    "global.new": () => {
       if (onMail) compose.open();
       else if (ticketsOn && !onNewTicket) shell.newTicket();
     },
-    b: () => toggleNav(),
-    "g e": () => sidebarEdit.toggle(),
-    "g i": () =>
-      onMail
-        ? void navigate({ to: "/mail/$box/{-$threadId}", params: { box: "inbox", threadId: undefined }, search: (prev: { account?: string }) => ({ account: prev.account }) })
-        : void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "unassigned", ticketId: undefined } }),
-    "g m": () => void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "mine", ticketId: undefined } }),
-    "g c": () => void navigate({ to: "/contacts/{-$contactId}", params: { contactId: undefined } }),
-    "g k": () => void navigate({ to: "/kb" }),
-    "g w": () => void navigate({ to: "/wiki" }),
-    "g r": () => void navigate({ to: "/reports" }),
-    "g s": () => void navigate({ to: "/settings" }),
   });
+  useGlobalShortcuts(onMail);
 
   if (!authed) return null;
   if (suspended) return <SuspendedWorkspace />;

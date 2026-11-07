@@ -9,7 +9,7 @@ import { api } from "@/lib/api/endpoints";
 import { isApiError } from "@/lib/api/client";
 import { realtime } from "@/lib/realtime/manager";
 import { useRealtime } from "@/lib/realtime/store";
-import { useHotkeys } from "@/lib/hotkeys";
+import { useShortcuts } from "@/lib/shortcuts";
 import { useAI } from "@/lib/ai";
 import { useTranslation } from "react-i18next";
 import { AiIcon } from "@/components/ai/bits";
@@ -263,18 +263,19 @@ export default function TicketDetail({
     setTimeout(() => setPicker(p), panel ? 0 : 60);
   };
 
-  useHotkeys(
+  useShortcuts(
     {
-      r: () => composer.current?.focus("reply"),
-      n: () => composer.current?.focus("note"),
-      a: () => openPicker("assignee"),
-      s: (e: KeyboardEvent) => (e.shiftKey ? spam() : openPicker("status")),
-      h: () => setSnoozeOpen(true),
-      p: () => openPicker("priority"),
-      t: () => teamsCtx.hasTeams && openPicker("team"),
-      e: solve,
-      i: () => assignMe(),
-      "]": togglePanel,
+      "ticket.reply": () => composer.current?.focus("reply"),
+      "ticket.note": () => composer.current?.focus("note"),
+      "ticket.assign": () => openPicker("assignee"),
+      "ticket.status": () => openPicker("status"),
+      "ticket.spam": spam,
+      "ticket.snooze": () => setSnoozeOpen(true),
+      "ticket.priority": () => openPicker("priority"),
+      "ticket.team": () => teamsCtx.hasTeams && openPicker("team"),
+      "ticket.solve": solve,
+      "ticket.assignMe": () => assignMe(),
+      "ticket.panel": togglePanel,
       // mod+J drafts a reply from inside the composer (Composer.tsx); elsewhere it opens Ollie.
     },
     !!t && canEdit,

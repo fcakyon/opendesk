@@ -30,7 +30,7 @@ import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuTri
 import { Picker } from "@/components/ui/picker";
 import { sortTeams, TeamDot, useTeamsCtx } from "@/components/tickets/teams";
 import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
-import { useHotkeys } from "@/lib/hotkeys";
+import { useShortcuts } from "@/lib/shortcuts";
 import { dur, ease } from "@/lib/motion";
 import type { Team, TicketCounts, View } from "@/lib/api/types";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -226,7 +226,7 @@ function TeamsSection({ rail, drawer, first, counts, hidden = NONE, rp }: { rail
       return false;
     }
   });
-  useHotkeys({ "g t": () => setSwitcher(true) }, !drawer && ctx.hasTeams);
+  useShortcuts({ "go.team": () => setSwitcher(true) }, !drawer && ctx.hasTeams);
   const waitingFor = useWaitingFor();
   if (!ctx.hasTeams) return null;
   const byName = (a: Team, b: Team) => a.name.localeCompare(b.name);

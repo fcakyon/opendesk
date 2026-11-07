@@ -11,7 +11,7 @@ import { Copy, Ellipsis, Eye, EyeOff, FolderInput, GripVertical, Hash, LayoutTem
 import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { useHotkeys } from "@/lib/hotkeys";
+import { useShortcuts } from "@/lib/shortcuts";
 import { buildEverywhereRow, buildRow, RowEmoji, useRowLabels } from "@/components/spaces/rows";
 import { SpaceGlyph } from "@/components/spaces/icons";
 import { useSpaceActions } from "@/components/spaces/actions";
@@ -842,6 +842,6 @@ function SpaceEditor({ spaces, space }: { spaces: Space[]; space: Space }) {
 export function SidebarEditor() {
   const { spaces } = useSpaces();
   const space = pickedSpace(spaces, usePickedSpaceId());
-  useHotkeys({ escape: () => sidebarEdit.stop() });
+  useShortcuts({ "sidebar.done": () => sidebarEdit.stop() });
   return space && spaces ? <SpaceEditor spaces={spaces} space={space} /> : <WorkspaceEditor />;
 }

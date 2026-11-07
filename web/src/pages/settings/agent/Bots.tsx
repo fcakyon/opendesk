@@ -18,7 +18,7 @@ import { useUsageLine, usageCount } from "@/components/bots/bits";
 import { api } from "@/lib/api/endpoints";
 import type { Bot } from "@/lib/api/types";
 import { randomLook } from "@/lib/botlook";
-import { useHotkeys } from "@/lib/hotkeys";
+import { useShortcuts } from "@/lib/shortcuts";
 import { q, qk, removeFromList, upsertInList } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { AI_TONE, tone } from "@/lib/tones";
@@ -97,7 +97,7 @@ export default function Bots() {
     );
   };
 
-  useHotkeys({ n: () => admin && !create.isPending && create.mutate() }, admin);
+  useShortcuts({ "bots.new": () => admin && !create.isPending && create.mutate() }, admin);
 
   if (!admin)
     return (

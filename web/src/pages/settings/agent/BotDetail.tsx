@@ -31,7 +31,7 @@ import { Chat, chatBot, usePlaygroundChat } from "@/pages/settings/agent/AgentPl
 import { api } from "@/lib/api/endpoints";
 import type { Bot, BotPersonality, PlaygroundSettings } from "@/lib/api/types";
 import { OLLIE_LOOK, randomLook, type BotLook } from "@/lib/botlook";
-import { useHotkeys } from "@/lib/hotkeys";
+import { useShortcuts } from "@/lib/shortcuts";
 import { q, qk, removeFromList, upsertInList } from "@/lib/queries";
 import { atLeast, useRole, useWorkspace } from "@/lib/session";
 import { AI_TONE, tone } from "@/lib/tones";
@@ -140,9 +140,9 @@ function Builder({ bot, back }: { bot: Bot; back: React.ReactNode }) {
     setHistory((h) => h.slice(0, -1));
     setLook(prev, false);
   };
-  useHotkeys({
-    r: () => tab === "look" && shuffle(),
-    z: () => tab === "look" && undo(),
+  useShortcuts({
+    "bots.shuffle": () => tab === "look" && shuffle(),
+    "bots.undo": () => tab === "look" && undo(),
   });
 
   // A happy hop after each look change, unless you are previewing a state.

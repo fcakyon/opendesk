@@ -19,7 +19,7 @@ import { accountCategories, categoryTabs, PRIMARY, ruleSender } from "@/lib/coll
 import { useAllFolders, useCanAct, useMailAccounts, useSidebarPrefs, useThreadAction } from "@/lib/collab/hooks";
 import { type ComposeMode } from "@/lib/collab/recipients";
 import { identitiesOf, ownEmails as ownEmailsOf } from "@/lib/collab/identities";
-import { useHotkeys } from "@/lib/hotkeys";
+import { useShortcuts } from "@/lib/shortcuts";
 import { cn } from "@/lib/cn";
 import { qk, q } from "@/lib/queries";
 import { useDocumentTitle } from "@/app/RootLayout";
@@ -343,38 +343,39 @@ export default function MailPage() {
     return targetFolders.filter((f) => f.kind === "label" && !f.role && ts.every((x) => x.folder_ids.includes(f.id))).map((f) => f.id);
   })();
 
-  useHotkeys({
-    j: () => move(1),
-    k: () => move(-1),
+  useShortcuts({
+    "mail.next": () => move(1),
+    "mail.previous": () => move(-1),
     // With a conversation open, the arrows and Enter are its own: they scroll it and press its buttons.
     ...(openId
       ? {}
       : {
-          arrowdown: () => move(1),
-          arrowup: () => move(-1),
-          enter: () => open(threads[focusIdx]),
+          "mail.down": () => move(1),
+          "mail.up": () => move(-1),
+          "mail.enter": () => open(threads[focusIdx]),
         }),
-    o: () => open(threads[focusIdx]),
-    x: () => threads[focusIdx] && toggle(threads[focusIdx], false),
-    e: () => act(targets(), "archive"),
-    "#": () => act(targets(), "trash"),
-    "!": () => act(targets(), "spam"),
-    s: (e) => !e.shiftKey && star(),
-    u: (e) => e.shiftKey && act(targets(), "unread", { silent: true }),
-    i: (e) => e.shiftKey && act(targets(), "read", { silent: true }),
-    m: () => (openId && !selected.size ? threadRef.current?.move() : canAct && targetAccount && setPickMove(true)),
-    l: () => (openId && !selected.size ? threadRef.current?.labels() : canAct && targetLabels && setPickLabels(true)),
-    r: () => answer("reply"),
-    a: () => answer("reply_all"),
-    f: () => answer("forward"),
-    c: (e) => (e.shiftKey ? openId && threadRef.current?.comment() : compose.open({ accountId: account?.id ?? folderAccount?.id })),
-    "]": () => openId && threadRef.current?.people(),
-    "/": () => searchRef.current?.focus(),
-    escape: () => {
+    "mail.open": () => open(threads[focusIdx]),
+    "mail.select": () => threads[focusIdx] && toggle(threads[focusIdx], false),
+    "mail.archive": () => act(targets(), "archive"),
+    "mail.trash": () => act(targets(), "trash"),
+    "mail.spam": () => act(targets(), "spam"),
+    "mail.star": () => star(),
+    "mail.unread": () => act(targets(), "unread", { silent: true }),
+    "mail.read": () => act(targets(), "read", { silent: true }),
+    "mail.move": () => (openId && !selected.size ? threadRef.current?.move() : canAct && targetAccount && setPickMove(true)),
+    "mail.label": () => (openId && !selected.size ? threadRef.current?.labels() : canAct && targetLabels && setPickLabels(true)),
+    "mail.reply": () => answer("reply"),
+    "mail.replyAll": () => answer("reply_all"),
+    "mail.forward": () => answer("forward"),
+    "global.new": () => compose.open({ accountId: account?.id ?? folderAccount?.id }),
+    "mail.comment": () => openId && threadRef.current?.comment(),
+    "mail.people": () => openId && threadRef.current?.people(),
+    "mail.search": () => searchRef.current?.focus(),
+    "mail.escape": () => {
       if (selected.size) setSelected(new Set());
       else if (openId) close();
     },
-    "mod+a": () => !openId && setSelected(new Set(threads.map((x) => x.id))),
+    "mail.selectAll": () => !openId && setSelected(new Set(threads.map((x) => x.id))),
   });
 
   // Infinite scroll.

@@ -3,7 +3,7 @@
 // In a ticket's reply box ⌘J asks Ollie for a draft instead: the composer handles
 // the key first and marks it taken, so the toggle here skips it.
 
-import { useHotkeys } from "@/lib/hotkeys";
+import { useShortcuts } from "@/lib/shortcuts";
 import { AssistantFloat } from "./AssistantPanel";
 import { useAssistantOn } from "./OllieButton";
 import { ollie } from "./store";
@@ -13,7 +13,7 @@ export { OllieButton } from "./OllieButton";
 
 export function AssistantRoot() {
   const on = useAssistantOn();
-  useHotkeys({ "mod+j": () => ollie.toggle() }, on);
+  useShortcuts({ "global.ollie": () => ollie.toggle() }, on);
   if (!on) return null;
   return <AssistantFloat />;
 }

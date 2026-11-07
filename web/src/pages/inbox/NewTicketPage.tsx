@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import type { Member, SavedReply } from "@/lib/api/types";
 import { q } from "@/lib/queries";
 import { cn } from "@/lib/cn";
-import { useHotkeys } from "@/lib/hotkeys";
+import { useShortcuts } from "@/lib/shortcuts";
 import { useDocumentTitle } from "@/app/RootLayout";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -70,7 +70,7 @@ export default function NewTicketPage() {
       savePanel(!p);
       return !p;
     });
-  useHotkeys({ escape: close, "]": togglePanel });
+  useShortcuts({ "tickets.escape": close, "ticket.panel": togglePanel });
 
   // The composer's suggestions: "/" saved replies (the ticket's team's and everyone's),
   // "@" teammates in a note, "{{" variables in an email, filled by the server when it is created.

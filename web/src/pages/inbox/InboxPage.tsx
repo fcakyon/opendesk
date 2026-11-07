@@ -11,7 +11,7 @@ import { q, qk } from "@/lib/queries";
 import { leavesList, nextInList, useNextTicketAfterSend } from "@/lib/nextTicket";
 import { teamsOf } from "@/lib/ticketCache";
 import { useUnsent } from "@/components/tickets/detail/outbox";
-import { useHotkeys } from "@/lib/hotkeys";
+import { useShortcuts } from "@/lib/shortcuts";
 import { realtime } from "@/lib/realtime/manager";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/ui/empty";
@@ -429,36 +429,36 @@ export default function InboxPage() {
     open(t);
   };
 
-  useHotkeys({
-    j: () => move(1),
-    k: () => move(-1),
-    o: () => open(tickets[focusIdx]),
-    x: () => tickets[focusIdx] && toggle(tickets[focusIdx], false),
+  useShortcuts({
+    "tickets.next": () => move(1),
+    "tickets.previous": () => move(-1),
+    "tickets.open": () => open(tickets[focusIdx]),
+    "tickets.select": () => tickets[focusIdx] && toggle(tickets[focusIdx], false),
     // With a ticket open, the arrows and Enter are the ticket's: they scroll it and press its buttons.
     ...(openId
       ? {}
       : {
-          arrowdown: () => move(1),
-          arrowup: () => move(-1),
-          enter: () => open(tickets[focusIdx]),
-          e: solveFocused,
-          r: replyFocused,
-          i: () => tickets[focusIdx] && !tickets[focusIdx].assignee && quick(tickets[focusIdx], "assign"),
-          h: () => tickets[focusIdx] && quick(tickets[focusIdx], "snooze"),
-          s: (e: KeyboardEvent) => e.shiftKey && spamFocused(),
+          "tickets.down": () => move(1),
+          "tickets.up": () => move(-1),
+          "tickets.enter": () => open(tickets[focusIdx]),
+          "tickets.solve": solveFocused,
+          "tickets.reply": replyFocused,
+          "tickets.assign": () => tickets[focusIdx] && !tickets[focusIdx].assignee && quick(tickets[focusIdx], "assign"),
+          "tickets.snooze": () => tickets[focusIdx] && quick(tickets[focusIdx], "snooze"),
+          "tickets.spam": spamFocused,
         }),
-    "/": () => {
+    "tickets.search": () => {
       searchRef.current?.focus();
       if (!searchRef.current) document.querySelector<HTMLButtonElement>("[data-inbox-search]")?.click();
     },
-    escape: () => {
+    "tickets.escape": () => {
       if (selected.size || allMatching) {
         setSelected(new Set());
         setAllMatching(false);
       }
       else if (openId) close();
     },
-    "mod+a": () => {
+    "tickets.selectAll": () => {
       if (!openId) {
         setAllMatching(false);
         setSelected(new Set(tickets.map((t) => t.id)));
