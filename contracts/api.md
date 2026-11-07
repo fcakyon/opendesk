@@ -337,6 +337,23 @@ type NotificationPreferences = {
 | GET | `/v1/me/workspace-prefs` | `WorkspacePrefs` (below; the defaults until the person changes something). No `OD-Workspace` |
 | PUT | `/v1/me/workspace-prefs` | any of `{order, hidden}` → `WorkspacePrefs`. Fields left out keep their value. `422` for more than 100 workspace ids, or a field it does not take |
 | GET | `/v1/me/overview` | `{workspaces: WorkspaceOverview[]}`: every workspace the person is in, in joining order (below). No `OD-Workspace` |
+| GET | `/v1/me/shortcuts` | `{bindings: Record<string, string \| null>}`: the keys the person chose for the web app's shortcuts ("Keyboard shortcuts" below), `{}` until they change one. No `OD-Workspace` |
+| PUT | `/v1/me/shortcuts` | `{bindings}` → the same. Replaces them all; `{}` puts every shortcut back on its default keys. `422` for more than 300 shortcuts, more than 8 KB, an id that is not `<group>.<name>`, or keys that are not a binding |
+
+#### Keyboard shortcuts
+
+The web app keeps one registry of its shortcuts (`web/src/lib/shortcuts.ts`): each has an id
+(`go.pages`, `ticket.reply`), default keys, and where it works. A person can change the keys of any
+shortcut the app handles itself, or turn one off, in Settings › Shortcuts; those the editor and the
+canvas handle keep their keys. `/v1/me/shortcuts` stores only what they changed, on their own row, so
+the same keys follow them to every workspace and device. The server checks the shape, not the ids: an
+id the app no longer has is ignored by it.
+
+A binding is one or two steps split by a space (`g p` is G, then P). A step is its modifiers, each once
+and in the order `mod`, `alt`, `shift`, then `+` and one key: a printable character or `enter`,
+`escape`, `space`, `tab`, `backspace`, `delete`, `arrowup`/`down`/`left`/`right`, `home`, `end`,
+`pageup`, `pagedown`, `f1`..`f12`. `mod` is Cmd on a Mac and Ctrl elsewhere. `shift` goes with a
+letter, a digit, `;` or a named key; a symbol carries its own (`?`). A step with `mod` ends the binding.
 
 #### Several workspaces
 
