@@ -712,7 +712,7 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
                   }}
                 />
               </Draggable>
-              {!rail && <AddSectionButton always={drawer} />}
+              {!rail && <AddSectionButton />}
               {!rail && <NewSectionDrop />}
             </>
           )}

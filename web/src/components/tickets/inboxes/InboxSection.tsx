@@ -21,6 +21,7 @@ import { q } from "@/lib/queries";
 import { atLeast, useRole, useSession } from "@/lib/session";
 import { teamsOf } from "@/lib/ticketCache";
 import { quickAdd } from "@/app/quickAdd";
+import { useBackIntoLabel } from "./backInto";
 
 const headerBtn =
   "flex size-5 items-center justify-center rounded text-fg-4 opacity-0 transition-opacity hover:bg-chrome-hover hover:text-fg group-hover/section:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100";
@@ -43,6 +44,7 @@ export function InboxSection({ scope, first, rail, shown }: { scope: InboxScope;
   const me = useSession((s) => s.user?.id ?? "");
   const prefs = useSidebarPrefs();
   const save = useSaveSidebarPrefs();
+  const backInto = useBackIntoLabel(scope.kind);
   const { data: counts } = useQuery(q.counts());
   const { data: mailboxes } = useQuery(q.mailboxes());
   const { data: teams } = useQuery(q.teams());
@@ -116,7 +118,7 @@ export function InboxSection({ scope, first, rail, shown }: { scope: InboxScope;
         </MenuTrigger>
         <MenuContent align="end" className="w-[220px]">
           <MenuItem icon={<CornerUpLeft />} onSelect={back}>
-            {scope.kind === "mailbox" ? t("inboxes.backIntoTickets") : t("inboxes.backIntoTeams")}
+            {backInto}
           </MenuItem>
           <MenuSeparator />
           <MenuItem icon={<ArrowUp />} disabled={at <= 0} onSelect={() => change(moveInboxSection(prefs, key, -1, shown))}>
@@ -169,7 +171,7 @@ export function InboxSection({ scope, first, rail, shown }: { scope: InboxScope;
                 rail={rail}
                 label={prefs.names[model.key] || model.label}
                 ownName={model.label}
-                items={[{ label: scope.kind === "mailbox" ? t("inboxes.backIntoTickets") : t("inboxes.backIntoTeams"), icon: <CornerUpLeft />, onSelect: back }]}
+                items={[{ label: backInto, icon: <CornerUpLeft />, onSelect: back }]}
               >
                 {row}
               </RowMenu>

@@ -12,12 +12,14 @@ import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { quickAdd } from "@/app/quickAdd";
+import { useBackIntoLabel } from "./backInto";
 
 export function InboxSwitcher({ mailbox, onPick }: { mailbox: string | undefined; onPick: (id: string | undefined) => void }) {
   const { t } = useTranslation("inbox");
   const role = useRole();
   const prefs = useSidebarPrefs();
   const save = useSaveSidebarPrefs();
+  const backInto = useBackIntoLabel("mailbox");
   const { data: mailboxes } = useQuery(q.mailboxes());
   const list = mailboxes ?? [];
   // One address takes every ticket: nothing to switch between.
@@ -72,7 +74,7 @@ export function InboxSwitcher({ mailbox, onPick }: { mailbox: string | undefined
           className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-fg-3 transition-colors hover:bg-hover hover:text-fg"
         >
           <PanelLeft className="size-3.5" />
-          {inSection ? t("inboxes.backIntoTickets") : t("inboxes.ownSection")}
+          {inSection ? backInto : t("inboxes.ownSection")}
         </button>
       )}
     </div>

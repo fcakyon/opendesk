@@ -208,17 +208,14 @@ export function OwnSection({ section, first, rail }: { section: SidebarSection; 
   );
 }
 
-/** "Add section" under the sidebar's sections: quiet until the sidebar is hovered or it has focus (always shown in the drawer, which has no hover). */
-export function AddSectionButton({ always }: { always?: boolean }) {
+/** "Add section" under the sidebar's sections: always there, in the quietest grey, so it is found without hovering. */
+export function AddSectionButton() {
   const { t } = useTranslation("collab");
   return (
     <button
       type="button"
       onClick={() => ownSectionsUi.name({ mode: "new" })}
-      className={cn(
-        "mx-2.5 mt-4 flex h-7 w-[calc(100%-1.25rem)] items-center gap-2.5 rounded-md px-2 text-[12.5px] text-fg-4 opacity-0 outline-none transition-[opacity,color,background-color] duration-150 hover:bg-chrome-hover hover:text-fg-2 focus-visible:opacity-100 focus-visible:shadow-[0_0_0_2px_var(--focus)] group-hover/nav:opacity-100 motion-reduce:transition-none [&>svg]:size-3.5",
-        always && "opacity-100",
-      )}
+      className="mx-2.5 mt-4 flex h-7 w-[calc(100%-1.25rem)] items-center gap-2.5 rounded-md px-2 text-[12.5px] text-fg-4 outline-none transition-[color,background-color] duration-150 hover:bg-chrome-hover hover:text-fg-2 focus-visible:shadow-[0_0_0_2px_var(--focus)] motion-reduce:transition-none [&>svg]:size-3.5"
     >
       <Plus />
       <span>{t("ownSections.addSection")}</span>
