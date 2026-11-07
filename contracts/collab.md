@@ -913,9 +913,19 @@ added from Settings. A page's title and an inbox folder's, team's or view's titl
 sidebar (`application/x-od-sidebar-row`): onto Favorites, a section of the member's own, or a spot at
 the end that makes a new section named after it.
 
+**Arranging in place.** Outside edit mode the sidebar arranges itself where it is too
+(`web/src/components/collab/SidebarDrag.tsx`, `SidebarRow.tsx`, `SectionMenu.tsx`): a row or a section's title
+drags as itself past a few pixels (a finger holds still first, so the sidebar still scrolls) with edit mode's
+rules and drop line; a double-click on a row or a section's title renames it in place (F2 on the focused row:
+`sidebarEdit.renameFocused()`); each section's ⋯ renames it, gives it an emoji, adds rows (Favorites and the
+member's own sections), moves it up or down, hides or deletes it; a row's menu renames it in place, changes its
+icon and moves it up or down where its section keeps the member's order. Every sidebar menu ends with Edit
+sidebar and Customize sidebar, and a Customize button sits at the bottom of the sidebar, in the rail too. With
+a Space picked, its sections and rows move and rename the same way.
+
 **Edit mode.** The web app arranges the sidebar where it is (`web/src/components/collab/SidebarEditor.tsx`),
-entered from Edit sidebar (a row's menu, the user menu, the sidebar's right-click menu, `g e`) and left with
-Done or Escape. Every section and row has a handle (pointer events, so touch drags too; arrow keys move one
+entered from Edit sidebar (the Customize button, a row's or section's menu, the user menu, the sidebar's
+right-click menu, `g e`) and left with Done or Escape. Every section and row has a handle (pointer events, so touch drags too; arrow keys move one
 place) and an eye; hidden ones stay listed, dimmed. Sections reorder among sections; a row reorders within
 its section (`row_order` for Inbox, Mail accounts, Teams and Workspace), goes into Favorites (pinned, or a
 page starred) or into a section of the member's own. Own sections and rows are renamed inline and take an
