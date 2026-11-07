@@ -83,7 +83,11 @@
     "myTeams": "Mes équipes",
     "newTicket": "Nouveau ticket",
     "phone": "Téléphone",
-    "print": "Imprimer"
+    "print": "Imprimer",
+    "wikiGraph": "Graphe",
+    "wikiTags": "Tags",
+    "wikiTemplates": "Modèles",
+    "wikiTrash": "Corbeille"
   },
   "folders": {
     "unassigned": "Non attribués",

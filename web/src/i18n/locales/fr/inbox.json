@@ -1033,5 +1033,9 @@
     "attachments": "Pièces jointes",
     "nothing": "Rien à imprimer",
     "nothingHint": "Aucun message à imprimer avec ces options, ou le message n’est plus dans le ticket."
+  },
+  "wiki": {
+    "title": "Wiki",
+    "untitled": "Sans titre"
   }
 }

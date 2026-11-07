@@ -121,7 +121,8 @@
       "views": "Ansichten",
       "mail": "Mail",
       "pages": "Seiten",
-      "everywhere": "Über deine Workspaces hinweg"
+      "everywhere": "Über deine Workspaces hinweg",
+      "wiki": "Wiki-Seiten"
     },
     "wholeHint": "Bleibt aktuell",
     "noCollab": "Collab ist in {{workspace}} aus, daher können seine E-Mails nicht hinzugefügt werden.",

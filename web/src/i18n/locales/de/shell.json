@@ -210,5 +210,8 @@
     "popupBlocked": "Dein Browser hat das {{name}}-Fenster blockiert. Erlaube Pop-ups über die Adressleiste, um dort fortzufahren.",
     "popupThisTab": "In diesem Tab fortfahren",
     "changePassword": "Dein Passwort steht auf einer Liste geleakter Passwörter oder ist kürzer, als wir jetzt verlangen. Wähle ein neues."
+  },
+  "wikiPresence": {
+    "editing": "{{name}} bearbeitet gerade"
   }
 }

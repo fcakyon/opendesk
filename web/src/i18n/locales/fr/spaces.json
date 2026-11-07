@@ -123,7 +123,8 @@
       "views": "Vues",
       "mail": "Courrier",
       "pages": "Pages",
-      "everywhere": "Dans tous vos espaces de travail"
+      "everywhere": "Dans tous vos espaces de travail",
+      "wiki": "Pages du wiki"
     },
     "wholeHint": "Toujours à jour",
     "noCollab": "Collab est désactivé dans {{workspace}} : son courrier ne peut pas être ajouté.",

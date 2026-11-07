@@ -215,5 +215,8 @@
     "popupBlocked": "Votre navigateur a bloqué la fenêtre {{name}}. Autorisez les fenêtres contextuelles depuis la barre d’adresse pour y terminer la connexion.",
     "popupThisTab": "Continuer dans cet onglet",
     "changePassword": "Votre mot de passe figure dans une liste de mots de passe divulgués ou est plus court que la longueur désormais requise. Choisissez-en un nouveau."
+  },
+  "wikiPresence": {
+    "editing": "{{name}} modifie"
   }
 }

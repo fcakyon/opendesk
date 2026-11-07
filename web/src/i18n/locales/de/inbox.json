@@ -1047,5 +1047,9 @@
     "attachments": "Anhänge",
     "nothing": "Nichts zu drucken",
     "nothingHint": "Mit diesen Optionen gibt es keine Nachrichten zum Drucken, oder die Nachricht ist nicht mehr im Ticket."
+  },
+  "wiki": {
+    "title": "Wiki",
+    "untitled": "Ohne Titel"
   }
 }
