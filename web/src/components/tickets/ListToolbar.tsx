@@ -233,7 +233,7 @@ export function ListToolbar({
           </div>
         )}
         {!searchOpen && (
-          <Tooltip content={t("toolbar.search")} shortcut="/">
+          <Tooltip content={t("toolbar.search")} shortcut="tickets.search">
             <Button variant="ghost" size="sm" square data-inbox-search aria-label={t("toolbar.search")} icon={<Search className="size-3.5" />} onClick={() => setSearchOpen(true)} />
           </Tooltip>
         )}

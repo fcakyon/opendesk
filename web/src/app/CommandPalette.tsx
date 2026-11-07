@@ -44,6 +44,8 @@ import { atLeast, useRole, useSession } from "@/lib/session";
 import { useTheme } from "@/lib/theme";
 import { desktop } from "@/lib/desktop";
 import { NEW_TICKET_PATH, shell, usePageCommands, useShell } from "./shellStore";
+import { ShortcutKeys } from "@/components/ui/shortcut-keys";
+import { ShortcutCommands } from "./ShortcutCommands";
 import { useAccountActions, useSwitcherEntries } from "./useAccounts";
 import { useTranslation } from "react-i18next";
 import { AiIcon } from "@/components/ai/bits";
@@ -412,7 +414,7 @@ export function CommandPalette() {
                 <Item value="go changelog product updates release notes" keywords={[tNav("titles.changelog")]} icon={<Newspaper />} {...link({ to: "/kb/changelog" })}>
                   {tNav("titles.changelog")}
                 </Item>
-                <Item value="go wiki internal docs runbooks policies" keywords={[tNav("titles.wiki")]} icon={<NotebookText />} hint={<Kbd>g w</Kbd>} {...link({ to: "/wiki" })}>
+                <Item value="go wiki internal docs runbooks policies" keywords={[tNav("titles.wiki")]} icon={<NotebookText />} hint={<ShortcutKeys id="go.wiki" />} {...link({ to: "/wiki" })}>
                   {tNav("titles.wiki")}
                 </Item>
                 {ticketsOn && <Item value="go reports analytics" keywords={[tNav("titles.reports")]} icon={<BarChart3 />} {...link({ to: "/reports" })}>
@@ -456,7 +458,7 @@ export function CommandPalette() {
 
               <Command.Group heading={tNav("command.actions")} className={groupCls}>
                 {ticketsOn && !onNewTicket && (
-                  <Item value="new ticket compose create" keywords={[tNav("command.newTicket")]} icon={<SquarePen />} hint={<Kbd>c</Kbd>} onSelect={() => go(() => shell.newTicket())}>
+                  <Item value="new ticket compose create" keywords={[tNav("command.newTicket")]} icon={<SquarePen />} hint={<ShortcutKeys id="global.new" />} onSelect={() => go(() => shell.newTicket())}>
                     {tNav("command.newTicket")}
                   </Item>
                 )}
@@ -483,7 +485,7 @@ export function CommandPalette() {
                 <Item value="toggle theme dark light mode" keywords={[tNav(dark ? "command.switchLight" : "command.switchDark")]} icon={dark ? <Sun /> : <Moon />} onSelect={() => go(() => setTheme(dark ? "light" : "dark"))}>
                   {tNav(dark ? "command.switchLight" : "command.switchDark")}
                 </Item>
-                <Item value="keyboard shortcuts help" keywords={[tNav("command.shortcuts")]} icon={<Keyboard />} hint={<Kbd>?</Kbd>} onSelect={() => go(() => shell.shortcuts())}>
+                <Item value="keyboard shortcuts help" keywords={[tNav("command.shortcuts")]} icon={<Keyboard />} hint={<ShortcutKeys id="global.help" />} onSelect={() => go(() => shell.shortcuts())}>
                   {tNav("command.shortcuts")}
                 </Item>
                 {desktop && (
@@ -523,6 +525,7 @@ export function CommandPalette() {
                   {tShell("accounts.paletteAdd")}
                 </Item>
               </Command.Group>
+              <ShortcutCommands item={Item} groupCls={groupCls} go={go} />
               {ai.enabled && (
                 <Command.Group heading={t("palette.ask")} className={groupCls}>
                   <Item value="ask ai semantic search meaning" keywords={[t("palette.ask_hint")]} icon={<AiIcon />} hint={<Kbd>tab</Kbd>} onSelect={() => setAiMode(true)}>

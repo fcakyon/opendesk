@@ -2,6 +2,7 @@ import { DropdownMenu as M } from "radix-ui";
 import { Check, ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { useShortcutLabel } from "@/lib/shortcuts";
 import { floatingPanel } from "./popover";
 import { Kbd } from "./kbd";
 
@@ -56,9 +57,11 @@ export function MenuItem({
   icon?: ReactNode;
   onSelect?: () => void;
   danger?: boolean;
+  /** Keys ("mod d") or a shortcut id ("page.duplicate"), shown as the person's own keys. */
   shortcut?: string;
   disabled?: boolean;
 }) {
+  const keys = useShortcutLabel(shortcut);
   return (
     <M.Item
       disabled={disabled}
@@ -67,7 +70,7 @@ export function MenuItem({
     >
       {icon}
       <span className="flex-1 truncate">{children}</span>
-      {shortcut && <Kbd>{shortcut}</Kbd>}
+      {keys && <Kbd>{keys}</Kbd>}
     </M.Item>
   );
 }

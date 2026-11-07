@@ -9,6 +9,7 @@ import { sidebarEdit } from "@/lib/collab/sidebarEdit";
 import { isTypingTarget, keyName } from "@/lib/hotkeys";
 import { useProducts } from "@/lib/products";
 import { bindingOf, useShortcuts, type ShortcutId } from "@/lib/shortcuts";
+import { useSyncShortcuts } from "@/lib/shortcutSync";
 import { toggleNav } from "./shellStore";
 
 /** The main sidebar's scrolling list of rows. */
@@ -57,6 +58,7 @@ export function useGlobalShortcuts(onMail: boolean) {
     "go.shortcuts": area("/settings/shortcuts"),
   });
   useSidebarKeys();
+  useSyncShortcuts(true);
 }
 
 /**

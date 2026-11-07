@@ -42,7 +42,8 @@ import { DayNav, TemplateBanner, TrashBanner, Verification } from "@/components/
 import { AddToSpace } from "@/components/wiki/AddToSpace";
 import { PublishDialog } from "@/components/wiki/PublishDialog";
 import { ExportPageItems } from "@/components/wiki/Export";
-import { openImport } from "@/app/quickAdd";
+import { openImport, quickAdd } from "@/app/quickAdd";
+import { usePageShortcuts } from "@/components/wiki/pageShortcuts";
 import { AliasChips } from "@/components/wiki/Aliases";
 import { printWikiPage } from "@/components/wiki/editor/print";
 import { BESIDE_ATTR, OpenBesideDialog, useSplit, useWideScreen } from "@/components/wiki/split";
@@ -541,6 +542,25 @@ export function PageScreen({
     void copyText(pageUrl(page.id));
     toast.success(t("toast.linkCopied"));
   };
+  usePageShortcuts(
+    live.deleted_at
+      ? {}
+      : {
+          newPage: canEdit ? () => quickAdd.page(undefined, areaOf(live)) : undefined,
+          newSubpage: canEdit ? () => create.mutate({ parent_id: page.id }) : undefined,
+          parent: crumbs.length ? () => void navigate(pageTo({ id: crumbs[crumbs.length - 1]!.id, area: live.area })) : undefined,
+          favorite: live.template ? undefined : () => fav.toggle(node),
+          duplicate: canEdit && !live.journal ? () => void duplicatePage(false) : undefined,
+          move: canEdit && !live.journal ? () => setMoving(true) : undefined,
+          copyLink,
+          beside: () => setPickBeside(true),
+          history: () => setHistory(true),
+          publish: canEdit && canPublish ? () => setPublishing(true) : undefined,
+          exportMenu: () => document.querySelector<HTMLButtonElement>(`button[aria-label="${CSS.escape(t("page.more"))}"]`)?.click(),
+          lock: canEdit ? () => look.set({ locked: !live.locked }) : undefined,
+        },
+    !peek,
+  );
 
   const iconTrigger = (
     <button
@@ -597,7 +617,7 @@ export function PageScreen({
                 <Link2 className="size-4" />
               </Button>
             </Tooltip>
-            <Tooltip content={t("panel.open")} shortcut="mod shift ;">
+            <Tooltip content={t("panel.open")} shortcut="page.panel">
               <Button square variant="ghost" size="sm" aria-label={t("panel.open")} aria-pressed={!!panel} onClick={() => setPanel(panel ? null : "outline")} className={cn("hidden", beside ? "2xl:inline-flex" : "lg:inline-flex", panel && "bg-hover text-fg")}>
                 <PanelRight className="size-4" />
               </Button>
@@ -663,7 +683,7 @@ export function PageScreen({
                   </MenuItem>
                   <MenuSeparator />
                   <ExportPageItems page={live} hasSubpages={kids.length > 0} />
-                  <MenuItem icon={<Printer />} shortcut="mod p" onSelect={() => printWikiPage(scrollEl)}>
+                  <MenuItem icon={<Printer />} shortcut="page.print" onSelect={() => printWikiPage(scrollEl)}>
                     {t("editor.print.menu")}
                   </MenuItem>
                   {canEdit && !live.template && live.kind !== "database" && (

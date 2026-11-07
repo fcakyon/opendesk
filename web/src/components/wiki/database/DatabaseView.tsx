@@ -25,6 +25,7 @@ import { ActiveChips, FilterMenu, GroupMenu, LayoutMenu, PropertiesMenu, SortMen
 import { useDatabase, useDatabaseActions } from "./useDatabase";
 import { withOption } from "./cells";
 import { RowPeek } from "./RowPeek";
+import { DatabaseKeys } from "./DatabaseKeys";
 import "./database.css";
 
 /** What every layout of a database gets. */
@@ -167,6 +168,21 @@ export function DatabaseView({ databaseId, viewId, onViewChange, inline }: { dat
 
   return (
     <div className={cn("wiki-db @container/db min-w-0", inline && "my-2")}>
+      {!inline && (
+        <DatabaseKeys
+          onNewRow={canEdit && !isForm ? async () => {
+            const row = await create();
+            if (row) open(row);
+          } : undefined}
+          onView={(by) => {
+            const at = db.views.findIndex((v) => v.id === view.id);
+            const next = db.views[(at + by + db.views.length) % db.views.length];
+            if (next) pick(next.id);
+          }}
+          onFilter={isForm ? undefined : () => setFilterOpen(true)}
+          onSearch={isForm ? undefined : () => setSearching(true)}
+        />
+      )}
       {inline && page && (
         <div className="group mb-1 flex items-center gap-1.5">
           <PageIcon icon={page.icon} className="size-5 text-[17px]" />

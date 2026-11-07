@@ -1,5 +1,6 @@
 import { Tooltip as T } from "radix-ui";
 import { forwardRef, type ReactNode } from "react";
+import { useShortcutLabel } from "@/lib/shortcuts";
 import { Kbd } from "./kbd";
 
 export const TooltipProvider = T.Provider;
@@ -8,6 +9,7 @@ type TooltipProps = {
   content: ReactNode;
   children: ReactNode;
   side?: "top" | "bottom" | "left" | "right";
+  /** Keys ("mod k") or a shortcut id ("go.pages"), shown as the person's own keys. */
   shortcut?: string;
   align?: "start" | "center" | "end";
 };
@@ -17,9 +19,11 @@ type TooltipProps = {
  * inside another Radix trigger (`<PopoverTrigger asChild><Tooltip>…`).
  */
 export const Tooltip = forwardRef<HTMLElement, TooltipProps & Omit<React.HTMLAttributes<HTMLElement>, "content" | "children">>(function Tooltip(
-  { content, children, side = "top", shortcut, align = "center", ...rest },
+  { content, children, side = "top", shortcut: asked, align = "center", ...rest },
   ref,
 ) {
+  // A shortcut id (lib/shortcuts.ts) shows the person's own keys; other text shows as it is.
+  const shortcut = useShortcutLabel(asked);
   if (!content) return <>{children}</>;
   return (
     <T.Root>

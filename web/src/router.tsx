@@ -760,6 +760,7 @@ const sAgentToAgent = settingsPage("/agent-to-agent", "agentToAgent", () => impo
   void qc.prefetchInfiniteQuery(q.assistantPeerAsks());
   return qc.ensureQueryData(q.assistantPeer()).catch(() => null);
 });
+const sShortcuts = settingsPage("/shortcuts", "shortcuts", () => import("./pages/settings/Shortcuts"));
 const sWorkspaces = settingsPage("/workspaces", "workspaces", () => import("./pages/settings/Workspaces"), (qc) =>
   Promise.all([qc.ensureQueryData(q.workspacePrefs()), qc.prefetchQuery(q.overview())]),
 );
@@ -1155,6 +1156,7 @@ const routeTree = rootRoute.addChildren([
       sNotifications,
       sAgentToAgent,
       sWorkspaces,
+      sShortcuts,
       sWorkspace,
       sPages,
       sMembers,

@@ -264,6 +264,9 @@ export const api = {
     /** How this person arranges their workspaces (contracts/api.md "Several workspaces"). */
     workspacePrefs: () => http.get<T.WorkspacePrefs>("/v1/me/workspace-prefs", { workspace: false }),
     putWorkspacePrefs: (b: T.WorkspacePrefsInput) => http.put<T.WorkspacePrefs>("/v1/me/workspace-prefs", b, { workspace: false }),
+    /** The keys the person chose for the app's shortcuts (contracts/api.md "Keyboard shortcuts"). */
+    shortcuts: () => http.get<T.ShortcutKeys>("/v1/me/shortcuts", { workspace: false }),
+    putShortcuts: (b: T.ShortcutKeys) => http.put<T.ShortcutKeys>("/v1/me/shortcuts", b, { workspace: false }),
     /** Every workspace's sidebar numbers, each as that workspace answers this person. */
     overview: () => http.get<{ workspaces: T.WorkspaceOverview[] }>("/v1/me/overview", { workspace: false }),
     /** The caller's Spaces (contracts/spaces.md): one list for every workspace and device. */

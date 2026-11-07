@@ -48,6 +48,7 @@ import {
   Webhook,
   Workflow,
   Smile,
+  Keyboard,
   LayoutPanelLeft,
   ScrollText,
 } from "lucide-react";
@@ -62,6 +63,7 @@ type NavPath =
   | "/settings/notifications"
   | "/settings/agent-to-agent"
   | "/settings/workspaces"
+  | "/settings/shortcuts"
   | "/settings/workspace"
   | "/settings/members"
   | "/settings/teams"
@@ -112,6 +114,7 @@ const groups: { title: keyof typeof navigation.groups; items: { to: NavPath; lab
       { to: "/settings/notifications", label: "notifications", icon: <Bell /> },
       { to: "/settings/agent-to-agent", label: "agentToAgent", icon: <MessagesSquare /> },
       { to: "/settings/workspaces", label: "workspaces", icon: <LayoutPanelLeft /> },
+      { to: "/settings/shortcuts", label: "shortcuts", icon: <Keyboard /> },
     ],
   },
   {

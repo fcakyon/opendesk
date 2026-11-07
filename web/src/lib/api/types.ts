@@ -3454,6 +3454,8 @@ export type WorkspacePrefs = {
   updated_at?: string;
 };
 export type WorkspacePrefsInput = Partial<Pick<WorkspacePrefs, "order" | "hidden">>;
+/** The keys a person chose for the app's shortcuts: id to keys, or null for one turned off (contracts/api.md "Keyboard shortcuts"). */
+export type ShortcutKeys = { bindings: Record<string, string | null> };
 export type WorkspaceOverview = {
   id: string;
   name: string;

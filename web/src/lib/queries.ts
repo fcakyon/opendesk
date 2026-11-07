@@ -48,6 +48,7 @@ export const qk = {
   of: <T extends readonly unknown[]>(...parts: T) => w(parts),
   /** How the person arranges their workspaces (contracts/api.md "Several workspaces"). */
   workspacePrefs: ["me", "workspace-prefs"] as const,
+  shortcuts: ["me", "shortcuts"] as const,
   /** Every workspace's sidebar numbers in one answer (GET /v1/me/overview). */
   overview: ["me", "overview"] as const,
   /** The person's Spaces (contracts/spaces.md): one list, the same in every workspace. */
@@ -402,6 +403,7 @@ async function allPages<R>(fn: (q: { limit: number; cursor: string | null }) => 
 export const q = {
   authConfig: () => queryOptions({ queryKey: qk.authConfig, queryFn: api.auth.config, staleTime: 5 * 60_000 }),
   workspacePrefs: () => queryOptions({ queryKey: qk.workspacePrefs, queryFn: api.me.workspacePrefs, staleTime: 5 * 60_000 }),
+  shortcuts: () => queryOptions({ queryKey: qk.shortcuts, queryFn: api.me.shortcuts, staleTime: 5 * 60_000 }),
   overview: () => queryOptions({ queryKey: qk.overview, queryFn: async () => (await api.me.overview()).workspaces, staleTime: 30_000 }),
   /** The user's Spaces, every field present. No events announce changes, so focus refetches them. */
   spaces: () =>
