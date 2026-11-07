@@ -16,6 +16,7 @@ import { useSpaces } from "@/lib/spaces/hooks";
 import { pickedSpace, replaceSpace } from "@/lib/spaces/model";
 import { usePickedSpaceId } from "@/lib/spaces/store";
 import { useSpaceActions } from "@/components/spaces/actions";
+import { useFavorites, useWikiTree } from "@/components/wiki/hooks";
 import { useOwnSidebar } from "./AddToSidebar";
 import { useEditDrag } from "./useEditDrag";
 
@@ -41,6 +42,8 @@ export function SidebarDragProvider({ rootRef, children }: { rootRef: RefObject<
   const { spaces } = useSpaces();
   const space = pickedSpace(spaces, usePickedSpaceId());
   const actions = useSpaceActions(spaces);
+  const fav = useFavorites();
+  const { tree } = useWikiTree();
 
   const rowsOf = useCallback(
     (key: string) => {
@@ -57,7 +60,14 @@ export function SidebarDragProvider({ rootRef, children }: { rootRef: RefObject<
       return;
     }
     const r = dropOnSidebar(prefs, wid, s, t, rowsOf);
-    if (r && "prefs" in r) change(r.prefs);
+    if (!r) return;
+    if ("prefs" in r) change(r.prefs);
+    else if ("stars" in r) fav.reorder(r.stars);
+    else {
+      // A page dropped on Favorites is starred where it lands (the wiki keeps the list).
+      const node = tree.byId.get(r.star);
+      if (node) fav.place(node, r.before);
+    }
   };
   const { drag, target, pressable } = useEditDrag<EditSource>({ root: rootRef, accepts, onDrop: apply });
 

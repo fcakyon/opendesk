@@ -632,15 +632,7 @@ function WorkspaceEditor() {
     else if ("stars" in r) fav.reorder(r.stars);
     else {
       const node = d?.wiki?.find((n) => n.id === r.star);
-      if (node && !fav.has(node.id)) {
-        fav.toggle(node);
-        const ids = [...fav.list.map((n) => n.id), node.id];
-        if (r.before) {
-          const order = ids.filter((x) => x !== node.id);
-          order.splice(Math.max(0, order.indexOf(r.before)), 0, node.id);
-          fav.reorder(order);
-        }
-      }
+      if (node) fav.place(node, r.before);
     }
   };
   const { drag, target, handle } = useEditDrag<EditSource>({ root: rootRef, accepts: (s, tg) => canDrop(prefs, wid, s, tg), onDrop: apply });

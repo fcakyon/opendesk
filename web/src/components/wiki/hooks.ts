@@ -289,6 +289,16 @@ export function useRestorePage() {
 // ─── Favorites ──────────────────────────────────────────────────────────────
 
 /** The person's favorite pages, in their order, changed at once and saved behind. */
+/** The favorites with `node` before `before` (or last), once; dropped on itself or on a page not there, a starred one stays put. */
+export function placeFavorite(list: WikiNode[], node: WikiNode, before: string | null): WikiNode[] {
+  const there = list.some((n) => n.id === node.id);
+  if (before !== null && (before === node.id || !list.some((n) => n.id === before))) return there ? list : [...list, node];
+  const out = list.filter((n) => n.id !== node.id);
+  const i = before === null ? -1 : out.findIndex((n) => n.id === before);
+  out.splice(i < 0 ? out.length : i, 0, node);
+  return out;
+}
+
 export function useFavorites() {
   const qc = useQueryClient();
   const { t } = useTranslation("wiki");
@@ -310,6 +320,8 @@ export function useFavorites() {
     has: (id: string) => list.some((n) => n.id === id),
     toggle: (node: WikiNode) => void save(list.some((n) => n.id === node.id) ? list.filter((n) => n.id !== node.id) : [...list, node]),
     reorder: (ids: string[]) => void save(ids.map((id) => list.find((n) => n.id === id)).filter((n): n is WikiNode => !!n)),
+    /** Stars a page, or moves a starred one, to sit before `before` (or last), in one save. */
+    place: (node: WikiNode, before: string | null) => void save(placeFavorite(list, node, before)),
   };
 }
 

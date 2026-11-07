@@ -10,6 +10,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRight, Columns2, Copy, EyeOff, FileText, FolderInput, LayoutDashboard, Link2, MoreHorizontal, PencilRuler, Plus, Star, StarOff, Table2 } from "lucide-react";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { SIDEBAR_DRAG } from "@/lib/collab/sidebarDrag";
 import { sidebarEdit } from "@/lib/collab/sidebarEdit";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -267,8 +268,10 @@ export function TreeView({
       ? {
           draggable: true,
           onDragStart: (e: DragEvent<HTMLElement>) => {
-            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.effectAllowed = variant === "nav" ? "copyMove" : "move";
             e.dataTransfer.setData("text/plain", pageUrl(n.id));
+            // In the main sidebar the page also drops on Favorites (starred) or a section of the member's own.
+            if (variant === "nav") e.dataTransfer.setData(SIDEBAR_DRAG, JSON.stringify({ kind: "wiki_page", id: n.id, label: n.title.trim() || t("untitled") }));
             setDrag(n.id);
           },
           onDragEnd: () => {

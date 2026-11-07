@@ -21,6 +21,8 @@ import { TeamDot, useTeamsCtx } from "@/components/tickets/teams";
 import type { SidebarPrefs, Team } from "@/lib/api/types";
 import { useSaveSidebarPrefs, useSidebarPrefs } from "@/lib/collab/hooks";
 import { RowEmoji } from "@/components/spaces/rows";
+import { SidebarRow, useRowEdit } from "@/components/collab/SidebarRow";
+import { FAVORITES, starKey } from "@/lib/collab/sidebarEditModel";
 import { hid, iconOf, nameOf, setHidden, type PagesPart } from "@/lib/collab/sidebarPrefs";
 import { cn } from "@/lib/cn";
 import { atLeast, useRole, useSession } from "@/lib/session";
@@ -376,6 +378,7 @@ export function FavoritePageRows({ rail }: { rail: boolean }) {
   const { tree } = useWikiTree();
   const openId = useOpenPageId();
   const who = useOpener();
+  const rowEdit = useRowEdit();
   return (
     <>
       {fav.list.map((saved) => {
@@ -384,33 +387,44 @@ export function FavoritePageRows({ rail }: { rail: boolean }) {
         const label = nameOf(sidebarPrefs, hid.wikiPage(n.id), title(n.title));
         const glyph = iconOf(sidebarPrefs, hid.wikiPage(n.id));
         const active = openHere(who, openId, n.id, "favorites");
+        // Drags among Favorites (the wiki's order) or into a section of the member's own, and
+        // renames with a double-click, like every other row.
         return (
-          <div key={n.id} className="group/row relative">
-            <NavTip rail={rail} label={label}>
-              <Link
-                {...pageTo(n)}
-                onClick={() => markOpener(n.id, "favorites")}
-                className={cn(rowBase, rowShape(rail), rowIdle, !rail && "group-hover/row:pr-8", active && rowActive)}
-                aria-label={rail ? label : undefined}
-              >
-                {/* Drawn by hand, not from the route: the same page's row in the tree may be the one lit. */}
-                {active && <ActivePill />}
-                <span className="flex size-[15px] shrink-0 items-center justify-center">
-                  {glyph ? <RowEmoji emoji={glyph} /> : <PageIcon icon={n.icon} kind={n.kind} />}
+          <SidebarRow
+            key={n.id}
+            id={`favorites|${starKey(n.id)}`}
+            source={{ kind: "row", from: FAVORITES, key: starKey(n.id), page: n.id, row: { kind: "wiki_page", id: n.id } }}
+            label={label}
+            edit={rowEdit(hid.wikiPage(n.id), title(n.title))}
+            rail={rail}
+          >
+            <div className="group/row relative">
+              <NavTip rail={rail} label={label}>
+                <Link
+                  {...pageTo(n)}
+                  onClick={() => markOpener(n.id, "favorites")}
+                  className={cn(rowBase, rowShape(rail), rowIdle, !rail && "group-hover/row:pr-8", active && rowActive)}
+                  aria-label={rail ? label : undefined}
+                >
+                  {/* Drawn by hand, not from the route: the same page's row in the tree may be the one lit. */}
+                  {active && <ActivePill />}
+                  <span className="flex size-[15px] shrink-0 items-center justify-center">
+                    {glyph ? <RowEmoji emoji={glyph} /> : <PageIcon icon={n.icon} kind={n.kind} />}
+                  </span>
+                  <Label rail={rail}>{label}</Label>
+                </Link>
+              </NavTip>
+              {!rail && (
+                <span className="absolute right-3.5 top-1">
+                  <Tooltip content={t("favorites.remove")}>
+                    <button type="button" aria-label={t("favorites.remove")} onClick={() => fav.toggle(n)} className={tool}>
+                      <StarOff className="size-3.5" />
+                    </button>
+                  </Tooltip>
                 </span>
-                <Label rail={rail}>{label}</Label>
-              </Link>
-            </NavTip>
-            {!rail && (
-              <span className="absolute right-3.5 top-1">
-                <Tooltip content={t("favorites.remove")}>
-                  <button type="button" aria-label={t("favorites.remove")} onClick={() => fav.toggle(n)} className={tool}>
-                    <StarOff className="size-3.5" />
-                  </button>
-                </Tooltip>
-              </span>
-            )}
-          </div>
+              )}
+            </div>
+          </SidebarRow>
         );
       })}
     </>
