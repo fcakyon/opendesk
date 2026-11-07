@@ -9,6 +9,12 @@ import { useCollab } from "@/lib/collab/hooks";
 
 export type Crumb = { label: string; to?: string; params?: Record<string, string | undefined> };
 
+/** A deep path keeps its first crumb and last two; the ones between fold into a menu. */
+export function foldCrumbs(crumbs: Crumb[]): (Crumb | { fold: Crumb[] })[] {
+  if (crumbs.length <= 4) return crumbs;
+  return [crumbs[0], { fold: crumbs.slice(1, -2) }, ...crumbs.slice(-2)];
+}
+
 /** A page names the last header crumb (a ticket subject, an article) while it is mounted. */
 export function usePageCrumb(label: string | null | undefined) {
   useEffect(() => {

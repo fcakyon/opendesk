@@ -26,13 +26,7 @@ import { WorkspaceSwitcher } from "./Sidebar";
 import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
 import { openImport, quickAdd } from "./quickAdd";
 import { shell, useNav } from "./shellStore";
-import { useBreadcrumbs, type Crumb } from "./useBreadcrumbs";
-
-/** A deep path keeps its first crumb and last two; the ones between fold into a menu. */
-function foldCrumbs(crumbs: Crumb[]): (Crumb | { fold: Crumb[] })[] {
-  if (crumbs.length <= 4) return crumbs;
-  return [crumbs[0], { fold: crumbs.slice(1, -2) }, ...crumbs.slice(-2)];
-}
+import { foldCrumbs, useBreadcrumbs, type Crumb } from "./useBreadcrumbs";
 
 function FoldedCrumbs({ crumbs }: { crumbs: Crumb[] }) {
   const { t } = useTranslation("shell");
