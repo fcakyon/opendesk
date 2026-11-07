@@ -73,6 +73,7 @@ The gateway checks the token's signature, `purpose`, expiry and, on the agent en
 | `team:<wid>:<tid>` | a `ws` token whose `teams` lists that private team | `"event"` for that team's tickets, in full |
 | `user:<uid>` | a user's own token | `"event"` for events addressed to that user, such as notifications |
 | `ticket:<wid>:<ticket_id>` | users in the workspace | Presence, `"typing"` and `"customer_typing"` |
+| `wiki_page:<wid>:<page_id>` | users in the workspace who can read the page | Presence: who is viewing or editing the page. Join with `{ "state": "viewing" }` (`editing`, `idle`), or `{ "watch": true }` to see others without being shown. Never for a private page |
 | `contact:<wid>:<contact_id>` | the chat widget for that contact | public `"event"`s and agent `"typing"` |
 
 A successful join replies `{ "server_time": "..." }`. A join you are not allowed replies with `{ "reason": "forbidden" }`.
@@ -83,7 +84,7 @@ Tickets of a private team are seen only by the people on that team. An event abo
 
 <Diagram name="event-flow" />
 
-The `ws` token lists the private teams you may see in its `teams` claim. Join `team:<wid>:<tid>` for each of them. When your private teams change (you join or leave one, or one becomes private), the gateway closes your socket; reconnect with a fresh token to get the new list. On `ticket:<wid>:<ticket_id>` for a private team's ticket, join with `{ "team_id": "<tid>" }` to see its presence and typing.
+The `ws` token lists the private teams you may see in its `teams` claim. Join `team:<wid>:<tid>` for each of them. When your private teams change (you join or leave one, or one becomes private), the gateway closes your socket; reconnect with a fresh token to get the new list. On `ticket:<wid>:<ticket_id>` for a private team's ticket, join with `{ "team_id": "<tid>" }` to see its presence and typing, and on `wiki_page:<wid>:<page_id>` for a page of a private team's teamspace, with that team's `team_id`.
 
 ### Workspace events
 

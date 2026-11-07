@@ -68,6 +68,9 @@ Every state change that someone else should see is written as an event, in the s
 | `saved_reply.*`, `view.*`, `automation.*`, `sla_policy.*`, `kb_article.*`, `kb_collection.*`, `changelog_entry.*`, `team.*`, `webhook.*` | agents | | `{ <resource> }` on create and update, `{ <resource>_id }` on delete |
 | `email_template.updated` | agents | | `{ brand_id, kind }`, when a brand's email layout (`layout`) or satisfaction email (`csat`) is saved or reset. See [Templates and email design](/api/resources/templates/) |
 | `billing.updated` | agents | | `Billing`, see [Billing API](/api/resources/billing/). Cloud only. |
+| `wiki_page.created`, `wiki_page.updated`, `wiki_page.moved` | agents | `user:<uid>` alone for a private page; `team:<wid>:<tid>` alone for a private team's page | `{ wiki_page, updated_by }`, the page without its body. See [Wiki](/api/resources/wiki/#events) |
+| `wiki_page.deleted`, `wiki_page.restored` | agents | as above | `{ wiki_page_id, wiki_page_ids }` (`trashed: true` for the trash), `{ wiki_page, wiki_page_ids }` |
+| `wiki_comment.changed` | agents | as above | `{ page_id, thread_id }`: refetch the page's comments |
 | `import.created`, `import.updated` | agents | | `{ import }`, a [history import](/guides/importing/) as it starts, moves and ends, at most once a second while it writes. The tickets, contacts and articles it brings in have no events of their own; refetch lists on `import.updated` |
 | `webhook.test` | | | sent only to the webhook being tested |
 

@@ -1,0 +1,118 @@
+---
+title: Wiki comments and following
+description: Discuss wiki pages in comments on text or on the whole page, react, resolve threads, mention teammates, follow pages, set reminders and see who else is on a page.
+---
+
+import Steps from '../../../components/Steps.astro';
+import Step from '../../../components/Step.astro';
+import Callout from '../../../components/Callout.astro';
+import Fold from '../../../components/Fold.astro';
+
+A wiki page is shared work. Teammates comment on a sentence or on the whole page, answer each other in threads, react, and resolve a thread once it is settled. Mentions, comments on pages you follow and the reminders you set reach you as notifications. Everyone who has the page open sees edits and comments as they happen, and the header shows who else is there.
+
+Writing pages is covered in the [wiki guide](/guides/wiki/).
+
+## Comment on text
+
+<Steps>
+<Step title="Select the text">
+
+Select the words you want to talk about and click **Comment** in the toolbar over them, or press <kbd>mod</kbd> <kbd>alt</kbd> <kbd>m</kbd>.
+
+</Step>
+<Step title="Write the comment">
+
+The **Comments** tab of the page panel opens with your thread started and the text it is on above it. Type your comment, <kbd>@</kbd> to mention someone, and click **Comment** or press <kbd>mod</kbd> <kbd>enter</kbd>.
+
+</Step>
+<Step title="Find it again">
+
+The text stays highlighted in the page while the thread is open. Click the highlight to open its thread; click the quote above a thread to find its text in the page.
+
+</Step>
+</Steps>
+
+Text you comment on can still be edited. If it is removed, the thread stays, with its quote and a note that **This text is no longer in the page**.
+
+## Comment on a page
+
+Under a page's title, click **Add a comment** (or **3 comments** once there are some) to open the **Comments** tab, and write in the field at the top. Page comments sit after the comments on text, which follow the order of the page.
+
+## Threads
+
+Each comment starts a thread. In a thread you can:
+
+- **Reply**: the reply line under a thread opens as you use it. What you type is kept per thread while you look elsewhere.
+- **React**: **Add a reaction** under a comment, with the usual few at hand and every emoji a search away. Click a reaction to add yours or take it back; rest the pointer on it to see who reacted.
+- **Resolve**: the check on a thread puts it away under **Resolved**, with **Undo**. **Reopen** brings it back, and so does any reply ("Reply to reopen").
+- **Edit**, **Copy link to thread** and **Delete**, from a comment's menu. You edit your own comments; you, or an admin, delete them. Deleting a thread's first comment deletes the thread with its replies, after asking.
+
+The **Open** and **Resolved** switch at the top of the tab shows either kind. A link to a thread opens the page with that thread in view.
+
+Viewers read comments; agents, admins and owners write them. A page in the trash keeps its comments to read.
+
+## Mentions and notifications
+
+Mention a teammate with <kbd>@</kbd>, in a page's text or in a comment. They get a notification that opens the page, or the comment's thread:
+
+| Notification | When |
+| --- | --- |
+| **Wiki mentions** | Someone mentions you in a page's text, or in a comment on one |
+| **Wiki comments** | A new comment or reply on a page you follow, or in a thread you wrote in |
+| **Wiki reminders** | A [reminder](#reminders) you set is due |
+
+You hear about a mention once, when it is added: saving the page again doesn't repeat it. Nobody hears about their own comments, and someone mentioned in a comment gets the mention, not a second notification for the comment.
+
+Only people who can see a page hear about it. A mention of someone who can't see the page (a private page, or a private team's page they are not on) notifies nobody. When a page moves out of someone's sight, or to the trash, their notifications about it go away.
+
+### Choose what reaches you
+
+The three types are the **Wiki** group in **Settings**, **Notifications**. Each has a switch for **Email**, **Phone** and **Desktop**:
+
+| Notification | Email | Phone | Desktop |
+| --- | --- | --- | --- |
+| Wiki mentions, Wiki reminders | On | On | On |
+| Wiki comments | Off | On | On |
+
+Mentions and reminders count as urgent: they can reach you by email sooner than the rest. See [Notifications](/guides/notifications/).
+
+## Follow a page
+
+Follow a page to hear about every new comment on it. You follow the pages you create and the pages you comment on.
+
+The bell in a page's header says **Follow** or **Following**; click it to change. **Follow comments** in the page's **More actions** menu does the same. When you unfollow a page, commenting on it again doesn't follow it back. You still hear about replies in threads you wrote in, and mentions reach you either way.
+
+## Reminders
+
+A date in a page can remind you. Type <kbd>@</kbd> and choose **Remind me**, or **Remind me** in the <kbd>/</kbd> menu: it adds tomorrow's date with a bell. Click any date to change the day, set a **Time**, or turn **Remind me** on or off.
+
+You get a notification on the day, at the time the date shows, or at 09:00 without one, in the time zone of your notification settings. A reminder belongs to the person who set it, so a teammate's date reminds them, not you. Changing the date reminds again at the new time; deleting the date removes the reminder. A date already more than a day past when you set it doesn't remind.
+
+Copies of a page and pages made from a template get fresh reminders, owned by whoever made them. A template's own dates remind nobody. A page holds up to 100 reminders.
+
+## Who is on a page
+
+The page header shows the teammates who have the page open, as small avatars, those editing first. Rest the pointer on them to read who is doing what: "Maya Chen is editing", "Jonas Weber is viewing".
+
+Edits, comments and changes to a page's look arrive live for everyone on it. If two people change the same page at once, the second to save is asked what to keep: see [Editing together](/guides/wiki/#editing-together).
+
+<Callout type="note">
+
+Private pages show no avatars: only their member can open them.
+
+</Callout>
+
+<Fold>
+
+## On the iPhone
+
+The [iPhone app](/guides/iphone-app/#the-wiki) reads and writes comment threads on a page, follows pages, and gets wiki notifications as push notifications. Comments on text are added on the web and the desktop app.
+
+</Fold>
+
+## Related
+
+- [Wiki](/guides/wiki/)
+- [Links, tags and the graph](/guides/wiki-links/)
+- [Notifications](/guides/notifications/)
+- [Wiki API](/api/resources/wiki/#comments)

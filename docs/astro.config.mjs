@@ -137,7 +137,16 @@ export default defineConfig({
             { label: 'Routing', slug: 'guides/routing' },
             { label: 'Knowledge base and help center', slug: 'guides/knowledge-base' },
             { label: 'Changelog', slug: 'guides/changelog' },
-            { label: 'Wiki', slug: 'guides/wiki' },
+            {
+              label: 'Wiki',
+              items: [
+                { label: 'Pages and writing', slug: 'guides/wiki' },
+                { label: 'Databases', slug: 'guides/wiki-databases' },
+                { label: 'Links, tags and the graph', slug: 'guides/wiki-links' },
+                { label: 'Comments and following', slug: 'guides/wiki-collaboration' },
+                { label: 'Tickets, help center and Ollie', slug: 'guides/wiki-desk' },
+              ],
+            },
             { label: 'Help center addresses', slug: 'guides/help-center-addresses' },
             { label: 'Labels and custom fields', slug: 'guides/labels-and-custom-fields' },
             { label: 'Automations', slug: 'guides/automations' },

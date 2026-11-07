@@ -1,0 +1,102 @@
+---
+title: Wiki links, tags and the graph
+description: Link pages to each other, see what links back, find pages that name a page without linking it, tag pages, and explore the wiki as a graph.
+---
+
+import Callout from '../../../components/Callout.astro';
+import Fold from '../../../components/Fold.astro';
+
+Pages in the wiki connect. Link one page from another and the second knows about it: its backlinks list the first. Tag pages with `#billing` and every billing page is one click away. The graph draws the whole wiki and how it hangs together, so you can see which pages are central, which stand alone, and what a page sits next to.
+
+Writing pages is covered in the [wiki guide](/guides/wiki/).
+
+## Link a page
+
+- Type <kbd>[[</kbd> and part of a page's title, then pick it. When no page has that title, **New page "…"** makes one under the page you are on and links it, so you can link first and write later.
+- Type <kbd>@</kbd> and pick a page under **Pages**.
+- Select text, click **Link** in the toolbar and type to search pages.
+- **Link to page** in the <kbd>/</kbd> menu starts a <kbd>[[</kbd> link.
+- **Copy link to block** in a block's menu gives an address that opens the page at that block. Paste it into any page or message.
+
+A link shows the page's current title and icon, so renaming a page never breaks it. A link to a page that was deleted reads **This page was deleted**.
+
+### Page previews
+
+Rest the pointer on a link to a page and a preview opens: its icon, title, where it sits and how it starts. Read a page without leaving the one you are on.
+
+## The page panel
+
+Click **Page panel** in a page's header, or press <kbd>mod</kbd> <kbd>shift</kbd> <kbd>;</kbd>. The panel opens beside the page, with a tab for each of these:
+
+- **Outline**: the page's headings. Click one to scroll to it.
+- **Links**: what links here and where this page links to. See below.
+- **Graph**: the page's local graph.
+- **Comments**: the page's [comments](/guides/wiki-collaboration/).
+- **Info**: words, characters and reading time, the page's tags, who created and last edited it and when, how many subpages and versions it has, and its **Readers**: how many views from how many people, and who read it lately.
+
+Under a page's title, "3 backlinks" opens the **Links** tab.
+
+### Backlinks
+
+The **Links** tab has:
+
+- **Linked mentions**: the pages that link to this one, with the passage around each link.
+- **Unlinked mentions**: the pages whose text names this page's title without linking it. Click **Link** to turn the first such mention in that page into a link, without opening it.
+- **Links on this page**: the pages this one links to.
+- **Tickets mentioned**: the tickets this page mentions. See [Tickets, the help center and Ollie](/guides/wiki-desk/).
+
+Backlinks stay current as people write: a link counts as soon as its page is saved, and goes when the link or the page does.
+
+## Tags
+
+Type `#` and a word anywhere in a page, like `#billing` or `#runbook`, and the page is tagged. The tag shows tinted in the text; click it while reading, or <kbd>mod</kbd> click it while writing, to see every page with that tag.
+
+- A tag has letters, digits, `_`, `-` or `/`, and at least one letter: `#42` is a number, not a tag.
+- A tag at the start of a line or after a space counts. One inside code doesn't.
+- Tags ignore case: `#Billing` and `#billing` are the same tag.
+- `/` nests tags: `#process/refunds` is under `#process`.
+
+Open **Tags** at the bottom of the wiki's sidebar for every tag in the wiki with how many pages carry it, nested tags under their parents. **Filter tags** narrows the list; pick a tag to see its pages. A page's tags are also in the **Info** tab of its panel.
+
+<Callout type="note" title="Tags and tickets">
+
+<kbd>#</kbd> followed by a number or words also offers tickets to mention. Pick one and it becomes a ticket mention; keep typing and it stays a tag.
+
+</Callout>
+
+## The graph
+
+Open **Graph** at the bottom of the wiki's sidebar, or from the wiki's home. Each page is a dot and each link a line between two dots. Pages that share a top-level page share a colour.
+
+- **Scroll to zoom, drag to move, double-click to fit**. With the keyboard, the arrow keys move it, <kbd>+</kbd> and <kbd>-</kbd> zoom and <kbd>0</kbd> fits it.
+- Rest the pointer on a page to see its name and its neighbours. Click it to open the page.
+- **Filter pages** shows only the pages whose title has the words you type.
+- **Subpages as links** draws a line from each page to its subpages too, so the wiki's outline shows as well as its links.
+- **Pages without links** shows or hides pages nothing links to and that link nowhere.
+- **Tags**: pick a tag to show only its pages.
+
+### A page's local graph
+
+The **Graph** tab of a page's panel draws only that page and its neighbours: **1 step** for the pages it links to and from, **2 steps** to go one further. **Full graph** opens the whole graph centred on the page; **Show every page** there leaves the page and draws everything again.
+
+## A random page
+
+On the wiki's home, **Open a random page** opens any page of the wiki. A good way to find what needs updating, or to rediscover something useful.
+
+<Fold>
+
+## What counts as a link
+
+- A link made with <kbd>[[</kbd>, <kbd>@</kbd>, the toolbar or a pasted address of a wiki page, and a subpage shown in a page's text.
+- Only pages of the same workspace, and only pages you can see: a link to a private page or to a private team's page shows in nobody else's backlinks or graph.
+- Pages in the trash and templates are left out of backlinks, the graph and tags.
+- An unlinked mention is a page's whole title, as a phrase, in another page's text. Pages without a title have none.
+
+</Fold>
+
+## Related
+
+- [Wiki](/guides/wiki/)
+- [Wiki databases](/guides/wiki-databases/)
+- [Comments and following](/guides/wiki-collaboration/)
+- [Wiki API](/api/resources/wiki/#links-tags-and-the-graph)

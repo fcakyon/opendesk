@@ -17,6 +17,7 @@ Scopes: `tickets:read` to read, `tickets:write` to change.
 | `POST` | `/v1/tickets/bulk` | Update or delete many tickets |
 | `POST` | `/v1/tickets/{id}/merge` | Merge into another ticket |
 | `GET` | `/v1/tickets/{id}/activities` | The ticket's activity, ascending |
+| `GET` | `/v1/tickets/{id}/wiki` | The wiki pages you can see that mention the ticket. Also needs `wiki:read`. See [Wiki](/api/resources/wiki/#tickets-and-the-help-center) |
 
 Messages are on their own page: [Messages and attachments](/api/resources/messages/).
 

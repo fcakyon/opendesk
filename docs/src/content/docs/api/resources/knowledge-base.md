@@ -11,6 +11,7 @@ Scopes: `kb:read` to read (including drafts), `kb:write` to change.
 | `GET`, `PATCH`, `DELETE` | `/v1/kb/collections/{id}` | |
 | `GET`, `POST` | `/v1/kb/articles` | List or create articles. Filters: `collection_id`, `status`, `q` |
 | `GET`, `PATCH`, `DELETE` | `/v1/kb/articles/{id}` | |
+| `POST` | `/v1/kb/articles/from-wiki` | A draft article copied from a wiki page: `page_id`, `title`, `collection_id`, `brand_id`. Also needs `wiki:read`. See [Wiki](/api/resources/wiki/#tickets-and-the-help-center) |
 
 For the public, unauthenticated help center endpoints, see [Public help center and CSAT](/api/resources/public/).
 

@@ -8,7 +8,7 @@ import Step from '../../../components/Step.astro';
 import Callout from '../../../components/Callout.astro';
 import Fold from '../../../components/Fold.astro';
 
-The opendesk iPhone app is a native app for your daily work: tickets and live chat, Collab mail, contacts, the knowledge base, reports and Ollie. It needs iOS 26 or later and works with opendesk Cloud and with self-hosted instances.
+The opendesk iPhone app is a native app for your daily work: tickets and live chat, Collab mail, contacts, the knowledge base, the wiki, reports and Ollie. It needs iOS 26 or later and works with opendesk Cloud and with self-hosted instances.
 
 ## Get started
 
@@ -74,11 +74,22 @@ The app does what the web app does, with a few exceptions:
 | Spaces, and the Everywhere lists across all your workspaces | Importing from another helpdesk |
 | Search across tickets, contacts and articles, or ask Ollie | Signing in to Google or Microsoft for a mailbox or a mail account |
 | New tickets, ticket view, details, custom fields and live chat | Signing in to an integration that uses its own sign-in |
-| Collab mail, contacts, companies, the knowledge base and reports | Formatted signatures, image uploads for brands and widgets, and the widget preview |
+| Collab mail, contacts, companies, the knowledge base, the wiki and reports | Formatted signatures, image uploads for brands and widgets, and the widget preview |
 | Your profile, security, notifications, saved replies, views and agent-to-agent | |
 | Every workspace setting, from members and teams to mailboxes, automations, the AI agent, API keys and the audit log | |
 
 Workspace settings are under **Account**, grouped as on the web. Everyone can read them; only admins change them. Billing shows your plan, seats and usage, and is changed on the web. Pages that open the web app use a browser inside the app, which keeps its own web session, so it may ask you to sign in there once.
+
+## The wiki
+
+The **Wiki** on the phone has the same sections as on the web: favorites, your teamspaces, the workspace's pages, your private pages and recent ones, and the trash.
+
+- Read and write pages, add subpages, star favorites and move pages to the trash, with **Undo**. Restore them from the trash.
+- See which pages are verified, follow pages, and read and write comment threads.
+- Open a database's rows as a list, each row as its page.
+- Pages are written as Markdown on the phone. Blocks made on the web, such as databases, embeds and ticket lists, show as links and cards; a page that holds them opens for editing as HTML, so nothing in it is lost. **Edit as HTML**, in the editor's menu, opens any page that way.
+
+Database views and property values, and comments on a run of text, are on the web and the [desktop app](/guides/desktop-app/). Wiki mentions, comments and reminders arrive as push notifications when **Phone** is on for them. See [Wiki](/guides/wiki/).
 
 ## Several accounts
 
@@ -100,3 +111,4 @@ A notification for another account opens that account when you tap it. On one se
 
 - [Desktop app](/guides/desktop-app/)
 - [Notifications](/guides/notifications/)
+- [Wiki](/guides/wiki/)
