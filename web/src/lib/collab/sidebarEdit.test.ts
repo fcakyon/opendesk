@@ -67,6 +67,18 @@ describe("drops in the sidebar", () => {
     expect(r && "prefs" in r && sidebarEntries(r.prefs).map(entryKey)[0]).toBe(own);
   });
 
+  it("leaves a section where it is when it lands on itself or on something that is not a section", () => {
+    const p = base();
+    const before = sidebarEntries(p).map(entryKey);
+    for (const target of ["mail", "support-teamspace"]) {
+      const r = dropOnSidebar(p, W, { kind: "section", key: "mail" }, { kind: "section", before: target }, rows(p));
+      expect(r && "prefs" in r && sidebarEntries(r.prefs).map(entryKey)).toEqual(before);
+    }
+    const up = dropOnSidebar(p, W, { kind: "section", key: "mail" }, { kind: "section", before: "inbox" }, rows(p));
+    const keys = up && "prefs" in up ? sidebarEntries(up.prefs).map(entryKey) : [];
+    expect(keys.indexOf("mail")).toBe(keys.indexOf("inbox") - 1);
+  });
+
   it("reorders a built-in section's rows into the member's row order", () => {
     const p = base();
     const r = dropOnSidebar(p, W, { kind: "row", from: "inbox", key: "ticket_folder:open" }, { kind: "row", section: "inbox", before: "ticket_folder:unassigned" }, rows(p));

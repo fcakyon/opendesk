@@ -39,8 +39,12 @@ export const pinKey = (p: SidebarPin) => `${p.kind}:${p.id}`;
 const STAR = "star:";
 export const starKey = (id: string) => `${STAR}${id}`;
 
-/** Where `key` goes among `keys` to sit before `before` (or last), once. */
-function placed(keys: readonly string[], key: string, before: string | null): string[] {
+/**
+ * Where `key` goes among `keys` to sit before `before` (or last), once. Before itself, or before
+ * something not among them, it stays where it is.
+ */
+export function placed(keys: readonly string[], key: string, before: string | null): string[] {
+  if (before !== null && (before === key || !keys.includes(before))) return keys.includes(key) ? [...keys] : [...keys, key];
   const out = keys.filter((k) => k !== key);
   const i = before === null ? -1 : out.indexOf(before);
   out.splice(i < 0 ? out.length : i, 0, key);

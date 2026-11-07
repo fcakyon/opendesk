@@ -26,11 +26,15 @@ const sameTarget = (a: Target | null, b: Target | null) =>
 /** Which drop a point names: for a section drag, the gap between headers; for a row drag, the gap between the rows of the section under it. */
 function targetAt(root: HTMLElement, x: number, y: number, kind: "section" | "row"): Target | null {
   if (kind === "section") {
-    const blocks = [...root.querySelectorAll<HTMLElement>("[data-edit-section]")];
+    // Only the sidebar's own sections: groups inside one (a teamspace under Pages) are not places a section goes.
+    const blocks = [...root.querySelectorAll<HTMLElement>("[data-edit-section]")].filter((b) => {
+      const outer = b.parentElement?.closest("[data-edit-section]");
+      return !outer || !root.contains(outer);
+    });
     for (const b of blocks) {
       const head = b.querySelector<HTMLElement>("[data-edit-head]") ?? b;
       const r = head.getBoundingClientRect();
-      if (y < r.top + r.height / 2) return { kind: "section", before: b.dataset.editSection ?? null };
+      if (y <= r.top + r.height / 2) return { kind: "section", before: b.dataset.editSection ?? null };
     }
     return { kind: "section", before: null };
   }
