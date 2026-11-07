@@ -6,74 +6,54 @@
 // to the trash, and pages drag onto, above or below each other, also into another section.
 // Keyboard: arrows move through the rows (Right opens, Left closes or goes up), Enter opens a
 // page, and Alt+arrows move the focused page up, down, in under the one above, or out.
+// The trees are PageTree's, shared with the main sidebar's Pages section.
 
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import {
   CalendarDays,
   ChevronRight,
   Clock,
-  Columns2,
-  Copy,
   EyeOff,
   FileText,
   FileUp,
-  FolderInput,
   Hash,
   LayoutDashboard,
   LayoutTemplate,
-  Link2,
   Lock,
   MoreHorizontal,
   Network,
   Plus,
   Settings2,
-  Star,
   StarOff,
   Table2,
   Trash2,
 } from "lucide-react";
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/input";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
-import { copyText } from "@/components/ui/copy-button";
-import { toast } from "@/components/ui/toast";
+
 import { useDebounced } from "@/components/contacts/hooks";
 import { TeamDot } from "@/components/tickets/teams";
-import { api } from "@/lib/api/endpoints";
-import type { Team, WikiKind, WikiNode, WikiSearchHit } from "@/lib/api/types";
+
+import type { Team, WikiNode, WikiSearchHit } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
-import { ancestorsOf, buildTree, childrenOf, dropIn, keyMove, spaceBody, spaceOf, spaceTree, visibleRows, type Drop, type SpaceKey, type Tree, type Zone } from "@/lib/wiki/tree";
-import { useCreatePage, useExpanded, useFavorites, useMovePage, useOpenPageId, useTitle, useWikiTree } from "./hooks";
-import { MoveDialog, TrashItem } from "./PageMenu";
-import { useSplit } from "./split";
+import { buildTree, childrenOf, spaceBody, type SpaceKey, type Tree } from "@/lib/wiki/tree";
+import { useCreatePage, useFavorites, useOpenPageId, useTitle, useWikiTree } from "./hooks";
+import { DragProvider, EmptyRow, PageIcon, TreeView, useSpaceView } from "./PageTree";
+
 import { useOpenToday } from "./journal";
 import { arrange, useSidebarLayout, type SectionKey } from "./sidebarLayout";
 import { CustomizeSidebar } from "./CustomizeSidebar";
-import { AddToSpace } from "./AddToSpace";
+
 import { starterDatabase } from "./database/starter";
-import { openImport } from "./ImportDialog";
-
-export function pageUrl(id: string) {
-  return `${location.origin}/wiki/${id}`;
-}
-
-export function PageIcon({ icon, className, kind }: { icon: string; className?: string; kind?: WikiKind }) {
-  if (icon)
-    return (
-      <span className={cn("flex size-4 shrink-0 items-center justify-center text-[13px] leading-none", className)} aria-hidden>
-        {icon}
-      </span>
-    );
-  const Glyph = kind === "database" ? Table2 : kind === "canvas" ? LayoutDashboard : FileText;
-  return <Glyph className={cn("size-[14px] shrink-0 text-fg-4", className)} aria-hidden />;
-}
+import { openImport } from "@/app/quickAdd";
 
 /** The sections a member can have, in their default order: teamspaces first, as Notion does. */
 export function useSections(): { key: SectionKey; team?: Team }[] {
@@ -255,14 +235,11 @@ function moveFocus(e: KeyboardEvent<HTMLElement>) {
 // ─── Sections ──────────────────────────────────────────────────────────────
 
 /** The page being dragged, shared by every section so a page drops into another space. */
-const DragCtx = createContext<{ drag: string | null; setDrag: (id: string | null) => void }>({ drag: null, setDrag: () => {} });
-
 function Sections({ canEdit, onNavigate, onSearch }: { canEdit: boolean; onNavigate?: () => void; onSearch: () => void }) {
   const { data = [] } = useWikiTree();
   const full = useMemo(() => buildTree(data), [data]);
   const sections = useSections();
   const { layout, toggleFold, setHidden } = useSidebarLayout();
-  const [drag, setDrag] = useState<string | null>(null);
   const [customize, setCustomize] = useState(false);
   const order = arrange(
     sections.map((s) => s.key),
@@ -271,7 +248,7 @@ function Sections({ canEdit, onNavigate, onSearch }: { canEdit: boolean; onNavig
   const byKey = new Map(sections.map((s) => [s.key, s]));
 
   return (
-    <DragCtx.Provider value={{ drag, setDrag }}>
+    <DragProvider>
       <div className="flex flex-col gap-3">
         {order.map((key) => {
           const s = byKey.get(key);
@@ -294,7 +271,7 @@ function Sections({ canEdit, onNavigate, onSearch }: { canEdit: boolean; onNavig
         })}
       </div>
       <CustomizeSidebar open={customize} onOpenChange={setCustomize} />
-    </DragCtx.Provider>
+    </DragProvider>
   );
 }
 
@@ -346,16 +323,8 @@ function SpaceSection({
   onSearch: () => void;
 }) {
   const { t } = useTranslation("wiki");
-  const { data = [] } = useWikiTree();
   const create = useCreatePage();
-  // A database's rows are its own, shown in its views: the sidebar leaves them out.
-  const view = useMemo(() => {
-    const databases = new Set(data.filter((n) => n.kind === "database").map((n) => n.id));
-    return spaceTree(
-      data.filter((n) => !n.parent_id || !databases.has(n.parent_id)),
-      space,
-    );
-  }, [data, space]);
+  const view = useSpaceView(space);
   const empty = childrenOf(view, null).length === 0;
   const label = space === "workspace" ? t("sidebar.workspace") : space === "private" ? t("sidebar.private") : t("sidebar.teamspace");
   const add = canEdit ? (
@@ -398,38 +367,6 @@ function TeamLabel({ id }: { id: string }) {
       <span className="truncate">{team?.name}</span>
       {team?.private && <Lock className="size-2.5 shrink-0" />}
     </span>
-  );
-}
-
-/** An empty space: a hint, and a drop target to bring a page in. */
-function EmptyRow({ space, canEdit, onAdd }: { space: SpaceKey; canEdit: boolean; onAdd: () => void }) {
-  const { t } = useTranslation("wiki");
-  const { drag, setDrag } = useContext(DragCtx);
-  const move = useMovePage();
-  const [over, setOver] = useState(false);
-  return (
-    <div
-      onDragOver={(e) => {
-        if (!drag) return;
-        e.preventDefault();
-        setOver(true);
-      }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        if (drag) move.mutate({ id: drag, drop: { parent: null, position: 0, space } });
-        setDrag(null);
-        setOver(false);
-      }}
-      className={cn("mx-1 rounded-md px-2 py-1.5 text-[12px] leading-[17px] text-fg-4", over && "bg-tone-blue-soft shadow-[inset_0_0_0_1px_var(--tone-blue-solid)]")}
-    >
-      {space === "private" ? t("sidebar.privateEmpty") : t("sidebar.spaceEmpty")}
-      {canEdit && !drag && (
-        <button type="button" onClick={onAdd} className="ml-1 text-fg-3 underline decoration-line-strong underline-offset-2 hover:text-fg">
-          {t("sidebar.addFirst")}
-        </button>
-      )}
-    </div>
   );
 }
 
@@ -549,378 +486,6 @@ function Places({ onNavigate }: { onNavigate?: () => void }) {
         </Link>
       </div>
     </nav>
-  );
-}
-
-// ─── Tree ──────────────────────────────────────────────────────────────────
-
-type Over = { id: string; zone: Zone } | { id: "__end"; zone: "after" };
-
-function TreeView({ view, full, space, canEdit, onNavigate, onSearch }: { view: Tree; full: Tree; space: SpaceKey; canEdit: boolean; onNavigate?: () => void; onSearch: () => void }) {
-  const { t } = useTranslation("wiki");
-  const { expanded, toggle, open } = useExpanded();
-  const openId = useOpenPageId();
-  const navigate = useNavigate();
-  const move = useMovePage();
-  const { drag, setDrag } = useContext(DragCtx);
-  const [focusId, setFocusId] = useState<string | null>(null);
-  const [over, setOver] = useState<Over | null>(null);
-  const [moving, setMoving] = useState<WikiNode | null>(null);
-  const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const root = useRef<HTMLDivElement>(null);
-
-  // The open page's ancestors stay open, so it is always in view.
-  const ancestorIds = useMemo(() => (openId && view.byId.has(openId) ? ancestorsOf(view, openId).map((a) => a.id) : []), [view, openId]);
-  useEffect(() => {
-    if (ancestorIds.length) open(ancestorIds);
-  }, [ancestorIds, open]);
-  useEffect(() => {
-    if (!openId) return;
-    root.current?.querySelector<HTMLElement>(`[data-id="${openId}"]`)?.scrollIntoView({ block: "nearest" });
-  }, [openId]);
-
-  const rows = visibleRows(view, expanded);
-  const current = focusId && rows.some((r) => r.node.id === focusId) ? focusId : openId && rows.some((r) => r.node.id === openId) ? openId : rows[0]?.node.id;
-
-  const focusRow = (id: string | undefined) => {
-    if (!id) return;
-    setFocusId(id);
-    requestAnimationFrame(() => root.current?.closest("[data-wiki-sidebar]")?.querySelector<HTMLElement>(`[data-id="${id}"]`)?.focus());
-  };
-
-  const doMove = (id: string, drop: Drop | null) => {
-    if (!drop) return;
-    if (drop.parent) open([drop.parent]);
-    move.mutate({ id, drop });
-  };
-
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const id = (e.target as HTMLElement).closest<HTMLElement>("[data-id]")?.dataset.id;
-    if (!id || (e.target as HTMLElement).closest("button")) return;
-    const i = rows.findIndex((r) => r.node.id === id);
-    const n = view.byId.get(id);
-    if (!n || i < 0) return;
-    const hasKids = childrenOf(view, id).length > 0;
-    if (e.altKey && canEdit && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
-      e.preventDefault();
-      const dir = ({ ArrowUp: "up", ArrowDown: "down", ArrowRight: "in", ArrowLeft: "out" } as const)[e.key as "ArrowUp"];
-      doMove(id, keyMove(view, id, dir));
-      focusRow(id);
-      return;
-    }
-    // Up and down cross into the sections above and below.
-    const all = [...(root.current?.closest("[data-wiki-sidebar]")?.querySelectorAll<HTMLElement>("[data-wiki-row]") ?? [])];
-    const at = all.indexOf(e.target as HTMLElement);
-    switch (e.key) {
-      case "ArrowDown":
-        e.preventDefault();
-        all[at + 1]?.focus();
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        if (at <= 0) onSearch();
-        else all[at - 1]?.focus();
-        break;
-      case "ArrowRight":
-        e.preventDefault();
-        if (hasKids && !expanded.has(id)) toggle(id, true);
-        else if (hasKids) focusRow(childrenOf(view, id)[0]?.id);
-        break;
-      case "ArrowLeft":
-        e.preventDefault();
-        if (hasKids && expanded.has(id)) toggle(id, false);
-        else if (n.parent_id) focusRow(n.parent_id);
-        break;
-      case "Home":
-        e.preventDefault();
-        focusRow(rows[0]?.node.id);
-        break;
-      case "End":
-        e.preventDefault();
-        focusRow(rows[rows.length - 1]?.node.id);
-        break;
-      case "Enter":
-        e.preventDefault();
-        void navigate({ to: "/wiki/$pageId", params: { pageId: id } });
-        onNavigate?.();
-        break;
-    }
-  };
-
-  const zoneOf = (e: DragEvent<HTMLElement>, id: string): Zone => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const y = (e.clientY - r.top) / r.height;
-    if (y < 0.28) return "before";
-    if (y > 0.72) return childrenOf(view, id).length && expanded.has(id) ? "inside" : "after";
-    return "inside";
-  };
-  const dropOn = (target: string, zone: Zone) => (drag ? dropIn(view, full, drag, target, zone, space) : null);
-
-  const dnd = (n: WikiNode) =>
-    canEdit
-      ? {
-          draggable: true,
-          onDragStart: (e: DragEvent<HTMLElement>) => {
-            e.dataTransfer.effectAllowed = "move";
-            e.dataTransfer.setData("text/plain", pageUrl(n.id));
-            setDrag(n.id);
-          },
-          onDragEnd: () => {
-            clearTimeout(hoverTimer.current);
-            setDrag(null);
-            setOver(null);
-          },
-          onDragOver: (e: DragEvent<HTMLElement>) => {
-            if (!drag) return;
-            let zone = zoneOf(e, n.id);
-            if (!dropOn(n.id, zone)) zone = zone === "inside" ? "after" : zone;
-            if (!dropOn(n.id, zone)) return setOver(null);
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "move";
-            if (over?.id !== n.id || over.zone !== zone) {
-              setOver({ id: n.id, zone });
-              clearTimeout(hoverTimer.current);
-              // Hovering in the middle of a closed page opens it, to drop deeper.
-              if (zone === "inside" && childrenOf(view, n.id).length && !expanded.has(n.id)) hoverTimer.current = setTimeout(() => toggle(n.id, true), 650);
-            }
-          },
-          onDragLeave: () => over?.id === n.id && setOver(null),
-          onDrop: (e: DragEvent<HTMLElement>) => {
-            e.preventDefault();
-            clearTimeout(hoverTimer.current);
-            if (drag && over && over.id === n.id) doMove(drag, dropOn(n.id, over.zone));
-            setDrag(null);
-            setOver(null);
-          },
-        }
-      : {};
-
-  const top = childrenOf(view, null);
-  return (
-    <>
-      <div ref={root} role="tree" aria-label={t("tree.label")} onKeyDown={onKeyDown} className="flex flex-col" data-wiki-panel>
-        {rows.map(({ node: n, depth }) => (
-          <TreeRow
-            key={n.id}
-            node={n}
-            depth={depth}
-            hasKids={childrenOf(view, n.id).length > 0}
-            open={expanded.has(n.id)}
-            active={n.id === openId}
-            focusable={n.id === current}
-            dragging={drag === n.id || (!!drag && ancestorsOf(view, n.id).some((a) => a.id === drag))}
-            over={over && over.id === n.id ? over.zone : null}
-            canEdit={canEdit}
-            onToggle={() => toggle(n.id)}
-            onFocus={() => setFocusId(n.id)}
-            onNavigate={onNavigate}
-            onMoveTo={() => setMoving(n)}
-            dnd={dnd(n)}
-          />
-        ))}
-        {canEdit && drag && (
-          // Below the last page: the end of this space's top level.
-          <div
-            className={cn("relative h-5 rounded-md", over?.id === "__end" && "before:absolute before:inset-x-2 before:top-1 before:h-0.5 before:rounded-full before:bg-tone-blue-solid")}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setOver({ id: "__end", zone: "after" });
-            }}
-            onDragLeave={() => setOver(null)}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (drag) {
-                const from = full.byId.get(drag);
-                doMove(drag, { parent: null, position: top.filter((x) => x.id !== drag).length, ...(from && spaceOf(from) !== space ? { space } : {}) });
-              }
-              setDrag(null);
-              setOver(null);
-            }}
-          />
-        )}
-      </div>
-      <MoveDialog node={moving} open={!!moving} onOpenChange={(o) => !o && setMoving(null)} />
-    </>
-  );
-}
-
-function TreeRow({
-  node: n,
-  depth,
-  hasKids,
-  open,
-  active,
-  focusable,
-  dragging,
-  over,
-  canEdit,
-  onToggle,
-  onFocus,
-  onNavigate,
-  onMoveTo,
-  dnd,
-}: {
-  node: WikiNode;
-  depth: number;
-  hasKids: boolean;
-  open: boolean;
-  active: boolean;
-  focusable: boolean;
-  dragging: boolean;
-  over: Zone | null;
-  canEdit: boolean;
-  onToggle: () => void;
-  onFocus: () => void;
-  onNavigate?: () => void;
-  onMoveTo: () => void;
-  dnd: Record<string, unknown>;
-}) {
-  const { t } = useTranslation("wiki");
-  const title = useTitle();
-  const create = useCreatePage();
-  const fav = useFavorites();
-  const navigate = useNavigate();
-  const split = useSplit();
-  const [menu, setMenu] = useState(false);
-  const indent = 6 + depth * 14;
-  const line = (where: "top" | "bottom"): ReactNode => (
-    <span
-      aria-hidden
-      className={cn("pointer-events-none absolute right-1 z-10 h-0.5 rounded-full bg-tone-blue-solid", where === "top" ? "-top-px" : "-bottom-px")}
-      style={{ left: indent + 18 }}
-    />
-  );
-  const duplicate = async () => {
-    try {
-      const copy = await api.wiki.duplicate(n.id, { parent_id: n.parent_id, title: t("duplicate.title", { title: title(n.title) }), position: n.position + 1 });
-      void navigate({ to: "/wiki/$pageId", params: { pageId: copy.id } });
-    } catch (e) {
-      toast.error(e, t("duplicate.failed"));
-    }
-  };
-  return (
-    <div
-      role="treeitem"
-      aria-level={depth + 1}
-      aria-expanded={hasKids ? open : undefined}
-      aria-selected={active}
-      aria-label={title(n.title)}
-      data-id={n.id}
-      data-wiki-row
-      tabIndex={focusable ? 0 : -1}
-      onFocus={onFocus}
-      {...dnd}
-      className={cn(
-        "group relative flex h-7 shrink-0 select-none items-center gap-1 rounded-md pr-1 text-[12.5px] outline-none transition-colors focus-visible:shadow-[0_0_0_2px_var(--focus)]",
-        active ? "bg-active font-medium text-fg" : "text-fg-2 hover:bg-hover hover:text-fg",
-        dragging && "opacity-40",
-        over === "inside" && "bg-tone-blue-soft shadow-[inset_0_0_0_1px_var(--tone-blue-solid)]",
-      )}
-      style={{ paddingLeft: indent }}
-    >
-      {over === "before" && line("top")}
-      {over === "after" && line("bottom")}
-      <button
-        type="button"
-        tabIndex={-1}
-        aria-label={open ? t("tree.collapse") : t("tree.expand")}
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle();
-        }}
-        className={cn("flex size-4 shrink-0 items-center justify-center rounded-sm text-fg-4 transition-colors hover:bg-active hover:text-fg-2", !hasKids && "invisible")}
-      >
-        <ChevronRight className={cn("size-3 transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")} />
-      </button>
-      <Link to="/wiki/$pageId" params={{ pageId: n.id }} tabIndex={-1} draggable={false} onClick={onNavigate} className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch outline-none">
-        <PageIcon icon={n.icon} kind={n.kind} />
-        <span className={cn("truncate", !n.title.trim() && "text-fg-3")}>{title(n.title)}</span>
-        {n.verified && <VerifiedMark />}
-      </Link>
-      <span className={cn("flex shrink-0 items-center gap-px transition-opacity", menu ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100")}>
-        <Menu open={menu} onOpenChange={setMenu}>
-          <MenuTrigger asChild>
-            <button type="button" tabIndex={-1} aria-label={t("tree.actions", { title: title(n.title) })} className="flex size-5 items-center justify-center rounded-sm text-fg-3 hover:bg-active hover:text-fg">
-              <MoreHorizontal className="size-3.5" />
-            </button>
-          </MenuTrigger>
-          <MenuContent align="start">
-            <MenuItem icon={fav.has(n.id) ? <StarOff /> : <Star />} onSelect={() => fav.toggle(n)}>
-              {fav.has(n.id) ? t("favorites.remove") : t("favorites.add")}
-            </MenuItem>
-            {canEdit && (
-              <>
-                <MenuItem icon={<Plus />} onSelect={() => create.mutate({ parent_id: n.id })}>
-                  {t("tree.addSubpage")}
-                </MenuItem>
-                {!n.journal && (
-                  <MenuItem icon={<Copy />} onSelect={() => void duplicate()}>
-                    {t("duplicate.action")}
-                  </MenuItem>
-                )}
-                {!n.journal && (
-                  <MenuItem icon={<FolderInput />} onSelect={onMoveTo}>
-                    {t("tree.moveTo")}
-                  </MenuItem>
-                )}
-              </>
-            )}
-            <MenuItem
-              icon={<Link2 />}
-              onSelect={() => {
-                void copyText(pageUrl(n.id));
-                toast.success(t("toast.linkCopied"));
-              }}
-            >
-              {t("page.copyLink")}
-            </MenuItem>
-            {split.available && !active && (
-              <MenuItem
-                icon={<Columns2 />}
-                onSelect={() => {
-                  split.open(n.id);
-                  onNavigate?.();
-                }}
-              >
-                {t("split.openBeside")}
-              </MenuItem>
-            )}
-            <AddToSpace pageId={n.id} />
-            <MenuSeparator />
-            <TrashItem node={n} />
-          </MenuContent>
-        </Menu>
-        {canEdit && (
-          <Tooltip content={t("tree.addSubpage")}>
-            <button
-              type="button"
-              tabIndex={-1}
-              aria-label={t("tree.addSubpageTo", { title: title(n.title) })}
-              onClick={(e) => {
-                e.stopPropagation();
-                create.mutate({ parent_id: n.id });
-              }}
-              className="flex size-5 items-center justify-center rounded-sm text-fg-3 hover:bg-active hover:text-fg"
-            >
-              <Plus className="size-3.5" />
-            </button>
-          </Tooltip>
-        )}
-      </span>
-    </div>
-  );
-}
-
-/** A small check beside a verified page's title. */
-export function VerifiedMark({ className }: { className?: string }) {
-  const { t } = useTranslation("wiki");
-  return (
-    <span title={t("verify.verified")} className={cn("flex size-3.5 shrink-0 items-center justify-center rounded-full bg-tone-blue-solid text-white", className)}>
-      <svg viewBox="0 0 12 12" className="size-2.5" aria-hidden>
-        <path d="M3 6.2 5 8.2 9 4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      <span className="sr-only">{t("verify.verified")}</span>
-    </span>
   );
 }
 

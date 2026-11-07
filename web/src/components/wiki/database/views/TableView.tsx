@@ -20,7 +20,7 @@ import { AddSubItem, Disclosure, INDENT, useNesting, type Nesting } from "./nest
 import { Cell } from "../Cell";
 import { OptionPill, PropIcon, StatusPill } from "../cells";
 import { PropertyMenu } from "../PropertyMenu";
-import { PageIcon } from "../../WikiTree";
+import { PageIcon } from "../../PageTree";
 
 const TITLE_W = 280;
 const CELL_W = 180;

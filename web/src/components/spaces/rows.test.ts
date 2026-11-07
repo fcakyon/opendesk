@@ -68,6 +68,16 @@ describe("Space rows", () => {
     expect(buildRow({ kind: "wiki_page", id: "w1" }, data({ wiki: undefined }), { labels })).toBeNull();
   });
 
+  it("shows a teamspace while its team is in sight and has pages", () => {
+    const page = { id: "p2", parent_id: null, title: "Billing runbook", icon: "", position: 0, version: 1, updated_at: "", created_by_id: null, tags: [], team_id: "t1" };
+    const d = data({ wiki: [page] });
+    expect(buildRow({ kind: "wiki_space", id: "t1" }, d, { labels })).toMatchObject({ key: "wiki_space:t1", label: "Team t1" });
+    // A teamspace without pages, a team out of sight, and a team that is gone show nothing.
+    expect(buildRow({ kind: "wiki_space", id: "t1" }, data(), { labels })).toBeNull();
+    expect(buildRow({ kind: "wiki_space", id: "secret" }, data({ wiki: [{ ...page, team_id: "secret" }], myTeams: new Set() }), { labels })).toBeNull();
+    expect(buildRow({ kind: "wiki_space", id: "gone" }, d, { labels })).toBeNull();
+  });
+
   it("names and numbers each kind from the workspace's data", () => {
     const d = data();
     expect(buildRow({ kind: "ticket_folder", id: "unassigned" }, d, { labels })).toMatchObject({ key: "ticket_folder:unassigned", label: "folder unassigned", badge: { kind: "ticket", nums: { count: 4 } } });

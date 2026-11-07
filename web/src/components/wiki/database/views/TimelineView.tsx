@@ -16,7 +16,7 @@ import type { DbProperty, DbRow } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { cellText, cellValue, dependencyEdges, isLate, lateBlockers, type DepEdge } from "@/lib/wiki/db";
 import type { ViewProps } from "../DatabaseView";
-import { PageIcon } from "../../WikiTree";
+import { PageIcon } from "../../PageTree";
 import { NeedsDate } from "./NeedsDate";
 import { axisOf, barOf, DAY_WIDTH, dayAt, daysBetween, editableDate, editDates, formatIn, HEADER, PLACE_DAYS, placeDates, SCALES, spanDays, spanOf, ticks, toneOf, type Axis, type DateEdit, type DaySpan, type Scale, type TickUnit } from "./time";
 

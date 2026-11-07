@@ -43,7 +43,8 @@
       "inbox": "Boîte de réception",
       "teams": "Équipes",
       "views": "Vues",
-      "workspace": "Espace de travail"
+      "workspace": "Espace de travail",
+      "pages": "Pages"
     },
     "show": "Afficher {{name}}",
     "hide": "Masquer {{name}}",
@@ -82,6 +83,15 @@
       "urgent": "Urgents",
       "overdue": "En retard",
       "none": "Aucun"
+    },
+    "pages": {
+      "workspace": "Pages de l’espace de travail",
+      "teamspaces": "Espaces d’équipe",
+      "private": "Pages privées",
+      "today": "Note du jour",
+      "templates": "Modèles",
+      "trash": "Corbeille",
+      "untitled": "Sans titre"
     }
   },
   "list": {

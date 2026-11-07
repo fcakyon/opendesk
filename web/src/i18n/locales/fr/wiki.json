@@ -17,7 +17,9 @@
     "addSubpage": "Ajouter une sous-page",
     "addSubpageTo": "Ajouter une sous-page à {{title}}",
     "moveTo": "Déplacer vers…",
-    "newDatabase": "Nouvelle base de données"
+    "newDatabase": "Nouvelle base de données",
+    "showColumn": "Afficher la liste des pages",
+    "hideColumn": "Masquer la liste des pages"
   },
   "icon": {
     "label": "Emoji",
@@ -564,7 +566,8 @@
     "moveDown": "Descendre",
     "show": "Afficher",
     "reset": "Réinitialiser",
-    "done": "Terminé"
+    "done": "Terminé",
+    "hidePage": "Masquer de la barre latérale"
   },
   "journal": {
     "title": "Journal",
@@ -1405,5 +1408,17 @@
     "people": "Personnes",
     "today": "Aujourd’hui",
     "failed": "Impossible de charger les vues."
+  },
+  "newPage": {
+    "title": "Nouvelle page",
+    "in": "Dans",
+    "page": "Page",
+    "pageHint": "Une page vierge où écrire",
+    "database": "Base de données",
+    "databaseHint": "Des lignes avec des propriétés, en tableau, kanban ou calendrier",
+    "canvas": "Canvas",
+    "canvasHint": "Des cartes, notes et liens sur un tableau",
+    "fromTemplate": "À partir d’un modèle",
+    "import": "Importer"
   }
 }

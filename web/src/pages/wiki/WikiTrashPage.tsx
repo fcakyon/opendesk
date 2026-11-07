@@ -16,7 +16,7 @@ import { SearchInput } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
-import { PageIcon } from "@/components/wiki/WikiTree";
+import { PageIcon } from "@/components/wiki/PageTree";
 import { useDeleteRule, useRestorePage, useTitle } from "@/components/wiki/hooks";
 import { api } from "@/lib/api/endpoints";
 import type { WikiTrashed } from "@/lib/api/types";

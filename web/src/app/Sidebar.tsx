@@ -4,7 +4,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, Copy, EyeOff, Inbox, Keyboard, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
+import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, Copy, EyeOff, Inbox, Keyboard, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Fragment, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
@@ -30,7 +30,9 @@ import { folders, type FolderId } from "@/lib/folders";
 import { useAI } from "@/lib/ai";
 import { useDismissOnboarding, useSetAvailability } from "@/lib/pictures";
 import { q } from "@/lib/queries";
-import { atLeast, loadAccounts, useRole, useSession, useWorkspace } from "@/lib/session";
+import { atLeast, loadAccounts, useRole, useSession, useUser, useWorkspace } from "@/lib/session";
+import { canWriteView, viewRights } from "@/components/settings2/viewCopy";
+import { quickAdd } from "./quickAdd";
 import { useTheme, type ThemePref } from "@/lib/theme";
 import { desktop } from "@/lib/desktop";
 import { groupViews } from "@/lib/viewSections";
@@ -59,6 +61,7 @@ import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
 // Collab's sections load with Collab: a workspace without it never downloads them.
 const LazyMail = lazy(() => import("@/components/collab/MailNav").then((m) => ({ default: m.MailSection })));
 const LazyFavorites = lazy(() => import("@/components/collab/MailNav").then((m) => ({ default: m.FavoritesSection })));
+const LazyPages = lazy(() => import("@/components/wiki/PagesSection").then((m) => ({ default: m.PagesSection })));
 
 const folderIcons: Record<FolderId, ReactNode> = {
   unassigned: <CircleDashed />,
@@ -243,14 +246,15 @@ function TeamsSection({ rail, drawer, first, counts, hidden = NONE, rp }: { rail
       first={first}
       action={
         atLeast(role, "admin") ? (
-          <Tooltip content={t("nav.manageTeams")}>
-            <Link
-              to="/settings/teams"
-              aria-label={t("nav.manageTeams")}
+          <Tooltip content={t("nav.newTeam")}>
+            <button
+              type="button"
+              aria-label={t("nav.newTeam")}
+              onClick={() => quickAdd.team()}
               className="flex size-5 items-center justify-center rounded text-fg-4 opacity-0 transition-opacity hover:bg-chrome-hover hover:text-fg group-hover/section:opacity-100 focus-visible:opacity-100"
             >
               <Plus className="size-3.5" />
-            </Link>
+            </button>
           </Tooltip>
         ) : undefined
       }
@@ -349,8 +353,11 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
   const { data: counts } = useQuery(q.counts());
   const { data: views } = useQuery(q.views());
   const role = useRole();
-  const navigate = useNavigate();
   const { t } = useTranslation("shell");
+  const me = useUser();
+  const { data: teamList } = useQuery(q.teams());
+  // Edit in a view's menu: for the views the member may change (the view editor's rule).
+  const rights = viewRights(atLeast(role, "admin"), teamList ?? [], me.id);
   // The member's hidden rows, numbers, favorites and menus apply with or without Collab;
   // Collab adds the Mail section (contracts/collab.md SidebarPrefs).
   const collab = useCollab();
@@ -415,14 +422,15 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
           first={first}
           action={
             atLeast(role, "agent") ? (
-              <Tooltip content={t("nav.manageViews")}>
-                <Link
-                  to="/settings/views"
-                  aria-label={t("nav.manageViews")}
+              <Tooltip content={t("nav.newView")}>
+                <button
+                  type="button"
+                  aria-label={t("nav.newView")}
+                  onClick={() => quickAdd.view({ kind: "new" })}
                   className="flex size-5 items-center justify-center rounded text-fg-4 opacity-0 transition-opacity hover:bg-chrome-hover hover:text-fg group-hover/section:opacity-100 focus-visible:opacity-100"
                 >
                   <Plus className="size-3.5" />
-                </Link>
+                </button>
               </Tooltip>
             ) : undefined
           }
@@ -446,7 +454,10 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
                     hideId={hid.view(v.id)}
                     items={
                       atLeast(role, "agent")
-                        ? [{ label: t("nav.duplicateView"), icon: <Copy />, onSelect: () => void navigate({ to: "/settings/views", search: { duplicate: v.id } }) }]
+                        ? [
+                            ...(canWriteView(rights, v) ? [{ label: t("nav.editView"), icon: <Pencil />, onSelect: () => quickAdd.view({ kind: "edit", id: v.id }) }] : []),
+                            { label: t("nav.duplicateView"), icon: <Copy />, onSelect: () => quickAdd.view({ kind: "duplicate", id: v.id }) },
+                          ]
                         : undefined
                     }
                     rail={rail}
@@ -471,10 +482,10 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
             />
           ) : (
             <NavTip rail={rail} label={t("nav.createView")}>
-              <Link to="/settings/views" className={cn(rowBase, rowShape(rail), rowIdle, "text-fg-3")}>
+              <button type="button" onClick={() => quickAdd.view({ kind: "new" })} className={cn(rowBase, rowShape(rail), rowIdle, "text-fg-3")}>
                 <Plus />
                 <Label rail={rail}>{t("nav.createView")}</Label>
-              </Link>
+              </button>
             </NavTip>
           )}
         </Section>
@@ -501,7 +512,8 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
             </>)}</Link>
           </NavTip>
           <NavTip rail={rail} label={t("nav.wiki")}>
-            <Link to="/wiki" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.wiki") : undefined}>{withPill(<>
+            {/* The wiki's home: a page is current in Pages, not here. */}
+            <Link to="/wiki" activeOptions={{ exact: true }} className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.wiki") : undefined}>{withPill(<>
               <NotebookText />
               <Label rail={rail}>{t("nav.wiki")}</Label>
             </>)}</Link>
@@ -519,6 +531,12 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
       return (
         <Suspense fallback={null}>
           <LazyFavorites prefs={prefs} rail={rail} first={first} />
+        </Suspense>
+      );
+    case "pages":
+      return (
+        <Suspense fallback={null}>
+          <LazyPages prefs={prefs} rail={rail} first={first} />
         </Suspense>
       );
     case "mail":

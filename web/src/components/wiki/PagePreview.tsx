@@ -14,7 +14,7 @@ import { q } from "@/lib/queries";
 import { useNow } from "@/lib/useNow";
 import { coverStyle } from "./covers";
 import { useTitle } from "./hooks";
-import { PageIcon } from "./WikiTree";
+import { PageIcon } from "./PageTree";
 
 /** The first lines of a body as plain text. */
 export function excerpt(html: string, max = 320): string {

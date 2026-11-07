@@ -13,7 +13,7 @@ import { pickerSearch } from "@/components/ui/picker";
 import { ancestorsOf } from "@/lib/wiki/tree";
 import { besideOf, closed, isBesideClick, pageIdOfHref, swapped, type PageSearch } from "@/lib/wiki/split";
 import { useOpenPageId, useTitle, useWikiTree } from "./hooks";
-import { PageIcon } from "./WikiTree";
+import { PageIcon } from "./PageTree";
 
 const NONE: PageSearch = {};
 

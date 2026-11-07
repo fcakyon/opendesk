@@ -160,7 +160,19 @@ export function useRowLabels(): RowLabels {
     page: (p) => tShell(pageLabels[p]),
     untitled: tWiki("untitled"),
     section: (id, collabEnabled = collab.enabled) =>
-      id === "favorites" ? tc("nav.favorites") : id === "mail" ? tc("nav.mail") : id === "inbox" ? tShell(collabEnabled ? "nav.tickets" : "nav.inbox") : id === "teams" ? tShell("nav.teams") : id === "views" ? tShell("nav.views") : tShell("nav.workspace"),
+      id === "favorites"
+        ? tc("nav.favorites")
+        : id === "mail"
+          ? tc("nav.mail")
+          : id === "inbox"
+            ? tShell(collabEnabled ? "nav.tickets" : "nav.inbox")
+            : id === "teams"
+              ? tShell("nav.teams")
+              : id === "views"
+                ? tShell("nav.views")
+                : id === "pages"
+                  ? tShell("nav.pages")
+                  : tShell("nav.workspace"),
   };
 }
 
@@ -279,6 +291,12 @@ export function buildRow(item: { kind: string; id: string }, d: WorkspaceData, c
       const n = d.wiki?.find((x) => x.id === item.id);
       if (!n) return null;
       return { key: `wiki_page:${n.id}`, label: n.title.trim() || ctx.labels.untitled, icon: <WikiPageGlyph icon={n.icon} />, link: { kind: "wiki", pageId: n.id } };
+    }
+    case "wiki_space": {
+      // A teamspace shows while its team is in sight and has pages the person sees.
+      const team = d.teams?.find((x) => x.id === item.id);
+      if (!team || !canSeeTeam(d, team) || !d.wiki?.some((n) => n.team_id === team.id)) return null;
+      return { key: hid.wikiSpace(team.id), label: team.name, icon: dotIcon(<TeamDot team={team} />), link: { kind: "page", page: "wiki" }, locked: team.private };
     }
     case "box": {
       if (!d.collab || !isMailBox(item.id)) return null;

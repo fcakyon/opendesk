@@ -4,7 +4,7 @@
 // same editor publishes a workspace's starter Space from Settings › General (admins), where
 // every row is of that workspace. Nothing is saved until Save.
 
-import { Building2, Check, ChevronsDownUp, Ellipsis, FolderInput, Inbox, Layers, Mail, Plus, Star, Trash2, Users, X } from "lucide-react";
+import { Building2, Check, ChevronsDownUp, Ellipsis, FileText, FolderInput, Inbox, Layers, Mail, Plus, Star, Trash2, Users, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
@@ -24,7 +24,7 @@ import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { SidebarBadge, SidebarSectionId, Space, SpaceItem, SpaceSection } from "@/lib/api/types";
 import { ACCOUNT_BOXES, accountName, buildFolderTree, flattenTree, folderWithRole } from "@/lib/collab/boxes";
-import { badgeChoices, badgeWord } from "@/lib/collab/sidebarPrefs";
+import { badgeChoices, badgeWord, SECTION_IDS } from "@/lib/collab/sidebarPrefs";
 import { cn } from "@/lib/cn";
 import { folders as ticketFolders } from "@/lib/folders";
 import { useCollab, useSidebarPrefs } from "@/lib/collab/hooks";
@@ -60,16 +60,17 @@ import {
   updateItem,
   updateSection,
   type SpaceProblem,
+  needsWiki,
 } from "@/lib/spaces/model";
 import { spaceUi, useSpaceUi, type EditorTarget } from "@/lib/spaces/store";
 import { tone } from "@/lib/tones";
 import { buildRow, everywhereIcons, InWorkspace, useRowLabels, type RowLabels } from "./rows";
-import { PageIcon } from "@/components/wiki/WikiTree";
+import { PageIcon } from "@/components/wiki/PageTree";
 import { buildTree, childrenOf } from "@/lib/wiki/tree";
 import { SpaceGlyph, spaceIcons, spaceTone } from "./icons";
 import { sameJSON } from "@/lib/sameJSON";
 
-const sectionIcons: Record<SidebarSectionId, ReactNode> = { favorites: <Star />, inbox: <Inbox />, mail: <Mail />, teams: <Users />, views: <Layers />, workspace: <Building2 /> };
+const sectionIcons: Record<SidebarSectionId, ReactNode> = { favorites: <Star />, inbox: <Inbox />, mail: <Mail />, teams: <Users />, views: <Layers />, pages: <FileText />, workspace: <Building2 /> };
 
 type Look = { label: string; icon: ReactNode; whole?: boolean; badgeKind?: "mail" | "ticket" | "team"; nums?: Record<string, number | null | undefined> };
 
@@ -82,6 +83,7 @@ function lookOf(item: SpaceItem, d: WorkspaceData | undefined, labels: RowLabels
   const loading =
     (item.kind === "team" && !d.teams) ||
     (item.kind === "view" && !d.views) ||
+    ((item.kind === "wiki_space" || item.kind === "wiki_page") && (!d.wiki || !d.teams)) ||
     (isCollabItem(item) && (d.collab === undefined || (d.collab && !d.accounts))) ||
     (item.kind === "folder" && !!d.accounts?.some((a) => !d.folders[a.id]));
   const m = buildRow(item, d, { labels });
@@ -99,9 +101,9 @@ function everywhereOffers(labels: RowLabels): Offer[] {
 }
 
 /** What a workspace offers a Space, in groups: whole sections, inbox folders, teams, views, mail (with Collab), pages. */
-function offersOf(d: WorkspaceData, labels: RowLabels, wholeHint: string): { id: "sections" | "inbox" | "teams" | "views" | "mail" | "pages" | "wiki"; offers: Offer[] }[] {
+function offersOf(d: WorkspaceData, labels: RowLabels, wholeHint: string): { id: "sections" | "inbox" | "teams" | "views" | "mail" | "pages" | "teamspaces" | "wiki"; offers: Offer[] }[] {
   const it = (kind: SpaceItem["kind"], id: string): SpaceItem => ({ workspace_id: d.id, kind, id });
-  const sections = (["favorites", "inbox", "mail", "teams", "views", "workspace"] as SidebarSectionId[])
+  const sections = SECTION_IDS
     .filter((id) => d.collab || id !== "mail")
     .map((id) => ({ item: it("section", id), label: labels.section(id, d.collab), icon: sectionIcons[id], hint: wholeHint }));
   const inbox = ticketFolders.map((f) => ({ item: it("ticket_folder", f.id), label: labels.folder(f.id), icon: buildRow(it("ticket_folder", f.id), d, { labels })?.icon }));
@@ -129,13 +131,16 @@ function offersOf(d: WorkspaceData, labels: RowLabels, wholeHint: string): { id:
     }
   }
   const pages = SPACE_PAGES.map((p) => ({ item: it("page", p), label: labels.page(p), icon: buildRow(it("page", p), d, { labels })?.icon }));
-  // Wiki pages, in the tree's order: any page can be a row of its own (a runbook, a journal).
+  // Teamspaces, each kept up to date with its pages.
+  const teamspaces = visible.filter((x) => d.wiki?.some((n) => n.team_id === x.id)).map((x) => ({ item: it("wiki_space", x.id), label: x.name, icon: <TeamDot team={x} /> }));
+  // Pages, databases and canvases, in the tree's order: any of them can be a row of its own (a
+  // runbook, a journal). A database's rows are its own, shown in its views.
   const wiki: Offer[] = [];
   const wtree = buildTree(d.wiki ?? []);
   const walk = (parent: string | null, depth: number) => {
     for (const n of childrenOf(wtree, parent)) {
-      wiki.push({ item: it("wiki_page", n.id), label: n.title.trim() || labels.untitled, icon: <PageIcon icon={n.icon} />, depth });
-      if (depth < 2) walk(n.id, depth + 1);
+      wiki.push({ item: it("wiki_page", n.id), label: n.title.trim() || labels.untitled, icon: <PageIcon icon={n.icon} kind={n.kind} />, depth });
+      if (depth < 2 && n.kind !== "database") walk(n.id, depth + 1);
     }
   };
   walk(null, 0);
@@ -146,6 +151,7 @@ function offersOf(d: WorkspaceData, labels: RowLabels, wholeHint: string): { id:
     { id: "views" as const, offers: views },
     { id: "mail" as const, offers: mail },
     { id: "pages" as const, offers: pages },
+    { id: "teamspaces" as const, offers: teamspaces },
     { id: "wiki" as const, offers: wiki },
   ].filter((g) => g.offers.length);
 }
@@ -460,7 +466,7 @@ function SpaceEditor({ target, make }: { target: EditorTarget; make: () => Space
     return out.filter((w) => w && w !== EVERY);
   }, [draft.sections, tab, members]);
   const names = (w: string, kind: string) => draft.sections.some((sec) => sec.items.some((i) => i.workspace_id === w && i.kind === kind));
-  const data = useWorkspacesData(wids, { folders: (w) => w === tab || names(w, "folder"), wiki: (w) => w === tab || names(w, "wiki_page") });
+  const data = useWorkspacesData(wids, { folders: (w) => w === tab || names(w, "folder"), wiki: (w) => w === tab || needsWiki(draft, w) });
   const sections = useMemo(() => draft.sections.map((s) => ({ ...s })), [draft.sections]);
 
   const problems = spaceProblems(draft, members);

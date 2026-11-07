@@ -3355,7 +3355,7 @@ export type CollabStatus = {
   storage: CollabStorage;
 };
 
-export type SidebarSectionId = "favorites" | "mail" | "inbox" | "teams" | "views" | "workspace";
+export type SidebarSectionId = "favorites" | "mail" | "inbox" | "teams" | "views" | "pages" | "workspace";
 export type SidebarPinKind = "box" | "folder" | "account" | "view" | "team" | "ticket_folder" | "view_section";
 export type SidebarPin = { kind: SidebarPinKind; id: string };
 
@@ -3450,7 +3450,7 @@ export type WorkspaceOverview = {
 export type SpaceColor = "grey" | "blue" | "violet" | "teal" | "green" | "amber" | "red" | "pink";
 
 /** What a Space row names: a whole built-in section, or one row of a workspace. */
-export type SpaceItemKind = "section" | "ticket_folder" | "team" | "view" | "box" | "account" | "folder" | "page" | "wiki_page" | "everywhere";
+export type SpaceItemKind = "section" | "ticket_folder" | "team" | "view" | "box" | "account" | "folder" | "page" | "wiki_page" | "wiki_space" | "everywhere";
 
 export type SpaceItem = {
   /** A workspace the user is a member of; "" for an everywhere row (it spans them all). */

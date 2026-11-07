@@ -16,7 +16,7 @@ import type { Database, DbNumberFormat, DbOption, DbProperty, DbPropType, DbRoll
 import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
 import { addProperty, changePropertyType, newOptionId, newPropId, pairsOf, parseFormula, removeProperty, TONE_ORDER } from "@/lib/wiki/db";
-import { PageIcon } from "../WikiTree";
+import { PageIcon } from "../PageTree";
 import { PROP_ICONS, PropIcon } from "./cells";
 
 export const TYPE_ORDER: DbPropType[] = [

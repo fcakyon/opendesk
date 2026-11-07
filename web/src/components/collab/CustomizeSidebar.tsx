@@ -1,12 +1,12 @@
 // Customize sidebar: the member orders sections, hides and shows sections and what
-// is in them (accounts, folders, boxes, views, teams), pins favorites, chooses the number
+// is in them (accounts, folders, boxes, views, teams, the parts and pages of Pages), pins favorites, chooses the number
 // beside each section's rows (and any one row's), and turns All inboxes and mark-as-read
 // on and off. Each change shows at once and is saved with
 // PUT /v1/collab/sidebar. Every member has it; without Collab it arranges the ticket side
-// (Favorites, Inbox, Teams, Views, Workspace) and leaves out Mail and the mail options.
+// (Favorites, Inbox, Teams, Views, Pages, Workspace) and leaves out Mail and the mail options.
 
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Eye, EyeOff, Hash, Layers, ListTree, Pin, PinOff } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronRight, Eye, EyeOff, FileText, Hash, LayoutTemplate, Layers, ListTree, Lock, Pin, PinOff, Trash2, Users } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { SidebarBadge, SidebarPin, SidebarPrefs, SidebarSectionId, View } from "@/lib/api/types";
@@ -22,6 +22,8 @@ import {
   MAX_PINS,
   movePin,
   moveSection,
+  PAGES_PARTS,
+  type PagesPart,
   sectionOrder,
   sectionsOffered,
   setBadge,
@@ -49,6 +51,7 @@ import { AccountDot, boxIcon, FolderGlyph } from "./bits";
 import { SpaceGlyph } from "@/components/spaces/icons";
 import { useSession } from "@/lib/session";
 import { useSpaces } from "@/lib/spaces/hooks";
+import { PageIcon } from "@/components/wiki/PageTree";
 import { pickedSpace } from "@/lib/spaces/model";
 import { spaceUi, usePickedSpaceId } from "@/lib/spaces/store";
 
@@ -213,6 +216,7 @@ export function CustomizeSidebar() {
   const { data: accounts } = useMailAccounts();
   const folderMap = useAllFolders(accounts);
   const { data: views } = useQuery(q.views());
+  const { data: pages } = useQuery(q.wikiTree());
   const teams = useTeamsCtx();
   const [expanded, setExpanded] = useState<Set<SidebarSectionId>>(new Set(["mail"]));
   const { t: ts } = useTranslation("spaces");
@@ -287,6 +291,27 @@ export function CustomizeSidebar() {
             ? [view(e.view, 0)]
             : [{ key: `section:${e.key}`, label: e.name, icon: <ListTree />, pin: { kind: "view_section", id: e.key }, note: t("customize.viewSection") }, ...e.views.map((v) => view(v, 1))],
         );
+      }
+      case "pages": {
+        // Its parts, the workspace's top-level pages under Workspace pages, and the teamspaces under Teamspaces.
+        const icons: Record<PagesPart, ReactNode> = {
+          workspace: <FileText />,
+          teamspaces: <Users />,
+          private: <Lock />,
+          today: <CalendarDays />,
+          templates: <LayoutTemplate />,
+          trash: <Trash2 />,
+        };
+        const tops = (pages ?? []).filter((n) => !n.parent_id && !n.private && !n.team_id && !n.journal).sort((a, b) => a.position - b.position);
+        const spaces = teams.teams.filter((x) => teams.canSeeTeam(x) && (pages ?? []).some((n) => n.team_id === x.id)).sort((a, b) => a.name.localeCompare(b.name));
+        return PAGES_PARTS.flatMap((part): Item[] => [
+          { key: `pages:${part}`, label: t(`customize.pages.${part}`), icon: icons[part], hideId: hid.pages(part) },
+          ...(part === "workspace"
+            ? tops.map((n) => ({ key: n.id, label: n.title.trim() || t("customize.pages.untitled"), icon: <PageIcon icon={n.icon} kind={n.kind} />, hideId: hid.wikiPage(n.id), depth: 1 }))
+            : part === "teamspaces"
+              ? spaces.map((x) => ({ key: x.id, label: x.name, icon: <TeamDot team={x} />, hideId: hid.wikiSpace(x.id), depth: 1 }))
+              : []),
+        ]);
       }
       case "workspace":
         return [];

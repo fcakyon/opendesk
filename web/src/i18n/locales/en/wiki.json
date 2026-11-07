@@ -17,7 +17,9 @@
     "addSubpage": "Add a subpage",
     "addSubpageTo": "Add a subpage to {{title}}",
     "moveTo": "Move to…",
-    "newDatabase": "New database"
+    "newDatabase": "New database",
+    "showColumn": "Show page list",
+    "hideColumn": "Hide page list"
   },
   "icon": {
     "label": "Emoji",
@@ -550,7 +552,8 @@
     "moveDown": "Move down",
     "show": "Show",
     "reset": "Reset",
-    "done": "Done"
+    "done": "Done",
+    "hidePage": "Hide from sidebar"
   },
   "journal": {
     "title": "Journal",
@@ -1372,5 +1375,17 @@
     "people": "People",
     "today": "Today",
     "failed": "Couldn't load the views."
+  },
+  "newPage": {
+    "title": "New page",
+    "in": "In",
+    "page": "Page",
+    "pageHint": "A blank page to write in",
+    "database": "Database",
+    "databaseHint": "Rows with properties, as a table, board or calendar",
+    "canvas": "Canvas",
+    "canvasHint": "Cards, notes and links on a board",
+    "fromTemplate": "From a template",
+    "import": "Import"
   }
 }

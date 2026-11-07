@@ -15,7 +15,7 @@ import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
 import { useTitle } from "../hooks";
 import { excerpt } from "../PagePreview";
-import { PageIcon } from "../WikiTree";
+import { PageIcon } from "../PageTree";
 import { cardTint, solidOf } from "./look";
 import { SIDES, WIKI_SRC, isImageName, type Handle } from "./model";
 

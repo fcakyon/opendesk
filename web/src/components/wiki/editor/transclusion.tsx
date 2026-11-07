@@ -16,7 +16,7 @@ import { TextInput } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
 import type { WikiNode } from "@/lib/api/types";
-import { PageIcon } from "../WikiTree";
+import { PageIcon } from "../PageTree";
 import { useTitle, useWikiTree } from "../hooks";
 import { useWikiEditorEnv } from "./context";
 import { readerExtensions } from "./extensions";

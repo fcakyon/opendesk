@@ -17,7 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { q } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { useDeletePage, useDeleteRule, useExpanded, useMovePage, useTitle, useTrashPage, useWikiTree } from "./hooks";
-import { PageIcon } from "./WikiTree";
+import { PageIcon } from "./PageTree";
 import { useFollow } from "./comments/hooks";
 
 const row =

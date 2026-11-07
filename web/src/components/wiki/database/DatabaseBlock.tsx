@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { Picker } from "@/components/ui/picker";
 import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
-import { PageIcon } from "../WikiTree";
+import { PageIcon } from "../PageTree";
 import { DatabaseView } from "./DatabaseView";
 
 export function DatabaseBlockView({ node, updateAttributes, selected, editor }: NodeViewProps) {

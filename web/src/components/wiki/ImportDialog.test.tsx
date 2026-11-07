@@ -9,7 +9,8 @@ import { api } from "@/lib/api/endpoints";
 import type { Team, WikiImportResult, WikiNode } from "@/lib/api/types";
 import { qk } from "@/lib/queries";
 import { useSession } from "@/lib/session";
-import { ImportDialogHost, openImport } from "./ImportDialog";
+import { openImport } from "@/app/quickAdd";
+import { ImportDialogHost } from "./ImportDialog";
 
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({
@@ -105,6 +106,17 @@ describe("wiki import dialog", () => {
     expect(dialog()?.querySelector("[role=alert]")?.textContent).toBe("This import makes 40 pages and the wiki has room for 12 more.");
     expect(dialog()?.textContent).toContain("a.md");
     expect(button("Import")?.disabled).toBe(false);
+  });
+
+  it("starts with the files dropped elsewhere, at the top of the space they were dropped for", async () => {
+    const spy = vi.spyOn(api.wiki, "importPages").mockResolvedValue({ pages: 1, root_ids: ["n1"], skipped: [] });
+    await render();
+    await act(async () => openImport(null, { files: [new File(["# A"], "a.md"), new File(["x"], "run.exe")], space: "team:t1" }));
+    expect(dialog()?.textContent).toContain("a.md");
+    expect(dialog()?.querySelector("[role=alert]")?.textContent).toContain("run.exe can't be imported");
+    await act(async () => button("Import")!.click());
+    expect(spy.mock.calls[0][0].map((f) => f.name)).toEqual(["a.md"]);
+    expect(spy.mock.calls[0][1]).toEqual({ space: "team", team_id: "t1" });
   });
 
   it("refuses more than 100 MB before uploading", async () => {

@@ -15,6 +15,7 @@ import {
   MAIN_SECTION_ID,
   moveItemTo,
   moveSpace,
+  needsWiki,
   nextColor,
   normalizeSpace,
   otherWorkspaces,
@@ -45,23 +46,34 @@ const ctx = (opts: { members?: string[]; collab?: Record<string, boolean | undef
   collab: (w: string) => (opts.collab ? opts.collab[w] : true),
 });
 
+describe("pages in a Space", () => {
+  it("reads a workspace's pages for a page, a teamspace or the whole Pages section", () => {
+    const space = (items: SpaceItem[]) => ({ sections: [{ id: "s", title: "", collapsed: false, items }] });
+    expect(needsWiki(space([item(A, "section", "inbox")]), A)).toBe(false);
+    expect(needsWiki(space([item(A, "section", "pages")]), A)).toBe(true);
+    expect(needsWiki(space([item(A, "wiki_space", "t1")]), A)).toBe(true);
+    expect(needsWiki(space([item(A, "wiki_page", "p1")]), A)).toBe(true);
+    expect(needsWiki(space([item(A, "wiki_page", "p1")]), "other")).toBe(false);
+  });
+});
+
 describe("starting a Space", () => {
   it("copies a workspace's own sidebar as whole sections in its order", () => {
-    const prefs = { ...defaultSidebarPrefs(), order: ["inbox", "mail", "favorites", "teams", "views", "workspace"], hidden: ["section:views"] };
+    const prefs = { ...defaultSidebarPrefs(), order: ["inbox", "mail", "favorites", "teams", "views", "pages", "workspace"], hidden: ["section:views"] };
     const s = sidebarCopy({ id: A, name: "Margin" }, defaultSections(prefs, true), "Margin", "teal");
     expect(s).toMatchObject({ name: "Margin", icon: "", color: "teal", marks: true });
     expect(s.sections).toHaveLength(1);
     expect(s.sections[0].id).toBe(MAIN_SECTION_ID);
-    expect(s.sections[0].items).toEqual(["inbox", "mail", "favorites", "teams", "workspace"].map((id) => item(A, "section", id)));
+    expect(s.sections[0].items).toEqual(["inbox", "mail", "favorites", "teams", "pages", "workspace"].map((id) => item(A, "section", id)));
     expect(spaceProblems(s, new Set([A]))).toEqual([]);
   });
 
   it("lists the sections a workspace's sidebar shows: without hidden ones, and without Mail without Collab", () => {
-    expect(defaultSections(null, false)).toEqual(["favorites", "inbox", "teams", "views", "workspace"]);
+    expect(defaultSections(null, false)).toEqual(["favorites", "inbox", "teams", "views", "pages", "workspace"]);
     expect(defaultSections({ ...defaultSidebarPrefs(), order: ["views", "inbox"], hidden: ["section:teams"] }, false))
-      .toEqual(["favorites", "views", "workspace", "inbox"]);
-    expect(defaultSections(null, true)).toEqual(["favorites", "inbox", "mail", "teams", "views", "workspace"]);
-    expect(defaultSections({ ...defaultSidebarPrefs(), hidden: ["section:favorites"] }, true)).toEqual(["inbox", "mail", "teams", "views", "workspace"]);
+      .toEqual(["favorites", "views", "pages", "workspace", "inbox"]);
+    expect(defaultSections(null, true)).toEqual(["favorites", "inbox", "mail", "teams", "views", "pages", "workspace"]);
+    expect(defaultSections({ ...defaultSidebarPrefs(), hidden: ["section:favorites"] }, true)).toEqual(["inbox", "mail", "teams", "views", "pages", "workspace"]);
   });
 
   it("gives a new Space a colour not in use yet", () => {

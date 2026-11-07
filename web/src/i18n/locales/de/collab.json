@@ -41,7 +41,8 @@
       "inbox": "Posteingang",
       "teams": "Teams",
       "views": "Ansichten",
-      "workspace": "Workspace"
+      "workspace": "Workspace",
+      "pages": "Seiten"
     },
     "show": "{{name}} anzeigen",
     "hide": "{{name}} ausblenden",
@@ -80,6 +81,15 @@
       "urgent": "Dringend",
       "overdue": "Überfällig",
       "none": "Keine"
+    },
+    "pages": {
+      "workspace": "Workspace-Seiten",
+      "teamspaces": "Teamspaces",
+      "private": "Private Seiten",
+      "today": "Heutige Notiz",
+      "templates": "Vorlagen",
+      "trash": "Papierkorb",
+      "untitled": "Ohne Titel"
     }
   },
   "list": {

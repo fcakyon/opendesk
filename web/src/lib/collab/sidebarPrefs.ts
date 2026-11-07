@@ -6,7 +6,7 @@
 import type { MailAccount, MailFolder, SidebarBadge, SidebarPin, SidebarPrefs, SidebarSectionId } from "../api/types";
 import { hasBox, isTabBox, type TabBox } from "./boxes";
 
-export const SECTION_IDS: readonly SidebarSectionId[] = ["favorites", "inbox", "mail", "teams", "views", "workspace"];
+export const SECTION_IDS: readonly SidebarSectionId[] = ["favorites", "inbox", "mail", "teams", "views", "pages", "workspace"];
 export const MAX_PINS = 30;
 export const MAX_TABS = 30;
 export const MAX_BADGES = 300;
@@ -163,7 +163,17 @@ export const hid = {
   ticketFolder: (id: string) => `ticket_folder:${id}`,
   /** The red row on top of Inbox while visitors wait in live chat with nobody on it. */
   waitingChats: "row:waiting_chats",
+  /** A part of the Pages section (PAGES_PARTS). */
+  pages: (part: PagesPart) => `pages:${part}`,
+  /** A top-level page in the Pages section. */
+  wikiPage: (id: string) => `wiki_page:${id}`,
+  /** A teamspace in the Pages section: a team's id. */
+  wikiSpace: (id: string) => `wiki_space:${id}`,
 };
+
+/** The parts of the Pages section a member can hide, in the order it shows them. */
+export const PAGES_PARTS = ["workspace", "teamspaces", "private", "today", "templates", "trash"] as const;
+export type PagesPart = (typeof PAGES_PARTS)[number];
 
 // ── Numbers beside rows ──────────────────────────────────────────────────
 

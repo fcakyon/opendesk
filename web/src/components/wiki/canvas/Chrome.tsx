@@ -36,7 +36,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import type { CanvasEdge, CanvasNode, WikiNode } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { useTitle } from "../hooks";
-import { PageIcon } from "../WikiTree";
+import { PageIcon } from "../PageTree";
 import { solidOf } from "./look";
 import { PRESETS, cleanUrl, fromEnd, toEnd, toWorld, type Rect, type Size, type View } from "./model";
 

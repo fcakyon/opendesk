@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/ui/empty";
 import { cn } from "@/lib/cn";
 import { formatCount, groupRows, NO_VALUE, type Group } from "@/lib/wiki/db";
 import type { ViewProps } from "../DatabaseView";
-import { PageIcon } from "../../WikiTree";
+import { PageIcon } from "../../PageTree";
 import { CardPreview, Composer, GroupLabel, groupProp, indexAt, openKeys, regroup, RowFields, toggleCollapsed, useGroupName, useRowDrag, type RowDrag } from "./cards";
 
 const COLUMN_W = { small: 220, medium: 264, large: 320 } as const;

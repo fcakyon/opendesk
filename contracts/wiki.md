@@ -361,7 +361,30 @@ The wiki's sidebar has sections each member arranges (order, hidden, folded; kep
 browser): Favorites, a section per teamspace they see, the workspace's pages, their private pages and
 Recent; then today's note, templates, the graph, tags and the trash. Pages drag between sections (a
 page dropped at the top level of another space moves to it). A page can also be a row of a Space
-(contracts/spaces.md, `wiki_page`).
+(contracts/spaces.md, `wiki_page`), and a teamspace too (`wiki_space`).
+
+## In the main sidebar
+
+Pages, databases and canvases are part of the app, not only the wiki: the main sidebar has a built-in
+**Pages** section (`SidebarPrefs` section id `pages`, contracts/collab.md), ordered, hidden and
+numbered like the others. It shows the same live tree as the wiki's own sidebar (the `wiki_page`
+events keep it current): the workspace's pages at the top level, each teamspace the member sees under a
+row that folds, their private pages under Private, then Today's note, Templates and Trash. Rows nest,
+fold, drag and have the wiki's page menu (favorite, add a subpage, duplicate, move, copy a link, open
+beside, add to a Space, move to the trash), plus Hide from sidebar on a top-level page or a teamspace.
+What shows is the member's (`SidebarPrefs.hidden`): `section:pages` (the whole section),
+`pages:<part>` for a part (`workspace`, `teamspaces`, `private`, `today`, `templates`, `trash`),
+`wiki_page:<id>` for a top-level page and `wiki_space:<team id>` for a teamspace. The collapsed rail
+shows one Pages row to the wiki. Folded rows are kept per member in the browser.
+
+The member's favorite pages (`/v1/wiki/favorites`, one list) are also rows of the main Favorites, after
+its pins, with the page's live title and icon.
+
+Adding happens in place, never by leaving for Settings: the section's `+` and the header's New menu
+open the new page popup (where it goes, then a page, a database or a canvas, a template, or files to
+import, dropped or picked), and files dropped on the section open the import with them. Viewers see
+no `+`. On wide screens the wiki's own page list beside a page shows or hides from the page's header,
+remembered in the browser; until the member chooses, it is hidden while the Pages section shows.
 
 ## Access
 

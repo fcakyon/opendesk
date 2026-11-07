@@ -21,7 +21,7 @@ import { bytes, longDate, timeOfDay } from "@/lib/format";
 import { newReminderId } from "@/lib/wiki/reminder";
 import { embedFor, EMBED_NAMES } from "@/lib/wiki/embeds";
 import { IconPicker } from "../IconPicker";
-import { PageIcon } from "../WikiTree";
+import { PageIcon } from "../PageTree";
 import { useTitle, useWikiTree } from "../hooks";
 import { useWikiEditorEnv } from "./context";
 import { PagePreview } from "../PagePreview";

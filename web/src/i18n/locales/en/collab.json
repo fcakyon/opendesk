@@ -43,7 +43,8 @@
       "inbox": "Inbox",
       "teams": "Teams",
       "views": "Views",
-      "workspace": "Workspace"
+      "workspace": "Workspace",
+      "pages": "Pages"
     },
     "show": "Show {{name}}",
     "hide": "Hide {{name}}",
@@ -82,6 +83,15 @@
       "urgent": "Urgent",
       "overdue": "Overdue",
       "none": "None"
+    },
+    "pages": {
+      "workspace": "Workspace pages",
+      "teamspaces": "Teamspaces",
+      "private": "Private pages",
+      "today": "Today's note",
+      "templates": "Templates",
+      "trash": "Trash",
+      "untitled": "Untitled"
     }
   },
   "list": {

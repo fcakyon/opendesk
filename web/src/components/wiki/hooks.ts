@@ -270,3 +270,23 @@ export function useFavorites() {
     reorder: (ids: string[]) => void save(ids.map((id) => list.find((n) => n.id === id)).filter((n): n is WikiNode => !!n)),
   };
 }
+
+// ─── Templates ──────────────────────────────────────────────────────────────
+
+/** Makes a page from a template of the team, beside it in its space, and opens it. */
+export function useUseTemplate() {
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const title = useTitle();
+  const { t } = useTranslation("wiki");
+  return async (tpl: WikiNode, parent?: string | null) => {
+    try {
+      const page = await api.wiki.duplicate(tpl.id, { template: false, parent_id: parent ?? null, title: title(tpl.title) });
+      qc.setQueryData(qk.wikiPage(page.id), page);
+      void qc.invalidateQueries({ queryKey: qk.wikiTree });
+      void navigate({ to: "/wiki/$pageId", params: { pageId: page.id } });
+    } catch (e) {
+      toast.error(e, t("templatesPage.failed"));
+    }
+  };
+}

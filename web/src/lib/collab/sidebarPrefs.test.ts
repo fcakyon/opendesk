@@ -62,12 +62,15 @@ describe("sidebar prefs", () => {
 
   it("places sections missing from the saved order where the default puts them, ignoring unknown ids", () => {
     const p = { ...defaultSidebarPrefs(), order: ["views", "future", "inbox"] };
-    expect(sectionOrder(p)).toEqual(["favorites", "views", "workspace", "inbox", "mail", "teams"]);
+    expect(sectionOrder(p)).toEqual(["favorites", "views", "pages", "workspace", "inbox", "mail", "teams"]);
+    // An order saved before Pages existed shows it after Views, above Workspace.
+    const before = { ...defaultSidebarPrefs(), order: ["inbox", "favorites", "views", "teams", "workspace"] };
+    expect(sectionOrder(before)).toEqual(["inbox", "mail", "favorites", "views", "pages", "teams", "workspace"]);
   });
 
   it("hides sections", () => {
     const p = setHidden(defaultSidebarPrefs(), hid.section("teams"), true);
-    expect(visibleSections(p)).toEqual(["favorites", "inbox", "mail", "views", "workspace"]);
+    expect(visibleSections(p)).toEqual(["favorites", "inbox", "mail", "views", "pages", "workspace"]);
     expect(setHidden(p, hid.section("teams"), false).hidden).toEqual([]);
   });
 
@@ -82,20 +85,20 @@ describe("sidebar prefs", () => {
   });
 
   it("moves sections and keeps unknown ids", () => {
-    const p = { ...defaultSidebarPrefs(), order: ["favorites", "mail", "inbox", "teams", "views", "workspace", "future"] };
+    const p = { ...defaultSidebarPrefs(), order: ["favorites", "mail", "inbox", "teams", "views", "pages", "workspace", "future"] };
     const moved = moveSection(p, "inbox", -1);
-    expect(moved.order).toEqual(["favorites", "inbox", "mail", "teams", "views", "workspace", "future"]);
+    expect(moved.order).toEqual(["favorites", "inbox", "mail", "teams", "views", "pages", "workspace", "future"]);
     expect(moveSection(p, "favorites", -1)).toBe(p);
   });
 
   it("offers every section but Mail without Collab, and moves past it", () => {
-    expect(sectionsOffered(true)).toEqual(["favorites", "inbox", "mail", "teams", "views", "workspace"]);
-    expect(sectionsOffered(false)).toEqual(["favorites", "inbox", "teams", "views", "workspace"]);
-    const p = { ...defaultSidebarPrefs(), order: ["favorites", "inbox", "mail", "teams", "views", "workspace"] };
-    expect(visibleSections(p, false)).toEqual(["favorites", "inbox", "teams", "views", "workspace"]);
+    expect(sectionsOffered(true)).toEqual(["favorites", "inbox", "mail", "teams", "views", "pages", "workspace"]);
+    expect(sectionsOffered(false)).toEqual(["favorites", "inbox", "teams", "views", "pages", "workspace"]);
+    const p = { ...defaultSidebarPrefs(), order: ["favorites", "inbox", "mail", "teams", "views", "pages", "workspace"] };
+    expect(visibleSections(p, false)).toEqual(["favorites", "inbox", "teams", "views", "pages", "workspace"]);
     // Teams goes above Inbox in one move; Mail, which the member does not see, keeps its place.
-    expect(moveSection(p, "teams", -1, false).order).toEqual(["favorites", "teams", "mail", "inbox", "views", "workspace"]);
-    expect(moveSection(p, "inbox", 1, false).order).toEqual(["favorites", "teams", "mail", "inbox", "views", "workspace"]);
+    expect(moveSection(p, "teams", -1, false).order).toEqual(["favorites", "teams", "mail", "inbox", "views", "pages", "workspace"]);
+    expect(moveSection(p, "inbox", 1, false).order).toEqual(["favorites", "teams", "mail", "inbox", "views", "pages", "workspace"]);
     expect(moveSection(p, "workspace", 1, false)).toBe(p);
   });
 

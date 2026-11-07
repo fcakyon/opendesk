@@ -1,7 +1,7 @@
 // The wiki's templates (/wiki/templates): the team's own, made like any page and kept out of
 // the tree, and the starter ones. Using one makes a new page from it, with its subpages.
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { LayoutTemplate, MoreHorizontal, Pencil, Plus } from "lucide-react";
 import { useState } from "react";
@@ -11,35 +11,14 @@ import { usePageCrumb } from "@/app/useBreadcrumbs";
 import { Button } from "@/components/ui/button";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "@/components/ui/toast";
 import { StarterTemplates } from "@/components/wiki/TemplateCards";
 import { TrashItem } from "@/components/wiki/PageMenu";
-import { PageIcon } from "@/components/wiki/WikiTree";
-import { useCreatePage, useTitle } from "@/components/wiki/hooks";
+import { PageIcon } from "@/components/wiki/PageTree";
+import { useCreatePage, useTitle, useUseTemplate } from "@/components/wiki/hooks";
 import { TEMPLATES, templatePage } from "@/components/wiki/templates";
-import { api } from "@/lib/api/endpoints";
-import type { WikiNode } from "@/lib/api/types";
-import { qk, q } from "@/lib/queries";
+import { q } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { PagesButton } from "./WikiLayout";
-
-/** Makes a page from a template of the team, beside it in its space, and opens it. */
-export function useUseTemplate() {
-  const qc = useQueryClient();
-  const navigate = useNavigate();
-  const title = useTitle();
-  const { t } = useTranslation("wiki");
-  return async (tpl: WikiNode, parent?: string | null) => {
-    try {
-      const page = await api.wiki.duplicate(tpl.id, { template: false, parent_id: parent ?? null, title: title(tpl.title) });
-      qc.setQueryData(qk.wikiPage(page.id), page);
-      void qc.invalidateQueries({ queryKey: qk.wikiTree });
-      void navigate({ to: "/wiki/$pageId", params: { pageId: page.id } });
-    } catch (e) {
-      toast.error(e, t("templatesPage.failed"));
-    }
-  };
-}
 
 export default function WikiTemplatesPage() {
   const { t } = useTranslation("wiki");

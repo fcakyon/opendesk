@@ -13,7 +13,7 @@ import { SearchInput } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState } from "@/components/ui/empty";
 import { WikiGraph } from "@/components/wiki/Graph";
-import { PageIcon } from "@/components/wiki/WikiTree";
+import { PageIcon } from "@/components/wiki/PageTree";
 import { useTitle } from "@/components/wiki/hooks";
 import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";

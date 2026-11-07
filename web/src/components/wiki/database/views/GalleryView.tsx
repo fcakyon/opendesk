@@ -11,7 +11,7 @@ import type { DbRow, DbValue, DbViewSettings } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { groupRows } from "@/lib/wiki/db";
 import type { ViewProps } from "../DatabaseView";
-import { PageIcon } from "../../WikiTree";
+import { PageIcon } from "../../PageTree";
 import { CardPreview, Composer, GroupHeading, groupProp, indexAt, openKeys, regroup, RowFields, toggleCollapsed, useRowDrag, type RowDrag } from "./cards";
 
 const MIN_W = { small: 180, medium: 240, large: 320 } as const;

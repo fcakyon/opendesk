@@ -18,7 +18,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
 import type { WikiNode } from "@/lib/api/types";
 import { useTitle, useWikiTree } from "../hooks";
-import { PageIcon } from "../WikiTree";
+import { PageIcon } from "../PageTree";
 import { heldComment } from "./comment";
 import { turnIntoOptions, type TurnId } from "./handle";
 import { bestName, rank } from "./menu";

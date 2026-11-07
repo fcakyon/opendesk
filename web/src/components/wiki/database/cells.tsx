@@ -42,7 +42,7 @@ import type { Database, DbDate, DbFile, DbOption, DbProperty, DbPropType, DbRow,
 import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
 import { cellText, cellValue, isEmpty, newOptionId, pairChoices, pairsOf, TONE_ORDER, type DbContext } from "@/lib/wiki/db";
-import { PageIcon } from "../WikiTree";
+import { PageIcon } from "../PageTree";
 
 export const PROP_ICONS: Record<DbPropType, typeof Type> = {
   title: Type,

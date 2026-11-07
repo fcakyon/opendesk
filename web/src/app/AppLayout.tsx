@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWaitingAlerts } from "@/components/tickets/useWaitingAlerts";
 import { Outlet, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
-import { lazy, Suspense, useEffect, useRef, type CSSProperties } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
 import { Dialog as D } from "radix-ui";
 import { identify } from "@/lib/analytics";
 import { formatUsd } from "@/lib/format";
@@ -37,6 +37,7 @@ import { AiBalanceBanner } from "@/components/billing/AiBalanceBanner";
 import { DesktopUpdateBanner } from "@/components/desktop/UpdateBanner";
 import { AllowNotificationsBanner } from "@/components/notifications/AllowBanner";
 import { NEW_TICKET_PATH, shell, toggleNav, useNav, useShell } from "./shellStore";
+import { quickAddOpen, useQuickAdd } from "./quickAdd";
 import { useCollab } from "@/lib/collab/hooks";
 import { useProducts } from "@/lib/products";
 import { useSpaceUi } from "@/lib/spaces/store";
@@ -49,6 +50,8 @@ const CollabRoot = lazy(() => import("@/components/collab/CollabRoot"));
 const CustomizeSidebar = lazy(() => import("@/components/collab/CustomizeSidebar").then((m) => ({ default: m.CustomizeSidebar })));
 const SpaceEditorRoot = lazy(() => import("@/components/spaces/SpaceEditor"));
 const UpgradeDialog = lazy(() => import("@/components/billing/UpgradeDialog"));
+// The sidebar's and the header's add dialogs, loaded the first time one opens.
+const QuickAddRoot = lazy(() => import("./QuickAddRoot"));
 
 function notificationText(n: Notification) {
   const subject = n.ticket ? `#${n.ticket.number}` : "";
@@ -279,6 +282,12 @@ export function AppLayout() {
   const collab = useCollab();
   const { tickets: ticketsOn } = useProducts();
   const spaceEditor = useSpaceUi((s) => !!s.editor);
+  // Once loaded the add dialogs stay, so one closing plays its animation.
+  const quickAddAsked = useQuickAdd(quickAddOpen);
+  const [quickAddLoaded, setQuickAddLoaded] = useState(false);
+  useEffect(() => {
+    if (quickAddAsked) setQuickAddLoaded(true);
+  }, [quickAddAsked]);
   // On the mail pages, c writes new mail and g i goes to the mail inbox.
   const onMail = collab.enabled && section === "mail";
   // The new ticket page is the dialog's draft on a full page: New ticket there opens nothing more.
@@ -386,6 +395,11 @@ export function AppLayout() {
       {spaceEditor && (
         <Suspense fallback={null}>
           <SpaceEditorRoot />
+        </Suspense>
+      )}
+      {(quickAddAsked || quickAddLoaded) && (
+        <Suspense fallback={null}>
+          <QuickAddRoot />
         </Suspense>
       )}
     </div>

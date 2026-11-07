@@ -20,7 +20,7 @@ import { defaultView, filterDefaults, filterRows, newViewId, searchRows, sortRow
 import { atLeast, useRole } from "@/lib/session";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useTitle } from "../hooks";
-import { PageIcon } from "../WikiTree";
+import { PageIcon } from "../PageTree";
 import { ActiveChips, FilterMenu, GroupMenu, LayoutMenu, PropertiesMenu, SortMenu, toolButton } from "./Toolbar";
 import { useDatabase, useDatabaseActions } from "./useDatabase";
 import { withOption } from "./cells";

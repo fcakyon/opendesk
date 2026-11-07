@@ -6,12 +6,13 @@
 // crumbs always start where the work panel does.
 
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, Menu as MenuIcon, Search, SquarePen } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, FileUp, Menu as MenuIcon, Search, SquarePen } from "lucide-react";
 import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 import { Mark } from "@/components/brand";
 import { OllieButton } from "@/components/assistant/OllieButton";
 import { Kbd } from "@/components/ui/kbd";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
 import { desktop } from "@/lib/desktop";
@@ -23,6 +24,7 @@ import { ConnectionIndicator } from "./ConnectionIndicator";
 import { NotificationsButton } from "./Notifications";
 import { WorkspaceSwitcher } from "./Sidebar";
 import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
+import { openImport, quickAdd } from "./quickAdd";
 import { shell, useNav } from "./shellStore";
 import { useBreadcrumbs } from "./useBreadcrumbs";
 
@@ -132,17 +134,44 @@ export function AppHeader() {
           <Kbd className="hidden lg:inline-flex">mod k</Kbd>
         </button>
         {atLeast(role, "agent") && (
-          <Tooltip content={t("newTicket")} shortcut="c">
-            <button
-              type="button"
-              aria-label={t("newTicket")}
-              onClick={() => shell.newTicket()}
-              className="ml-1 flex h-7 items-center gap-1.5 rounded-md bg-inverse px-2.5 text-[12.5px] font-medium text-inverse-fg transition-[background-color,transform] hover:bg-inverse-hover active:scale-[0.97] max-sm:w-7 max-sm:justify-center max-sm:px-0"
-            >
-              <SquarePen className="size-3.5" />
-              <span className="hidden sm:inline">{t("newTicket")}</span>
-            </button>
-          </Tooltip>
+          // New ticket, and beside it what else can be made in place: a page (or database, or canvas) and an import.
+          <div className="ml-1 flex h-7 items-stretch rounded-md bg-inverse text-inverse-fg">
+            <Tooltip content={t("newTicket")} shortcut="c">
+              <button
+                type="button"
+                aria-label={t("newTicket")}
+                onClick={() => shell.newTicket()}
+                className="flex items-center gap-1.5 rounded-l-md pl-2.5 pr-2 text-[12.5px] font-medium transition-[background-color,transform] hover:bg-inverse-hover active:scale-[0.97] max-sm:w-7 max-sm:justify-center max-sm:px-0"
+              >
+                <SquarePen className="size-3.5" />
+                <span className="hidden sm:inline">{t("newTicket")}</span>
+              </button>
+            </Tooltip>
+            <Menu>
+              <Tooltip content={t("newMore")}>
+                <MenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={t("newMore")}
+                    className="flex w-6 items-center justify-center rounded-r-md border-l border-inverse-fg/15 transition-colors hover:bg-inverse-hover data-[state=open]:bg-inverse-hover"
+                  >
+                    <ChevronDown className="size-3.5" />
+                  </button>
+                </MenuTrigger>
+              </Tooltip>
+              <MenuContent align="end" className="w-[200px]">
+                <MenuItem icon={<SquarePen />} shortcut="c" onSelect={() => shell.newTicket()}>
+                  {t("newTicket")}
+                </MenuItem>
+                <MenuItem icon={<FileText />} onSelect={() => quickAdd.page()}>
+                  {t("newPage")}
+                </MenuItem>
+                <MenuItem icon={<FileUp />} onSelect={() => openImport()}>
+                  {t("importPages")}
+                </MenuItem>
+              </MenuContent>
+            </Menu>
+          </div>
         )}
       </div>
     </header>

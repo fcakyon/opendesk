@@ -11,7 +11,7 @@ import { useDocumentTitle } from "@/app/RootLayout";
 import { usePageCrumb } from "@/app/useBreadcrumbs";
 import { SearchInput } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty";
-import { PageIcon } from "@/components/wiki/WikiTree";
+import { PageIcon } from "@/components/wiki/PageTree";
 import { useTitle, useWikiTree } from "@/components/wiki/hooks";
 import { cn } from "@/lib/cn";
 import { relLong } from "@/lib/format";

@@ -10,7 +10,7 @@ import type { DbRow, DbValue } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { groupRows, type FlatRow } from "@/lib/wiki/db";
 import type { ViewProps } from "../DatabaseView";
-import { PageIcon } from "../../WikiTree";
+import { PageIcon } from "../../PageTree";
 import { Composer, GroupHeading, groupProp, indexAt, openKeys, regroup, RowFields, toggleCollapsed, useRowDrag, type RowDrag } from "./cards";
 import { AddSubItem, Disclosure, INDENT, useNesting, type Nesting } from "./nesting";
 

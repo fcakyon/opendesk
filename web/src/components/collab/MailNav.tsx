@@ -26,6 +26,8 @@ import { useOpenWorkspaceData } from "@/lib/spaces/hooks";
 import { findSection } from "@/lib/viewSections";
 import { AccountTags } from "./AccountTags";
 import { AccountDot, boxIcon, FolderGlyph } from "./bits";
+import { quickAdd } from "@/app/quickAdd";
+import { FavoritePageRows, useHasFavoritePages } from "@/components/wiki/PagesSection";
 import { RowMenu, type RowMenuProps } from "./RowMenu";
 
 const sectionAction =
@@ -334,9 +336,9 @@ export function MailSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail:
             </button>
           </Tooltip>
           <Tooltip content={t("nav.connect")}>
-            <Link to="/settings/mail-accounts" search={{}} aria-label={t("nav.connect")} className={sectionAction}>
+            <button type="button" aria-label={t("nav.connect")} onClick={() => quickAdd.mail()} className={sectionAction}>
               <Plus className="size-3.5" />
-            </Link>
+            </button>
           </Tooltip>
         </span>
       }
@@ -408,10 +410,10 @@ export function MailSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail:
       ))}
       {accounts && accounts.length === 0 && (
         <NavTip rail={rail} label={t("nav.noAccounts")}>
-          <Link to="/settings/mail-accounts" search={{}} className={cn(rowBase, rowShape(rail), rowIdle, "text-fg-3")}>
+          <button type="button" onClick={() => quickAdd.mail()} className={cn(rowBase, rowShape(rail), rowIdle, "text-fg-3")}>
             <Plus />
             <Label rail={rail}>{t("nav.noAccounts")}</Label>
-          </Link>
+          </button>
         </NavTip>
       )}
     </Section>
@@ -432,6 +434,7 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
   const navigate = useNavigate();
   const [folded, toggle] = useFoldedSections("favorites");
   const openView = useOpenView();
+  const pages = useHasFavoritePages();
   if (!data) return null;
   // A favorite is unpinned rather than hidden, and reads Favorites' number first, then its own section's.
   const ctx = { labels, via: ["favorites"] as SidebarSectionId[], here, waiting: waitingFor };
@@ -444,7 +447,7 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
     const section = findSection(data.views ?? [], pin.id);
     return section && { kind: "section", name: section.name, views: section.views };
   });
-  if (!pins.length) return null;
+  if (!pins.length && !pages) return null;
   const menuFor = (model: RowModel, pin: SidebarPin) => (row: ReactElement) => (
     <RowMenu
       enabled
@@ -499,6 +502,8 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
           />
         );
       })}
+      {/* The member's favorite pages, the wiki's own list, after the pins. */}
+      <FavoritePageRows rail={rail} />
     </Section>
   );
 }

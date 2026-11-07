@@ -1,8 +1,9 @@
 // Importing pages into the wiki (contracts/wiki.md "Import and export"): files dropped or
 // picked (a zip, or Markdown, HTML, CSV and text files), where they land (under the page it
 // was opened from, or the top of a space), an upload with its progress, then what came in and
-// what was left out, grouped by reason. One dialog for the wiki, opened with openImport from
-// the sidebar's "+", the wiki's home and a page's menu. The new pages arrive in the tree by
+// what was left out, grouped by reason. One dialog for the app, opened with openImport (app/quickAdd) from
+// the sidebars' "+" and new-page popup, files dropped on the main sidebar's Pages, the wiki's
+// home and a page's menu. The new pages arrive in the tree by
 // their events; the tree is fetched again too, in case the socket missed some.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,7 +11,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { ArrowUpRight, CircleCheck, FileArchive, FileText, UploadCloud, X } from "lucide-react";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { create } from "zustand";
+import { quickAdd, useQuickAdd, type ImportStart } from "@/app/quickAdd";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Select, type SelectOption } from "@/components/ui/select";
@@ -25,21 +26,15 @@ import { useSession } from "@/lib/session";
 import { groupSkipped, IMPORT_ACCEPT, importable, MAX_IMPORT_BYTES, SKIP_REASONS, type SkipGroup } from "@/lib/wiki/port";
 import { ancestorsOf, spaceBody, type SpaceKey } from "@/lib/wiki/tree";
 import { useExpanded, useTitle, useWikiTree } from "./hooks";
-import { PageIcon } from "./WikiTree";
+import { PageIcon } from "./PageTree";
 
 const GUIDE = "https://docs.opendesk.sh/guides/wiki-import-export/";
 
-const useImportStore = create<{ open: boolean; parentId: string | null; nonce: number }>(() => ({ open: false, parentId: null, nonce: 0 }));
-
-/** Opens the import dialog, offering to put the pages under parentId (the page the person is on). */
-export function openImport(parentId: string | null = null) {
-  useImportStore.setState((s) => ({ open: true, parentId, nonce: s.nonce + 1 }));
-}
-
-/** The wiki's one import dialog; each opening starts afresh. */
+/** The app's one import dialog (openImport in app/quickAdd); each opening starts afresh. */
 export function ImportDialogHost() {
-  const { open, parentId, nonce } = useImportStore();
-  return <ImportDialog key={nonce} open={open} parentId={parentId} onClose={() => useImportStore.setState({ open: false })} />;
+  const importing = useQuickAdd((s) => s.importing);
+  const nonce = useQuickAdd((s) => s.importNonce);
+  return <ImportDialog key={nonce} open={!!importing} start={importing ?? { parentId: null, files: [] }} onClose={quickAdd.closeImport} />;
 }
 
 type Step = { kind: "pick" } | { kind: "sending"; progress: number } | { kind: "done"; result: WikiImportResult };
@@ -50,7 +45,8 @@ function importError(e: unknown, fallback: string): string {
   return errorMessage(e, fallback);
 }
 
-function ImportDialog({ open, parentId, onClose }: { open: boolean; parentId: string | null; onClose: () => void }) {
+function ImportDialog({ open, start: from, onClose }: { open: boolean; start: ImportStart; onClose: () => void }) {
+  const { parentId } = from;
   const { t } = useTranslation("wiki");
   const { t: ui } = useTranslation("ui");
   const title = useTitle();
@@ -64,9 +60,12 @@ function ImportDialog({ open, parentId, onClose }: { open: boolean; parentId: st
   // Pages can't be imported into a database.
   const under = parent && parent.kind !== "database" ? parent : undefined;
 
-  const [files, setFiles] = useState<File[]>([]);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [target, setTarget] = useState<string>(under ? `page:${under.id}` : "workspace");
+  const [files, setFiles] = useState<File[]>(() => from.files.filter((f) => importable(f.name)));
+  const [problem, setProblem] = useState<string | null>(() => {
+    const refused = from.files.find((f) => !importable(f.name));
+    return refused ? t("import.wrongType", { name: refused.name }) : null;
+  });
+  const [target, setTarget] = useState<string>(under ? `page:${under.id}` : (from.space ?? "workspace"));
   const [step, setStep] = useState<Step>({ kind: "pick" });
   const abort = useRef<AbortController | null>(null);
 
@@ -196,8 +195,8 @@ function ImportDialog({ open, parentId, onClose }: { open: boolean; parentId: st
   );
 }
 
-/** A drop area for files, which also opens the file picker. */
-function Drop({ onFiles, invalid }: { onFiles: (list: FileList | null) => void; invalid: boolean }) {
+/** A drop area for files, which also opens the file picker; the new page popup has a compact one. */
+export function Drop({ onFiles, invalid, compact }: { onFiles: (list: FileList | null) => void; invalid: boolean; compact?: boolean }) {
   const { t } = useTranslation("wiki");
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -217,13 +216,14 @@ function Drop({ onFiles, invalid }: { onFiles: (list: FileList | null) => void; 
           onFiles(e.dataTransfer.files);
         }}
         className={cn(
-          "flex min-h-[148px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-6 py-7 text-center outline-none transition-colors duration-150 focus-visible:shadow-[0_0_0_3px_var(--focus)] motion-reduce:transition-none",
+          "flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed text-center outline-none transition-colors duration-150 focus-visible:shadow-[0_0_0_3px_var(--focus)] motion-reduce:transition-none",
+          compact ? "min-h-[96px] px-5 py-4" : "min-h-[148px] px-6 py-7",
           over ? "border-fg-3 bg-hover" : "border-line-strong bg-surface hover:border-fg-4 hover:bg-canvas",
           invalid && !over && "border-[color-mix(in_srgb,var(--danger)_40%,var(--line))]",
         )}
       >
-        <span className="flex size-10 items-center justify-center rounded-lg bg-hover text-fg-3">
-          <UploadCloud className="size-5" aria-hidden />
+        <span className={cn("flex items-center justify-center rounded-lg bg-hover text-fg-3", compact ? "size-8" : "size-10")}>
+          <UploadCloud className={compact ? "size-4" : "size-5"} aria-hidden />
         </span>
         <span className="text-[13px] font-medium text-fg">{over ? t("import.dropNow") : t("import.drop")}</span>
         <span className="max-w-[420px] text-[12px] leading-[18px] text-fg-3">{t("import.dropHint")}</span>

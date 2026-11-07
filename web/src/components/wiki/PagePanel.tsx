@@ -30,7 +30,7 @@ import { AliasChips } from "./Aliases";
 import { WikiGraph } from "./Graph";
 import { PageAnalytics } from "./PageAnalytics";
 import { useTitle, useWikiTree } from "./hooks";
-import { PageIcon } from "./WikiTree";
+import { PageIcon } from "./PageTree";
 
 type Heading = { level: number; text: string; id: string };
 

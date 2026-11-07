@@ -17,7 +17,9 @@
     "addSubpage": "Unterseite hinzufügen",
     "addSubpageTo": "Unterseite zu {{title}} hinzufügen",
     "moveTo": "Verschieben nach…",
-    "newDatabase": "Neue Datenbank"
+    "newDatabase": "Neue Datenbank",
+    "showColumn": "Seitenliste einblenden",
+    "hideColumn": "Seitenliste ausblenden"
   },
   "icon": {
     "label": "Emoji",
@@ -550,7 +552,8 @@
     "moveDown": "Nach unten",
     "show": "Einblenden",
     "reset": "Zurücksetzen",
-    "done": "Fertig"
+    "done": "Fertig",
+    "hidePage": "In der Seitenleiste ausblenden"
   },
   "journal": {
     "title": "Journal",
@@ -1372,5 +1375,17 @@
     "people": "Personen",
     "today": "Heute",
     "failed": "Die Aufrufe konnten nicht geladen werden."
+  },
+  "newPage": {
+    "title": "Neue Seite",
+    "in": "In",
+    "page": "Seite",
+    "pageHint": "Eine leere Seite zum Schreiben",
+    "database": "Datenbank",
+    "databaseHint": "Zeilen mit Eigenschaften, als Tabelle, Board oder Kalender",
+    "canvas": "Canvas",
+    "canvasHint": "Karten, Notizen und Links auf einer Fläche",
+    "fromTemplate": "Aus einer Vorlage",
+    "import": "Importieren"
   }
 }

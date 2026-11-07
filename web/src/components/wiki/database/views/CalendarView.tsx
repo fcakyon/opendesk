@@ -16,7 +16,7 @@ import { cellValue, isDateRange } from "@/lib/wiki/db";
 import type { ViewProps } from "../DatabaseView";
 import { NeedsDate } from "./NeedsDate";
 import { ROW_TYPE } from "./cards";
-import { PageIcon } from "../../WikiTree";
+import { PageIcon } from "../../PageTree";
 import { dayKey, daysBetween, editableDate, editDates, formatIn, layoutWeek, monthGrid, spanOf, toneOf, weekdays, type DaySpan } from "./time";
 
 /** Bars a day shows before "+N more". */

@@ -39,7 +39,7 @@ export const SPACE_COLORS: readonly SpaceColor[] = ["grey", "blue", "violet", "t
 /** The colours new Spaces take, in turn. */
 export const NEW_COLORS: readonly SpaceColor[] = ["blue", "violet", "teal", "green", "amber", "red", "pink", "grey"];
 
-export const SPACE_KINDS: readonly SpaceItemKind[] = ["section", "ticket_folder", "team", "view", "box", "account", "folder", "page", "wiki_page", "everywhere"];
+export const SPACE_KINDS: readonly SpaceItemKind[] = ["section", "ticket_folder", "team", "view", "box", "account", "folder", "page", "wiki_page", "wiki_space", "everywhere"];
 /** The pages a Space row can open. */
 export const SPACE_PAGES = ["contacts", "knowledge", "wiki", "reports"] as const;
 export type SpacePage = (typeof SPACE_PAGES)[number];
@@ -79,6 +79,11 @@ export const isSpaceBox = (v: unknown): v is SpaceBox => typeof v === "string" &
 const isKind = (v: unknown): v is SpaceItemKind => typeof v === "string" && (SPACE_KINDS as readonly string[]).includes(v);
 const isBadge = (v: unknown): v is SidebarBadge => typeof v === "string" && (BADGES as readonly string[]).includes(v);
 export const isSectionId = (v: unknown): v is SidebarSectionId => typeof v === "string" && (SECTION_IDS as readonly string[]).includes(v);
+
+/** Whether a Space shows a workspace's pages: a page or teamspace row, or the whole Pages section. */
+export function needsWiki(space: Pick<Space, "sections">, wid: string): boolean {
+  return space.sections.some((sec) => sec.items.some((i) => i.workspace_id === wid && (i.kind === "wiki_page" || i.kind === "wiki_space" || (i.kind === "section" && i.id === "pages"))));
+}
 
 /** Rows that need Collab: its mail and its member prefs (Favorites). Skipped for a workspace without it. */
 export function isCollabItem(i: Pick<SpaceItem, "kind" | "id">): boolean {

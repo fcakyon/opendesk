@@ -32,7 +32,11 @@
     "teamCounts": "{{unassigned}} unassigned, {{open}} open",
     "manageTeams": "Manage teams",
     "switchTeam": "Switch team",
-    "teamHint": "Team"
+    "teamHint": "Team",
+    "pages": "Pages",
+    "newTeam": "New team",
+    "newView": "New view",
+    "editView": "Edit view"
   },
   "workspaces": {
     "title": "Workspaces",
@@ -213,5 +217,8 @@
   },
   "wikiPresence": {
     "editing": "{{name}} is editing"
-  }
+  },
+  "newMore": "More to create",
+  "newPage": "New page",
+  "importPages": "Import pages"
 }
