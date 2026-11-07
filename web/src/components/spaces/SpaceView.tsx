@@ -6,9 +6,13 @@
 // its title. Section titles the person wrote read like the built-in ones and fold.
 
 import { Pencil } from "lucide-react";
-import { Fragment, lazy, Suspense, useMemo, useState, type ReactNode } from "react";
+import { Fragment, lazy, Suspense, useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Section, SectionMarkCtx } from "@/app/sidebarParts";
+import { Section, SectionMarkCtx, type SectionEdit } from "@/app/sidebarParts";
+import { SectionMenu } from "@/components/collab/SectionMenu";
+import { SidebarRow } from "@/components/collab/SidebarRow";
+import { toast } from "@/components/ui/toast";
+import { ownSectionsUi } from "@/lib/collab/ownSectionsUi";
 import { useWaitingFor } from "@/components/tickets/useUrgentChats";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty";
@@ -19,10 +23,10 @@ import { findSection, orderViews } from "@/lib/viewSections";
 import { folders as ticketFolders } from "@/lib/folders";
 import { useSession } from "@/lib/session";
 import { canSeeTeam, useOverview, useWorkspacesData, type WorkspaceData } from "@/lib/spaces/hooks";
-import { isEverywhere, isSectionId, itemKey, needsWiki, replaceSpace, showSpace, SPACE_PAGES, updateItem, updateSection } from "@/lib/spaces/model";
+import { isEverywhere, isSectionId, itemKey, needsWiki, removeSection, replaceSpace, showSpace, SPACE_PAGES, updateItem, updateSection } from "@/lib/spaces/model";
 import { spaceUi } from "@/lib/spaces/store";
 import { buildEverywhereRow, buildRow, InWorkspace, NavItemRow, useMailLocation, useRowLabels, type RowContext, type RowModel } from "./rows";
-import { RenameRow, SpaceRowMenu } from "./SpaceRowMenu";
+import { SpaceRowMenu } from "./SpaceRowMenu";
 import { useSpaceActions } from "./actions";
 import { defaultSidebarPrefs } from "@/lib/collab/sidebarPrefs";
 
@@ -42,18 +46,18 @@ export function SectionList<Id extends string = SidebarSectionId>({ ids, render 
 const NO_PREFS = defaultSidebarPrefs();
 
 /** One of the Space's sections: under the person's title, read and folded like a built-in section; untitled, its rows alone. */
-function SpaceSectionBlock({ section, first, rail, onFold, children }: { section: SpaceSection; first: boolean; rail: boolean; onFold: (folded: boolean) => void; children: ReactNode }) {
+function SpaceSectionBlock({ section, first, rail, onFold, edit, children }: { section: SpaceSection; first: boolean; rail: boolean; onFold: (folded: boolean) => void; edit: SectionEdit; children: ReactNode }) {
   const title = section.title.trim();
   if (!title)
     return (
-      <div className={cn(!first && "mt-5")}>
+      <div className={cn(!first && "mt-5")} data-edit-section={section.id}>
         {rail && !first && <div aria-hidden className="mx-4 mb-2 h-px bg-chrome-line" />}
         <div className="[&>*:first-child]:!mt-0">{children}</div>
       </div>
     );
   return (
     <SectionMarkCtx.Provider value={null}>
-      <Section id={`space-${section.id}`} label={title} rail={rail} first={first} folded={section.collapsed} onFold={onFold} icon={section.icon}>
+      <Section id={`space-${section.id}`} label={title} rail={rail} first={first} folded={section.collapsed} onFold={onFold} icon={section.icon} edit={edit} dragKey={section.id}>
         <div className="[&>*:first-child]:!mt-0">{children}</div>
       </Section>
     </SectionMarkCtx.Provider>
@@ -153,7 +157,7 @@ export function SpaceView({
   const labels = useRowLabels();
   const here = useMailLocation();
   const waitingFor = useWaitingFor();
-  const [renaming, setRenaming] = useState<string | null>(null);
+  const { t: tc } = useTranslation("collab");
 
   // Only another workspace's rows say which workspace they are in: the open one's are the sidebar's own.
   const badgeFor = (d: WorkspaceData): ReactNode => (shown.marks && !d.open ? <InWorkspace name={d.name} logo={d.logo} /> : null);
@@ -165,25 +169,25 @@ export function SpaceView({
     const model = d ? buildRow(item, d, { labels, here: d.open ? here : undefined, waiting: d.open ? waitingFor : undefined }) : buildEverywhereRow(item.id, labels, [...overview.values()]);
     if (!model) return null;
     const key = itemKey(item);
-    const rk = `${section.id}|${key}`;
-    if (renaming === rk && !rail)
-      return (
-        <RenameRow
-          key={key}
-          initial={item.name ?? model.label}
-          placeholder={model.label}
-          label={t("row.renameLabel", { name: model.label })}
-          onDone={(v) => {
-            setRenaming(null);
-            if (v === null) return;
-            const name = v.trim();
-            change(updateItem(space, key, { name: !name || name === model.label ? null : name }));
-          }}
-        />
-      );
+    const name = item.name || model.label;
     return (
-      <NavItemRow
+      <SidebarRow
         key={key}
+        id={`space:${section.id}|${key}`}
+        scope="space"
+        source={{ kind: "row", from: section.id, key }}
+        label={name}
+        rail={rail}
+        edit={{
+          name,
+          placeholder: model.label,
+          label: t("row.renameLabel", { name: model.label }),
+          emoji: item.icon,
+          onName: (v) => change(updateItem(space, key, { name: !v || v === model.label ? null : v })),
+          onIcon: (v) => change(updateItem(space, key, { icon: v || null })),
+        }}
+      >
+      <NavItemRow
         model={model}
         rail={rail}
         prefs={d?.prefs ?? NO_PREFS}
@@ -194,11 +198,12 @@ export function SpaceView({
         ws={d && !d.open ? d.id : undefined}
         mark={d ? badgeFor(d) : null}
         menu={(row) => (
-          <SpaceRowMenu spaces={spaces} space={space} item={item} model={model} put={actions.put} onRename={() => setRenaming(rk)} rail={rail} label={item.name || model.label}>
+          <SpaceRowMenu spaces={spaces} space={space} item={item} model={model} put={actions.put} onRename={() => undefined} rail={rail} label={item.name || model.label}>
             {row}
           </SpaceRowMenu>
         )}
       />
+      </SidebarRow>
     );
   };
 
@@ -263,11 +268,35 @@ export function SpaceView({
 
   return (
     <>
-      {shown.sections.map(({ section, items }, si) => (
-        <SpaceSectionBlock key={section.id} section={section} first={si === 0} rail={rail} onFold={(collapsed) => change(updateSection(space, section.id, { collapsed }))}>
-          {renderItems(section, items)}
-        </SpaceSectionBlock>
-      ))}
+      {shown.sections.map(({ section, items }, si) => {
+        const title = section.title.trim() || tc("ownSections.untitled");
+        const rid = `section:space:${section.id}`;
+        const edit: SectionEdit = {
+          key: rid,
+          placeholder: tc("ownSections.untitled"),
+          renameLabel: tc("edit.rename", { name: title }),
+          onName: (v) => change(updateSection(space, section.id, { title: v })),
+          menu: (
+            <SectionMenu
+              id={rid}
+              name={title}
+              dragKey={section.id}
+              emoji={section.icon}
+              onIcon={(v) => change(updateSection(space, section.id, { icon: v || null }))}
+              onAdd={() => ownSectionsUi.addToSpace(space.id, section.id)}
+              onDelete={() => {
+                change(removeSection(space, section.id));
+                toast.undo(tc("edit.sectionDeleted", { name: title }), () => change(space), tc("edit.undo"));
+              }}
+            />
+          ),
+        };
+        return (
+          <SpaceSectionBlock key={section.id} section={section} first={si === 0} rail={rail} edit={edit} onFold={(collapsed) => change(updateSection(space, section.id, { collapsed }))}>
+            {renderItems(section, items)}
+          </SpaceSectionBlock>
+        );
+      })}
     </>
   );
 }

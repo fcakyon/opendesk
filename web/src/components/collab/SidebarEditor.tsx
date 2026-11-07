@@ -342,34 +342,47 @@ function EditList({
   );
 }
 
-/** The slim bar on top while editing. */
-function EditBar({ title, menu, onReset }: { title: ReactNode; menu: ReactNode; onReset?: () => void }) {
+/** A word-labelled action of the bar. */
+const barBtn =
+  "flex h-6 items-center gap-1 rounded-md px-1.5 text-[12px] text-fg-3 outline-none transition-colors hover:bg-chrome-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)] data-[state=open]:bg-chrome-hover data-[state=open]:text-fg [&_svg]:size-3.5";
+
+/** The bar on top while editing: what this is and Done, then its actions in words. */
+function EditBar({ title, menu, onReset, onLayouts }: { title: ReactNode; menu: ReactNode; onReset?: () => void; onLayouts?: () => void }) {
   const { t } = useTranslation("collab");
   return (
-    <div className="sticky -top-1 z-10 -mt-1 mb-2 flex h-11 items-center gap-1 border-b border-chrome-line bg-chrome px-3 pt-1">
-      <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-fg">{title}</span>
-      {onReset && (
-        <Tooltip content={t("edit.reset")}>
-          <button type="button" aria-label={t("edit.reset")} onClick={onReset} className={tool}>
-            <RotateCcw />
+    <div className="sticky -top-1 z-10 -mt-1 mb-2 border-b border-chrome-line bg-chrome px-3 pb-1.5 pt-1">
+      <div className="flex h-9 items-center gap-1">
+        <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-fg">{title}</span>
+        <Button size="xs" variant="primary" onClick={() => sidebarEdit.stop()}>
+          {t("edit.done")}
+        </Button>
+      </div>
+      <div className="-ml-1.5 flex items-center gap-0.5">
+        {onLayouts && (
+          <button type="button" onClick={onLayouts} className={barBtn}>
+            <LayoutTemplate />
+            {t("edit.layoutsShort")}
           </button>
-        </Tooltip>
-      )}
-      <Menu>
-        <Tooltip content={t("edit.more")}>
+        )}
+        {onReset && (
+          <button type="button" onClick={onReset} className={barBtn}>
+            <RotateCcw />
+            {t("edit.reset")}
+          </button>
+        )}
+        <Menu>
           <MenuTrigger asChild>
-            <button type="button" aria-label={t("edit.more")} className={cn(tool, "data-[state=open]:bg-chrome-hover data-[state=open]:text-fg")}>
+            <button type="button" className={barBtn}>
               <Ellipsis />
+              {t("edit.more")}
             </button>
           </MenuTrigger>
-        </Tooltip>
-        <MenuContent align="end" className="w-[220px]">
-          {menu}
-        </MenuContent>
-      </Menu>
-      <Button size="xs" variant="primary" onClick={() => sidebarEdit.stop()}>
-        {t("edit.done")}
-      </Button>
+          <MenuContent align="start" className="w-[220px]">
+            {menu}
+          </MenuContent>
+        </Menu>
+      </div>
+      <p className="mt-1 text-[11.5px] leading-4 text-fg-4">{t("edit.barHint")}</p>
     </div>
   );
 }
@@ -677,9 +690,6 @@ function WorkspaceEditor() {
 
   const menu = (
     <>
-      <MenuItem icon={<LayoutTemplate />} onSelect={() => layoutsUi.open()}>
-        {t("edit.layouts")}
-      </MenuItem>
       {copyable.length > 0 && (
         <MenuSub icon={<Copy />} label={t("edit.copySpace")}>
           {copyable.map((sp) => (
@@ -689,19 +699,15 @@ function WorkspaceEditor() {
           ))}
         </MenuSub>
       )}
-      <MenuSeparator />
       <MenuItem icon={<SlidersHorizontal />} onSelect={() => collabUi.customize(true)}>
         {t("edit.options")}
-      </MenuItem>
-      <MenuItem icon={<RotateCcw />} onSelect={reset}>
-        {t("edit.reset")}
       </MenuItem>
     </>
   );
 
   return (
     <>
-      <EditBar title={t("edit.title")} menu={menu} onReset={reset} />
+      <EditBar title={t("edit.title")} menu={menu} onReset={reset} onLayouts={() => layoutsUi.open()} />
       <EditList blocks={blocks} rootRef={rootRef} drag={drag} target={target} handle={handle} step={step} renaming={renaming} setRenaming={setRenaming} picking={picking} setPicking={setPicking} />
       <button type="button" onClick={newSection} className={cn(rowCls, "mt-3 w-[calc(100%-1.25rem)] gap-2 pl-1.5 text-fg-3 outline-none hover:bg-chrome-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)] [&>svg]:size-3.5")}>
         <Plus />

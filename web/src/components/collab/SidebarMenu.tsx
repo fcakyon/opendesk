@@ -10,7 +10,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 import { Tooltip } from "@/components/ui/tooltip";
 import { useSidebarPrefs } from "@/lib/collab/hooks";
 import { ownSectionsUi } from "@/lib/collab/ownSectionsUi";
-import { dismissHint, hintDismissed, sidebarEdit } from "@/lib/collab/sidebarEdit";
+import { dismissHint, hintDismissed, sidebarEdit, useSidebarEdit } from "@/lib/collab/sidebarEdit";
 import { collabUi } from "@/lib/collab/ui";
 import { useSession } from "@/lib/session";
 import { usePickedSpaceId } from "@/lib/spaces/store";
@@ -40,25 +40,31 @@ export function SidebarMenu({ enabled, children }: { enabled: boolean; children:
         )}
         <ContextMenuSeparator />
         <ContextMenuItem icon={<SlidersHorizontal />} onSelect={() => collabUi.customize(true)}>
-          {t("edit.options")}
+          {t("rowMenu.customize")}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );
 }
 
-/** "Make the sidebar yours": once, while the member has arranged nothing, until they edit or dismiss it. */
+/**
+ * "Make the sidebar yours": while the member has arranged nothing, until they edit or dismiss
+ * it. It says how (drag, double-click) and points at Customize below it, which stays.
+ */
 export function EditHint() {
   const { t } = useTranslation("collab");
   const uid = useSession((s) => s.user?.id ?? "");
   const prefs = useSidebarPrefs();
   const space = usePickedSpaceId();
-  const [gone, setGone] = useState(() => !uid || hintDismissed(uid));
-  const untouched = !prefs.sections.length && !prefs.hidden.length && !Object.keys(prefs.row_order).length;
-  if (gone || space || !untouched) return null;
+  const editing = useSidebarEdit((s) => s.editing);
+  // Read for the signed-in member: the session may still be loading on the first render.
+  const [closed, setClosed] = useState<string | null>(null);
+  const untouched = !prefs.sections.length && !prefs.hidden.length && !Object.keys(prefs.row_order).length && !Object.keys(prefs.names).length;
+  // Opening edit mode counts as having seen it (sidebarEdit.start).
+  if (!uid || closed === uid || hintDismissed(uid) || space || !untouched || editing) return null;
   const close = () => {
     dismissHint(uid);
-    setGone(true);
+    setClosed(uid);
   };
   return (
     <div className="mx-2.5 mb-1 shrink-0 animate-rise-in rounded-lg bg-surface px-3 py-2.5 shadow-[0_0_0_1px_var(--line)] motion-reduce:animate-none">

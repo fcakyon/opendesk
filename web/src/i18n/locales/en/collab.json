@@ -922,7 +922,8 @@
     "copied_one": "Added {{count}} section",
     "copied_other": "Added {{count}} sections",
     "nothingToCopy": "That Space has no rows of this workspace",
-    "tooMany": "You have 20 sections of your own, the most there can be."
+    "tooMany": "You have 20 sections of your own, the most there can be.",
+    "dragHere": "Drag rows here or add some"
   },
   "edit": {
     "title": "Edit sidebar",
@@ -948,12 +949,12 @@
     "add": "Add",
     "newSection": "New section",
     "newSectionTitle": "New section",
-    "emptySection": "Drag rows here",
+    "emptySection": "Drag rows here or add some",
     "emptyFavorites": "Drag rows here to make them favorites",
     "spaceSettings": "Space settings",
     "editingSpace": "Editing {{name}}",
     "hintTitle": "Make the sidebar yours",
-    "hintBody": "Drag sections and rows, hide what you don't use and add sections of your own.",
+    "hintBody": "Drag rows and sections to move them, and double-click a name to rename it. Customize, below, has everything else.",
     "hintDismiss": "Dismiss",
     "dropNew": "Drop here for a new section",
     "rowMenu": "More for {{name}}",
@@ -969,7 +970,13 @@
     "renameSave": "Save",
     "favoritesTitle": "Add to favorites",
     "favoritesHint": "Inbox folders, teams, views, mail boxes and pages can be favorites.",
-    "notFavorite": "This can't be a favorite. Add it to a section of your own instead."
+    "notFavorite": "This can't be a favorite. Add it to a section of your own instead.",
+    "customize": "Customize",
+    "customizeHint": "Arrange your sidebar: drag, rename, hide",
+    "doneHint": "Done arranging the sidebar",
+    "doneEditing": "Done",
+    "layoutsShort": "Layouts",
+    "barHint": "Drag to move. Click a name to rename it. The eye hides it."
   },
   "layouts": {
     "title": "Start from a layout",
@@ -997,5 +1004,8 @@
       "name": "Minimal",
       "hint": "Favorites, the inbox, mail and pages. Teams, views and Workspace are hidden."
     }
+  },
+  "section": {
+    "hide": "Hide section"
   }
 }

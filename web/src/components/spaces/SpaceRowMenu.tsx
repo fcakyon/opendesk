@@ -6,7 +6,10 @@
 // sidebar section (`sidebar`) it is the same menu, in the sidebar's words.
 
 import { sidebarEdit } from "@/lib/collab/sidebarEdit";
-import { Check, ChevronRight, Ellipsis, FolderInput, Pencil, PencilRuler, Plus, RotateCcw, SquareStack, X } from "lucide-react";
+import { collabUi } from "@/lib/collab/ui";
+import { spaceUi } from "@/lib/spaces/store";
+import { useSidebarRow } from "@/components/collab/SidebarRow";
+import { ArrowDown, ArrowUp, Check, ChevronRight, Ellipsis, FolderInput, Pencil, PencilRuler, Plus, RotateCcw, SlidersHorizontal, SmilePlus, SquareStack, X } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { ContextMenu as CM, DropdownMenu as M } from "radix-ui";
 import { forwardRef, useRef, type ReactElement, type ReactNode } from "react";
@@ -57,6 +60,13 @@ export const SpaceRowMenu = forwardRef<HTMLElement, SpaceRowMenuProps>(function 
     ? { rename: tc("ownSections.row.rename"), moveTo: tc("ownSections.row.moveTo"), newSection: tc("ownSections.newSection"), remove: tc("ownSections.row.remove") }
     : { rename: t("row.rename"), moveTo: t("row.moveTo"), newSection: t("row.newSection"), remove: t("row.remove") };
   const byPointer = useRef(false);
+  // The row it is in (components/collab/SidebarRow.tsx): renamed and given an emoji where it is, moved up and down.
+  const row = useSidebarRow();
+  // The closing menu leaves the focus with the field or picker opened on the row.
+  const here = (f: () => void) => () => {
+    byPointer.current = true;
+    setTimeout(f, 0);
+  };
   const key = itemKey(item);
   const change = (next: Space) => put(replaceSpace(spaces, next));
   const others = sidebar ? [] : spaces.filter((x) => x.id !== space.id);
@@ -112,8 +122,11 @@ export const SpaceRowMenu = forwardRef<HTMLElement, SpaceRowMenuProps>(function 
             {sep}
           </>
         )}
-        {itemEl(<Pencil />, words.rename, onRename)}
-        {item.name && itemEl(<RotateCcw />, t("row.resetName", { name: model.label }), () => change(updateItem(space, key, { name: null })))}
+        {itemEl(<Pencil />, words.rename, row?.edit ? here(() => sidebarEdit.rename(row.id)) : onRename)}
+        {row?.edit && itemEl(<SmilePlus />, tc("edit.pickIcon"), here(() => sidebarEdit.pickIcon(row.id)))}
+        {(item.name || item.icon) && itemEl(<RotateCcw />, t("row.resetName", { name: model.label }), () => change(updateItem(space, key, { name: null, icon: null })))}
+        {row?.move?.(-1, true) && itemEl(<ArrowUp />, tc("ownSections.moveUp"), () => row.move!(-1))}
+        {row?.move?.(1, true) && itemEl(<ArrowDown />, tc("ownSections.moveDown"), () => row.move!(1))}
         {sub(
           <FolderInput />,
           words.moveTo,
@@ -149,6 +162,7 @@ export const SpaceRowMenu = forwardRef<HTMLElement, SpaceRowMenuProps>(function 
         })}
         {sep}
         {itemEl(<PencilRuler />, tc("edit.title"), () => sidebarEdit.start())}
+        {itemEl(<SlidersHorizontal />, tc("rowMenu.customize"), () => (sidebar ? collabUi.customize(true) : spaceUi.edit({ kind: "space", id: space.id })))}
       </>
     );
   };

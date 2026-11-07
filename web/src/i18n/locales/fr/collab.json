@@ -822,7 +822,8 @@
     "copied_many": "{{count}} sections ajoutées",
     "copied_other": "{{count}} sections ajoutées",
     "nothingToCopy": "Ce Space n’a aucune ligne de cet espace de travail",
-    "tooMany": "Vous avez 20 sections à vous, le maximum possible."
+    "tooMany": "Vous avez 20 sections à vous, le maximum possible.",
+    "dragHere": "Faites glisser des lignes ici ou ajoutez-en"
   },
   "edit": {
     "title": "Modifier la barre latérale",
@@ -848,12 +849,12 @@
     "add": "Ajouter",
     "newSection": "Nouvelle section",
     "newSectionTitle": "Nouvelle section",
-    "emptySection": "Faites glisser des lignes ici",
+    "emptySection": "Faites glisser des lignes ici ou ajoutez-en",
     "emptyFavorites": "Faites glisser des lignes ici pour en faire des favoris",
     "spaceSettings": "Réglages de l'espace",
     "editingSpace": "Modification de {{name}}",
     "hintTitle": "Faites de la barre latérale la vôtre",
-    "hintBody": "Faites glisser sections et lignes, masquez ce qui ne vous sert pas et ajoutez vos propres sections.",
+    "hintBody": "Faites glisser lignes et sections pour les déplacer, et double-cliquez sur un nom pour le renommer. Personnaliser, plus bas, fait tout le reste.",
     "hintDismiss": "Ignorer",
     "dropNew": "Déposez ici pour une nouvelle section",
     "rowMenu": "Plus pour {{name}}",
@@ -869,7 +870,13 @@
     "renameSave": "Enregistrer",
     "favoritesTitle": "Ajouter aux favoris",
     "favoritesHint": "Les dossiers de la boîte de réception, équipes, vues, boîtes mail et pages peuvent être des favoris.",
-    "notFavorite": "Cet élément ne peut pas être un favori. Ajoutez-le plutôt à l'une de vos sections."
+    "notFavorite": "Cet élément ne peut pas être un favori. Ajoutez-le plutôt à l'une de vos sections.",
+    "customize": "Personnaliser",
+    "customizeHint": "Organiser la barre latérale : déplacer, renommer, masquer",
+    "doneHint": "Terminer l'organisation de la barre latérale",
+    "doneEditing": "Terminé",
+    "layoutsShort": "Dispositions",
+    "barHint": "Faites glisser pour déplacer. Cliquez sur un nom pour le renommer. L'œil le masque."
   },
   "layouts": {
     "title": "Partir d'une disposition",
@@ -898,5 +905,8 @@
       "name": "Minimale",
       "hint": "Les favoris, la boîte de réception, le mail et les pages. Équipes, vues et Espace de travail sont masqués."
     }
+  },
+  "section": {
+    "hide": "Masquer la section"
   }
 }

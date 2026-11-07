@@ -5,9 +5,12 @@
 import { sidebarEdit, useSidebarEdit } from "@/lib/collab/sidebarEdit";
 import { EditHint, SidebarMenu } from "@/components/collab/SidebarMenu";
 import { FavoritesDrop, NewSectionDrop } from "@/components/collab/SidebarDrop";
+import { SidebarDragProvider } from "@/components/collab/SidebarDrag";
+import { SidebarRow, useRowEdit } from "@/components/collab/SidebarRow";
+import { useBuiltinSectionEdit } from "@/components/collab/SectionMenu";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, Copy, EyeOff, Inbox, Keyboard, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
+import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, Copy, EyeOff, Inbox, Keyboard, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Pencil, PencilRuler, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Fragment, lazy, Suspense, useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
@@ -45,7 +48,7 @@ import { groupViews } from "@/lib/viewSections";
 import { useFoldedSections, useOpenView, ViewSectionGroup } from "./ViewSectionGroup";
 import { shell, toggleNav, useNav } from "./shellStore";
 import { quickEntries, quickSwitchKeys, useAccountActions, useQuickSwitch, useSwitcherEntries } from "./useAccounts";
-import { Count, Label, litLink, NavTip, PillCtx, rowActive, rowBase, rowIdle, rowShape, Section, useOpener, WaitDot, WaitingBadge, withPill } from "./sidebarParts";
+import { Count, Label, litLink, NavTip, PillCtx, rowActive, rowBase, rowIdle, rowShape, Section, SectionEditCtx, useOpener, WaitDot, WaitingBadge, withPill } from "./sidebarParts";
 import { useSpaceKeys } from "@/components/spaces/actions";
 import { SpaceGlyph } from "@/components/spaces/icons";
 import { SwitcherSpaces, useSwitcherStarters } from "@/components/spaces/SwitcherSpaces";
@@ -161,7 +164,15 @@ function TeamRow({
   const key = hid.team(teamId);
   const n = pickCount(badgeFor(rp.prefs, key, "teams", "team"), nums);
   const own = teamId !== "mine";
+  const rowEdit = useRowEdit();
   return (
+    <SidebarRow
+      id={`teams|${key}`}
+      source={{ kind: "row", from: "teams", key, pin: own ? { kind: "team", id: teamId } : undefined, row: { kind: "team", id: teamId } }}
+      label={name}
+      edit={rowEdit(key, label)}
+      rail={rail}
+    >
     <NavTip rail={rail} label={name}>
       <RowMenu
         enabled
@@ -194,6 +205,7 @@ function TeamRow({
        />
       </RowMenu>
     </NavTip>
+    </SidebarRow>
   );
 }
 
@@ -371,6 +383,8 @@ const NONE: ReadonlySet<string> = new Set();
 /** One built-in section of the open workspace: the sidebar's own rows, live counts and menus. */
 function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; first: boolean; rail: boolean; drawer?: boolean }) {
   const { t: tNav } = useTranslation("navigation");
+  const { t: tc } = useTranslation("collab");
+  const rowEdit = useRowEdit();
   // The row clicked lights up alone among rows of the same target, like a tab (sidebarParts "The row that opened the page").
   const who = useOpener();
   const { data: counts } = useQuery(q.counts());
@@ -404,13 +418,26 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
             (r) => r.key,
             prefs.row_order.inbox,
           ).map(({ key, f }) => {
-            if (!f) return <WaitingChats key={key} rail={rail} />;
+            if (!f)
+              return (
+                <SidebarRow key={key} id={`inbox|${key}`} source={{ kind: "row", from: "inbox", key }} label={tc("customize.waitingChats")} rail={rail}>
+                  <WaitingChats rail={rail} />
+                </SidebarRow>
+              );
             const folderName = nameOf(prefs, key, tNav(f.labelKey));
             const counted = f.id !== "solved" && f.id !== "spam";
             const nums = ticketRowNumbers(counts, key);
             const n = counted ? shown(key, "inbox", nums) : undefined;
             return (
-            <NavTip key={f.id} rail={rail} label={folderName}>
+            <SidebarRow
+              key={f.id}
+              id={`inbox|${key}`}
+              source={{ kind: "row", from: "inbox", key, pin: { kind: "ticket_folder", id: f.id }, row: { kind: "ticket_folder", id: f.id } }}
+              label={folderName}
+              edit={rowEdit(key, tNav(f.labelKey))}
+              rail={rail}
+            >
+            <NavTip rail={rail} label={folderName}>
               <RowMenu
                 enabled
                 prefs={prefs}
@@ -438,6 +465,7 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
                />
               </RowMenu>
             </NavTip>
+            </SidebarRow>
             );
           })}
         </Section>
@@ -477,6 +505,13 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
                 const vName = nameOf(prefs, hid.view(v.id), viewName(v));
                 const nums = ticketRowNumbers(counts, hid.view(v.id));
                 return (
+                <SidebarRow
+                  id={`views|${hid.view(v.id)}`}
+                  source={{ kind: "row", from: "views", key: hid.view(v.id), pin: { kind: "view", id: v.id }, row: { kind: "view", id: v.id } }}
+                  label={vName}
+                  edit={rowEdit(hid.view(v.id), viewName(v))}
+                  rail={rail}
+                >
                 <NavTip rail={rail} label={vName}>
                   <RowMenu
                     enabled
@@ -510,6 +545,7 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
                    />
                   </RowMenu>
                 </NavTip>
+                </SidebarRow>
                 );
               }}
             />
@@ -573,11 +609,20 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
       return (
         <Section id="workspace" label={t("nav.workspace")} rail={rail} first={first}>
           {rows.map((x) => (
-            <NavTip key={x.id} rail={rail} label={nameOf(prefs, hid.page(x.id), x.label)}>
+            <SidebarRow
+              key={x.id}
+              id={`workspace|${hid.page(x.id)}`}
+              source={{ kind: "row", from: "workspace", key: hid.page(x.id), row: { kind: "page", id: x.id } }}
+              label={nameOf(prefs, hid.page(x.id), x.label)}
+              edit={rowEdit(hid.page(x.id), x.label)}
+              rail={rail}
+            >
+            <NavTip rail={rail} label={nameOf(prefs, hid.page(x.id), x.label)}>
               <RowMenu enabled prefs={prefs} hideId={hid.page(x.id)} rail={rail} label={nameOf(prefs, hid.page(x.id), x.label)} ownName={x.label}>
                 {x.el}
               </RowMenu>
             </NavTip>
+            </SidebarRow>
           ))}
         </Section>
       );
@@ -631,9 +676,14 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
   // Edit mode arranges the sidebar where it is (components/collab/SidebarEditor.tsx); in the
   // drawer it is the drawer's while the drawer is open, in the side column otherwise.
   const editing = useSidebarEdit((s) => s.editing) && !rail;
+  // Outside it, rows and sections drag as themselves and sections have their own menu.
+  const sectionEdit = useBuiltinSectionEdit(!space);
+  const dragRoot = useRef<HTMLDivElement>(null);
+  const { t: tc } = useTranslation("collab");
 
   return (
     <PillCtx.Provider value={drawer ? "nav-pill-drawer" : "nav-pill"}>
+    <SectionEditCtx.Provider value={rail ? null : sectionEdit}>
     <nav aria-label={t("nav.main")} className="group/nav flex h-full w-full flex-col">
       <SidebarMenu enabled={!editing && !rail}>
         <div className="flex-1 overflow-y-auto overflow-x-hidden pb-3 pt-1">
@@ -642,16 +692,20 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
               <LazyEditor />
             </Suspense>
           ) : space && spaces ? (
-            <SpaceView key={space.id} spaces={spaces} space={space} rail={rail} renderSection={render} />
+            <Draggable rail={rail} root={dragRoot}>
+              <SpaceView key={space.id} spaces={spaces} space={space} rail={rail} renderSection={render} />
+            </Draggable>
           ) : (
             <>
-              <SectionList
-                ids={order.map(entryKey)}
-                render={(key, first) => {
-                  const e = order.find((x) => entryKey(x) === key) as SidebarEntry;
-                  return e.kind === "builtin" ? render(e.id, first) : <OwnSection section={e.section} first={first} rail={rail} />;
-                }}
-              />
+              <Draggable rail={rail} root={dragRoot}>
+                <SectionList
+                  ids={order.map(entryKey)}
+                  render={(key, first) => {
+                    const e = order.find((x) => entryKey(x) === key) as SidebarEntry;
+                    return e.kind === "builtin" ? render(e.id, first) : <OwnSection section={e.section} first={first} rail={rail} />;
+                  }}
+                />
+              </Draggable>
               {!rail && <AddSectionButton always={drawer} />}
               {!rail && <NewSectionDrop />}
             </>
@@ -662,6 +716,19 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
       <div className="flex shrink-0 flex-col gap-px py-1.5">
         {/* Per workspace: one finished elsewhere never celebrates on switching to it. */}
         <SetupChecklist key={wid} rail={rail} />
+        {/* Always in sight: the way into arranging the sidebar. */}
+        <Tooltip content={editing ? tc("edit.doneHint") : tc("edit.customizeHint")} side="right">
+          <button
+            type="button"
+            aria-label={editing ? tc("edit.done") : tc("edit.customize")}
+            aria-pressed={editing}
+            onClick={() => sidebarEdit.toggle()}
+            className={cn(rowBase, rowShape(rail), rowIdle, editing && "bg-chrome-active text-fg [&>svg]:text-fg")}
+          >
+            {editing ? <Check /> : <PencilRuler />}
+            <Label rail={rail}>{editing ? tc("edit.doneEditing") : tc("edit.customize")}</Label>
+          </button>
+        </Tooltip>
         <NavTip rail={rail} label={t("nav.settings")}>
           <Link to="/settings" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.settings") : undefined}>{withPill(<>
             <Settings />
@@ -687,8 +754,15 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
         <UserMenu rail={rail} />
       </div>
     </nav>
+    </SectionEditCtx.Provider>
     </PillCtx.Provider>
   );
+}
+
+/** The sidebar's sections, dragging as themselves; the rail only clicks. */
+function Draggable({ rail, root, children }: { rail: boolean; root: React.RefObject<HTMLDivElement | null>; children: ReactNode }) {
+  if (rail) return <>{children}</>;
+  return <SidebarDragProvider rootRef={root}>{children}</SidebarDragProvider>;
 }
 
 /**

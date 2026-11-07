@@ -1,46 +1,35 @@
 // A member's own sidebar section (contracts/collab.md SidebarPrefs `sections`): their title,
 // folded like the built-in ones, and rows of anything the workspace offers, drawn as the
-// sidebar draws its own (components/spaces/rows.tsx) with their live numbers. Rows drag to
-// reorder, and into another own section. The header's ⋯ renames, adds rows, moves, folds
-// and deletes; rows keep the Space row menu in the sidebar's words. "Add section" sits
-// under the sections, shown on hover.
+// sidebar draws its own (components/spaces/rows.tsx) with their live numbers. Rows and the
+// section drag as themselves (components/collab/SidebarDrag.tsx), a page's or a list's title
+// dragged in from the page lands where it is dropped, and a double-click renames a row or the
+// title where it is. The header's ⋯ (components/collab/SectionMenu.tsx) renames, gives it an
+// emoji, adds rows, moves, folds and deletes; rows keep the Space row menu in the sidebar's
+// words. "Add section" sits under the sections, shown on hover.
 
-import { carriesSidebarRow, readSidebarDrag } from "@/lib/collab/sidebarDrag";
+import { readSidebarDrag, carriesSidebarRow } from "@/lib/collab/sidebarDrag";
 import { dropOnSidebar } from "@/lib/collab/sidebarEditModel";
-import { ArrowDown, ArrowUp, ChevronsDownUp, ChevronsUpDown, Ellipsis, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Plus } from "lucide-react";
 import { lazy, Suspense, useState, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Section } from "@/app/sidebarParts";
-import { RenameRow, SpaceRowMenu } from "@/components/spaces/SpaceRowMenu";
+import { SpaceRowMenu } from "@/components/spaces/SpaceRowMenu";
 import { buildRow, NavItemRow, useMailLocation, useRowLabels } from "@/components/spaces/rows";
 import { useWaitingFor } from "@/components/tickets/useUrgentChats";
 import { toast } from "@/components/ui/toast";
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { MenuItem } from "@/components/ui/menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { SidebarSection, Space } from "@/lib/api/types";
-import { useCollab } from "@/lib/collab/hooks";
-import { asSpace, entryKey, moveEntry, ownKey, visibleEntries, withSpace } from "@/lib/collab/ownSections";
-import { ownSectionsUi } from "@/lib/collab/ownSectionsUi";
+import { asSpace, ownKey, withSpace } from "@/lib/collab/ownSections";
+import { ownSectionsUi, type OwnRow } from "@/lib/collab/ownSectionsUi";
 import { cn } from "@/lib/cn";
 import { useWorkspacesData } from "@/lib/spaces/hooks";
-import { itemKey, moveItemTo, removeSection, reorderItems, updateItem, updateSection } from "@/lib/spaces/model";
+import { itemKey, removeSection, updateItem, updateSection } from "@/lib/spaces/model";
 import { useOwnSidebar } from "./AddToSidebar";
+import { SectionMenu } from "./SectionMenu";
+import { SidebarRow } from "./SidebarRow";
 
 const LazyTeamspace = lazy(() => import("@/components/wiki/PagesSection").then((m) => ({ default: m.SpaceTeamspace })));
-
-/** What a dragged row carries: its key and the section it comes from. */
-const DRAG_TYPE = "application/x-od-own-row";
-type Dragged = { key: string; from: string };
-
-const readDrag = (e: DragEvent): Dragged | null => {
-  try {
-    const v = JSON.parse(e.dataTransfer.getData(DRAG_TYPE)) as Dragged;
-    return typeof v?.key === "string" && typeof v.from === "string" ? v : null;
-  } catch {
-    return null;
-  }
-};
-const carries = (e: DragEvent) => e.dataTransfer.types.includes(DRAG_TYPE) || carriesSidebarRow(e);
 
 const headerBtn =
   "flex size-5 items-center justify-center rounded text-fg-4 opacity-0 transition-opacity hover:bg-chrome-hover hover:text-fg group-hover/section:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100";
@@ -48,16 +37,14 @@ const headerBtn =
 export function OwnSection({ section, first, rail }: { section: SidebarSection; first: boolean; rail: boolean }) {
   const { t } = useTranslation("collab");
   const { prefs, wid, change } = useOwnSidebar();
-  const collab = useCollab();
   const folders = section.items.some((i) => i.kind === "folder");
   const wiki = section.items.some((i) => i.kind === "wiki_page" || i.kind === "wiki_space");
   const d = useWorkspacesData(wid ? [wid] : [], { folders: () => folders, wiki: () => wiki }).get(wid);
   const labels = useRowLabels();
   const here = useMailLocation();
   const waiting = useWaitingFor();
-  const [renaming, setRenaming] = useState<string | null>(null);
-  // Where a dragged row would land: before a row's key, or "" for the end.
-  const [over, setOver] = useState<string | null>(null);
+  // A page's or a list's title dragged in from the page, over the section.
+  const [over, setOver] = useState(false);
 
   const space = asSpace(prefs, wid);
   const sec = space.sections.find((s) => s.id === section.id);
@@ -65,51 +52,34 @@ export function OwnSection({ section, first, rail }: { section: SidebarSection; 
   const save = (next: Space) => change(withSpace(prefs, next));
   const put = (list: Space[]) => list[0] && save(list[0]);
   const title = section.title || t("ownSections.untitled");
-  const entries = visibleEntries(prefs, collab.enabled).map(entryKey);
-  const at = entries.indexOf(ownKey(section.id));
+  const key = ownKey(section.id);
 
-  const drop = (e: DragEvent, before: string) => {
-    const dragged = readDrag(e);
-    setOver(null);
-    // Something dragged in from the page (a page's or a list's title) is added where it lands.
-    const outside = dragged ? null : readSidebarDrag(e);
-    if (outside) {
-      e.preventDefault();
-      const row = { kind: outside.kind, id: outside.id };
-      const r = dropOnSidebar(prefs, wid, { kind: "row", from: "page", key: itemKey({ workspace_id: wid, ...row }), row }, { kind: "row", section: ownKey(section.id), before: before || null }, () => []);
-      if (r && "prefs" in r) change(r.prefs);
-      else if (!sec.items.some((i) => i.kind === row.kind && i.id === row.id)) toast.error(t("ownSections.full"));
-      return;
-    }
-    if (!dragged) return;
-    e.preventDefault();
-    let next = dragged.from === section.id ? space : moveItemTo(space, dragged.key, section.id);
-    const keys = (next.sections.find((s) => s.id === section.id)?.items ?? []).map(itemKey).filter((k) => k !== dragged.key);
-    const i = before ? keys.indexOf(before) : -1;
-    keys.splice(i < 0 ? keys.length : i, 0, dragged.key);
-    next = reorderItems(next, section.id, keys);
-    save(next);
-  };
-  const dropZone = (before: string) =>
-    rail
-      ? {}
-      : {
-          onDragOver: (e: DragEvent) => {
-            if (!carries(e)) return;
-            e.preventDefault();
-            e.stopPropagation();
-            e.dataTransfer.dropEffect = "move";
-            if (over !== before) setOver(before);
-          },
-          onDragLeave: (e: DragEvent) => {
-            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver((o) => (o === before ? null : o));
-          },
-          onDrop: (e: DragEvent) => {
-            e.stopPropagation();
-            drop(e, before);
-          },
-        };
-  const line = "relative before:pointer-events-none before:absolute before:inset-x-4 before:-top-px before:z-10 before:h-0.5 before:rounded-full before:bg-tone-blue-solid";
+  // Something dragged in from the page (a page's or a list's title) is added at the end.
+  const dropZone = rail
+    ? {}
+    : {
+        onDragOver: (e: DragEvent) => {
+          if (!carriesSidebarRow(e)) return;
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = "copy";
+          if (!over) setOver(true);
+        },
+        onDragLeave: (e: DragEvent) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false);
+        },
+        onDrop: (e: DragEvent) => {
+          setOver(false);
+          const outside = readSidebarDrag(e);
+          if (!outside) return;
+          e.preventDefault();
+          e.stopPropagation();
+          const row = { kind: outside.kind, id: outside.id };
+          const r = dropOnSidebar(prefs, wid, { kind: "row", from: "page", key: itemKey({ workspace_id: wid, ...row }), row }, { kind: "row", section: key, before: null }, () => []);
+          if (r && "prefs" in r) change(r.prefs);
+          else if (!sec.items.some((i) => i.kind === row.kind && i.id === row.id)) toast.error(t("ownSections.full"));
+        },
+      };
 
   // Deleted at once, with the way back in the toast.
   const remove = () => {
@@ -118,90 +88,67 @@ export function OwnSection({ section, first, rail }: { section: SidebarSection; 
     toast.undo(t("edit.sectionDeleted", { name: title }), () => change(before), t("edit.undo"));
   };
 
-  const action = (
-    <div className="flex items-center gap-0.5">
-      <Tooltip content={t("ownSections.addRows")}>
-        <button type="button" aria-label={t("ownSections.addRows")} onClick={() => ownSectionsUi.add(section.id)} className={headerBtn}>
-          <Plus className="size-3.5" />
-        </button>
-      </Tooltip>
-      <Menu>
-        <MenuTrigger asChild>
-          <button type="button" aria-label={t("ownSections.menu", { name: title })} className={headerBtn}>
-            <Ellipsis className="size-3.5" />
-          </button>
-        </MenuTrigger>
-        <MenuContent align="end" className="w-[200px]">
-          <MenuItem icon={<Pencil />} onSelect={() => ownSectionsUi.name({ mode: "rename", id: section.id })}>
-            {t("ownSections.rename")}
-          </MenuItem>
-          <MenuItem icon={<Plus />} onSelect={() => ownSectionsUi.add(section.id)}>
-            {t("ownSections.addRows")}
-          </MenuItem>
-          <MenuSeparator />
-          <MenuItem icon={<ArrowUp />} disabled={at <= 0} onSelect={() => change(moveEntry(prefs, ownKey(section.id), -1, collab.enabled))}>
-            {t("ownSections.moveUp")}
-          </MenuItem>
-          <MenuItem icon={<ArrowDown />} disabled={at < 0 || at >= entries.length - 1} onSelect={() => change(moveEntry(prefs, ownKey(section.id), 1, collab.enabled))}>
-            {t("ownSections.moveDown")}
-          </MenuItem>
+  const rid = `section:${key}`;
+  const edit = {
+    key: rid,
+    placeholder: t("ownSections.untitled"),
+    renameLabel: t("edit.rename", { name: title }),
+    onName: (v: string) => v && save(updateSection(space, section.id, { title: v })),
+    menu: (
+      <SectionMenu
+        id={rid}
+        name={title}
+        dragKey={key}
+        emoji={section.icon}
+        onIcon={(v) => save(updateSection(space, section.id, { icon: v || null }))}
+        onAdd={() => ownSectionsUi.add(section.id)}
+        onDelete={remove}
+        extra={
           <MenuItem
             icon={section.collapsed ? <ChevronsUpDown /> : <ChevronsDownUp />}
             onSelect={() => save(updateSection(space, section.id, { collapsed: !section.collapsed }))}
           >
             {section.collapsed ? t("ownSections.expand") : t("ownSections.collapse")}
           </MenuItem>
-          <MenuSeparator />
-          <MenuItem icon={<Trash2 />} onSelect={remove}>
-            {t("ownSections.delete")}
-          </MenuItem>
-        </MenuContent>
-      </Menu>
-    </div>
-  );
+        }
+      />
+    ),
+  };
 
   const rows = sec.items.map((item) => {
-    const key = itemKey(item);
+    const k = itemKey(item);
+    // Rows of the member's own sections are of the kinds a section takes (contracts/collab.md SidebarItem).
+    const source = { kind: "row" as const, from: key, key: k, row: { kind: item.kind as OwnRow["kind"], id: item.id } };
     if (item.kind === "wiki_space") {
       // A teamspace is its tree of pages, kept up to date.
       const team = d.teams?.find((x) => x.id === item.id);
       if (!team || !buildRow(item, d, { labels })) return null;
       return (
-        <div key={key} className="flex flex-col gap-px">
+        <SidebarRow key={k} id={`${key}|${k}`} source={source} label={team.name} rail={rail} className="flex flex-col gap-px">
           <Suspense fallback={null}>
             <LazyTeamspace team={team} />
           </Suspense>
-        </div>
+        </SidebarRow>
       );
     }
     const model = buildRow(item, d, { labels, here, waiting });
     if (!model) return null;
-    if (renaming === key && !rail)
-      return (
-        <RenameRow
-          key={key}
-          initial={item.name ?? model.label}
-          placeholder={model.label}
-          label={t("ownSections.row.rename")}
-          onDone={(v) => {
-            setRenaming(null);
-            if (v === null) return;
-            const name = v.trim();
-            save(updateItem(space, key, { name: !name || name === model.label ? null : name }));
-          }}
-        />
-      );
+    const name = item.name || model.label;
     return (
-      <div
-        key={key}
-        className={cn(over === key && line)}
-        onDragStart={(e) => {
-          if (rail) return;
-          // The row's link drags as itself; it also carries which row it is.
-          e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ key, from: section.id } satisfies Dragged));
-          e.dataTransfer.effectAllowed = "copyMove";
+      <SidebarRow
+        key={k}
+        id={`${key}|${k}`}
+        source={source}
+        label={name}
+        rail={rail}
+        edit={{
+          name,
+          placeholder: model.label,
+          label: t("edit.rename", { name }),
+          emoji: item.icon,
+          onName: (v) => save(updateItem(space, k, { name: !v || v === model.label ? null : v })),
+          onIcon: (v) => save(updateItem(space, k, { icon: v || null })),
         }}
-        {...dropZone(key)}
       >
         <NavItemRow
           model={model}
@@ -212,18 +159,18 @@ export function OwnSection({ section, first, rail }: { section: SidebarSection; 
           emoji={item.icon}
           place={`section:${section.id}`}
           menu={(row) => (
-            <SpaceRowMenu spaces={[space]} space={space} item={item} model={model} put={put} onRename={() => setRenaming(key)} rail={rail} label={item.name || model.label} sidebar>
+            <SpaceRowMenu spaces={[space]} space={space} item={item} model={model} put={put} onRename={() => undefined} rail={rail} label={name} sidebar>
               {row}
             </SpaceRowMenu>
           )}
         />
-      </div>
+      </SidebarRow>
     );
   });
   const shown = rows.filter(Boolean);
 
   return (
-    <div {...dropZone("")}>
+    <div {...dropZone} className={cn("rounded-md transition-colors", over && "bg-chrome-hover/60")}>
       <Section
         id={`own-${section.id}`}
         label={title}
@@ -232,20 +179,30 @@ export function OwnSection({ section, first, rail }: { section: SidebarSection; 
         folded={section.collapsed}
         onFold={(collapsed) => save(updateSection(space, section.id, { collapsed }))}
         icon={section.icon}
-        action={action}
+        edit={edit}
+        dragKey={key}
+        action={
+          <Tooltip content={t("ownSections.addRows")}>
+            <button type="button" aria-label={t("ownSections.addRows")} onClick={() => ownSectionsUi.add(section.id)} className={headerBtn}>
+              <Plus className="size-3.5" />
+            </button>
+          </Tooltip>
+        }
       >
         {shown}
         {!rail && !shown.length && (
-          <button
-            type="button"
-            onClick={() => ownSectionsUi.add(section.id)}
-            className="mx-2.5 flex h-7 w-[calc(100%-1.25rem)] items-center gap-2.5 rounded-md px-2 text-[13px] text-fg-4 outline-none transition-colors hover:bg-chrome-hover hover:text-fg-2 focus-visible:shadow-[0_0_0_2px_var(--focus)] [&>svg]:size-4"
-          >
-            <Plus />
-            <span className="truncate">{t("ownSections.addRows")}</span>
-          </button>
+          <div className="mx-2.5 flex h-7 items-center gap-2 px-2 text-[12px] text-fg-4">
+            <span className="min-w-0 flex-1 truncate">{t("ownSections.dragHere")}</span>
+            <button
+              type="button"
+              onClick={() => ownSectionsUi.add(section.id)}
+              className="flex h-5 shrink-0 items-center gap-1 rounded px-1.5 text-fg-3 outline-none transition-colors hover:bg-chrome-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)] [&>svg]:size-3"
+            >
+              <Plus />
+              {t("edit.add")}
+            </button>
+          </div>
         )}
-        {!rail && <div aria-hidden className={cn("h-1", over === "" && line)} />}
       </Section>
     </div>
   );

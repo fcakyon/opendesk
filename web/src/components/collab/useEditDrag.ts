@@ -1,5 +1,6 @@
-// Dragging in the sidebar's edit mode: sections and rows move by their handle with the mouse,
-// a finger or a pen (pointer events, so touch works without the HTML drag API). While a drag
+// Dragging in the sidebar: in edit mode sections and rows move by their handle with the mouse,
+// a finger or a pen (pointer events, so touch works without the HTML drag API); outside it,
+// by the row or the section's title itself (`pressable`), past a few pixels or a finger's hold. While a drag
 // runs, a small copy of the row follows the pointer, the target shows a line where it would
 // land, and the sidebar scrolls when the pointer nears its top or bottom edge.
 //
@@ -17,6 +18,7 @@ export type Target = { kind: "section"; before: string | null } | { kind: "row";
 const START_AT = 4; // px the pointer moves before a press becomes a drag
 const EDGE = 36; // px from the scroller's edge where it starts to scroll
 const STEP = 12; // px scrolled per frame at the edge
+const HOLD_MS = 350; // a finger holds this long on a row before it drags it
 
 const sameTarget = (a: Target | null, b: Target | null) =>
   a === b || (!!a && !!b && a.kind === b.kind && a.before === b.before && (a.kind === "section" || (b.kind === "row" && a.section === b.section)));
@@ -148,5 +150,88 @@ export function useEditDrag<S extends { kind: "section" | "row" }>({
     style: { touchAction: "none" as const },
   });
 
-  return { drag, target, handle };
+  // Pressing a row or a section's title outside edit mode: it stays a link or a button for a
+  // click, and becomes a drag once the pointer moves a few pixels (a finger holds still first,
+  // so the sidebar still scrolls under it). A drag swallows the click that would follow it.
+  const press = useRef<{ stop: () => void } | null>(null);
+  useEffect(() => () => press.current?.stop(), []);
+  const pressable = (source: S, label: string) => ({
+    onPointerDown: (e: ReactPointerEvent<HTMLElement>) => {
+      if (e.button !== 0 || press.current) return;
+      // Its own buttons (the ⋯, a fold chevron) and fields keep their pointer.
+      const inner = (e.target as Element).closest("button, input, textarea, select, [data-no-drag]");
+      if (inner && inner !== e.currentTarget && e.currentTarget.contains(inner)) return;
+      const touch = e.pointerType !== "mouse";
+      const id = e.pointerId;
+      const x0 = e.clientX;
+      const y0 = e.clientY;
+      let armed = !touch;
+      const hold = touch
+        ? setTimeout(() => {
+            armed = true;
+            window.addEventListener("touchmove", block, { passive: false });
+            navigator.vibrate?.(8);
+          }, HOLD_MS)
+        : undefined;
+      // Once a finger has held, the page does not scroll under the drag.
+      const block = (ev: TouchEvent) => ev.preventDefault();
+      const move = (ev: PointerEvent) => {
+        if (ev.pointerId !== id) return;
+        if (!armed) {
+          // A finger that moves before it held is scrolling: let it go.
+          if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > START_AT * 2) stop();
+          return;
+        }
+        if (!live.current) {
+          if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < START_AT) return;
+          live.current = { source, label, x0, y0, started: true, target: null, y: ev.clientY };
+          document.getSelection()?.removeAllRanges();
+          document.documentElement.classList.add("cursor-grabbing", "select-none");
+        }
+        const d = live.current;
+        d.y = ev.clientY;
+        setDrag({ source: d.source, label: d.label, x: ev.clientX, y: ev.clientY });
+        retarget(ev.clientX, ev.clientY);
+        if (frame.current === null) frame.current = requestAnimationFrame(tick);
+      };
+      const up = (ev: PointerEvent) => {
+        if (ev.pointerId !== id) return;
+        const dragged = !!live.current?.started;
+        stop();
+        if (!dragged) return;
+        // The click the release would make lands on the row: it is not a click.
+        const swallow = (c: MouseEvent) => {
+          c.preventDefault();
+          c.stopPropagation();
+        };
+        window.addEventListener("click", swallow, { capture: true, once: true });
+        setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
+        end(true);
+      };
+      const cancel = (ev: PointerEvent) => {
+        if (ev.pointerId !== id) return;
+        stop();
+        end(false);
+      };
+      // A link's own drag would take the pointer away.
+      const native = (ev: DragEvent) => ev.preventDefault();
+      function stop() {
+        clearTimeout(hold);
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", cancel);
+        window.removeEventListener("touchmove", block);
+        window.removeEventListener("dragstart", native, true);
+        document.documentElement.classList.remove("cursor-grabbing", "select-none");
+        press.current = null;
+      }
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", cancel);
+      window.addEventListener("dragstart", native, true);
+      press.current = { stop };
+    },
+  });
+
+  return { drag, target, handle, pressable };
 }

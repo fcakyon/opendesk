@@ -898,7 +898,8 @@
     "copied_one": "{{count}} Abschnitt hinzugefügt",
     "copied_other": "{{count}} Abschnitte hinzugefügt",
     "nothingToCopy": "Dieser Space hat keine Zeilen dieses Workspace",
-    "tooMany": "Sie haben 20 eigene Abschnitte, das Maximum."
+    "tooMany": "Sie haben 20 eigene Abschnitte, das Maximum.",
+    "dragHere": "Zeilen hierher ziehen oder hinzufügen"
   },
   "edit": {
     "title": "Seitenleiste bearbeiten",
@@ -924,12 +925,12 @@
     "add": "Hinzufügen",
     "newSection": "Neuer Bereich",
     "newSectionTitle": "Neuer Bereich",
-    "emptySection": "Zeilen hierher ziehen",
+    "emptySection": "Zeilen hierher ziehen oder hinzufügen",
     "emptyFavorites": "Zeilen hierher ziehen, um sie zu Favoriten zu machen",
     "spaceSettings": "Space-Einstellungen",
     "editingSpace": "{{name}} bearbeiten",
     "hintTitle": "Gestalte deine Seitenleiste",
-    "hintBody": "Ziehe Bereiche und Zeilen, blende aus, was du nicht brauchst, und lege eigene Bereiche an.",
+    "hintBody": "Ziehe Zeilen und Bereiche, um sie zu verschieben, und doppelklicke auf einen Namen, um ihn umzubenennen. Anpassen, weiter unten, kann alles andere.",
     "hintDismiss": "Ausblenden",
     "dropNew": "Hier ablegen für einen neuen Bereich",
     "rowMenu": "Mehr für {{name}}",
@@ -945,7 +946,13 @@
     "renameSave": "Speichern",
     "favoritesTitle": "Zu Favoriten hinzufügen",
     "favoritesHint": "Posteingangsordner, Teams, Ansichten, Postfächer und Seiten können Favoriten sein.",
-    "notFavorite": "Das kann kein Favorit sein. Füge es stattdessen einem eigenen Bereich hinzu."
+    "notFavorite": "Das kann kein Favorit sein. Füge es stattdessen einem eigenen Bereich hinzu.",
+    "customize": "Anpassen",
+    "customizeHint": "Seitenleiste anordnen: ziehen, umbenennen, ausblenden",
+    "doneHint": "Anordnen der Seitenleiste beenden",
+    "doneEditing": "Fertig",
+    "layoutsShort": "Layouts",
+    "barHint": "Zum Verschieben ziehen. Zum Umbenennen auf einen Namen klicken. Das Auge blendet aus."
   },
   "layouts": {
     "title": "Mit einem Layout beginnen",
@@ -973,5 +980,8 @@
       "name": "Minimal",
       "hint": "Favoriten, Posteingang, Mail und Seiten. Teams, Ansichten und Workspace sind ausgeblendet."
     }
+  },
+  "section": {
+    "hide": "Bereich ausblenden"
   }
 }

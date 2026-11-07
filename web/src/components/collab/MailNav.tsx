@@ -4,12 +4,12 @@
 // (its folders unfold on request) with its own Assigned to me under it while it has some. Unread counts come from GET /v1/collab/counts, kept
 // fresh by collab.changed events.
 
-import { sidebarEdit } from "@/lib/collab/sidebarEdit";
 import { applyRowOrder } from "@/lib/collab/rowOrder";
+import type { EditSource } from "@/lib/collab/sidebarEditModel";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { AlertCircle, ChevronRight, Layers, PencilRuler, Plus } from "lucide-react";
-import { Fragment, type ReactElement, type ReactNode } from "react";
+import { AlertCircle, ChevronRight, Layers, Plus } from "lucide-react";
+import { type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivePill, Count, givesWay, Label, markOpener, NavTip, rowActive, rowBase, rowIdle, rowShape, Section, useOpener } from "@/app/sidebarParts";
 import { useFoldedSections, useOpenView, ViewSectionGroup } from "@/app/ViewSectionGroup";
@@ -30,6 +30,7 @@ import { AccountDot, boxIcon, FolderGlyph } from "./bits";
 import { quickAdd } from "@/app/quickAdd";
 import { FavoritePageRows, useHasFavoritePages } from "@/components/wiki/PagesSection";
 import { RowMenu, type RowMenuProps } from "./RowMenu";
+import { SidebarRow, useRowEdit } from "./SidebarRow";
 
 const sectionAction =
   "flex size-5 items-center justify-center rounded text-fg-4 opacity-0 transition-opacity hover:bg-chrome-hover hover:text-fg group-hover/section:opacity-100 focus-visible:opacity-100";
@@ -89,7 +90,14 @@ function MailRow({
   const lit = active && !givesWay(who, target, "mail");
   // The menu lists what each choice would show.
   const withNums: Menu | undefined = menu?.badge && shown?.nums ? { ...menu, badge: { ...menu.badge, numbers: shown.nums } } : menu;
+  const rowEdit = useRowEdit();
+  // Accounts keep the member's order inside Mail; every mail row drags into Favorites and their own sections.
+  const pin = menu?.pin;
+  const source: EditSource | undefined = rowKey
+    ? { kind: "row", from: rowKey.startsWith("account:") ? "mail" : "mail:box", key: rowKey, pin, row: pin && pin.kind !== "view_section" ? { kind: pin.kind, id: pin.id } : undefined }
+    : undefined;
   return (
+    <SidebarRow id={`mail|${rowKey || target}`} source={source} label={name} edit={rowKey ? rowEdit(rowKey, label) : undefined} rail={rail}>
     <NavTip rail={rail} label={name}>
       <RowMenu enabled={!!menu} prefs={prefs} rail={rail} label={label} {...withNums}>
       <Link
@@ -114,6 +122,7 @@ function MailRow({
       </Link>
       </RowMenu>
     </NavTip>
+    </SidebarRow>
   );
 }
 
@@ -340,18 +349,11 @@ export function MailSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail:
       rail={rail}
       first={first}
       action={
-        <span className="flex items-center gap-0.5">
-          <Tooltip content={t("edit.title")}>
-            <button type="button" aria-label={t("edit.title")} onClick={() => sidebarEdit.start()} className={sectionAction}>
-              <PencilRuler className="size-3.5" />
-            </button>
-          </Tooltip>
-          <Tooltip content={t("nav.connect")}>
-            <button type="button" aria-label={t("nav.connect")} onClick={() => quickAdd.mail()} className={sectionAction}>
-              <Plus className="size-3.5" />
-            </button>
-          </Tooltip>
-        </span>
+        <Tooltip content={t("nav.connect")}>
+          <button type="button" aria-label={t("nav.connect")} onClick={() => quickAdd.mail()} className={sectionAction}>
+            <Plus className="size-3.5" />
+          </button>
+        </Tooltip>
       }
     >
       {unified && (
@@ -446,6 +448,7 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
   const [folded, toggle] = useFoldedSections("favorites");
   const openView = useOpenView();
   const pages = useHasFavoritePages();
+  const rowEdit = useRowEdit();
   if (!data) return null;
   // A favorite is unpinned rather than hidden, and reads Favorites' number first, then its own section's.
   const ctx = { labels, via: ["favorites"] as SidebarSectionId[], here, waiting: waitingFor };
@@ -482,9 +485,16 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
       {pins.map(({ pin, target }, i) => {
         if (target.kind === "row")
           return (
-            <Fragment key={`${pin.kind}:${pin.id}`}>
+            <SidebarRow
+              key={`${pin.kind}:${pin.id}`}
+              id={`favorites|${pin.kind}:${pin.id}`}
+              source={{ kind: "row", from: "favorites", key: `${pin.kind}:${pin.id}`, pin, row: pin.kind === "view_section" ? undefined : { kind: pin.kind, id: pin.id } }}
+              label={prefs.names[target.model.key] || target.model.label}
+              edit={rowEdit(target.model.key, target.model.label)}
+              rail={rail}
+            >
               <NavItemRow model={target.model} rail={rail} prefs={prefs} place="favorites" menu={menuFor(target.model, pin)} />
-            </Fragment>
+            </SidebarRow>
           );
         return (
           <ViewSectionGroup

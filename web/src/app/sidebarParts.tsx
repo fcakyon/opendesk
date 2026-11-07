@@ -5,13 +5,16 @@
 import { useTranslation } from "react-i18next";
 import { motion, useReducedMotion } from "motion/react";
 import { ChevronDown } from "lucide-react";
-import { createContext, useContext, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useContext, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AnimatedNumber } from "@/components/motion";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
 import { tone, toneFor } from "@/lib/tones";
 import { useSidebarPrefs } from "@/lib/collab/hooks";
 import { iconOf, nameOf, SECTION_IDS } from "@/lib/collab/sidebarPrefs";
+import { sidebarEdit, useSidebarEdit } from "@/lib/collab/sidebarEdit";
+import type { SidebarSectionId } from "@/lib/api/types";
+import type { EditSource } from "@/lib/collab/sidebarEditModel";
 
 // The two row shapes share one element so the icon never moves while the label
 // fades and the column narrows.
@@ -137,6 +140,8 @@ export function Section({
   folded: foldedProp,
   onFold,
   icon,
+  edit: editProp,
+  dragKey: dragKeyProp,
   children,
 }: {
   id: string;
@@ -149,6 +154,10 @@ export function Section({
   /** Folded, when the caller keeps it (a Space's own sections save it in the Space). */
   folded?: boolean;
   onFold?: (folded: boolean) => void;
+  /** Renaming it where it is and its ⋯ menu; a built-in section gets its own from SectionEditCtx. */
+  edit?: SectionEdit;
+  /** Its key among the sections it drags with; a built-in section's is its id. */
+  dragKey?: string;
   children: ReactNode;
 }) {
   const mark = useContext(SectionMarkCtx);
@@ -157,6 +166,12 @@ export function Section({
   const builtin = (SECTION_IDS as readonly string[]).includes(id);
   const title = builtin ? nameOf(prefs, `section:${id}`, label) : label;
   const emoji = icon ?? (builtin ? iconOf(prefs, `section:${id}`) : undefined);
+  const editFor = useContext(SectionEditCtx);
+  const edit = editProp ?? (builtin ? editFor?.(id as SidebarSectionId, label) : undefined);
+  const drag = useContext(SidebarDragCtx);
+  const dragKey = dragKeyProp ?? (builtin && drag?.scope === "sidebar" ? id : undefined);
+  const dragProps = drag && dragKey && !rail ? drag.section(dragKey, title) : undefined;
+  const renaming = useSidebarEdit((s) => !!edit && s.renaming === edit.key);
   const key = `od-nav-fold-${id}`;
   const [foldedHere, setFolded] = useState(() => {
     try {
@@ -176,31 +191,124 @@ export function Section({
     }
   };
   return (
-    <div className={cn(!first && "mt-5")}>
+    <div className={cn(!first && "mt-5")} data-edit-section={dragProps ? dragKey : undefined}>
       {!rail && (
-        <div className="group/section mx-2.5 mb-0.5 flex h-6 items-center px-2">
-          <button
-            type="button"
-            aria-expanded={!folded}
-            onClick={toggle}
-            className="label-caps flex min-w-0 flex-1 items-center gap-1 text-left outline-none transition-colors hover:text-fg-2 focus-visible:text-fg"
-          >
-            {emoji && <span aria-hidden className="text-[11px] normal-case leading-none tracking-normal">{emoji}</span>}
-            <span className="truncate">{title}</span>
-            {mark && <span className="ml-0.5 flex shrink-0 normal-case tracking-normal">{mark}</span>}
-            <ChevronDown
-              aria-hidden
-              className={cn(
-                "size-3 shrink-0 transition-[transform,opacity] duration-200",
-                folded ? "-rotate-90 opacity-100" : "opacity-0 group-hover/section:opacity-100",
-              )}
-            />
-          </button>
-          {action}
+        <div data-edit-head="" className="group/section mx-2.5 mb-0.5 flex h-6 items-center px-2">
+          {renaming && edit ? (
+            <InlineRename initial={title} placeholder={edit.placeholder} label={edit.renameLabel} caps onDone={(v) => {
+              sidebarEdit.done();
+              if (v !== null) edit.onName(v);
+            }} />
+          ) : (
+            <button
+              type="button"
+              aria-expanded={!folded}
+              onClick={toggle}
+              onDoubleClick={edit ? () => sidebarEdit.rename(edit.key) : undefined}
+              data-sidebar-row={edit?.key}
+              data-renamable={edit ? "true" : undefined}
+              {...dragProps}
+              className="label-caps flex min-w-0 flex-1 items-center gap-1 text-left outline-none transition-colors hover:text-fg-2 focus-visible:text-fg"
+            >
+              {emoji && <span aria-hidden className="text-[11px] normal-case leading-none tracking-normal">{emoji}</span>}
+              <span className="truncate">{title}</span>
+              {mark && <span className="ml-0.5 flex shrink-0 normal-case tracking-normal">{mark}</span>}
+              <ChevronDown
+                aria-hidden
+                className={cn(
+                  "size-3 shrink-0 transition-[transform,opacity] duration-200",
+                  folded ? "-rotate-90 opacity-100" : "opacity-0 group-hover/section:opacity-100",
+                )}
+              />
+            </button>
+          )}
+          {!renaming && (action || edit?.menu) && (
+            <span className="flex shrink-0 items-center gap-0.5">
+              {action}
+              {edit?.menu}
+            </span>
+          )}
         </div>
       )}
       {(!folded || rail) && <div className="flex flex-col gap-px">{children}</div>}
     </div>
+  );
+}
+
+// ─── Arranging the sidebar where it is ──────────────────────────────────────
+
+/** A section's name of the member's own and its ⋯ menu (components/collab/SectionMenu.tsx). */
+export type SectionEdit = {
+  /** Its id while renamed or picking an icon (`data-sidebar-row`), "section:<key>". */
+  key: string;
+  placeholder: string;
+  renameLabel: string;
+  /** Saves the new name; an empty one brings back its own. */
+  onName: (name: string) => void;
+  menu: ReactNode;
+};
+
+/** The ⋯ menu and renaming of the built-in sections, given by the sidebar that draws them. */
+export const SectionEditCtx = createContext<((id: SidebarSectionId, label: string) => SectionEdit | undefined) | null>(null);
+
+type DragProps = Record<string, unknown>;
+
+/**
+ * Dragging rows and sections outside edit mode (components/collab/SidebarDrag.tsx): the props
+ * that make a row or a section's title drag, in the sidebar's own sections or a Space's.
+ */
+export const SidebarDragCtx = createContext<{
+  scope: "sidebar" | "space";
+  row: (source: EditSource, label: string) => DragProps;
+  section: (key: string, label: string) => DragProps;
+  /** Moves a row or section one place up (-1) or down (1); `dry` only says whether it can. */
+  step: (source: EditSource, dir: -1 | 1, dry?: boolean) => boolean;
+} | null>(null);
+
+/**
+ * How long a menu takes to close and give the focus back to what opened it: a field or picker
+ * opened from the menu on a row keeps the focus through it.
+ */
+export const MENU_SETTLE_MS = 1000;
+
+/** A name typed where it was: Enter or leaving it saves, Escape keeps the old one. */
+export function InlineRename({ initial, placeholder, label, caps, onDone }: { initial: string; placeholder: string; label: string; caps?: boolean; onDone: (name: string | null) => void }) {
+  const done = useRef(false);
+  // Opened from a menu, the menu's closing takes the focus back for a moment: the field keeps it.
+  const [born] = useState(() => Date.now());
+  const finish = (v: string | null) => {
+    if (done.current) return;
+    done.current = true;
+    onDone(v === null ? null : v.trim());
+  };
+  return (
+    <input
+      autoFocus
+      defaultValue={initial}
+      placeholder={placeholder}
+      aria-label={label}
+      maxLength={64}
+      onFocus={(e) => e.currentTarget.select()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          finish(e.currentTarget.value);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          finish(null);
+        }
+      }}
+      onBlur={(e) => {
+        const el = e.currentTarget;
+        if (Date.now() - born < MENU_SETTLE_MS) return void setTimeout(() => el.focus(), 0);
+        finish(el.value);
+      }}
+      className={cn(
+        "h-6 min-w-0 flex-1 rounded border border-line bg-surface px-1 text-[12.5px] text-fg outline-none placeholder:text-fg-4 focus:shadow-[0_0_0_2px_var(--focus)]",
+        caps && "label-caps text-fg",
+      )}
+    />
   );
 }
 
