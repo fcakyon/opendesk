@@ -352,7 +352,7 @@ func TestAPISidebarWithoutCollab(t *testing.T) {
 	w.account(w.agent, ProviderGoogle, VisibilityPrivate, Audience{})
 	w.account(w.agent2, ProviderGoogle, VisibilityShared, Audience{Everyone: true})
 	var prefs SidebarPrefs
-	if st := doJSON(t, "GET", srv.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || len(prefs.Order) != 6 ||
+	if st := doJSON(t, "GET", srv.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || len(prefs.Order) != 7 ||
 		len(prefs.Pinned) != 0 || len(prefs.AutoPins) != 0 {
 		t.Fatalf("defaults without Collab: %d %+v", st, prefs)
 	}
@@ -937,7 +937,7 @@ func TestAPISidebar(t *testing.T) {
 	srv := w.api(w.agent)
 	var prefs SidebarPrefs
 	if st := doJSON(t, "GET", srv.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || !prefs.MarkReadOnOpen || !prefs.UnifiedInbox ||
-		len(prefs.Order) != 6 || prefs.Order[0] != "favorites" || prefs.Pinned == nil {
+		strings.Join(prefs.Order, ",") != "favorites,inbox,mail,teams,views,pages,workspace" || prefs.Pinned == nil {
 		t.Fatalf("defaults: %d %+v", st, prefs)
 	}
 	in := SidebarPrefs{Order: []string{"mail", "favorites"}, Hidden: []string{"box:spam"}, Pinned: []SidebarPin{{Kind: "box", ID: "inbox"}},

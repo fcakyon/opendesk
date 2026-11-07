@@ -49,7 +49,7 @@ var (
 
 // defaultSidebar is the sidebar of a member who never arranged it.
 func defaultSidebar() SidebarPrefs {
-	return SidebarPrefs{Order: []string{"favorites", "inbox", "mail", "teams", "views", "workspace"}, Hidden: []string{},
+	return SidebarPrefs{Order: slices.Clone(SidebarSectionIDs), Hidden: []string{},
 		Pinned: []SidebarPin{}, ExpandedAccounts: []string{}, MarkReadOnOpen: true, UnifiedInbox: true,
 		Badges: map[string]string{}, MailTabs: defaultMailTabs(), AutoPins: []string{}}
 }

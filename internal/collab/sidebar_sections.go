@@ -1,7 +1,7 @@
 package collab
 
 // SidebarSectionIDs are the built-in sidebar sections, in their default order.
-var SidebarSectionIDs = []string{"favorites", "inbox", "mail", "teams", "views", "workspace"}
+var SidebarSectionIDs = []string{"favorites", "inbox", "mail", "teams", "views", "pages", "workspace"}
 
 // BadgeValue reports whether v is one of the numbers a sidebar row can show
 // (contracts/collab.md "badges").

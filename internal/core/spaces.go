@@ -57,7 +57,7 @@ var spaceItemIDs = map[string][]string{
 // spaceEverywhere is the kind of the Everywhere lists, the one kind of no workspace (workspace_id "").
 const spaceEverywhere = "everywhere"
 
-var spaceUUIDKinds = []string{"team", "view", "account", "folder", "wiki_page"}
+var spaceUUIDKinds = []string{"team", "view", "account", "folder", "wiki_page", "wiki_space"}
 
 var spaceSectionIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,40}$`)
 
@@ -82,7 +82,7 @@ type CoreSpaceSection struct {
 // CoreSpaceItem is the contract shape SpaceItem.
 type CoreSpaceItem struct {
 	WorkspaceID string `json:"workspace_id"`
-	Kind        string `json:"kind" enum:"section,ticket_folder,team,view,box,account,folder,page,wiki_page,everywhere"`
+	Kind        string `json:"kind" enum:"section,ticket_folder,team,view,box,account,folder,page,wiki_page,wiki_space,everywhere"`
 	ID          string `json:"id"`
 	Name        string `json:"name,omitempty"`
 	Badge       string `json:"badge,omitempty" enum:"unread,total,count,awaiting,urgent,overdue,open,none"`
@@ -239,7 +239,7 @@ func validateSpaceItem(in coreSpaceItemIn, workspace *uuid.UUID) (CoreSpaceItem,
 		}
 		out.ID = id
 	} else {
-		return out, httpx.Validation("Each row's kind is section, ticket_folder, team, view, box, account, folder, page, wiki_page or everywhere.")
+		return out, httpx.Validation("Each row's kind is section, ticket_folder, team, view, box, account, folder, page, wiki_page, wiki_space or everywhere.")
 	}
 	if in.Name != "" {
 		if utf8.RuneCountInString(displayname.Normalize(in.Name)) > maxSpaceItemName {
@@ -269,6 +269,8 @@ func kindLabel(kind string) string {
 		return "mail folder"
 	case "wiki_page":
 		return "wiki page"
+	case "wiki_space":
+		return "teamspace"
 	case spaceEverywhere:
 		return "everywhere"
 	}

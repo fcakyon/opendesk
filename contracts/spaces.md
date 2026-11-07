@@ -44,7 +44,7 @@ interface SpaceItem {
 }
 
 type SpaceItemKind =
-  | "section"        // a whole built-in section, kept up to date: id "favorites" | "inbox" | "mail" | "teams" | "views" | "workspace"
+  | "section"        // a whole built-in section, kept up to date: id "favorites" | "inbox" | "mail" | "teams" | "views" | "pages" | "workspace"
   | "ticket_folder"  // an inbox folder: id "unassigned" | "mine" | "open" | "pending" | "solved" | "spam" (web/src/lib/folders.ts)
   | "team"           // id: team uuid
   | "view"           // id: view uuid
@@ -54,6 +54,8 @@ type SpaceItemKind =
   | "page"           // a workspace page: id "contacts" | "knowledge" | "wiki" | "reports"
   | "wiki_page"      // a wiki page (contracts/wiki.md): id: page uuid; shows its live title and icon, skipped
                      // while the page is in the trash, gone or out of the person's sight
+  | "wiki_space"     // a teamspace (contracts/wiki.md "Private pages and teamspaces"): id: team uuid; its pages,
+                     // kept up to date; skipped while the team is out of sight or has no page the person sees
   | "everywhere"     // an Everywhere list across every workspace: id "mine" (assigned to me) | "mail" (all mail);
                      // workspace_id "" (the one kind of no workspace); never in a starter Space
 
@@ -109,12 +111,16 @@ to the starter do not change it.
   chip: their menus would change that workspace's preferences. Empty sections do not show; a Space with
   nothing to show has the shared empty state with Edit Space. An `everywhere` row opens its Everywhere
   list (`/everywhere/mine`, `/everywhere/mail`).
+- **Pages.** The open workspace's whole Pages section is its own tree (contracts/wiki.md "In the main
+  sidebar"), and a teamspace row is that teamspace's row and tree. Another workspace's Pages are rows of
+  its top-level workspace pages that its sidebar shows, and its teamspace rows open its wiki.
 - **Row menu** inside a Space: Number, Rename in this Space, Move to section, Also add to Space, Remove
   from the Space. Rows inside a whole built-in section keep that section's own menu.
 - **The editor** (New Space, Edit) has the name, icon and colour; the Space's sections and rows, dragged
   into order, each row with its name and number; Add section; and "Add from" with a tab per workspace
   listing what that workspace offers: its whole sections, inbox folders, teams, views, Collab boxes,
-  accounts and folders, and pages, plus an "Every workspace" tab with the Everywhere lists (not offered
+  accounts and folders, its pages (Contacts, Knowledge base, Wiki, Reports), its teamspaces and its pages,
+  databases and canvases (searchable), plus an "Every workspace" tab with the Everywhere lists (not offered
   for a starter Space). Then the `marks` switch. Admins edit the starter Space with the same
   editor from Settings › General.
 - Spaces are the active account's. Workspaces of another account signed in to in the same browser are not
