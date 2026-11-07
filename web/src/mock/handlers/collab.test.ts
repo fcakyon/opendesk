@@ -77,6 +77,11 @@ describe("mock Collab", () => {
     expect((await call("PUT", "/v1/collab/sidebar", { order: ["inbox"], hidden: [], pinned: [], expanded_accounts: [], mark_read_on_open: true, unified_inbox: true })).body.row_order).toEqual({ inbox: ["ticket_folder:open", "ticket_folder:unassigned"] });
     expect((await call("PUT", "/v1/collab/sidebar", { ...kept, sections: [{ ...withIcons[0], icon: "rocket" }] })).body.code).toBe("validation_failed");
     expect((await call("PUT", "/v1/collab/sidebar", { ...kept, row_order: { "custom:launch": ["view:v1"] } })).body.code).toBe("validation_failed");
+    // The member's own names and emoji for built-in sections and rows: kept when left out, an empty name dropped.
+    const named = (await call("PUT", "/v1/collab/sidebar", { ...kept, names: { "section:inbox": "Desk", "view:v1": " " }, icons: { "section:inbox": "🛎️" } })).body;
+    expect(named.names).toEqual({ "section:inbox": "Desk" });
+    expect((await call("PUT", "/v1/collab/sidebar", { order: ["inbox"], hidden: [], pinned: [], expanded_accounts: [], mark_read_on_open: true, unified_inbox: true })).body.icons).toEqual({ "section:inbox": "🛎️" });
+    expect((await call("PUT", "/v1/collab/sidebar", { ...kept, icons: { "section:inbox": "bell" } })).body.code).toBe("validation_failed");
   });
 
   it("keeps the sidebar prefs without Collab too", async () => {
