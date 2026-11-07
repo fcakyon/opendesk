@@ -1393,6 +1393,7 @@
     "import": "Import"
   },
   "pages": {
+    "openHome": "Open Pages home",
     "title": "Pages",
     "intro": "Your team's docs, notes, plans and databases in one place. Only members see them; customers never do.",
     "importHint": "Markdown, HTML, or a Notion or Obsidian export",

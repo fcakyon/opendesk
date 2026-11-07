@@ -7,13 +7,14 @@
 // section, each part, a teamspace or a top-level page can be hidden (SidebarPrefs `hidden`).
 // Wiki favorites are also rows of the main Favorites (FavoritePageRows).
 
-import { Link } from "@tanstack/react-router";
-import { CalendarDays, ChevronRight, EyeOff, FileText, LayoutTemplate, Lock, MoreHorizontal, Plus, StarOff, Trash2 } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { CalendarDays, ChevronRight, EyeOff, FileText, FileUp, LayoutGrid, LayoutTemplate, Lock, MoreHorizontal, PencilRuler, Plus, StarOff, Trash2 } from "lucide-react";
 import { useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivePill, Label, NavTip, rowActive, rowBase, rowIdle, rowShape, Section, withPill } from "@/app/sidebarParts";
 import { openImport, quickAdd } from "@/app/quickAdd";
-import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { sidebarEdit } from "@/lib/collab/sidebarEdit";
 import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
 import { TeamDot, useTeamsCtx } from "@/components/tickets/teams";
@@ -78,6 +79,8 @@ export function PagesSection(props: { prefs: SidebarPrefs; rail: boolean; first:
 function PagesTree({ prefs, rail, first }: { prefs: SidebarPrefs; rail: boolean; first: boolean }) {
   const { t } = useTranslation("shell");
   const { t: tw } = useTranslation("wiki");
+  const { t: tc } = useTranslation("collab");
+  const navigate = useNavigate();
   const canEdit = atLeast(useRole(), "agent");
   const { data = [], isLoading } = useAreaTree();
   const teams = useTeamsCtx();
@@ -120,13 +123,41 @@ function PagesTree({ prefs, rail, first }: { prefs: SidebarPrefs; rail: boolean;
       rail={false}
       first={first}
       action={
-        canEdit ? (
-          <Tooltip content={tw("tree.newPage")}>
-            <button type="button" aria-label={tw("tree.newPage")} onClick={() => quickAdd.page(undefined, "pages")} className={tool}>
-              <Plus className="size-3.5" />
-            </button>
-          </Tooltip>
-        ) : undefined
+        <span className="flex items-center gap-px">
+          <Menu>
+            <MenuTrigger asChild>
+              <button type="button" aria-label={tw("tree.actions", { title: t("nav.pages") })} className={tool}>
+                <MoreHorizontal className="size-3.5" />
+              </button>
+            </MenuTrigger>
+            <MenuContent align="start">
+              {canEdit && (
+                <>
+                  <MenuItem icon={<Plus />} onSelect={() => quickAdd.page(undefined, "pages")}>
+                    {tw("tree.newPage")}
+                  </MenuItem>
+                  <MenuItem icon={<FileUp />} onSelect={() => openImport(null, { area: "pages" })}>
+                    {tw("import.action")}
+                  </MenuItem>
+                </>
+              )}
+              <MenuItem icon={<LayoutGrid />} onSelect={() => void navigate({ to: "/pages" })}>
+                {tw("pages.openHome")}
+              </MenuItem>
+              <MenuSeparator />
+              <MenuItem icon={<PencilRuler />} onSelect={() => sidebarEdit.start()}>
+                {tc("edit.title")}
+              </MenuItem>
+            </MenuContent>
+          </Menu>
+          {canEdit && (
+            <Tooltip content={tw("tree.newPage")}>
+              <button type="button" aria-label={tw("tree.newPage")} onClick={() => quickAdd.page(undefined, "pages")} className={tool}>
+                <Plus className="size-3.5" />
+              </button>
+            </Tooltip>
+          )}
+        </span>
       }
     >
       <div
@@ -292,6 +323,7 @@ function Group({
   children: ReactNode;
 }) {
   const { t } = useTranslation("wiki");
+  const { t: tc } = useTranslation("collab");
   return (
     <>
       <div className="group/row relative">
@@ -321,6 +353,9 @@ function Group({
                 )}
                 <MenuItem icon={<EyeOff />} onSelect={onHide}>
                   {t("sidebar.hidePage")}
+                </MenuItem>
+                <MenuItem icon={<PencilRuler />} onSelect={() => sidebarEdit.start()}>
+                  {tc("edit.title")}
                 </MenuItem>
               </MenuContent>
             </Menu>

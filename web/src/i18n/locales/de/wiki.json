@@ -1393,6 +1393,7 @@
     "import": "Importieren"
   },
   "pages": {
+    "openHome": "Seiten-Startseite öffnen",
     "title": "Seiten",
     "intro": "Dokumente, Notizen, Pläne und Datenbanken deines Teams an einem Ort. Nur Mitglieder sehen sie, Kunden nie.",
     "importHint": "Markdown, HTML oder ein Notion- oder Obsidian-Export",

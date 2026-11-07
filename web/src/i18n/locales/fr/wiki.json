@@ -1427,6 +1427,7 @@
     "import": "Importer"
   },
   "pages": {
+    "openHome": "Ouvrir l’accueil des pages",
     "title": "Pages",
     "intro": "Les documents, notes, plans et bases de données de votre équipe, au même endroit. Seuls les membres les voient, jamais les clients.",
     "importHint": "Markdown, HTML, ou un export Notion ou Obsidian",
