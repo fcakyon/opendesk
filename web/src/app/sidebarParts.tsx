@@ -141,6 +141,7 @@ export function Section({
   onFold,
   icon,
   edit: editProp,
+  menuTop,
   dragKey: dragKeyProp,
   children,
 }: {
@@ -156,6 +157,8 @@ export function Section({
   onFold?: (folded: boolean) => void;
   /** Renaming it where it is and its ⋯ menu; a built-in section gets its own from SectionEditCtx. */
   edit?: SectionEdit;
+  /** A built-in section's own actions, first in its one ⋯ menu (Pages: new page, import). */
+  menuTop?: ReactNode;
   /** Its key among the sections it drags with; a built-in section's is its id. */
   dragKey?: string;
   children: ReactNode;
@@ -167,7 +170,7 @@ export function Section({
   const title = builtin ? nameOf(prefs, `section:${id}`, label) : label;
   const emoji = icon ?? (builtin ? iconOf(prefs, `section:${id}`) : undefined);
   const editFor = useContext(SectionEditCtx);
-  const edit = editProp ?? (builtin ? editFor?.(id as SidebarSectionId, label) : undefined);
+  const edit = editProp ?? (builtin ? editFor?.(id as SidebarSectionId, label, menuTop) : undefined);
   const drag = useContext(SidebarDragCtx);
   const dragKey = dragKeyProp ?? (builtin && drag?.scope === "sidebar" ? id : undefined);
   const dragProps = drag && dragKey && !rail ? drag.section(dragKey, title) : undefined;
@@ -249,7 +252,7 @@ export type SectionEdit = {
 };
 
 /** The ⋯ menu and renaming of the built-in sections, given by the sidebar that draws them. */
-export const SectionEditCtx = createContext<((id: SidebarSectionId, label: string) => SectionEdit | undefined) | null>(null);
+export const SectionEditCtx = createContext<((id: SidebarSectionId, label: string, top?: ReactNode) => SectionEdit | undefined) | null>(null);
 
 type DragProps = Record<string, unknown>;
 

@@ -13,7 +13,7 @@ import { useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivePill, Label, NavTip, rowActive, rowBase, rowIdle, rowShape, Section, withPill } from "@/app/sidebarParts";
 import { openImport, quickAdd } from "@/app/quickAdd";
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { sidebarEdit } from "@/lib/collab/sidebarEdit";
 import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -79,7 +79,6 @@ export function PagesSection(props: { prefs: SidebarPrefs; rail: boolean; first:
 function PagesTree({ prefs, rail, first }: { prefs: SidebarPrefs; rail: boolean; first: boolean }) {
   const { t } = useTranslation("shell");
   const { t: tw } = useTranslation("wiki");
-  const { t: tc } = useTranslation("collab");
   const navigate = useNavigate();
   const canEdit = atLeast(useRole(), "agent");
   const { data = [], isLoading } = useAreaTree();
@@ -122,42 +121,32 @@ function PagesTree({ prefs, rail, first }: { prefs: SidebarPrefs; rail: boolean;
       label={t("nav.pages")}
       rail={false}
       first={first}
-      action={
-        <span className="flex items-center gap-px">
-          <Menu>
-            <MenuTrigger asChild>
-              <button type="button" aria-label={tw("tree.actions", { title: t("nav.pages") })} className={tool}>
-                <MoreHorizontal className="size-3.5" />
-              </button>
-            </MenuTrigger>
-            <MenuContent align="start">
-              {canEdit && (
-                <>
-                  <MenuItem icon={<Plus />} onSelect={() => quickAdd.page(undefined, "pages")}>
-                    {tw("tree.newPage")}
-                  </MenuItem>
-                  <MenuItem icon={<FileUp />} onSelect={() => openImport(null, { area: "pages" })}>
-                    {tw("import.action")}
-                  </MenuItem>
-                </>
-              )}
-              <MenuItem icon={<LayoutGrid />} onSelect={() => void navigate({ to: "/pages" })}>
-                {tw("pages.openHome")}
-              </MenuItem>
-              <MenuSeparator />
-              <MenuItem icon={<PencilRuler />} onSelect={() => sidebarEdit.start()}>
-                {tc("edit.title")}
-              </MenuItem>
-            </MenuContent>
-          </Menu>
+      // One ⋯ for the section: what Pages does first, then arranging it (components/collab/SectionMenu.tsx).
+      menuTop={
+        <>
           {canEdit && (
-            <Tooltip content={tw("tree.newPage")}>
-              <button type="button" aria-label={tw("tree.newPage")} onClick={() => quickAdd.page(undefined, "pages")} className={tool}>
-                <Plus className="size-3.5" />
-              </button>
-            </Tooltip>
+            <>
+              <MenuItem icon={<Plus />} onSelect={() => quickAdd.page(undefined, "pages")}>
+                {tw("tree.newPage")}
+              </MenuItem>
+              <MenuItem icon={<FileUp />} onSelect={() => openImport(null, { area: "pages" })}>
+                {tw("import.action")}
+              </MenuItem>
+            </>
           )}
-        </span>
+          <MenuItem icon={<LayoutGrid />} onSelect={() => void navigate({ to: "/pages" })}>
+            {tw("pages.openHome")}
+          </MenuItem>
+        </>
+      }
+      action={
+        canEdit ? (
+          <Tooltip content={tw("tree.newPage")}>
+            <button type="button" aria-label={tw("tree.newPage")} onClick={() => quickAdd.page(undefined, "pages")} className={tool}>
+              <Plus className="size-3.5" />
+            </button>
+          </Tooltip>
+        ) : undefined
       }
     >
       <div

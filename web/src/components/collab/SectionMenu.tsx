@@ -33,6 +33,7 @@ export function SectionMenu({
   onHide,
   onDelete,
   extra,
+  top,
 }: {
   /** Its `data-sidebar-row` id ("section:<key>"): renaming and the emoji picker name it. */
   id: string;
@@ -49,6 +50,8 @@ export function SectionMenu({
   onDelete?: () => void;
   /** More of its own (fold, the member's section's moves). */
   extra?: ReactNode;
+  /** What the section itself does, above arranging it (Pages: new page, import, its home). */
+  top?: ReactNode;
 }) {
   const { t } = useTranslation("collab");
   const drag = useContext(SidebarDragCtx);
@@ -82,6 +85,12 @@ export function SectionMenu({
             e.preventDefault();
           }}
         >
+          {top && (
+            <>
+              {top}
+              <MenuSeparator />
+            </>
+          )}
           <MenuItem icon={<Pencil />} onSelect={here(() => sidebarEdit.rename(id))}>
             {t("ownSections.rename")}
           </MenuItem>
@@ -139,10 +148,10 @@ export function SectionMenu({
  * (`names`, `icons`), Favorites' Add, hiding with Undo, and moving in the workspace's own sidebar
  * (`movable`; a whole section in a Space moves with the Space's rows).
  */
-export function useBuiltinSectionEdit(movable: boolean): (id: SidebarSectionId, label: string) => SectionEdit {
+export function useBuiltinSectionEdit(movable: boolean): (id: SidebarSectionId, label: string, top?: ReactNode) => SectionEdit {
   const { t } = useTranslation("collab");
   const { prefs, change } = useOwnSidebar();
-  return (id, label) => {
+  return (id, label, top) => {
     const key = sectionKey(id);
     const name = nameOf(prefs, key, label);
     const rid = `section:${id}`;
@@ -156,6 +165,7 @@ export function useBuiltinSectionEdit(movable: boolean): (id: SidebarSectionId, 
           id={rid}
           name={name}
           dragKey={movable ? id : undefined}
+          top={top}
           emoji={prefs.icons[key]}
           onIcon={(v) => change(setIcon(prefs, key, v))}
           onReset={prefs.names[key] || prefs.icons[key] ? () => change(setIcon(setName(prefs, key, ""), key, "")) : undefined}
