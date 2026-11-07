@@ -126,6 +126,7 @@ function readItem(v: unknown): SpaceItem | null {
   const out: SpaceItem = { workspace_id: x.workspace_id, kind: x.kind, id: x.id };
   if (typeof x.name === "string" && x.name.trim()) out.name = x.name;
   if (isBadge(x.badge)) out.badge = x.badge;
+  if (typeof x.icon === "string" && x.icon) out.icon = x.icon;
   return out;
 }
 
@@ -144,6 +145,7 @@ export function normalizeSpace(v: unknown): Space | null {
             id: r.id,
             title: typeof r.title === "string" ? r.title : "",
             collapsed: r.collapsed === true,
+            ...(typeof r.icon === "string" && r.icon ? { icon: r.icon } : {}),
             items: Array.isArray(r.items) ? r.items.map(readItem).filter((i): i is SpaceItem => !!i) : [],
           },
         ];
@@ -275,6 +277,7 @@ export function forWire(s: Space): Space {
         const name = it.name ? cleanName(it.name) : "";
         if (name) out.name = name;
         if (it.badge) out.badge = it.badge;
+        if (it.icon) out.icon = it.icon;
         return out;
       }),
     })),
@@ -324,7 +327,7 @@ export function removeItem(s: Space, key: string): Space {
 }
 
 /** Sets a row's own name or number; null goes back to the row's default. */
-export function updateItem(s: Space, key: string, patch: { name?: string | null; badge?: SidebarBadge | null }): Space {
+export function updateItem(s: Space, key: string, patch: { name?: string | null; badge?: SidebarBadge | null; icon?: string | null }): Space {
   return {
     ...s,
     sections: s.sections.map((sec) => ({
@@ -340,6 +343,10 @@ export function updateItem(s: Space, key: string, patch: { name?: string | null;
         if (patch.badge !== undefined) {
           if (patch.badge === null) delete out.badge;
           else out.badge = patch.badge;
+        }
+        if (patch.icon !== undefined) {
+          if (patch.icon) out.icon = patch.icon;
+          else delete out.icon;
         }
         return out;
       }),
@@ -372,8 +379,16 @@ export function addSection(s: Space, title = "", items: SpaceItem[] = []): { spa
   return { space: { ...s, sections: [...s.sections, { id, title, collapsed: false, items: fresh }] }, id };
 }
 
-export function updateSection(s: Space, id: string, patch: Partial<Pick<SpaceSection, "title" | "collapsed">>): Space {
-  return mapSection(s, id, (sec) => ({ ...sec, ...patch }));
+export function updateSection(s: Space, id: string, patch: Partial<Pick<SpaceSection, "title" | "collapsed">> & { icon?: string | null }): Space {
+  return mapSection(s, id, (sec) => {
+    const { icon, ...rest } = patch;
+    const out = { ...sec, ...rest };
+    if (icon !== undefined) {
+      if (icon) out.icon = icon;
+      else delete out.icon;
+    }
+    return out;
+  });
 }
 
 export function removeSection(s: Space, id: string): Space {

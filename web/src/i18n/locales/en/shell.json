@@ -151,7 +151,8 @@
     "goMine": "Go to my tickets",
     "goReports": "Go to reports",
     "goWiki": "Go to the wiki",
-    "switchWorkspace": "Open workspace 1 to 9"
+    "switchWorkspace": "Open workspace 1 to 9",
+    "editSidebar": "Edit sidebar"
   },
   "route": {
     "loading": "Loading",

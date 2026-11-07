@@ -11,10 +11,11 @@ import { Dialog } from "@/components/ui/dialog";
 import { Field, TextInput } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
 import { asSpace, hasRoom, newOwnSection, OWN_LIMITS, sectionOf, toggleInSection, withSpace } from "@/lib/collab/ownSections";
-import { ownSectionsUi, useOwnSectionsUi, type Naming } from "@/lib/collab/ownSectionsUi";
+import { ownSectionsUi, useOwnSectionsUi, type Naming, type SpaceAdding } from "@/lib/collab/ownSectionsUi";
+import { useSpaceActions } from "@/components/spaces/actions";
 import { useSession } from "@/lib/session";
-import { useWorkspacesData } from "@/lib/spaces/hooks";
-import { cleanName, updateSection } from "@/lib/spaces/model";
+import { useSpaces, useWorkspacesData } from "@/lib/spaces/hooks";
+import { addItems, cleanName, hasItem, itemKey, moveItemTo, removeItem, replaceSpace, updateSection } from "@/lib/spaces/model";
 import { useOwnSidebar } from "./AddToSidebar";
 
 function NameDialog({ naming }: { naming: Naming }) {
@@ -119,12 +120,64 @@ function AddRowsDialog({ sectionId }: { sectionId: string }) {
   );
 }
 
+/** Adding rows to a section of a Space, from the sidebar's edit mode: what every workspace offers, as the Space editor lists it. */
+function AddToSpaceDialog({ spaceId, sectionId }: SpaceAdding) {
+  const { t } = useTranslation("collab");
+  const { t: ts } = useTranslation("spaces");
+  const labels = useRowLabels();
+  const { spaces } = useSpaces();
+  const actions = useSpaceActions(spaces);
+  const memberships = useSession((s) => s.memberships);
+  const wid = useSession((s) => s.workspaceId) ?? "";
+  const workspaces = memberships.map((m) => ({ id: m.workspace.id, name: m.workspace.name, logo: m.workspace.avatar_url }));
+  const [active, setActive] = useState(wid || workspaces[0]?.id || "");
+  const data = useWorkspacesData(active && active !== "*" ? [active] : [], { folders: () => true, wiki: () => true });
+  const space = spaces?.find((x) => x.id === spaceId);
+  const section = space?.sections.find((x) => x.id === sectionId);
+  useEffect(() => {
+    if (spaces && !section) ownSectionsUi.close();
+  }, [spaces, section]);
+  if (!space || !section) return null;
+  const only = { ...space, sections: [section] };
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => !o && ownSectionsUi.close()}
+      size="md"
+      title={t("ownSections.addRowsTitle", { name: section.title || t("ownSections.untitled") })}
+      footer={
+        <Button variant="primary" onClick={() => ownSectionsUi.close()}>
+          {t("ownSections.done")}
+        </Button>
+      }
+    >
+      <div className="flex h-[min(420px,52vh)] flex-col">
+        <AddFrom
+          space={only}
+          workspaces={[...workspaces, { id: "*", name: ts("editor.everyWorkspace"), logo: null }]}
+          data={data}
+          active={active}
+          onActive={setActive}
+          labels={labels}
+          onToggle={(item, on) => {
+            const key = itemKey(item);
+            if (!on) return actions.put(replaceSpace(spaces ?? [], removeItem(space, key)));
+            if (hasItem(space, item)) return actions.put(replaceSpace(spaces ?? [], moveItemTo(space, key, sectionId)));
+            actions.put(replaceSpace(spaces ?? [], addItems(space, sectionId, [item])));
+          }}
+        />
+      </div>
+    </Dialog>
+  );
+}
+
 export function OwnSectionDialogs() {
-  const { naming, adding } = useOwnSectionsUi();
+  const { naming, adding, addingToSpace } = useOwnSectionsUi();
   return (
     <>
       {naming && <NameDialog key={naming.mode === "rename" ? naming.id : "new"} naming={naming} />}
       {adding && <AddRowsDialog sectionId={adding} />}
+      {addingToSpace && <AddToSpaceDialog {...addingToSpace} />}
     </>
   );
 }

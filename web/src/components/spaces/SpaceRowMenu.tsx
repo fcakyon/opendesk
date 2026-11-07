@@ -5,7 +5,9 @@
 // Rows inside a whole built-in section keep that section's own menu. In a member's own
 // sidebar section (`sidebar`) it is the same menu, in the sidebar's words.
 
-import { Check, ChevronRight, Ellipsis, FolderInput, Pencil, Plus, RotateCcw, SlidersHorizontal, SquareStack, X } from "lucide-react";
+import { sidebarEdit } from "@/lib/collab/sidebarEdit";
+import { Check, ChevronRight, Ellipsis, FolderInput, Pencil, PencilRuler, Plus, RotateCcw, SquareStack, X } from "lucide-react";
+import { toast } from "@/components/ui/toast";
 import { ContextMenu as CM, DropdownMenu as M } from "radix-ui";
 import { forwardRef, useRef, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,8 +17,6 @@ import type { Space, SpaceItem } from "@/lib/api/types";
 import { badgeChoices, badgeWord, pickCount } from "@/lib/collab/sidebarPrefs";
 import { cn } from "@/lib/cn";
 import { addItems, addSection, hasItem, itemKey, moveItemTo, removeItem, replaceSpace, updateItem } from "@/lib/spaces/model";
-import { spaceUi } from "@/lib/spaces/store";
-import { collabUi } from "@/lib/collab/ui";
 import { ownSectionsUi, type OwnRow } from "@/lib/collab/ownSectionsUi";
 import type { RowModel } from "./rows";
 
@@ -142,11 +142,13 @@ export const SpaceRowMenu = forwardRef<HTMLElement, SpaceRowMenuProps>(function 
               );
             }),
           )}
-        {itemEl(<X />, words.remove, () => change(removeItem(space, key)))}
+        {itemEl(<X />, words.remove, () => {
+          // Taken out at once, with the way back in the toast.
+          change(removeItem(space, key));
+          toast.undo(tc("edit.removed", { name: label }), () => change(space), tc("edit.undo"));
+        })}
         {sep}
-        {sidebar
-          ? itemEl(<SlidersHorizontal />, tc("rowMenu.customize"), () => collabUi.customize(true))
-          : itemEl(<SlidersHorizontal />, t("row.edit"), () => spaceUi.edit({ kind: "space", id: space.id }))}
+        {itemEl(<PencilRuler />, tc("edit.title"), () => sidebarEdit.start())}
       </>
     );
   };

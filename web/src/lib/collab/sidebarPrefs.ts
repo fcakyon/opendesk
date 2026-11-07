@@ -25,6 +25,7 @@ export function defaultSidebarPrefs(): SidebarPrefs {
     mail_tabs: [...DEFAULT_MAIL_TABS],
     auto_pins: [],
     sections: [],
+    row_order: {},
   };
 }
 
@@ -53,6 +54,7 @@ export function normalizePrefs(p: Partial<SidebarPrefs> | null | undefined): Sid
     mail_tabs: Array.isArray(p.mail_tabs) ? p.mail_tabs.filter((x): x is string => typeof x === "string") : d.mail_tabs,
     auto_pins: Array.isArray(p.auto_pins) ? p.auto_pins.filter((x): x is string => typeof x === "string") : d.auto_pins,
     sections: Array.isArray(p.sections) ? p.sections.map(readSection).filter((x): x is SidebarSection => !!x) : d.sections,
+    row_order: readRowOrder(p.row_order) ?? d.row_order,
   };
 }
 
@@ -69,9 +71,19 @@ function readSection(v: unknown): SidebarSection | null {
     const out: SidebarItem = { kind: i.kind as SidebarItem["kind"], id: i.id };
     if (typeof i.name === "string" && i.name.trim()) out.name = i.name;
     if (isBadge(i.badge)) out.badge = i.badge;
+    if (typeof i.icon === "string" && i.icon) out.icon = i.icon;
     items.push(out);
   }
-  return { id: x.id, title: typeof x.title === "string" ? x.title : "", collapsed: x.collapsed === true, items };
+  const out: SidebarSection = { id: x.id, title: typeof x.title === "string" ? x.title : "", collapsed: x.collapsed === true, items };
+  if (typeof x.icon === "string" && x.icon) out.icon = x.icon;
+  return out;
+}
+
+function readRowOrder(v: unknown): Record<string, string[]> | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const out: Record<string, string[]> = {};
+  for (const [k, x] of Object.entries(v)) if (Array.isArray(x)) out[k] = x.filter((r): r is string => typeof r === "string");
+  return out;
 }
 
 const isSection = (id: string): id is SidebarSectionId => (SECTION_IDS as readonly string[]).includes(id);
@@ -189,6 +201,8 @@ export const hid = {
   wikiPage: (id: string) => `wiki_page:${id}`,
   /** A teamspace in the Pages section: a team's id. */
   wikiSpace: (id: string) => `wiki_space:${id}`,
+  /** A row of the Workspace section: contacts, knowledge, wiki or reports. */
+  page: (id: string) => `page:${id}`,
 };
 
 /** The parts of the Pages section a member can hide, in the order it shows them. */

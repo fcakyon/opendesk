@@ -133,6 +133,11 @@ export function applyCollabEvent(qc: QueryClient, type: string, data: Record<str
     schedule(qc, wid, p);
     return true;
   }
+  if (type === "collab.sidebar") {
+    // The member saved their sidebar in another tab or on another device.
+    void qc.invalidateQueries({ queryKey: qk.mailSidebar });
+    return true;
+  }
   if (type === "collab.accounts") {
     const id = typeof data.account_id === "string" ? data.account_id : null;
     void qc.invalidateQueries({ queryKey: qk.mailAccounts });

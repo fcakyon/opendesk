@@ -5,7 +5,7 @@
 // or without Collab; with `enabled` false it holds the row's actions alone, and a row without
 // any is left as it is. Saved at once with PUT /v1/collab/sidebar.
 
-import { Ellipsis, EyeOff, Pin, PinOff, Settings, SlidersHorizontal } from "lucide-react";
+import { Ellipsis, EyeOff, PencilRuler, Pin, PinOff, Settings } from "lucide-react";
 import { forwardRef, useRef, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Slot } from "radix-ui";
@@ -35,7 +35,7 @@ import {
   type BadgeKind,
   type BadgeNumbers,
 } from "@/lib/collab/sidebarPrefs";
-import { collabUi } from "@/lib/collab/ui";
+import { sidebarEdit } from "@/lib/collab/sidebarEdit";
 import { AddToSidebar } from "./AddToSidebar";
 import type { OwnRow } from "@/lib/collab/ownSectionsUi";
 import { canColor, LABEL_TONES, toneHex, toneOf, useSetLabelColor } from "./labelColor";
@@ -145,7 +145,13 @@ export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ 
       )}
       {pin && pin.kind !== "view_section" && <AddToSidebar item={pin as OwnRow} inContext={context} />}
       {hideId && (
-        <Item icon={<EyeOff />} onSelect={() => change(setHidden(prefs, hideId, true))}>
+        <Item
+          icon={<EyeOff />}
+          onSelect={() => {
+            change(setHidden(prefs, hideId, true));
+            toast.undo(t("edit.hidden", { name: label ?? "" }), () => change(setHidden(prefs, hideId, false)), t("edit.undo"));
+          }}
+        >
           {t("rowMenu.hide")}
         </Item>
       )}
@@ -155,8 +161,8 @@ export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ 
           {settings.label}
         </Item>
       )}
-      <Item icon={<SlidersHorizontal />} onSelect={() => collabUi.customize(true)}>
-        {t("rowMenu.customize")}
+      <Item icon={<PencilRuler />} onSelect={() => sidebarEdit.start()}>
+        {t("edit.title")}
       </Item>
     </>
   );

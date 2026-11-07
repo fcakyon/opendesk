@@ -23,6 +23,7 @@ export function ShortcutsSheet() {
   const extra: Record<string, { keys: string; label: string }[]> = {
     general: [
       { keys: "b", label: t("shortcuts.toggleSidebar") },
+      { keys: "g e", label: t("shortcuts.editSidebar") },
       { keys: "g m", label: t("shortcuts.goMine") },
       { keys: "g r", label: t("shortcuts.goReports") },
       { keys: "g w", label: t("shortcuts.goWiki") },

@@ -4,9 +4,11 @@
 // (its folders unfold on request) with its own Assigned to me under it while it has some. Unread counts come from GET /v1/collab/counts, kept
 // fresh by collab.changed events.
 
+import { sidebarEdit } from "@/lib/collab/sidebarEdit";
+import { applyRowOrder } from "@/lib/collab/rowOrder";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { AlertCircle, ChevronRight, Layers, Plus, SlidersHorizontal } from "lucide-react";
+import { AlertCircle, ChevronRight, Layers, PencilRuler, Plus } from "lucide-react";
 import { Fragment, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivePill, Count, Label, NavTip, rowActive, rowBase, rowIdle, rowShape, Section } from "@/app/sidebarParts";
@@ -19,7 +21,6 @@ import { accountAssignedNumbers, accountNumbers, allInboxNumbers, folderNumbers,
 import { ACCOUNT_BOXES, accountName, buildFolderTree, flattenTree, folderWithRole } from "@/lib/collab/boxes";
 import { useAllFolders, useMailAccounts, useSaveSidebarPrefs } from "@/lib/collab/hooks";
 import { badgeFor, hid, livePins, pickCount, toggleExpanded, type MailBadge } from "@/lib/collab/sidebarPrefs";
-import { collabUi } from "@/lib/collab/ui";
 import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
 import { useOpenWorkspaceData } from "@/lib/spaces/hooks";
@@ -314,7 +315,8 @@ export function MailSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail:
   const folders = useAllFolders(accounts);
   const here = useMailLocation();
   const hidden = new Set(prefs.hidden);
-  const shown = (accounts ?? []).filter((a) => !hidden.has(hid.account(a.id)));
+  // In the member's order (contracts/collab.md "Row order").
+  const shown = applyRowOrder((accounts ?? []).filter((a) => !hidden.has(hid.account(a.id))), (a) => hid.account(a.id), prefs.row_order.mail);
   const unified = prefs.unified_inbox && (accounts?.length ?? 0) >= 2 && !hidden.has(hid.box("inbox"));
   // Each account shows its own assigned conversations; the row across them shows while they
   // span two accounts, or some are in an account without a row here (and always on the rail,
@@ -330,9 +332,9 @@ export function MailSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail:
       first={first}
       action={
         <span className="flex items-center gap-0.5">
-          <Tooltip content={t("nav.customize")}>
-            <button type="button" aria-label={t("nav.customize")} onClick={() => collabUi.customize(true)} className={sectionAction}>
-              <SlidersHorizontal className="size-3.5" />
+          <Tooltip content={t("edit.title")}>
+            <button type="button" aria-label={t("edit.title")} onClick={() => sidebarEdit.start()} className={sectionAction}>
+              <PencilRuler className="size-3.5" />
             </button>
           </Tooltip>
           <Tooltip content={t("nav.connect")}>

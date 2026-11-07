@@ -53,7 +53,7 @@ function SpaceSectionBlock({ section, first, rail, onFold, children }: { section
     );
   return (
     <SectionMarkCtx.Provider value={null}>
-      <Section id={`space-${section.id}`} label={title} rail={rail} first={first} folded={section.collapsed} onFold={onFold}>
+      <Section id={`space-${section.id}`} label={title} rail={rail} first={first} folded={section.collapsed} onFold={onFold} icon={section.icon}>
         <div className="[&>*:first-child]:!mt-0">{children}</div>
       </Section>
     </SectionMarkCtx.Provider>
@@ -189,6 +189,7 @@ export function SpaceView({
         prefs={d?.prefs ?? NO_PREFS}
         own={item.badge}
         label={item.name}
+        emoji={item.icon}
         ws={d && !d.open ? d.id : undefined}
         mark={d ? badgeFor(d) : null}
         menu={(row) => (

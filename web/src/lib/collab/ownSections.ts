@@ -99,7 +99,7 @@ const toItem = ({ workspace_id: _w, ...rest }: SpaceItem): SidebarItem => rest a
  * section's key) or last; a section gone leaves the order.
  */
 export function withSpace(p: SidebarPrefs, space: Space, at?: string): SidebarPrefs {
-  const sections: SidebarSection[] = space.sections.map((s) => ({ id: s.id, title: cleanName(s.title), collapsed: s.collapsed, items: s.items.map(toItem) }));
+  const sections: SidebarSection[] = space.sections.map((s) => ({ id: s.id, title: cleanName(s.title), collapsed: s.collapsed, ...(s.icon ? { icon: s.icon } : {}), items: s.items.map(toItem) }));
   const before = new Set(p.sections.map((s) => s.id));
   const after = new Set(sections.map((s) => s.id));
   let order = sidebarEntries(p)

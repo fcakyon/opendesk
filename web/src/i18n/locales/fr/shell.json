@@ -156,7 +156,8 @@
     "goMine": "Aller à mes tickets",
     "goReports": "Aller aux rapports",
     "goWiki": "Aller au wiki",
-    "switchWorkspace": "Ouvrir l’espace de travail 1 à 9"
+    "switchWorkspace": "Ouvrir l’espace de travail 1 à 9",
+    "editSidebar": "Modifier la barre latérale"
   },
   "route": {
     "loading": "Chargement",

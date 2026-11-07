@@ -2,12 +2,15 @@
 // tracked-uppercase section labels, 28px rows, hairlines between groups, and an
 // icon-only rail (`b` or the Collapse row) that keeps every row reachable.
 
+import { sidebarEdit, useSidebarEdit } from "@/lib/collab/sidebarEdit";
+import { EditHint, SidebarMenu } from "@/components/collab/SidebarMenu";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { BarChart3, BookOpen, Check, ChevronRight, ChevronsUpDown, CircleCheck, CircleDashed, Clock, Copy, EyeOff, Inbox, Keyboard, Lock, LogOut, Monitor, Moon, NotebookText, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Server, Settings, ShieldAlert, SlidersHorizontal, Sun, User, UserPlus, Users } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Fragment, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, lazy, Suspense, useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { applyRowOrder } from "@/lib/collab/rowOrder";
 import { useTranslation } from "react-i18next";
 import { ChecklistMini, ProgressRing, stepsLeft } from "@/components/onboarding/Checklist";
 import { useUrgentChats, useWaitingFor } from "@/components/tickets/useUrgentChats";
@@ -57,13 +60,13 @@ import { ticketRowNumbers } from "@/lib/collab/badges";
 import { badgeFor, hid, pickCount, type BadgeNumbers } from "@/lib/collab/sidebarPrefs";
 import { entryKey, visibleEntries, type SidebarEntry } from "@/lib/collab/ownSections";
 import { AddSectionButton, OwnSection } from "@/components/collab/OwnSections";
-import { collabUi } from "@/lib/collab/ui";
 import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
 
 // Collab's sections load with Collab: a workspace without it never downloads them.
 const LazyMail = lazy(() => import("@/components/collab/MailNav").then((m) => ({ default: m.MailSection })));
 const LazyFavorites = lazy(() => import("@/components/collab/MailNav").then((m) => ({ default: m.FavoritesSection })));
 const LazyPages = lazy(() => import("@/components/wiki/PagesSection").then((m) => ({ default: m.PagesSection })));
+const LazyEditor = lazy(() => import("@/components/collab/SidebarEditor").then((m) => ({ default: m.SidebarEditor })));
 
 const folderIcons: Record<FolderId, ReactNode> = {
   unassigned: <CircleDashed />,
@@ -209,8 +212,11 @@ function TeamsSection({ rail, drawer, first, counts, hidden = NONE, rp }: { rail
   if (!ctx.hasTeams) return null;
   const byName = (a: Team, b: Team) => a.name.localeCompare(b.name);
   const shown = (x: Team) => !hidden.has(hid.team(x.id));
-  const mine = ctx.teams.filter((x) => ctx.myTeams.has(x.id) && shown(x)).sort(byName);
-  const others = ctx.teams.filter((x) => !ctx.myTeams.has(x.id) && ctx.canSeeTeam(x) && shown(x)).sort(byName);
+  // The member's own order (contracts/collab.md "Row order"), else by name.
+  const order = rp.prefs.row_order.teams;
+  const mine = applyRowOrder(ctx.teams.filter((x) => ctx.myTeams.has(x.id) && shown(x)).sort(byName), (x) => hid.team(x.id), order);
+  const others = applyRowOrder(ctx.teams.filter((x) => !ctx.myTeams.has(x.id) && ctx.canSeeTeam(x) && shown(x)).sort(byName), (x) => hid.team(x.id), order);
+  const myTeamsRow = mine.length > 1 && !hidden.has(hid.team("mine"));
   const countsOf = (id: string) => (id === "mine" ? counts?.my_teams : counts?.teams?.[id]);
   const titleOf = (id: string) => {
     const c = countsOf(id);
@@ -283,10 +289,16 @@ function TeamsSection({ rail, drawer, first, counts, hidden = NONE, rp }: { rail
           trigger={<span aria-hidden className="pointer-events-none mx-2.5 block h-0" />}
         />
       )}
-      {mine.length > 1 && (
-        <TeamRow teamId="mine" label={t("nav.myTeams")} icon={<Users className="size-[15px] text-fg-3" />} nums={ticketRowNumbers(counts, hid.team("mine"))} title={titleOf("mine")} rail={rail} rp={rp} waiting={waitingFor({ kind: "team", id: "mine" })} />
-      )}
-      {mine.map((x) => row(x))}
+      {applyRowOrder(
+        [
+          ...(myTeamsRow
+            ? [{ key: hid.team("mine"), el: <TeamRow key="mine" teamId="mine" label={t("nav.myTeams")} icon={<Users className="size-[15px] text-fg-3" />} nums={ticketRowNumbers(counts, hid.team("mine"))} title={titleOf("mine")} rail={rail} rp={rp} waiting={waitingFor({ kind: "team", id: "mine" })} /> }]
+            : []),
+          ...mine.map((x) => ({ key: hid.team(x.id), el: row(x) })),
+        ],
+        (r) => r.key,
+        order,
+      ).map((r) => r.el)}
       {others.length > 0 && !rail && (
         <button
           type="button"
@@ -375,9 +387,15 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
     case "inbox":
       return (
         <Section id="inbox" label={collab.enabled ? t("nav.tickets") : t("nav.inbox")} rail={rail} first={first}>
-          {!hidden.has(hid.waitingChats) && <WaitingChats rail={rail} />}
-          {folders.filter((f) => !hidden.has(hid.ticketFolder(f.id))).map((f) => {
-            const key = hid.ticketFolder(f.id);
+          {applyRowOrder(
+            [
+              ...(hidden.has(hid.waitingChats) ? [] : [{ key: hid.waitingChats, f: null }]),
+              ...folders.filter((f) => !hidden.has(hid.ticketFolder(f.id))).map((f) => ({ key: hid.ticketFolder(f.id), f })),
+            ],
+            (r) => r.key,
+            prefs.row_order.inbox,
+          ).map(({ key, f }) => {
+            if (!f) return <WaitingChats key={key} rail={rail} />;
             const counted = f.id !== "solved" && f.id !== "spam";
             const nums = ticketRowNumbers(counts, key);
             const n = counted ? shown(key, "inbox", nums) : undefined;
@@ -492,42 +510,65 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
           )}
         </Section>
       );
-    case "workspace":
-      return (
-        <Section id="workspace" label={t("nav.workspace")} rail={rail} first={first}>
-          <NavTip rail={rail} label={t("nav.contacts")}>
-            <Link
-              to="/contacts/{-$contactId}"
-              params={{ contactId: undefined }}
-              className={cn(rowBase, rowShape(rail), rowIdle)}
-              activeProps={{ className: rowActive }}
-              aria-label={rail ? t("nav.contacts") : undefined}
-            >{withPill(<>
+    case "workspace": {
+      // Each row hides from its menu and takes the member's place (contracts/collab.md "Row order").
+      const pages: { id: string; label: string; el: ReactElement }[] = [
+        {
+          id: "contacts",
+          label: t("nav.contacts"),
+          el: (
+            <Link to="/contacts/{-$contactId}" params={{ contactId: undefined }} className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.contacts") : undefined}>{withPill(<>
               <Users />
               <Label rail={rail}>{t("nav.contacts")}</Label>
             </>)}</Link>
-          </NavTip>
-          <NavTip rail={rail} label={t("nav.kb")}>
+          ),
+        },
+        {
+          id: "knowledge",
+          label: t("nav.kb"),
+          el: (
             <Link to="/kb" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.kb") : undefined}>{withPill(<>
               <BookOpen />
               <Label rail={rail}>{t("nav.kb")}</Label>
             </>)}</Link>
-          </NavTip>
-          <NavTip rail={rail} label={t("nav.wiki")}>
-            {/* The wiki's home: a page is current in Pages, not here. */}
+          ),
+        },
+        {
+          id: "wiki",
+          label: t("nav.wiki"),
+          el: (
+            // The wiki's home: a page is current in Pages, not here.
             <Link to="/wiki" activeOptions={{ exact: true }} className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.wiki") : undefined}>{withPill(<>
               <NotebookText />
               <Label rail={rail}>{t("nav.wiki")}</Label>
             </>)}</Link>
-          </NavTip>
-          <NavTip rail={rail} label={t("nav.reports")}>
+          ),
+        },
+        {
+          id: "reports",
+          label: t("nav.reports"),
+          el: (
             <Link to="/reports" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.reports") : undefined}>{withPill(<>
               <BarChart3 />
               <Label rail={rail}>{t("nav.reports")}</Label>
             </>)}</Link>
-          </NavTip>
+          ),
+        },
+      ];
+      const rows = applyRowOrder(pages.filter((x) => !hidden.has(hid.page(x.id))), (x) => hid.page(x.id), prefs.row_order.workspace);
+      if (!rows.length) return null;
+      return (
+        <Section id="workspace" label={t("nav.workspace")} rail={rail} first={first}>
+          {rows.map((x) => (
+            <NavTip key={x.id} rail={rail} label={x.label}>
+              <RowMenu enabled prefs={prefs} hideId={hid.page(x.id)} rail={rail} label={x.label}>
+                {x.el}
+              </RowMenu>
+            </NavTip>
+          ))}
         </Section>
       );
+    }
     case "favorites":
       // Without Collab, favorites are the ticket rows: inbox folders, teams and views.
       return (
@@ -572,26 +613,36 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
   // Until the Spaces load, a remembered Space shows nothing rather than the workspace for a moment.
   const waiting = !!pickedId && !spaces && !isError;
   const render = (id: SidebarSectionId, first: boolean) => <BuiltinSection id={id} first={first} rail={rail} drawer={drawer} />;
+  // Edit mode arranges the sidebar where it is (components/collab/SidebarEditor.tsx); in the
+  // drawer it is the drawer's while the drawer is open, in the side column otherwise.
+  const editing = useSidebarEdit((s) => s.editing) && !rail;
 
   return (
     <PillCtx.Provider value={drawer ? "nav-pill-drawer" : "nav-pill"}>
     <nav aria-label={t("nav.main")} className="group/nav flex h-full w-full flex-col">
-      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-3 pt-1">
-        {waiting ? null : space && spaces ? (
-          <SpaceView key={space.id} spaces={spaces} space={space} rail={rail} renderSection={render} />
-        ) : (
-          <>
-            <SectionList
-              ids={order.map(entryKey)}
-              render={(key, first) => {
-                const e = order.find((x) => entryKey(x) === key) as SidebarEntry;
-                return e.kind === "builtin" ? render(e.id, first) : <OwnSection section={e.section} first={first} rail={rail} />;
-              }}
-            />
-            {!rail && <AddSectionButton always={drawer} />}
-          </>
-        )}
-      </div>
+      <SidebarMenu enabled={!editing && !rail}>
+        <div className="flex-1 overflow-y-auto overflow-x-hidden pb-3 pt-1">
+          {waiting ? null : editing ? (
+            <Suspense fallback={null}>
+              <LazyEditor />
+            </Suspense>
+          ) : space && spaces ? (
+            <SpaceView key={space.id} spaces={spaces} space={space} rail={rail} renderSection={render} />
+          ) : (
+            <>
+              <SectionList
+                ids={order.map(entryKey)}
+                render={(key, first) => {
+                  const e = order.find((x) => entryKey(x) === key) as SidebarEntry;
+                  return e.kind === "builtin" ? render(e.id, first) : <OwnSection section={e.section} first={first} rail={rail} />;
+                }}
+              />
+              {!rail && <AddSectionButton always={drawer} />}
+            </>
+          )}
+        </div>
+      </SidebarMenu>
+      {!editing && !rail && <EditHint />}
       <div className="flex shrink-0 flex-col gap-px py-1.5">
         {/* Per workspace: one finished elsewhere never celebrates on switching to it. */}
         <SetupChecklist key={wid} rail={rail} />
@@ -912,8 +963,8 @@ function UserMenu({ rail }: { rail: boolean }) {
         <MenuItem icon={<Settings />} onSelect={() => void navigate({ to: "/settings" })}>
           {t("nav.settings")}
         </MenuItem>
-        <MenuItem icon={<SlidersHorizontal />} onSelect={() => collabUi.customize(true)}>
-          {tc("nav.customize")}
+        <MenuItem icon={<SlidersHorizontal />} onSelect={() => sidebarEdit.start()}>
+          {tc("edit.title")}
         </MenuItem>
         <MenuItem icon={<Keyboard />} onSelect={() => shell.shortcuts()}>
           <span className="flex items-center justify-between">

@@ -151,7 +151,8 @@
     "goMine": "Zu meinen Tickets",
     "goReports": "Zu den Berichten",
     "goWiki": "Zum Wiki",
-    "switchWorkspace": "Workspace 1 bis 9 öffnen"
+    "switchWorkspace": "Workspace 1 bis 9 öffnen",
+    "editSidebar": "Seitenleiste bearbeiten"
   },
   "route": {
     "loading": "Wird geladen",

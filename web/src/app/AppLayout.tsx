@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { sidebarEdit, useSidebarEdit } from "@/lib/collab/sidebarEdit";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWaitingAlerts } from "@/components/tickets/useWaitingAlerts";
 import { Outlet, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
@@ -51,6 +52,7 @@ const CollabRoot = lazy(() => import("@/components/collab/CollabRoot"));
 const CustomizeSidebar = lazy(() => import("@/components/collab/CustomizeSidebar").then((m) => ({ default: m.CustomizeSidebar })));
 const SpaceEditorRoot = lazy(() => import("@/components/spaces/SpaceEditor"));
 const OwnSectionDialogs = lazy(() => import("@/components/collab/OwnSectionDialogs").then((m) => ({ default: m.OwnSectionDialogs })));
+const LayoutsDialog = lazy(() => import("@/components/collab/LayoutsDialog").then((m) => ({ default: m.LayoutsDialog })));
 const UpgradeDialog = lazy(() => import("@/components/billing/UpgradeDialog"));
 // The sidebar's and the header's add dialogs, loaded the first time one opens.
 const QuickAddRoot = lazy(() => import("./QuickAddRoot"));
@@ -284,7 +286,8 @@ export function AppLayout() {
   const collab = useCollab();
   const { tickets: ticketsOn } = useProducts();
   const spaceEditor = useSpaceUi((s) => !!s.editor);
-  const ownSectionPopup = useOwnSectionsUi((s) => !!s.naming || !!s.adding);
+  const ownSectionPopup = useOwnSectionsUi((s) => !!s.naming || !!s.adding || !!s.addingToSpace);
+  const editingSidebar = useSidebarEdit((s) => s.editing);
   // Once loaded the add dialogs stay, so one closing plays its animation.
   const quickAddAsked = useQuickAdd(quickAddOpen);
   const [quickAddLoaded, setQuickAddLoaded] = useState(false);
@@ -308,6 +311,7 @@ export function AppLayout() {
       else if (ticketsOn && !onNewTicket) shell.newTicket();
     },
     b: () => toggleNav(),
+    "g e": () => sidebarEdit.toggle(),
     "g i": () =>
       onMail
         ? void navigate({ to: "/mail/$box/{-$threadId}", params: { box: "inbox", threadId: undefined }, search: (prev: { account?: string }) => ({ account: prev.account }) })
@@ -395,6 +399,11 @@ export function AppLayout() {
       <Suspense fallback={null}>
         <CustomizeSidebar />
       </Suspense>
+      {editingSidebar && (
+        <Suspense fallback={null}>
+          <LayoutsDialog />
+        </Suspense>
+      )}
       {ownSectionPopup && (
         <Suspense fallback={null}>
           <OwnSectionDialogs />

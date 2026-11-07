@@ -3390,13 +3390,15 @@ export type SidebarPrefs = {
   auto_pins: string[];
   /** The member's own sections, placed in `order` as "custom:<id>": rows of anything the workspace offers. */
   sections: SidebarSection[];
+  /** The member's order of a built-in section's rows ("inbox", "mail", "teams", "workspace"), as row keys spelled like `hidden`'s. Default {}. */
+  row_order: Record<string, string[]>;
 };
 
 /** A row of a member's own section: a Space row of this workspace. */
 export type SidebarItem = Omit<SpaceItem, "workspace_id" | "kind"> & { kind: Exclude<SpaceItemKind, "section" | "everywhere"> };
 
 /** One of a member's own sidebar sections: at most 20, 60 rows each, 300 in all. */
-export type SidebarSection = { id: string; title: string; collapsed: boolean; items: SidebarItem[] };
+export type SidebarSection = { id: string; title: string; collapsed: boolean; icon?: string; items: SidebarItem[] };
 
 /** unread / total / none for mail rows; count / awaiting / urgent / overdue / none for ticket rows, and open for team rows. */
 export type SidebarBadge = "unread" | "total" | "count" | "awaiting" | "urgent" | "overdue" | "open" | "none";
@@ -3477,6 +3479,8 @@ export type SpaceItem = {
   name?: string;
   /** The number beside the row; left out: the row's default. */
   badge?: SidebarBadge;
+  /** One emoji in place of the row's own icon. */
+  icon?: string;
 };
 
 export type SpaceSection = {
@@ -3485,6 +3489,8 @@ export type SpaceSection = {
   /** 0..40 characters; "" shows no header. */
   title: string;
   collapsed: boolean;
+  /** One emoji beside the title. */
+  icon?: string;
   /** At most 60; at most 300 across the Space. */
   items: SpaceItem[];
 };

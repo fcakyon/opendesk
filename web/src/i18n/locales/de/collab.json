@@ -899,5 +899,65 @@
     "copied_other": "{{count}} Abschnitte hinzugefügt",
     "nothingToCopy": "Dieser Space hat keine Zeilen dieses Workspace",
     "tooMany": "Sie haben 20 eigene Abschnitte, das Maximum."
+  },
+  "edit": {
+    "title": "Seitenleiste bearbeiten",
+    "done": "Fertig",
+    "reset": "Zurücksetzen",
+    "more": "Mehr",
+    "resetConfirm": "Seitenleiste zurücksetzen? Jeder Bereich kommt an seinen Platz zurück und wird wieder angezeigt, und Zeilen stehen wieder in ihrer üblichen Reihenfolge. Deine eigenen Bereiche und Favoriten bleiben.",
+    "resetAction": "Zurücksetzen",
+    "resetDone": "Seitenleiste zurückgesetzt",
+    "undo": "Rückgängig",
+    "layouts": "Mit einem Layout beginnen",
+    "copySpace": "Einen Space kopieren",
+    "options": "Weitere Optionen",
+    "move": "{{name}} verschieben",
+    "rename": "{{name}} umbenennen",
+    "icon": "Symbol für {{name}}",
+    "remove": "{{name}} entfernen",
+    "unstar": "{{name}} aus den Favoriten entfernen",
+    "removed": "{{name}} aus der Seitenleiste entfernt",
+    "hidden": "{{name}} ausgeblendet",
+    "unpinned": "{{name}} aus den Favoriten entfernt",
+    "sectionDeleted": "{{name}} gelöscht",
+    "add": "Hinzufügen",
+    "newSection": "Neuer Bereich",
+    "newSectionTitle": "Neuer Bereich",
+    "emptySection": "Zeilen hierher ziehen",
+    "emptyFavorites": "Zeilen hierher ziehen, um sie zu Favoriten zu machen",
+    "spaceSettings": "Space-Einstellungen",
+    "editingSpace": "{{name}} bearbeiten",
+    "hintTitle": "Gestalte deine Seitenleiste",
+    "hintBody": "Ziehe Bereiche und Zeilen, blende aus, was du nicht brauchst, und lege eigene Bereiche an.",
+    "hintDismiss": "Ausblenden",
+    "dropNew": "Hier ablegen für einen neuen Bereich"
+  },
+  "layouts": {
+    "title": "Mit einem Layout beginnen",
+    "description": "Wähle eines, um die Seitenleiste damit zu sehen. Deine eigenen Bereiche, Favoriten und ausgeblendeten Zeilen bleiben.",
+    "use": "Dieses Layout verwenden",
+    "cancel": "Abbrechen",
+    "current": "Aktuell",
+    "preview": "Vorschau",
+    "applied": "Layout {{name}} angewendet",
+    "more_one": "{{count}} weitere",
+    "more_other": "{{count}} weitere",
+    "support": {
+      "name": "Support-Desk",
+      "hint": "Tickets zuerst, deine Teams und Ansichten in der Nähe. Mail und Seiten sind ausgeblendet."
+    },
+    "mail": {
+      "name": "Mail zuerst",
+      "hint": "Deine Posteingänge oben, dann Tickets und der Rest."
+    },
+    "docs": {
+      "name": "Docs zuerst",
+      "hint": "Seiten oben, dann der Desk."
+    },
+    "minimal": {
+      "name": "Minimal",
+      "hint": "Favoriten, Posteingang, Mail und Seiten. Teams, Ansichten und Workspace sind ausgeblendet."
+    }
   }
 }

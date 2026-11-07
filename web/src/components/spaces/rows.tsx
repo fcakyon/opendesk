@@ -484,6 +484,7 @@ export function NavItemRow({
   mark,
   menu,
   nested,
+  emoji,
 }: {
   model: RowModel;
   rail: boolean;
@@ -499,6 +500,8 @@ export function NavItemRow({
   menu?: (row: ReactElement) => ReactElement;
   /** Indented under a view section's header (app/ViewSectionGroup.tsx). */
   nested?: boolean;
+  /** The emoji the person gave the row, in place of its icon. */
+  emoji?: string;
 }) {
   const { t } = useTranslation("shell");
   const name = label || model.label;
@@ -511,7 +514,7 @@ export function NavItemRow({
       {(active) => (
         <>
           {active && <ActivePill />}
-          {model.icon}
+          {emoji ? <RowEmoji emoji={emoji} /> : model.icon}
           <Label rail={rail}>
             <span className="flex min-w-0 items-center gap-1">
               <span className="truncate">{name}</span>
@@ -531,6 +534,15 @@ export function NavItemRow({
     <NavTip rail={rail} label={name}>
       {menu ? menu(link) : link}
     </NavTip>
+  );
+}
+
+/** An emoji where a row has its icon, the icon's size. */
+export function RowEmoji({ emoji }: { emoji: string }) {
+  return (
+    <span aria-hidden className="flex size-[15px] shrink-0 items-center justify-center text-[13px] leading-none">
+      {emoji}
+    </span>
   );
 }
 

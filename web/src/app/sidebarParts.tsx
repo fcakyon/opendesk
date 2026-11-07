@@ -87,10 +87,13 @@ export function Section({
   first,
   folded: foldedProp,
   onFold,
+  icon,
   children,
 }: {
   id: string;
   label: string;
+  /** The emoji the person gave the section, before its title. */
+  icon?: string;
   rail: boolean;
   action?: ReactNode;
   first?: boolean;
@@ -128,6 +131,7 @@ export function Section({
             onClick={toggle}
             className="label-caps flex min-w-0 flex-1 items-center gap-1 text-left outline-none transition-colors hover:text-fg-2 focus-visible:text-fg"
           >
+            {icon && <span aria-hidden className="text-[11px] normal-case leading-none tracking-normal">{icon}</span>}
             <span className="truncate">{label}</span>
             {mark && <span className="ml-0.5 flex shrink-0 normal-case tracking-normal">{mark}</span>}
             <ChevronDown

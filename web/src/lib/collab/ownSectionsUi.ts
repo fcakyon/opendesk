@@ -12,11 +12,16 @@ export type Naming =
   | { mode: "new"; item?: OwnRow; at?: string }
   | { mode: "rename"; id: string };
 
-export const useOwnSectionsUi = create<{ naming: Naming | null; adding: string | null }>(() => ({ naming: null, adding: null }));
+/** Adding rows to a section of a Space, from the sidebar's edit mode. */
+export type SpaceAdding = { spaceId: string; sectionId: string };
+
+export const useOwnSectionsUi = create<{ naming: Naming | null; adding: string | null; addingToSpace: SpaceAdding | null }>(() => ({ naming: null, adding: null, addingToSpace: null }));
 
 export const ownSectionsUi = {
   name: (n: Naming) => useOwnSectionsUi.setState({ naming: n }),
   /** Opens the rows picker for a section. */
   add: (sectionId: string) => useOwnSectionsUi.setState({ adding: sectionId }),
-  close: () => useOwnSectionsUi.setState({ naming: null, adding: null }),
+  /** Opens the rows picker for a section of a Space. */
+  addToSpace: (spaceId: string, sectionId: string) => useOwnSectionsUi.setState({ addingToSpace: { spaceId, sectionId } }),
+  close: () => useOwnSectionsUi.setState({ naming: null, adding: null, addingToSpace: null }),
 };

@@ -823,5 +823,66 @@
     "copied_other": "{{count}} sections ajoutées",
     "nothingToCopy": "Ce Space n’a aucune ligne de cet espace de travail",
     "tooMany": "Vous avez 20 sections à vous, le maximum possible."
+  },
+  "edit": {
+    "title": "Modifier la barre latérale",
+    "done": "Terminé",
+    "reset": "Réinitialiser",
+    "more": "Plus",
+    "resetConfirm": "Réinitialiser la barre latérale ? Chaque section reprend sa place et s'affiche de nouveau, et les lignes retrouvent leur ordre habituel. Vos propres sections et vos favoris restent.",
+    "resetAction": "Réinitialiser",
+    "resetDone": "Barre latérale réinitialisée",
+    "undo": "Annuler",
+    "layouts": "Partir d'une disposition",
+    "copySpace": "Copier un espace",
+    "options": "Plus d'options",
+    "move": "Déplacer {{name}}",
+    "rename": "Renommer {{name}}",
+    "icon": "Icône de {{name}}",
+    "remove": "Retirer {{name}}",
+    "unstar": "Retirer {{name}} des favoris",
+    "removed": "{{name}} retiré de la barre latérale",
+    "hidden": "{{name}} masqué",
+    "unpinned": "{{name}} retiré des favoris",
+    "sectionDeleted": "{{name}} supprimée",
+    "add": "Ajouter",
+    "newSection": "Nouvelle section",
+    "newSectionTitle": "Nouvelle section",
+    "emptySection": "Faites glisser des lignes ici",
+    "emptyFavorites": "Faites glisser des lignes ici pour en faire des favoris",
+    "spaceSettings": "Réglages de l'espace",
+    "editingSpace": "Modification de {{name}}",
+    "hintTitle": "Faites de la barre latérale la vôtre",
+    "hintBody": "Faites glisser sections et lignes, masquez ce qui ne vous sert pas et ajoutez vos propres sections.",
+    "hintDismiss": "Ignorer",
+    "dropNew": "Déposez ici pour une nouvelle section"
+  },
+  "layouts": {
+    "title": "Partir d'une disposition",
+    "description": "Choisissez-en une pour voir la barre latérale avec. Vos propres sections, vos favoris et les lignes masquées restent.",
+    "use": "Utiliser cette disposition",
+    "cancel": "Annuler",
+    "current": "Actuelle",
+    "preview": "Aperçu",
+    "applied": "Disposition {{name}} appliquée",
+    "more_one": "{{count}} de plus",
+    "more_many": "{{count}} de plus",
+    "more_other": "{{count}} de plus",
+    "support": {
+      "name": "Support",
+      "hint": "Les tickets d'abord, avec vos équipes et vues à portée. Mail et Pages sont masqués."
+    },
+    "mail": {
+      "name": "Mail d'abord",
+      "hint": "Vos boîtes de réception en haut, puis les tickets et le reste."
+    },
+    "docs": {
+      "name": "Docs d'abord",
+      "hint": "Pages en haut, puis le support."
+    },
+    "minimal": {
+      "name": "Minimale",
+      "hint": "Les favoris, la boîte de réception, le mail et les pages. Équipes, vues et Espace de travail sont masqués."
+    }
   }
 }

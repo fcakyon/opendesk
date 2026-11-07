@@ -923,5 +923,65 @@
     "copied_other": "Added {{count}} sections",
     "nothingToCopy": "That Space has no rows of this workspace",
     "tooMany": "You have 20 sections of your own, the most there can be."
+  },
+  "edit": {
+    "title": "Edit sidebar",
+    "done": "Done",
+    "reset": "Reset",
+    "more": "More",
+    "resetConfirm": "Reset the sidebar? Every section goes back to its place and shows again, and rows come back in their usual order. Your own sections and favorites stay.",
+    "resetAction": "Reset",
+    "resetDone": "Sidebar reset",
+    "undo": "Undo",
+    "layouts": "Start from a layout",
+    "copySpace": "Copy a Space",
+    "options": "More options",
+    "move": "Move {{name}}",
+    "rename": "Rename {{name}}",
+    "icon": "Icon for {{name}}",
+    "remove": "Remove {{name}}",
+    "unstar": "Remove {{name}} from favorites",
+    "removed": "{{name}} removed from the sidebar",
+    "hidden": "{{name}} hidden",
+    "unpinned": "{{name}} removed from favorites",
+    "sectionDeleted": "{{name}} deleted",
+    "add": "Add",
+    "newSection": "New section",
+    "newSectionTitle": "New section",
+    "emptySection": "Drag rows here",
+    "emptyFavorites": "Drag rows here to make them favorites",
+    "spaceSettings": "Space settings",
+    "editingSpace": "Editing {{name}}",
+    "hintTitle": "Make the sidebar yours",
+    "hintBody": "Drag sections and rows, hide what you don't use and add sections of your own.",
+    "hintDismiss": "Dismiss",
+    "dropNew": "Drop here for a new section"
+  },
+  "layouts": {
+    "title": "Start from a layout",
+    "description": "Pick one to see the sidebar with it. Your own sections, favorites and hidden rows stay.",
+    "use": "Use this layout",
+    "cancel": "Cancel",
+    "current": "Current",
+    "preview": "Preview",
+    "applied": "{{name}} layout applied",
+    "more_one": "{{count}} more",
+    "more_other": "{{count}} more",
+    "support": {
+      "name": "Support desk",
+      "hint": "Tickets first, with your teams and views close by. Mail and Pages are hidden."
+    },
+    "mail": {
+      "name": "Mail first",
+      "hint": "Your inboxes on top, then tickets and the rest."
+    },
+    "docs": {
+      "name": "Docs first",
+      "hint": "Pages on top, then the desk."
+    },
+    "minimal": {
+      "name": "Minimal",
+      "hint": "Favorites, the inbox, mail and pages. Teams, views and Workspace are hidden."
+    }
   }
 }

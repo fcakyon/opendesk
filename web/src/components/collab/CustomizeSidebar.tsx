@@ -5,13 +5,11 @@
 // PUT /v1/collab/sidebar. Every member has it; without Collab it arranges the ticket side
 // (Favorites, Inbox, Teams, Views, Pages, Workspace) and leaves out Mail and the mail options.
 
-import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, ChevronDown, ChevronRight, Copy, Eye, EyeOff, FileText, Hash, LayoutTemplate, Layers, ListTree, Lock, Pencil, Pin, PinOff, Plus, Trash2, Users } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, Eye, EyeOff, Hash, Pencil, Pin, PinOff, Plus, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { SidebarBadge, SidebarPin, SidebarPrefs, SidebarSection, SidebarSectionId, Space, View } from "@/lib/api/types";
-import { ACCOUNT_BOXES, accountName, buildFolderTree, flattenTree, folderWithRole, isMailBox } from "@/lib/collab/boxes";
-import { useAllFolders, useCollab, useMailAccounts, useSaveSidebarPrefs, useSidebarPrefs } from "@/lib/collab/hooks";
+import type { SidebarBadge, SidebarPrefs, SidebarSection, SidebarSectionId, Space } from "@/lib/api/types";
+import { useCollab, useSaveSidebarPrefs, useSidebarPrefs } from "@/lib/collab/hooks";
 import {
   badgeChoices,
   badgeFor,
@@ -21,39 +19,30 @@ import {
   isPinned,
   MAX_PINS,
   movePin,
-  PAGES_PARTS,
-  type PagesPart,
   sectionsOffered,
   setBadge,
   setHidden,
   togglePin,
   type BadgeKind,
-  type MailBadge,
-  type TicketBadge,
 } from "@/lib/collab/sidebarPrefs";
 import { useCollabUi, collabUi } from "@/lib/collab/ui";
-import { folderById, folders as ticketFolders } from "@/lib/folders";
 import { cn } from "@/lib/cn";
-import { findSection, groupViews } from "@/lib/viewSections";
-import { q } from "@/lib/queries";
 import { ReorderButtons } from "@/components/settings2/bits";
-import { TeamDot, useTeamsCtx } from "@/components/tickets/teams";
-import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Menu, MenuChoice, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
-import { AccountDot, boxIcon, FolderGlyph } from "./bits";
+import { useSidebarItems, type Item, type ItemBadge } from "./sidebarItems";
 import { SpaceGlyph } from "@/components/spaces/icons";
 import { useSession } from "@/lib/session";
 import { useSpaces } from "@/lib/spaces/hooks";
-import { PageIcon } from "@/components/wiki/PageTree";
 import { pickedSpace } from "@/lib/spaces/model";
 import { spaceUi, usePickedSpaceId } from "@/lib/spaces/store";
 import { useConfirm } from "@/components/ui/confirm";
-import { asSpace, entryKey, moveEntry, newOwnSection, OWN_LIMITS, ownCount, reorderEntries, sidebarEntries, withSpace } from "@/lib/collab/ownSections";
+import { asSpace, entryKey, moveEntry, OWN_LIMITS, reorderEntries, sidebarEntries, withSpace } from "@/lib/collab/ownSections";
+import { copySpaceSections } from "@/lib/collab/copySpace";
 import { ownSectionsUi } from "@/lib/collab/ownSectionsUi";
 import { removeSection } from "@/lib/spaces/model";
 
@@ -77,8 +66,6 @@ function IconToggle({ on, onClick, label, iconOn, iconOff, disabled }: { on: boo
   );
 }
 
-type ItemBadge = { key: string; kind: BadgeKind; sections: SidebarSectionId[]; fallback?: MailBadge | TicketBadge };
-type Item = { key: string; label: string; icon: ReactNode; hideId?: string; pin?: SidebarPin; badge?: ItemBadge; depth?: number; note?: string };
 
 /** The sections whose rows carry numbers, and what kind. */
 const SECTION_BADGE: Partial<Record<SidebarSectionId, BadgeKind | "both">> = { mail: "mail", favorites: "both", inbox: "ticket", teams: "team", views: "ticket" };
@@ -209,17 +196,11 @@ function ItemRow({ item, prefs, onChange }: { item: Item; prefs: SidebarPrefs; o
 }
 
 export function CustomizeSidebar() {
-  const { t: tNav } = useTranslation("navigation");
   const { t } = useTranslation("collab");
   const open = useCollabUi((s) => s.customizeOpen);
   const collab = useCollab().enabled;
   const prefs = useSidebarPrefs();
   const save = useSaveSidebarPrefs();
-  const { data: accounts } = useMailAccounts();
-  const folderMap = useAllFolders(accounts);
-  const { data: views } = useQuery(q.views());
-  const { data: pages } = useQuery(q.wikiTree());
-  const teams = useTeamsCtx();
   const [expanded, setExpanded] = useState<Set<SidebarSectionId>>(new Set(["mail"]));
   const { t: ts } = useTranslation("spaces");
   const { spaces } = useSpaces();
@@ -274,141 +255,13 @@ export function CustomizeSidebar() {
   // A Space's sections with this workspace's rows, copied as the member's own.
   const copyable = (spaces ?? []).filter((sp) => sp.sections.some((sec) => sec.items.some((i) => i.workspace_id === wid && i.kind !== "section" && i.kind !== "everywhere")));
   const copySpace = (sp: Space) => {
-    let next = prefs;
-    let made = 0;
-    for (const sec of sp.sections) {
-      const rows = sec.items.filter((i) => i.workspace_id === wid && i.kind !== "section" && i.kind !== "everywhere");
-      if (!rows.length || next.sections.length >= OWN_LIMITS.sections) continue;
-      const room = Math.min(OWN_LIMITS.sectionItems, OWN_LIMITS.items - ownCount(next));
-      if (room <= 0) break;
-      const r = newOwnSection(next, wid, sec.title || sp.name);
-      const own = asSpace(r.prefs, wid);
-      next = withSpace(r.prefs, { ...own, sections: own.sections.map((x) => (x.id === r.id ? { ...x, items: rows.slice(0, room).map((i) => ({ workspace_id: wid, kind: i.kind, id: i.id, ...(i.name ? { name: i.name } : {}), ...(i.badge ? { badge: i.badge } : {}) })) } : x)) });
-      made++;
-    }
-    if (!made) return void toast.error(t("ownSections.nothingToCopy"));
-    change(next);
-    toast.success(t("ownSections.copied", { count: made }));
+    const r = copySpaceSections(prefs, wid, sp);
+    if (!r.made) return void toast.error(t("ownSections.nothingToCopy"));
+    change(r.prefs);
+    toast.success(t("ownSections.copied", { count: r.made }));
   };
 
-  const mailBadge = (key: string, fallback?: MailBadge): ItemBadge => ({ key, kind: "mail", sections: ["mail"], fallback });
-  const ticketBadge = (key: string, section: SidebarSectionId): ItemBadge => ({ key, kind: section === "teams" ? "team" : "ticket", sections: [section] });
-
-  const itemsOf = (id: SidebarSectionId): Item[] => {
-    switch (id) {
-      case "favorites":
-        return [];
-      case "mail": {
-        const out: Item[] = [
-          { key: "box:inbox", label: t("nav.allInboxes"), icon: <Layers />, hideId: hid.box("inbox"), pin: { kind: "box", id: "inbox" }, badge: mailBadge("box:inbox") },
-          { key: "box:shared", label: t("box.shared"), icon: boxIcon.shared, hideId: hid.box("shared"), pin: { kind: "box", id: "shared" }, badge: mailBadge("box:shared") },
-          { key: "box:assigned", label: t("box.assigned"), icon: boxIcon.assigned, hideId: hid.box("assigned"), pin: { kind: "box", id: "assigned" }, badge: mailBadge("box:assigned") },
-          ...ACCOUNT_BOXES.map((b) => ({ key: `every:${b}`, label: t(`box.${b}`), icon: boxIcon[b], hideId: hid.folder(b), note: t("customize.everyAccount") })),
-        ];
-        for (const a of accounts ?? []) {
-          const fs = folderMap[a.id];
-          out.push({ key: `account:${a.id}`, label: accountName(a), icon: <AccountDot color={a.color} className="size-2.5" />, hideId: hid.account(a.id), pin: { kind: "account", id: a.id }, badge: mailBadge(`account:${a.id}`) });
-          for (const b of ACCOUNT_BOXES) {
-            const f = folderWithRole(fs, b);
-            // Only Starred of the special folders showed a number before anyone chose.
-            if (f) out.push({ key: `f:${f.id}`, label: t(`box.${b}`), icon: boxIcon[b], hideId: hid.folder(f.id), pin: { kind: "folder", id: f.id }, badge: mailBadge(`folder:${f.id}`, b === "starred" ? undefined : "none"), depth: 1 });
-          }
-          for (const { node, depth } of flattenTree(buildFolderTree(fs ?? []))) {
-            if (!node.folder) continue;
-            out.push({ key: `f:${node.folder.id}`, label: node.name, icon: <FolderGlyph folder={node.folder} />, hideId: hid.folder(node.folder.id), pin: { kind: "folder", id: node.folder.id }, badge: mailBadge(`folder:${node.folder.id}`), depth: 1 + depth });
-          }
-        }
-        return out;
-      }
-      case "inbox":
-        return [
-          // Shown only while someone waits, so a member who does not take chats can leave it out.
-          { key: "waiting_chats", label: t("customize.waitingChats"), icon: <span className="size-2 rounded-full bg-tone-red-solid" />, hideId: hid.waitingChats, note: t("customize.waitingChatsNote") },
-          ...ticketFolders.map((f): Item => ({
-            key: f.id,
-            label: tNav(f.labelKey),
-            icon: <Layers />,
-            hideId: hid.ticketFolder(f.id),
-            pin: { kind: "ticket_folder", id: f.id },
-            badge: f.id === "solved" || f.id === "spam" ? undefined : ticketBadge(hid.ticketFolder(f.id), "inbox"),
-          })),
-        ];
-      case "teams":
-        return teams.teams
-          .filter(teams.canSeeTeam)
-          .map((x) => ({ key: x.id, label: x.name, icon: <TeamDot team={x} />, hideId: hid.team(x.id), pin: { kind: "team", id: x.id }, badge: ticketBadge(hid.team(x.id), "teams") }));
-      case "views": {
-        const view = (v: View, depth: number): Item => ({
-          key: v.id,
-          label: viewName(v),
-          icon: <ViewIcon icon={v.icon} size={14} />,
-          hideId: hid.view(v.id),
-          pin: { kind: "view", id: v.id },
-          badge: ticketBadge(hid.view(v.id), "views"),
-          depth,
-        });
-        // A section heads its views, and pins to Favorites with them.
-        return groupViews(views ?? []).flatMap((e) =>
-          e.kind === "view"
-            ? [view(e.view, 0)]
-            : [{ key: `section:${e.key}`, label: e.name, icon: <ListTree />, pin: { kind: "view_section", id: e.key }, note: t("customize.viewSection") }, ...e.views.map((v) => view(v, 1))],
-        );
-      }
-      case "pages": {
-        // Its parts, the workspace's top-level pages under Workspace pages, and the teamspaces under Teamspaces.
-        const icons: Record<PagesPart, ReactNode> = {
-          workspace: <FileText />,
-          teamspaces: <Users />,
-          private: <Lock />,
-          today: <CalendarDays />,
-          templates: <LayoutTemplate />,
-          trash: <Trash2 />,
-        };
-        const tops = (pages ?? []).filter((n) => !n.parent_id && !n.private && !n.team_id && !n.journal).sort((a, b) => a.position - b.position);
-        const spaces = teams.teams.filter((x) => teams.canSeeTeam(x) && (pages ?? []).some((n) => n.team_id === x.id)).sort((a, b) => a.name.localeCompare(b.name));
-        return PAGES_PARTS.flatMap((part): Item[] => [
-          { key: `pages:${part}`, label: t(`customize.pages.${part}`), icon: icons[part], hideId: hid.pages(part) },
-          ...(part === "workspace"
-            ? tops.map((n) => ({ key: n.id, label: n.title.trim() || t("customize.pages.untitled"), icon: <PageIcon icon={n.icon} kind={n.kind} />, hideId: hid.wikiPage(n.id), depth: 1 }))
-            : part === "teamspaces"
-              ? spaces.map((x) => ({ key: x.id, label: x.name, icon: <TeamDot team={x} />, hideId: hid.wikiSpace(x.id), depth: 1 }))
-              : []),
-        ]);
-      }
-      case "workspace":
-        return [];
-    }
-  };
-
-  // Favorites list: what each pin points at, by name.
-  const pinLabel = (p: SidebarPin): string | null => {
-    switch (p.kind) {
-      case "box":
-        // Mail favorites are Collab's: without it they stay saved but are not listed.
-        return collab && isMailBox(p.id) ? (p.id === "inbox" ? t("nav.allInboxes") : t(`box.${p.id}`)) : null;
-      case "account": {
-        const a = accounts?.find((x) => x.id === p.id);
-        return a ? accountName(a) : null;
-      }
-      case "folder": {
-        const f = Object.values(folderMap).flatMap((x) => x ?? []).find((x) => x.id === p.id);
-        return f ? f.name : null;
-      }
-      case "view":
-        return views?.find((v) => v.id === p.id)?.name ?? null;
-      case "view_section":
-        return findSection(views ?? [], p.id)?.name ?? null;
-      case "team":
-        return teams.team(p.id)?.name ?? null;
-      case "ticket_folder": {
-        const folder = folderById(p.id);
-        return folder ? tNav(folder.labelKey) : null;
-      }
-      default:
-        return null;
-    }
-  };
-  const livePinned = prefs.pinned.filter((p) => pinLabel(p));
+  const { itemsOf, pinLabel, livePinned } = useSidebarItems();
 
   return (
     <Dialog

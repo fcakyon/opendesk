@@ -12,7 +12,7 @@ import { Section } from "@/app/sidebarParts";
 import { RenameRow, SpaceRowMenu } from "@/components/spaces/SpaceRowMenu";
 import { buildRow, NavItemRow, useMailLocation, useRowLabels } from "@/components/spaces/rows";
 import { useWaitingFor } from "@/components/tickets/useUrgentChats";
-import { useConfirm } from "@/components/ui/confirm";
+import { toast } from "@/components/ui/toast";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { SidebarSection, Space } from "@/lib/api/types";
@@ -47,7 +47,6 @@ export function OwnSection({ section, first, rail }: { section: SidebarSection; 
   const { t } = useTranslation("collab");
   const { prefs, wid, change } = useOwnSidebar();
   const collab = useCollab();
-  const confirm = useConfirm();
   const folders = section.items.some((i) => i.kind === "folder");
   const wiki = section.items.some((i) => i.kind === "wiki_page" || i.kind === "wiki_space");
   const d = useWorkspacesData(wid ? [wid] : [], { folders: () => folders, wiki: () => wiki }).get(wid);
@@ -100,11 +99,12 @@ export function OwnSection({ section, first, rail }: { section: SidebarSection; 
         };
   const line = "relative before:pointer-events-none before:absolute before:inset-x-4 before:-top-px before:z-10 before:h-0.5 before:rounded-full before:bg-tone-blue-solid";
 
-  const remove = () =>
-    confirm.show(t("ownSections.deleteConfirm", { name: title }), () => change(withSpace(prefs, removeSection(space, section.id))), {
-      confirmLabel: t("ownSections.deleteAction"),
-      danger: true,
-    });
+  // Deleted at once, with the way back in the toast.
+  const remove = () => {
+    const before = prefs;
+    change(withSpace(prefs, removeSection(space, section.id)));
+    toast.undo(t("edit.sectionDeleted", { name: title }), () => change(before), t("edit.undo"));
+  };
 
   const action = (
     <div className="flex items-center gap-0.5">
@@ -197,6 +197,7 @@ export function OwnSection({ section, first, rail }: { section: SidebarSection; 
           prefs={prefs}
           own={item.badge}
           label={item.name}
+          emoji={item.icon}
           menu={(row) => (
             <SpaceRowMenu spaces={[space]} space={space} item={item} model={model} put={put} onRename={() => setRenaming(key)} rail={rail} label={item.name || model.label} sidebar>
               {row}
@@ -217,6 +218,7 @@ export function OwnSection({ section, first, rail }: { section: SidebarSection; 
         first={first}
         folded={section.collapsed}
         onFold={(collapsed) => save(updateSection(space, section.id, { collapsed }))}
+        icon={section.icon}
         action={action}
       >
         {shown}
