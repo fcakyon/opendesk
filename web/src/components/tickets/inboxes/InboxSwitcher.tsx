@@ -44,14 +44,14 @@ export function InboxSwitcher({ mailbox, onPick }: { mailbox: string | undefined
         </MenuTrigger>
         <MenuContent align="start" className="w-[260px]">
           <MenuLabel>{t("inboxes.switcher")}</MenuLabel>
-          <MenuItem icon={mailbox ? <span /> : <Check />} onSelect={() => onPick(undefined)}>
+          <MenuItem icon={<Check className={cn(mailbox && "invisible")} />} onSelect={() => onPick(undefined)}>
             {t("inboxes.allInboxes")}
           </MenuItem>
           {list.map((m) => (
-            <MenuItem key={m.id} icon={m.id === mailbox ? <Check /> : <span />} onSelect={() => onPick(m.id)}>
-              <span className="flex min-w-0 flex-col">
+            <MenuItem key={m.id} icon={<Check className={cn(m.id !== mailbox && "invisible")} />} onSelect={() => onPick(m.id)}>
+              <span className="flex min-w-0 items-baseline gap-2">
                 <span className="truncate">{m.name || m.email}</span>
-                {m.name && <span className="mono truncate text-[11px] text-fg-4">{m.email}</span>}
+                {m.name && <span className="mono min-w-0 truncate text-[11px] text-fg-4">{m.email}</span>}
               </span>
             </MenuItem>
           ))}

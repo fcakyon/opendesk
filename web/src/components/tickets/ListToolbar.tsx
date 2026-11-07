@@ -62,6 +62,7 @@ export function ListToolbar({
   onLayout,
   below,
   inTeam,
+  inboxBelow,
   titleAction,
   dragItem,
 }: {
@@ -73,6 +74,8 @@ export function ListToolbar({
   below?: ReactNode;
   /** A team inbox: the team filter is the page itself. */
   inTeam?: boolean;
+  /** The ticket inbox is chosen under the title (components/tickets/inboxes/InboxSwitcher): no filter chip for it. */
+  inboxBelow?: boolean;
   title: string;
   icon: ReactNode;
   count?: number | null;
@@ -181,7 +184,7 @@ export function ListToolbar({
     severities.length +
     (search.channel ? 1 : 0) +
     (search.tag ? 1 : 0) +
-    (search.mailbox ? 1 : 0) +
+    (search.mailbox && !inboxBelow ? 1 : 0) +
     (search.to ? 1 : 0) +
     teamSel.length +
     (brandSel ? 1 : 0) +
@@ -521,7 +524,7 @@ export function ListToolbar({
                     </Chip>
                   );
                 })}
-                {search.mailbox && (
+                {search.mailbox && !inboxBelow && (
                   <Chip key="mailbox" label={t("filter.remove")} onRemove={() => onSearch({ ...search, mailbox: undefined })}>
                     <Mail />
                     <span className="mono text-[11.5px]">{activeMailbox?.email ?? t("filter.address")}</span>
