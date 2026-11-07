@@ -105,6 +105,7 @@ export default defineConfig({
             { label: 'Inbox and tickets', slug: 'guides/inbox-and-tickets' },
             { label: 'Inbox categories', slug: 'guides/inbox-categories' },
             { label: 'Import your history', slug: 'guides/importing' },
+            { label: 'Your sidebar', slug: 'guides/sidebar' },
             { label: 'Several workspaces', slug: 'guides/workspaces' },
             {
               label: 'Mailboxes',
