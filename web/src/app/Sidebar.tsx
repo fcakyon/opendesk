@@ -180,7 +180,7 @@ function TeamRow({
         prefs={rp.prefs}
         badge={{ key, kind: "team", sections: ["teams"], numbers: nums }}
         pin={own ? { kind: "team", id: teamId } : undefined}
-        hideId={own ? key : undefined}
+        hideId={key}
         rail={rail}
         label={name}
         ownName={label}
