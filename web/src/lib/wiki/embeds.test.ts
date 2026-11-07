@@ -33,7 +33,7 @@ describe("embedFor", () => {
       const src = embedFor(link)?.src;
       expect(src, link).toBeTruthy();
       const origin = new URL(src!).origin;
-      expect(EMBED_ORIGINS.some((o) => o === origin || (o.includes("*") && new RegExp(`^${o.replace(".", "\\.").replace("*", "[\\w-]+")}$`).test(origin))), origin).toBe(true);
+      expect(EMBED_ORIGINS.some((o) => o === origin || (o.includes("*") && new RegExp(`^${o.replaceAll(".", "\\.").replaceAll("*", "[\\w-]+")}$`).test(origin))), origin).toBe(true);
     }
   });
 

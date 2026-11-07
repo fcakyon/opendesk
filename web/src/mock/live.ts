@@ -15,8 +15,10 @@ import { textToHtml } from "./util";
 const timers: ReturnType<typeof setTimeout>[] = [];
 let running = false;
 
-const rnd = (min: number, max: number) => min + Math.random() * (max - min);
-const any = <T>(a: T[]): T | undefined => a[Math.floor(Math.random() * a.length)];
+// The demo's chance, from the browser's crypto source like every other id the mock makes.
+const random = () => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
+const rnd = (min: number, max: number) => min + random() * (max - min);
+const any = <T>(a: T[]): T | undefined => a[Math.floor(random() * a.length)];
 
 function ws(): WsData {
   return db.workspaces[0];
@@ -66,10 +68,10 @@ function randomNewTicket() {
   if (!contact) return;
   const subject = any(NEW_SUBJECTS) ?? GENERATED[0].subject;
   const body = `Hi there,\n\n${subject}. Could you take a look?\n\n${contact.name.split(" ")[0]}`;
-  const widget = Math.random() < 0.25 ? any(w.widgets) : undefined;
+  const widget = random() < 0.25 ? any(w.widgets) : undefined;
   let t;
   if (widget) {
-    const topic = Math.random() < 0.6 ? any(widget.settings.topics) : undefined;
+    const topic = random() < 0.6 ? any(widget.settings.topics) : undefined;
     const slug = w.brands.find((b) => b.id === widget.brand_id)?.slug ?? "margin";
     const page_url = `https://${slug}.app${any(CHAT_PAGES) ?? "/"}`;
     const route = evaluateRouting(w, { channel: "chat", from: contact.email ?? "", subject, body, widget_id: widget.id, topic: topic?.id, page_url });
@@ -79,9 +81,9 @@ function randomNewTicket() {
   } else {
     const box = any(w.mailboxes.filter((m) => m.status === "active"));
     if (!box) return;
-    const to = Math.random() < 0.3 && box.aliases.length ? (any(box.aliases) ?? box.email) : box.email;
+    const to = random() < 0.3 && box.aliases.length ? (any(box.aliases) ?? box.email) : box.email;
     const route = evaluateRouting(w, { channel: "email", to, from: contact.email ?? "", subject, body });
-    t = newTicket(w, { subject, contact: contactRef(contact), channel: "email", priority: Math.random() < 0.2 ? "high" : "normal", mailbox_id: route.mailbox_id ?? box.id, team_id: route.team_id, brand_id: route.brand_id, received_at: to, routed: route.routed });
+    t = newTicket(w, { subject, contact: contactRef(contact), channel: "email", priority: random() < 0.2 ? "high" : "normal", mailbox_id: route.mailbox_id ?? box.id, team_id: route.team_id, brand_id: route.brand_id, received_at: to, routed: route.routed });
     t.required_skills = route.required_skills.map(({ id, name }) => ({ id, name }));
     t.origin_mailbox_id = box.id;
     countRuleRun(w, route.routed);
@@ -100,7 +102,7 @@ function randomNotification() {
   const t = any(w.tickets.filter((x) => x.assignee?.id === db.meId && OPENISH.includes(x.status)));
   if (!t) return;
   const jonas = db.users[1];
-  notify(w, Math.random() < 0.5 ? "mentioned" : "customer_replied", t, { actor: { id: jonas.id, name: jonas.name, email: jonas.email, avatar_url: "" }, contact: { name: t.contact?.name ?? "" } });
+  notify(w, random() < 0.5 ? "mentioned" : "customer_replied", t, { actor: { id: jonas.id, name: jonas.name, email: jonas.email, avatar_url: "" }, contact: { name: t.contact?.name ?? "" } });
 }
 
 function teammateWander() {
@@ -111,7 +113,7 @@ function teammateWander() {
   if (!mate || !t) return;
   // Leave wherever they were, then show up on the new ticket.
   for (const other of w.tickets) setTeammatePresenceIfPresent(other.id, mate.id);
-  setTeammatePresence(t.id, { user_id: mate.id, name: mate.name, avatar: "", state: Math.random() < 0.3 ? "replying" : "viewing" });
+  setTeammatePresence(t.id, { user_id: mate.id, name: mate.name, avatar: "", state: random() < 0.3 ? "replying" : "viewing" });
 }
 
 function setTeammatePresenceIfPresent(tid: string, uid: string) {
@@ -125,7 +127,7 @@ function wikiMateOnActive() {
   const room = wikiRoom(id);
   const here = teammatePresence.get(room)?.[0];
   if (here) {
-    if (Math.random() < 0.3) setTeammatePresence(room, null, here.user_id);
+    if (random() < 0.3) setTeammatePresence(room, null, here.user_id);
     else setTeammatePresence(room, { user_id: here.user_id, name: here.name, avatar: here.avatar, state: here.state === "editing" ? "viewing" : "editing" });
     return;
   }
@@ -139,7 +141,7 @@ function typingOnActive() {
   if (!tid) return;
   const t = w.tickets.find((x) => x.id === tid);
   if (!t) return;
-  if (t.channel === "chat" && Math.random() < 0.6) {
+  if (t.channel === "chat" && random() < 0.6) {
     emitOnTicket(tid, "customer_typing", { ticket_id: tid, contact_id: t.contact?.id });
     return;
   }
