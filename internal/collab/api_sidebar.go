@@ -59,7 +59,7 @@ func defaultSidebar() SidebarPrefs {
 	return SidebarPrefs{Order: slices.Clone(SidebarSectionIDs), Hidden: []string{},
 		Pinned: []SidebarPin{}, ExpandedAccounts: []string{}, MarkReadOnOpen: true, UnifiedInbox: true,
 		Badges: map[string]string{}, MailTabs: defaultMailTabs(), AutoPins: []string{}, Sections: []SidebarSection{},
-		RowOrder: map[string][]string{}, Names: map[string]string{}, Icons: map[string]string{}}
+		RowOrder: map[string][]string{}, Names: map[string]string{}, Icons: map[string]string{}, ShowWaitingChats: new(bool)}
 }
 
 // normalized fills missing lists so the shape always has arrays.
@@ -96,6 +96,9 @@ func (p SidebarPrefs) normalized() SidebarPrefs {
 	}
 	if p.Icons == nil {
 		p.Icons = map[string]string{}
+	}
+	if p.ShowWaitingChats == nil {
+		p.ShowWaitingChats = new(bool)
 	}
 	for i := range p.Sections {
 		if p.Sections[i].Items == nil {
@@ -208,8 +211,9 @@ func (s *service) registerSidebarRoutes(api huma.API) {
 				return nil, httpx.Wrap(err)
 			}
 			// A client that does not know the numbers, the tabs, the pins added by themselves,
-			// the member's own sections or their row order leaves them as saved.
-			if in.Body.Badges == nil || in.Body.MailTabs == nil || in.Body.AutoPins == nil || in.Body.Sections == nil || in.Body.RowOrder == nil || in.Body.Names == nil || in.Body.Icons == nil {
+			// the member's own sections, their row order, names, icons or the waiting chats row
+			// leaves them as saved.
+			if in.Body.Badges == nil || in.Body.MailTabs == nil || in.Body.AutoPins == nil || in.Body.Sections == nil || in.Body.RowOrder == nil || in.Body.Names == nil || in.Body.Icons == nil || in.Body.ShowWaitingChats == nil {
 				saved, err := s.loadSidebar(ctx, p.WorkspaceID, p.UserID)
 				if err != nil {
 					return nil, httpx.Wrap(err)
@@ -234,6 +238,9 @@ func (s *service) registerSidebarRoutes(api huma.API) {
 				}
 				if in.Body.Icons == nil {
 					in.Body.Icons = saved.Icons
+				}
+				if in.Body.ShowWaitingChats == nil {
+					in.Body.ShowWaitingChats = saved.ShowWaitingChats
 				}
 			}
 			prefs := in.Body.normalized()

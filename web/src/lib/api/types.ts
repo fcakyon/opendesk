@@ -3396,6 +3396,8 @@ export type SidebarPrefs = {
   names: Record<string, string>;
   /** The member's own emoji, keyed like `names`. Default {}. */
   icons: Record<string, string>;
+  /** The red row on top of the ticket inbox while visitors wait in live chat with nobody on it. Default false. */
+  show_waiting_chats: boolean;
 };
 
 /** A row of a member's own section: a Space row of this workspace. */

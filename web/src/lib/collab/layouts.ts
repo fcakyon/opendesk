@@ -50,5 +50,5 @@ export function layoutSections(layout: Layout, offered: readonly SidebarSectionI
 /** Back to how the sidebar starts: every section in the default order, nothing hidden, no row order. The member's own sections and favorites stay. */
 export function resetPrefs(p: SidebarPrefs): SidebarPrefs {
   const keys = [...SECTION_IDS, ...p.sections.map((s) => `custom:${s.id}`)];
-  return { ...reorderEntries({ ...p, hidden: [], row_order: {} }, keys), hidden: [], row_order: {} };
+  return { ...reorderEntries({ ...p, hidden: [], row_order: {} }, keys), hidden: [], row_order: {}, show_waiting_chats: false };
 }

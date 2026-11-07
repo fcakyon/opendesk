@@ -28,6 +28,7 @@ export function defaultSidebarPrefs(): SidebarPrefs {
     row_order: {},
     names: {},
     icons: {},
+    show_waiting_chats: false,
   };
 }
 
@@ -59,6 +60,7 @@ export function normalizePrefs(p: Partial<SidebarPrefs> | null | undefined): Sid
     row_order: readRowOrder(p.row_order) ?? d.row_order,
     names: readStrings(p.names) ?? d.names,
     icons: readStrings(p.icons) ?? d.icons,
+    show_waiting_chats: p.show_waiting_chats === true,
   };
 }
 
@@ -130,11 +132,15 @@ export function visibleSections(p: SidebarPrefs, collab = true): SidebarSectionI
   return sectionOrder(p).filter((id) => offered.includes(id) && !isHidden(p, `section:${id}`));
 }
 
+// The waiting chats row is the one row shown by choice (`show_waiting_chats`), so reading or
+// setting its hidden-id goes through that flag and every hide and show control works for it.
 export function isHidden(p: SidebarPrefs, id: string): boolean {
+  if (id === hid.waitingChats) return !p.show_waiting_chats;
   return p.hidden.includes(id);
 }
 
 export function setHidden(p: SidebarPrefs, id: string, hidden: boolean): SidebarPrefs {
+  if (id === hid.waitingChats) return p.show_waiting_chats === !hidden ? p : { ...p, show_waiting_chats: !hidden };
   const has = p.hidden.includes(id);
   if (hidden === has) return p;
   return { ...p, hidden: hidden ? [...p.hidden, id] : p.hidden.filter((x) => x !== id) };

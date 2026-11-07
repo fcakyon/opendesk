@@ -954,6 +954,21 @@ func TestAPISidebar(t *testing.T) {
 	if st := doJSON(t, "GET", w.api(w.agent2).URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || !prefs.MarkReadOnOpen {
 		t.Fatalf("other member: %+v", prefs)
 	}
+	// The waiting chats row is off until the member turns it on, and a client that leaves it out keeps it.
+	if prefs.ShowWaitingChats == nil || *prefs.ShowWaitingChats {
+		t.Fatalf("waiting chats by default: %v", prefs.ShowWaitingChats)
+	}
+	on := true
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", SidebarPrefs{Order: []string{"inbox"}, ShowWaitingChats: &on}, &prefs); st != 200 || !*prefs.ShowWaitingChats {
+		t.Fatalf("waiting chats on: %d %v", st, prefs.ShowWaitingChats)
+	}
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", SidebarPrefs{Order: []string{"inbox"}}, &prefs); st != 200 || !*prefs.ShowWaitingChats {
+		t.Fatalf("waiting chats left out: %d %v", st, prefs.ShowWaitingChats)
+	}
+	off := false
+	if st := doJSON(t, "PUT", srv.URL+"/v1/collab/sidebar", SidebarPrefs{Order: []string{"inbox"}, ShowWaitingChats: &off}, &prefs); st != 200 || *prefs.ShowWaitingChats {
+		t.Fatalf("waiting chats off: %d %v", st, prefs.ShowWaitingChats)
+	}
 	big := SidebarPrefs{Hidden: make([]string, 0, 450)}
 	for i := range 450 {
 		big.Hidden = append(big.Hidden, "folder:"+uuid.NewString()+strconv.Itoa(i))

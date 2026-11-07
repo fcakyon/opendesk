@@ -74,14 +74,17 @@ describe("sidebar prefs", () => {
     expect(setHidden(p, hid.section("teams"), false).hidden).toEqual([]);
   });
 
-  it("hides the waiting chats row like any other row, shown until the member hides it", () => {
-    expect(isHidden(defaultSidebarPrefs(), hid.waitingChats)).toBe(false);
-    const p = setHidden(defaultSidebarPrefs(), hid.waitingChats, true);
-    expect(p.hidden).toEqual(["row:waiting_chats"]);
-    // Saved and read back, it stays hidden; the sections are untouched.
-    expect(isHidden(normalizePrefs(JSON.parse(JSON.stringify(p))), hid.waitingChats)).toBe(true);
-    expect(visibleSections(p)).toEqual(visibleSections(defaultSidebarPrefs()));
-    expect(setHidden(p, hid.waitingChats, false).hidden).toEqual([]);
+  it("shows the waiting chats row only once the member turns it on, through the hide and show controls", () => {
+    expect(isHidden(defaultSidebarPrefs(), hid.waitingChats)).toBe(true);
+    // Saved before the setting existed, with the old hidden-id or without it: still off.
+    expect(isHidden(normalizePrefs({ ...defaultSidebarPrefs(), hidden: [] } as never), hid.waitingChats)).toBe(true);
+    const on = setHidden(defaultSidebarPrefs(), hid.waitingChats, false);
+    expect(on.show_waiting_chats).toBe(true);
+    expect(on.hidden).toEqual([]);
+    // Saved and read back, it stays on; the sections are untouched.
+    expect(isHidden(normalizePrefs(JSON.parse(JSON.stringify(on))), hid.waitingChats)).toBe(false);
+    expect(visibleSections(on)).toEqual(visibleSections(defaultSidebarPrefs()));
+    expect(setHidden(on, hid.waitingChats, true).show_waiting_chats).toBe(false);
   });
 
   it("moves sections and keeps unknown ids", () => {

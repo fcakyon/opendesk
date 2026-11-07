@@ -60,7 +60,7 @@ import { RowMenu } from "@/components/collab/RowMenu";
 import { useCollab, useSidebarPrefs } from "@/lib/collab/hooks";
 import { useProducts } from "@/lib/products";
 import { ticketRowNumbers } from "@/lib/collab/badges";
-import { badgeFor, hid, pickCount, type BadgeNumbers } from "@/lib/collab/sidebarPrefs";
+import { badgeFor, hid, isHidden, pickCount, type BadgeNumbers } from "@/lib/collab/sidebarPrefs";
 import { entryKey, visibleEntries, type SidebarEntry } from "@/lib/collab/ownSections";
 import { AddSectionButton, OwnSection } from "@/components/collab/OwnSections";
 import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
@@ -398,7 +398,7 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
         <Section id="inbox" label={collab.enabled ? t("nav.tickets") : t("nav.inbox")} rail={rail} first={first}>
           {applyRowOrder(
             [
-              ...(hidden.has(hid.waitingChats) ? [] : [{ key: hid.waitingChats, f: null }]),
+              ...(isHidden(prefs, hid.waitingChats) ? [] : [{ key: hid.waitingChats, f: null }]),
               ...folders.filter((f) => !hidden.has(hid.ticketFolder(f.id))).map((f) => ({ key: hid.ticketFolder(f.id), f })),
             ],
             (r) => r.key,

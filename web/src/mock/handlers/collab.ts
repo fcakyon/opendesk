@@ -2071,8 +2071,8 @@ export function registerCollab() {
     if (JSON.stringify(ctx.body).length - own > 16 * 1024) throw invalid("Sidebar preferences are limited to 16 KB");
     if (own > 32 * 1024) throw invalid("Your sections are too large.");
     const saved = state(ctx.ws).prefs[db.meId] ?? defaultSidebarPrefs();
-    // Like the API: a client that leaves out the numbers, the tabs, the pins added by themselves or its own sections keeps them as saved.
-    const p = normalizePrefs({ ...body, badges: body.badges ?? saved.badges, mail_tabs: body.mail_tabs ?? saved.mail_tabs, auto_pins: body.auto_pins ?? saved.auto_pins, sections: body.sections ?? saved.sections, row_order: body.row_order ?? saved.row_order, names: body.names ?? saved.names, icons: body.icons ?? saved.icons });
+    // Like the API: a client that leaves out the numbers, the tabs, the pins added by themselves, its own sections, names, icons or the waiting chats row keeps them as saved.
+    const p = normalizePrefs({ ...body, badges: body.badges ?? saved.badges, mail_tabs: body.mail_tabs ?? saved.mail_tabs, auto_pins: body.auto_pins ?? saved.auto_pins, sections: body.sections ?? saved.sections, row_order: body.row_order ?? saved.row_order, names: body.names ?? saved.names, icons: body.icons ?? saved.icons, show_waiting_chats: body.show_waiting_chats ?? saved.show_waiting_chats });
     const emoji = (v: string | undefined) => !v || isEmoji(v.trim());
     for (const k of Object.keys(p.names)) if (!p.names[k].trim()) delete p.names[k];
     if (Object.keys(p.names).length > 300 || Object.keys(p.icons).length > 300) throw invalid("At most 300 sections and rows can have a name or an icon of your own.");

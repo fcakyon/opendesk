@@ -400,6 +400,9 @@ type SidebarPrefs struct {
 	Names map[string]string `json:"names" required:"false" doc:"Left out: the saved value stays"`
 	// Icons are the member's own emoji for sections and rows, keyed like Names.
 	Icons map[string]string `json:"icons" required:"false" doc:"Left out: the saved value stays"`
+	// ShowWaitingChats shows the red row on top of the ticket inbox while visitors wait in live
+	// chat with nobody on it. Off until the member turns it on; the ticket lists keep their own notice.
+	ShowWaitingChats *bool `json:"show_waiting_chats" required:"false" doc:"Default false. Left out: the saved value stays"`
 }
 
 // SidebarSection is one of the member's own sidebar sections.

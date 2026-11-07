@@ -848,7 +848,7 @@ interface CollabStatus {
 interface SidebarPrefs {
   order: string[]              // section ids, top to bottom: "favorites", "inbox", "mail", "teams", "views", "pages", "workspace" (the default),
                                // and "custom:<id>" for the member's own sections; at most 40
-  hidden: string[]             // "section:<id>", "box:<box>", "account:<id>", "folder:<id>", "folder:<inbox|starred|...>", "view:<id>", "team:<id>", "ticket_folder:<id>", "row:waiting_chats",
+  hidden: string[]             // "section:<id>", "box:<box>", "account:<id>", "folder:<id>", "folder:<inbox|starred|...>", "view:<id>", "team:<id>", "ticket_folder:<id>",
                                // and in Pages "pages:<workspace|teamspaces|private|today|templates|trash>", "wiki_page:<id>", "wiki_space:<team id>" (contracts/wiki.md "In the main sidebar"),
                                // and in Workspace "page:<contacts|knowledge|wiki|reports>"
   pinned: { kind: "box" | "folder" | "account" | "view" | "team" | "ticket_folder" | "view_section"; id: string }[]  // shown under Favorites, in order, at most 30
@@ -862,6 +862,7 @@ interface SidebarPrefs {
   row_order: Record<"inbox" | "mail" | "teams" | "workspace", string[]>  // the member's order of a built-in section's rows ("Row order"); default {}
   names: Record<string, string>  // the member's own labels: "section:<id>" for a built-in section, a row key as in `hidden`; default {}
   icons: Record<string, string>  // the member's own emoji, keyed like `names`; default {}
+  show_waiting_chats: boolean  // default false: the red row on top of Inbox while visitors wait in live chat with nobody on it ("Waiting chats")
 }
 
 interface SidebarSection {
@@ -932,9 +933,15 @@ after the nearest section before it in the default order.
 
 Every member has them, with or without Collab. Without Collab they arrange the ticket side: the
 order of Favorites, Inbox, Teams, Views, Pages and Workspace, hidden rows and sections, favorites of inbox
-folders, teams, views and view sections, and their numbers. `row:waiting_chats` hides the red row on top of
-Inbox that shows while visitors wait in live chat with nobody on it. The Mail section, mail rows and favorites, `unified_inbox`,
+folders, teams, views and view sections, and their numbers. The Mail section, mail rows and favorites, `unified_inbox`,
 `mark_read_on_open`, `mail_tabs` and `auto_pins` are Collab's: kept as saved, used once it is on.
+
+**Waiting chats.** The red row on top of Inbox that shows while visitors wait in live chat with nobody on
+it is shown by choice: `show_waiting_chats`, off by default, so a member who never turned it on (preferences
+saved before it included) doesn't see it. The web app lists it as a hidden row of Inbox: edit mode shows it
+dimmed with its eye, and Customize sidebar has its switch. Its row key stays `row:waiting_chats` in `names`,
+`icons` and `row_order`; in `hidden` it is not used. A client that leaves `show_waiting_chats` out keeps the
+saved value. The ticket lists' own notice of waiting visitors is not this row and stays.
 
 **View sections in Favorites.** A `view_section` favorite names a view section (contracts/api.md,
 `/v1/views` `section`) by its name in lower case with spaces collapsed, as the sidebar matches views to
@@ -1089,7 +1096,7 @@ account or conversation; "act": sees it and is agent or above; "manage": "Who se
 | GET | `/v1/collab/messages/{id}/details` | see | `MessageDetails` ("Message details"), read from the message's source (stored, else the provider: `502 provider_error`) |
 | GET | `/v1/collab/attachments/{message_id}/{index}` | signed (`exp`, `sig`) | the file, `Content-Disposition: attachment` unless an image; `?inline=1` for images. `404` when the signature is wrong or expired |
 | GET | `/v1/collab/sidebar` | member | `SidebarPrefs` (defaults when never saved); with or without Collab; with Collab, pins All inboxes once at a second account ("All inboxes in Favorites") |
-| PUT | `/v1/collab/sidebar` | member | `SidebarPrefs` → `SidebarPrefs`; with or without Collab; at most 16 KB besides `sections`, which hold at most 32 KB; unknown ids are kept (an id of something gone is ignored by the app). `badges`: at most 300, keys of at most 100 characters with the prefixes above, values `unread`, `total`, `count`, `awaiting`, `urgent`, `overdue`, `open` or `none`; `mail_tabs`: at most 30, each a box above or `folder:<uuid>`, once. `sections`: the limits above, item ids as SpaceItem's, each `icon` one emoji. `row_order`: keys the built-in section ids, at most 300 rows each, each 1..100 characters once, at most 16 KB. `names` and `icons`: at most 300 each, keys 1..100 characters, names checked like a name people choose (1..64 characters, `422 invalid_name`), icons one emoji, at most 48 KB together. Leaving out `badges`, `mail_tabs`, `auto_pins`, `sections`, `row_order`, `names` or `icons` keeps the saved value; `422` otherwise |
+| PUT | `/v1/collab/sidebar` | member | `SidebarPrefs` → `SidebarPrefs`; with or without Collab; at most 16 KB besides `sections`, which hold at most 32 KB; unknown ids are kept (an id of something gone is ignored by the app). `badges`: at most 300, keys of at most 100 characters with the prefixes above, values `unread`, `total`, `count`, `awaiting`, `urgent`, `overdue`, `open` or `none`; `mail_tabs`: at most 30, each a box above or `folder:<uuid>`, once. `sections`: the limits above, item ids as SpaceItem's, each `icon` one emoji. `row_order`: keys the built-in section ids, at most 300 rows each, each 1..100 characters once, at most 16 KB. `names` and `icons`: at most 300 each, keys 1..100 characters, names checked like a name people choose (1..64 characters, `422 invalid_name`), icons one emoji, at most 48 KB together. Leaving out `badges`, `mail_tabs`, `auto_pins`, `sections`, `row_order`, `names`, `icons` or `show_waiting_chats` keeps the saved value; `422` otherwise |
 
 Errors: `403 feature_disabled` (with product and reason), `404 not_found`, `422 labels_unsupported`, `422 connection_failed`,
 `409 account_conflict`, `502 provider_error`, `502 send_failed`, `422 provider_not_configured`,
