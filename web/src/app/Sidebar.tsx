@@ -43,7 +43,7 @@ import { groupViews } from "@/lib/viewSections";
 import { useFoldedSections, useOpenView, ViewSectionGroup } from "./ViewSectionGroup";
 import { shell, toggleNav, useNav } from "./shellStore";
 import { quickEntries, quickSwitchKeys, useAccountActions, useQuickSwitch, useSwitcherEntries } from "./useAccounts";
-import { Count, Label, NavTip, PillCtx, rowActive, rowBase, rowIdle, rowShape, Section, WaitDot, WaitingBadge, withPill } from "./sidebarParts";
+import { Count, Label, litLink, NavTip, PillCtx, rowActive, rowBase, rowIdle, rowShape, Section, useOpener, WaitDot, WaitingBadge, withPill } from "./sidebarParts";
 import { useSpaceKeys } from "@/components/spaces/actions";
 import { SpaceGlyph } from "@/components/spaces/icons";
 import { SwitcherSpaces, useSwitcherStarters } from "@/components/spaces/SwitcherSpaces";
@@ -153,6 +153,7 @@ function TeamRow({
   waiting?: number;
 }) {
   const { t } = useTranslation("shell");
+  const who = useOpener();
   const key = hid.team(teamId);
   const n = pickCount(badgeFor(rp.prefs, key, "teams", "team"), nums);
   const own = teamId !== "mine";
@@ -171,10 +172,7 @@ function TeamRow({
         to="/teams/$teamId/{-$ticketId}"
         params={{ teamId, ticketId: undefined }}
         className={cn(rowBase, rowShape(rail), rowIdle, muted && "text-fg-3")}
-        activeProps={{ className: rowActive, "data-status": "active" } as Record<string, string>}
-        aria-label={rail ? label : undefined}
-        title={rail ? undefined : title}
-      >{withPill(<>
+        {...litLink(who, `team:${teamId}`, "teams", <>
         <span className="flex size-[15px] shrink-0 items-center justify-center">{icon}</span>
         <Label rail={rail}>
           <span className="flex min-w-0 items-center gap-1">
@@ -185,7 +183,10 @@ function TeamRow({
         <WaitingBadge n={waiting} rail={rail} />
         {n !== undefined && n > 0 && <Count n={n} rail={rail} />}
         {rail && n !== undefined && n > 0 && <span className="absolute right-1 top-1 size-1.5 rounded-full bg-fg ring-2 ring-chrome" />}
-      </>)}</Link>
+      </>)}
+        aria-label={rail ? label : undefined}
+        title={rail ? undefined : title}
+       />
       </RowMenu>
     </NavTip>
   );
@@ -365,6 +366,8 @@ const NONE: ReadonlySet<string> = new Set();
 /** One built-in section of the open workspace: the sidebar's own rows, live counts and menus. */
 function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; first: boolean; rail: boolean; drawer?: boolean }) {
   const { t: tNav } = useTranslation("navigation");
+  // The row clicked lights up alone among rows of the same target, like a tab (sidebarParts "The row that opened the page").
+  const who = useOpener();
   const { data: counts } = useQuery(q.counts());
   const { data: views } = useQuery(q.views());
   const role = useRole();
@@ -415,9 +418,7 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
                 to="/inbox/$folder/{-$ticketId}"
                 params={{ folder: f.id, ticketId: undefined }}
                 className={cn(rowBase, rowShape(rail), rowIdle)}
-                activeProps={{ className: rowActive, "data-status": "active" } as Record<string, string>}
-                aria-label={rail ? tNav(f.labelKey) : undefined}
-              >{withPill(<>
+                {...litLink(who, `ticket_folder:${f.id}`, "inbox", <>
                 {folderIcons[f.id]}
                 <Label rail={rail}>{tNav(f.labelKey)}</Label>
                 <WaitingBadge n={waitingFor({ kind: "ticket_folder", id: f.id })} rail={rail} />
@@ -425,7 +426,9 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
                 {rail && f.id === "unassigned" && (n ?? 0) > 0 && (
                   <span className="absolute right-1 top-1 size-1.5 rounded-full bg-fg ring-2 ring-chrome" />
                 )}
-              </>)}</Link>
+              </>)}
+                aria-label={rail ? tNav(f.labelKey) : undefined}
+               />
               </RowMenu>
             </NavTip>
             );
@@ -488,14 +491,14 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
                     to="/views/$viewId/{-$ticketId}"
                     params={{ viewId: v.id, ticketId: undefined }}
                     className={cn(rowBase, rowShape(rail), rowIdle, nested && "pl-[22px]")}
-                    activeProps={{ className: rowActive, "data-status": "active" } as Record<string, string>}
-                    aria-label={rail ? viewName(v) : undefined}
-                  >{withPill(<>
+                    {...litLink(who, `view:${v.id}`, "views", <>
                     <ViewIcon icon={v.icon} />
                     <Label rail={rail}>{viewName(v)}</Label>
                     <WaitingBadge n={waitingFor({ kind: "view", id: v.id })} rail={rail} />
                     <Count n={shown(hid.view(v.id), "views", nums)} rail={rail} />
-                  </>)}</Link>
+                  </>)}
+                    aria-label={rail ? viewName(v) : undefined}
+                   />
                   </RowMenu>
                 </NavTip>
                 );
@@ -518,20 +521,20 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
           id: "contacts",
           label: t("nav.contacts"),
           el: (
-            <Link to="/contacts/{-$contactId}" params={{ contactId: undefined }} className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.contacts") : undefined}>{withPill(<>
+            <Link to="/contacts/{-$contactId}" params={{ contactId: undefined }} className={cn(rowBase, rowShape(rail), rowIdle)} aria-label={rail ? t("nav.contacts") : undefined} {...litLink(who, "page:contacts", "workspace", <>
               <Users />
               <Label rail={rail}>{t("nav.contacts")}</Label>
-            </>)}</Link>
+            </>)} />
           ),
         },
         {
           id: "knowledge",
           label: t("nav.kb"),
           el: (
-            <Link to="/kb" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.kb") : undefined}>{withPill(<>
+            <Link to="/kb" className={cn(rowBase, rowShape(rail), rowIdle)} aria-label={rail ? t("nav.kb") : undefined} {...litLink(who, "page:knowledge", "workspace", <>
               <BookOpen />
               <Label rail={rail}>{t("nav.kb")}</Label>
-            </>)}</Link>
+            </>)} />
           ),
         },
         {
@@ -539,20 +542,20 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
           label: t("nav.wiki"),
           el: (
             // The wiki's home: a page is current in Pages, not here.
-            <Link to="/wiki" activeOptions={{ exact: true }} className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.wiki") : undefined}>{withPill(<>
+            <Link to="/wiki" activeOptions={{ exact: true }} className={cn(rowBase, rowShape(rail), rowIdle)} aria-label={rail ? t("nav.wiki") : undefined} {...litLink(who, "page:wiki", "workspace", <>
               <NotebookText />
               <Label rail={rail}>{t("nav.wiki")}</Label>
-            </>)}</Link>
+            </>)} />
           ),
         },
         {
           id: "reports",
           label: t("nav.reports"),
           el: (
-            <Link to="/reports" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.reports") : undefined}>{withPill(<>
+            <Link to="/reports" className={cn(rowBase, rowShape(rail), rowIdle)} aria-label={rail ? t("nav.reports") : undefined} {...litLink(who, "page:reports", "workspace", <>
               <BarChart3 />
               <Label rail={rail}>{t("nav.reports")}</Label>
-            </>)}</Link>
+            </>)} />
           ),
         },
       ];

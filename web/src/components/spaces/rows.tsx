@@ -9,7 +9,7 @@ import { Link, useRouterState, type NavigateOptions } from "@tanstack/react-rout
 import { BarChart3, BookOpen, CircleCheck, CircleDashed, Clock, FileText, Inbox, Layers, Lock, Mails, NotebookText, ShieldAlert, User, UserCheck, Users } from "lucide-react";
 import { forwardRef, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { ActivePill, Count, Label, NavTip, rowActive, rowBase, rowIdle, rowShape, WaitingBadge } from "@/app/sidebarParts";
+import { ActivePill, Count, givesWay, Label, markOpener, NavTip, rowActive, rowBase, rowIdle, rowShape, useOpener, WaitingBadge } from "@/app/sidebarParts";
 import { AccountTags } from "@/components/collab/AccountTags";
 import { AccountDot, boxIcon, FolderGlyph } from "@/components/collab/bits";
 import { TeamDot } from "@/components/tickets/teams";
@@ -375,9 +375,39 @@ export function rowNumber(model: RowModel, prefs: SidebarPrefs, own?: SidebarBad
 const activeLink = { className: rowActive, "data-status": "active" } as Record<string, string>;
 
 /** The row's link: the router's own in the open workspace, a plain one that opens another workspace otherwise. */
-type AnchorProps = { link: RowLink; ws?: string; className: string; label?: string; title?: string; active?: boolean; children: (active: boolean) => ReactNode } & Omit<React.HTMLAttributes<HTMLAnchorElement>, "children" | "title">;
+type AnchorProps = {
+  link: RowLink;
+  ws?: string;
+  className: string;
+  label?: string;
+  title?: string;
+  active?: boolean;
+  /** Another row of the same target was the one clicked: this one does not light up (app/sidebarParts.tsx). */
+  away?: boolean;
+  children: (active: boolean) => ReactNode;
+} & Omit<React.HTMLAttributes<HTMLAnchorElement>, "children" | "title">;
 
-const RowAnchor = forwardRef<HTMLAnchorElement, AnchorProps>(function RowAnchor({ link, ws, className, label, title, active, children, ...rest }, ref) {
+/** What a row opens, as the sidebar's opener names it ("view:<id>", "wiki_page:<id>"). */
+export function rowTarget(l: RowLink): string {
+  switch (l.kind) {
+    case "inbox":
+      return `ticket_folder:${l.folder}`;
+    case "team":
+      return `team:${l.teamId}`;
+    case "view":
+      return `view:${l.viewId}`;
+    case "mail":
+      return `mail:${l.box}:${l.account ?? ""}:${l.folder ?? ""}`;
+    case "page":
+      return `page:${l.page}`;
+    case "wiki":
+      return `wiki_page:${l.pageId}`;
+    case "everywhere":
+      return `everywhere:${l.list}`;
+  }
+}
+
+const RowAnchor = forwardRef<HTMLAnchorElement, AnchorProps>(function RowAnchor({ link, ws, className, label, title, active, away, children, ...rest }, ref) {
   const openIn = useOpenInWorkspace();
   const common = { ref, className, "aria-label": label, title, ...rest };
   if (ws) {
@@ -397,45 +427,46 @@ const RowAnchor = forwardRef<HTMLAnchorElement, AnchorProps>(function RowAnchor(
       </a>
     );
   }
-  const fn = ({ isActive }: { isActive: boolean }) => children(isActive);
+  const lit = away ? undefined : activeLink;
+  const fn = ({ isActive }: { isActive: boolean }) => children(isActive && !away);
   switch (link.kind) {
     case "inbox":
       return (
-        <Link to="/inbox/$folder/{-$ticketId}" params={{ folder: link.folder, ticketId: undefined }} activeProps={activeLink} {...common}>
+        <Link to="/inbox/$folder/{-$ticketId}" params={{ folder: link.folder, ticketId: undefined }} activeProps={lit} {...common}>
           {fn}
         </Link>
       );
     case "team":
       return (
-        <Link to="/teams/$teamId/{-$ticketId}" params={{ teamId: link.teamId, ticketId: undefined }} activeProps={activeLink} {...common}>
+        <Link to="/teams/$teamId/{-$ticketId}" params={{ teamId: link.teamId, ticketId: undefined }} activeProps={lit} {...common}>
           {fn}
         </Link>
       );
     case "view":
       return (
-        <Link to="/views/$viewId/{-$ticketId}" params={{ viewId: link.viewId, ticketId: undefined }} activeProps={activeLink} {...common}>
+        <Link to="/views/$viewId/{-$ticketId}" params={{ viewId: link.viewId, ticketId: undefined }} activeProps={lit} {...common}>
           {fn}
         </Link>
       );
     case "page":
       return link.page === "contacts" ? (
-        <Link to="/contacts/{-$contactId}" params={{ contactId: undefined }} activeProps={activeLink} {...common}>
+        <Link to="/contacts/{-$contactId}" params={{ contactId: undefined }} activeProps={lit} {...common}>
           {fn}
         </Link>
       ) : (
-        <Link to={pagePaths[link.page] as "/kb" | "/wiki" | "/reports"} activeProps={activeLink} {...common}>
+        <Link to={pagePaths[link.page] as "/kb" | "/wiki" | "/reports"} activeProps={lit} {...common}>
           {fn}
         </Link>
       );
     case "wiki":
       return (
-        <Link {...pageTo({ id: link.pageId, area: link.area })} activeProps={activeLink} {...common}>
+        <Link {...pageTo({ id: link.pageId, area: link.area })} activeProps={lit} {...common}>
           {fn}
         </Link>
       );
     case "everywhere":
       return (
-        <Link to="/everywhere/$list" params={{ list: link.list }} activeProps={activeLink} {...common}>
+        <Link to="/everywhere/$list" params={{ list: link.list }} activeProps={lit} {...common}>
           {fn}
         </Link>
       );
@@ -445,12 +476,12 @@ const RowAnchor = forwardRef<HTMLAnchorElement, AnchorProps>(function RowAnchor(
           to="/mail/$box/{-$threadId}"
           params={{ box: link.box, threadId: undefined }}
           search={{ account: link.account, folder: link.folder }}
-          data-status={active ? "active" : undefined}
+          data-status={active && !away ? "active" : undefined}
           aria-current={active ? "page" : undefined}
           {...common}
-          className={cn(className, active && rowActive)}
+          className={cn(className, active && !away && rowActive)}
         >
-          {children(!!active)}
+          {children(!!active && !away)}
         </Link>
       );
   }
@@ -485,6 +516,7 @@ export function NavItemRow({
   menu,
   nested,
   emoji,
+  place,
 }: {
   model: RowModel;
   rail: boolean;
@@ -502,15 +534,28 @@ export function NavItemRow({
   nested?: boolean;
   /** The emoji the person gave the row, in place of its icon. */
   emoji?: string;
+  /** Where the row sits ("favorites", "section:<id>"): clicked, it lights up alone among rows of the same target. */
+  place?: string;
 }) {
   const { t } = useTranslation("shell");
+  const who = useOpener();
+  const target = rowTarget(model.link);
   const name = label || model.label;
   const { n, choice } = rowNumber(model, prefs, own);
   // Mail and team rows show a number above zero; inbox folders and views show their count, zero too.
   const count = n !== undefined && (model.badge?.kind === "ticket" || n > 0) ? n : undefined;
   const dot = rail && (model.railDot === "unread" ? choice !== "none" && !!model.badge?.nums.unread : model.railDot === "count" ? (n ?? 0) > 0 : false);
   const link = (
-    <RowAnchor link={model.link} ws={ws} active={model.active} className={cn(rowBase, rowShape(rail), rowIdle, nested && "pl-[22px]")} label={rail ? name : undefined} title={rail ? undefined : (model.title ?? (label ? model.label : undefined))}>
+    <RowAnchor
+      link={model.link}
+      ws={ws}
+      active={model.active}
+      away={place ? givesWay(who, target, place) : false}
+      onClick={place ? () => markOpener(target, place) : undefined}
+      className={cn(rowBase, rowShape(rail), rowIdle, nested && "pl-[22px]")}
+      label={rail ? name : undefined}
+      title={rail ? undefined : (model.title ?? (label ? model.label : undefined))}
+    >
       {(active) => (
         <>
           {active && <ActivePill />}

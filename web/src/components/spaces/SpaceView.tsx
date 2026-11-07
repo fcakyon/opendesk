@@ -190,6 +190,7 @@ export function SpaceView({
         own={item.badge}
         label={item.name}
         emoji={item.icon}
+        place={`space:${section.id}`}
         ws={d && !d.open ? d.id : undefined}
         mark={d ? badgeFor(d) : null}
         menu={(row) => (

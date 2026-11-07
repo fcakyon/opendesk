@@ -11,7 +11,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { AlertCircle, ChevronRight, Layers, PencilRuler, Plus } from "lucide-react";
 import { Fragment, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { ActivePill, Count, Label, NavTip, rowActive, rowBase, rowIdle, rowShape, Section } from "@/app/sidebarParts";
+import { ActivePill, Count, givesWay, Label, markOpener, NavTip, rowActive, rowBase, rowIdle, rowShape, Section, useOpener } from "@/app/sidebarParts";
 import { useFoldedSections, useOpenView, ViewSectionGroup } from "@/app/ViewSectionGroup";
 import { buildRow, NavItemRow, rowNumber, useMailLocation, useRowLabels, type MailHere, type RowModel } from "@/components/spaces/rows";
 import { useWaitingFor } from "@/components/tickets/useUrgentChats";
@@ -79,6 +79,10 @@ function MailRow({
   menu?: Menu;
 }) {
   const count = shown?.count;
+  // Pinned to Favorites as well, the row clicked lights up alone (app/sidebarParts.tsx).
+  const who = useOpener();
+  const target = `mail:${link.box}:${link.account ?? ""}:${link.folder ?? ""}`;
+  const lit = active && !givesWay(who, target, "mail");
   // The menu lists what each choice would show.
   const withNums: Menu | undefined = menu?.badge && shown?.nums ? { ...menu, badge: { ...menu.badge, numbers: shown.nums } } : menu;
   return (
@@ -88,14 +92,15 @@ function MailRow({
         to="/mail/$box/{-$threadId}"
         params={{ box: link.box, threadId: undefined }}
         search={{ account: link.account, folder: link.folder }}
-        className={cn(rowBase, rowShape(rail), active ? rowActive : rowIdle)}
-        data-status={active ? "active" : undefined}
+        onClick={() => markOpener(target, "mail")}
+        className={cn(rowBase, rowShape(rail), lit ? rowActive : rowIdle)}
+        data-status={lit ? "active" : undefined}
         aria-current={active ? "page" : undefined}
         aria-label={rail ? label : undefined}
         title={rail ? undefined : title}
         style={!rail && depth ? { paddingLeft: `${8 + depth * 14}px` } : undefined}
       >
-        {active && <ActivePill />}
+        {lit && <ActivePill />}
         {icon}
         <Label rail={rail}>{label}</Label>
         {!rail && tag}
@@ -474,7 +479,7 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
         if (target.kind === "row")
           return (
             <Fragment key={`${pin.kind}:${pin.id}`}>
-              <NavItemRow model={target.model} rail={rail} prefs={prefs} menu={menuFor(target.model, pin)} />
+              <NavItemRow model={target.model} rail={rail} prefs={prefs} place="favorites" menu={menuFor(target.model, pin)} />
             </Fragment>
           );
         return (
@@ -489,7 +494,7 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
             openView={openView}
             row={(v) => {
               const model = viewRow(v);
-              return model && <NavItemRow model={model} rail={rail} prefs={prefs} nested={!rail} menu={menuFor(model, { kind: "view", id: v.id })} />;
+              return model && <NavItemRow model={model} rail={rail} prefs={prefs} nested={!rail} place="favorites" menu={menuFor(model, { kind: "view", id: v.id })} />;
             }}
             count={(v) => {
               const model = viewRow(v);

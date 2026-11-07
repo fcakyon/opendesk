@@ -5,7 +5,7 @@
 import { useTranslation } from "react-i18next";
 import { motion, useReducedMotion } from "motion/react";
 import { ChevronDown } from "lucide-react";
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AnimatedNumber } from "@/components/motion";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
@@ -50,6 +50,53 @@ export const withPill = (content: ReactNode) =>
       </>
     );
   };
+
+// ─── The row that opened the page ───────────────────────────────────────────
+//
+// The same thing can be a row in several places of the sidebar: a view under Views and in
+// Favorites, a page in the Pages tree and in a section of the member's own. The row clicked
+// lights up alone, like a tab; opened from anywhere else, every row of it lights up. A row
+// names what it opens (`target`: "view:<id>", "wiki_page:<id>") and where it sits (`place`:
+// "views", "favorites", "section:<id>", "tree").
+
+export type Opener = { target: string; place: string };
+
+let opener: Opener | null = null;
+const openerListeners = new Set<() => void>();
+
+/** Records the row clicked: the next render lights it, and only it, for that target. */
+export function markOpener(target: string, place: string) {
+  opener = { target, place };
+  openerListeners.forEach((l) => l());
+}
+
+export function useOpener(): Opener | null {
+  return useSyncExternalStore(
+    (l) => {
+      openerListeners.add(l);
+      return () => openerListeners.delete(l);
+    },
+    () => opener,
+  );
+}
+
+/** Whether a row gives way: another row of the same target was the one clicked. */
+export function givesWay(who: Opener | null, target: string, place: string): boolean {
+  return !!who && who.target === target && who.place !== place;
+}
+
+/**
+ * The parts of a sidebar Link that lights up by its route like a tab: marks itself on click,
+ * and while it gives way to the row clicked it neither bolds nor draws the pill.
+ */
+export function litLink(who: Opener | null, target: string, place: string, content: ReactNode) {
+  const away = givesWay(who, target, place);
+  return {
+    onClick: () => markOpener(target, place),
+    activeProps: (away ? {} : { className: rowActive, "data-status": "active" }) as Record<string, string>,
+    children: away ? content : withPill(content),
+  };
+}
 
 export function NavTip({ rail, label, children }: { rail: boolean; label: string; children: React.ReactElement }) {
   if (!rail) return children;

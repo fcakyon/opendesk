@@ -2,6 +2,7 @@
 // the cache patched at once (the server's answer or event settles it), and which pages
 // are open in the tree.
 
+import { givesWay, markOpener as markRowOpener, useOpener, type Opener } from "@/app/sidebarParts";
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useMemo, useSyncExternalStore } from "react";
@@ -59,33 +60,21 @@ export function useOpenPageId(): string | undefined {
 
 // ─── The sidebar row that opened the page ───────────────────────────────────
 
-/** A row of the main sidebar that can open a page: a favorite, or its place in the Pages tree. */
-export type OpenerRow = "favorite" | "tree";
+/** Where a page is a row of the main sidebar: Favorites, its place in the Pages tree, or a section ("section:<id>"). */
+export type OpenerRow = string;
 
-// A page can be a row in several places of the main sidebar. The one clicked lights up alone,
-// like a tab; a page opened from anywhere else lights up every row of it.
-let opener: { pageId: string; row: OpenerRow } | null = null;
-const openerListeners = new Set<() => void>();
+/** The sidebar's target for a page (app/sidebarParts.tsx "The row that opened the page"). */
+export const pageTarget = (pageId: string) => `wiki_page:${pageId}`;
 
 export function markOpener(pageId: string, row: OpenerRow) {
-  opener = { pageId, row };
-  openerListeners.forEach((l) => l());
+  markRowOpener(pageTarget(pageId), row);
 }
 
-export function useOpener() {
-  return useSyncExternalStore(
-    (l) => {
-      openerListeners.add(l);
-      return () => openerListeners.delete(l);
-    },
-    () => opener,
-  );
-}
+export { useOpener };
 
 /** Whether row shows pageId as the open page, given who opened it. */
-export function openHere(who: ReturnType<typeof useOpener>, openId: string | undefined, pageId: string, row: OpenerRow): boolean {
-  if (openId !== pageId) return false;
-  return !who || who.pageId !== pageId || who.row === row;
+export function openHere(who: Opener | null, openId: string | undefined, pageId: string, row: OpenerRow): boolean {
+  return openId === pageId && !givesWay(who, pageTarget(pageId), row);
 }
 
 // ─── Open pages in the tree ─────────────────────────────────────────────────

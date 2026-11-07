@@ -210,6 +210,7 @@ export function OwnSection({ section, first, rail }: { section: SidebarSection; 
           own={item.badge}
           label={item.name}
           emoji={item.icon}
+          place={`section:${section.id}`}
           menu={(row) => (
             <SpaceRowMenu spaces={[space]} space={space} item={item} model={model} put={put} onRename={() => setRenaming(key)} rail={rail} label={item.name || model.label} sidebar>
               {row}

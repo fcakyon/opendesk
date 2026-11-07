@@ -354,13 +354,13 @@ export function FavoritePageRows({ rail }: { rail: boolean }) {
         const n = tree.byId.get(saved.id);
         if (!n) return null;
         const label = title(n.title);
-        const active = openHere(who, openId, n.id, "favorite");
+        const active = openHere(who, openId, n.id, "favorites");
         return (
           <div key={n.id} className="group/row relative">
             <NavTip rail={rail} label={label}>
               <Link
                 {...pageTo(n)}
-                onClick={() => markOpener(n.id, "favorite")}
+                onClick={() => markOpener(n.id, "favorites")}
                 className={cn(rowBase, rowShape(rail), rowIdle, !rail && "group-hover/row:pr-8", active && rowActive)}
                 aria-label={rail ? label : undefined}
               >
