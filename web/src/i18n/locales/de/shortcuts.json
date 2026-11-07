@@ -120,7 +120,8 @@
       "publish": "Im Hilfecenter veröffentlichen",
       "export": "Exportieren",
       "lock": "Seite sperren oder entsperren",
-      "print": "Drucken oder als PDF speichern"
+      "print": "Drucken oder als PDF speichern",
+      "save": "Jetzt speichern"
     },
     "editor": {
       "slash": "Block einfügen",
@@ -147,7 +148,11 @@
       "inlineCode": "Inline-Code",
       "link": "Link hinzufügen",
       "comment": "Auswahl kommentieren",
-      "ollie": "Ollie zur Auswahl fragen"
+      "ollie": "Ollie zur Auswahl fragen",
+      "ticket": "Ticket erwähnen, per Nummer oder Stichwort",
+      "emoji": "Emoji",
+      "write": "Ollie schreiben lassen, in einer leeren Zeile",
+      "highlight": "Hervorheben"
     },
     "database": {
       "newRow": "Neue Zeile",

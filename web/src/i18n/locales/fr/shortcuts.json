@@ -120,7 +120,8 @@
       "publish": "Publier dans le centre d’aide",
       "export": "Exporter",
       "lock": "Verrouiller ou déverrouiller la page",
-      "print": "Imprimer ou enregistrer en PDF"
+      "print": "Imprimer ou enregistrer en PDF",
+      "save": "Enregistrer maintenant"
     },
     "editor": {
       "slash": "Insérer un bloc",
@@ -147,7 +148,11 @@
       "inlineCode": "Code en ligne",
       "link": "Ajouter un lien",
       "comment": "Commenter la sélection",
-      "ollie": "Demander à Ollie à propos de la sélection"
+      "ollie": "Demander à Ollie à propos de la sélection",
+      "ticket": "Mentionner un ticket, par numéro ou par mots",
+      "emoji": "Emoji",
+      "write": "Demander à Ollie d’écrire, sur une ligne vide",
+      "highlight": "Surligner"
     },
     "database": {
       "newRow": "Nouvelle ligne",

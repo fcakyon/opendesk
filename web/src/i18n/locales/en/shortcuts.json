@@ -120,7 +120,8 @@
       "publish": "Publish to the help center",
       "export": "Export",
       "lock": "Lock or unlock the page",
-      "print": "Print or save as PDF"
+      "print": "Print or save as PDF",
+      "save": "Save now"
     },
     "editor": {
       "slash": "Insert a block",
@@ -147,7 +148,11 @@
       "inlineCode": "Inline code",
       "link": "Add a link",
       "comment": "Comment on the selection",
-      "ollie": "Ask Ollie about the selection"
+      "ollie": "Ask Ollie about the selection",
+      "ticket": "Mention a ticket, by number or words",
+      "emoji": "Emoji",
+      "write": "Ask Ollie to write, on an empty line",
+      "highlight": "Highlight"
     },
     "database": {
       "newRow": "New row",
