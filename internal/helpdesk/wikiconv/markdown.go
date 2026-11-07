@@ -16,16 +16,22 @@ type MarkdownOptions struct {
 }
 
 // Markdown is the page body as Markdown with Obsidian's extensions where Markdown has
-// none: callouts and toggles as callouts, highlights as ==text==, math as $…$.
+// none: callouts and toggles as callouts, highlights as ==text==, math as $…$, synced
+// blocks as embeds (![[…]]), footnotes as [^1].
 func Markdown(body string, opt MarkdownOptions) string {
-	m := mdWriter{opt: opt}
-	out := m.blocks(parse(body))
+	root := parse(body)
+	m := mdWriter{opt: opt, notes: footnoteNumbers(root)}
+	out := m.blocks(root)
 	return strings.TrimSpace(blankRuns.ReplaceAllString(out, "\n\n")) + "\n"
 }
 
 var blankRuns = regexp.MustCompile(`\n{3,}`)
 
-type mdWriter struct{ opt MarkdownOptions }
+type mdWriter struct {
+	opt MarkdownOptions
+	// notes numbers the page's footnotes by their id (footnoteNumbers).
+	notes map[string]int
+}
 
 // blocks renders a node's children as blocks separated by blank lines.
 func (m mdWriter) blocks(n *html.Node) string {
@@ -105,6 +111,21 @@ func (m mdWriter) block(n *html.Node) string {
 	case "callout":
 		return quote(m.blocks(n), "[!"+calloutType(attr(n, "data-tone"))+"]")
 	case "details":
+		if level := attr(n, "data-heading"); level == "1" || level == "2" || level == "3" {
+			// A toggle heading: Obsidian folds a heading and what is under it on its own.
+			var parts []string
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				if c.Type != html.ElementNode {
+					continue
+				}
+				if c.Data == "summary" {
+					parts = append(parts, strings.Repeat("#", int(level[0]-'0'))+" "+strings.TrimSpace(m.inlines(c)))
+				} else if s := m.blocks(c); strings.TrimSpace(s) != "" {
+					parts = append(parts, s)
+				}
+			}
+			return strings.Join(parts, "\n\n")
+		}
 		summary := ""
 		var body strings.Builder
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -137,10 +158,65 @@ func (m mdWriter) block(n *html.Node) string {
 			return s
 		}
 		return ""
+	case "transclusion":
+		// Obsidian's embed of a note: ![[Note]] (an alias would be read as a size there).
+		if s, ok := m.page(attr(n, "data-id")); ok {
+			if i := strings.Index(s, "|"); strings.HasPrefix(s, "[[") && i > 0 {
+				s = s[:i] + "]]"
+			}
+			return "!" + s
+		}
+		return ""
+	case "button":
+		if url := attr(n, "data-url"); attr(n, "data-action") == "link" && url != "" {
+			return "[" + escape(attr(n, "data-label")) + "](" + linkTarget(url) + ")"
+		}
+		return ""
+	case "footnotes":
+		var lines []string
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if kind(c) != "footnote" {
+				continue
+			}
+			text := strings.ReplaceAll(strings.TrimSpace(m.blocks(c)), "\n\n", "\n")
+			text = strings.ReplaceAll(text, "\n", "\n    ")
+			lines = append(lines, fmt.Sprintf("[^%d]: %s", m.notes[attr(c, "data-note")], text))
+		}
+		return strings.Join(lines, "\n")
 	case "toc":
 		return ""
 	}
 	return m.blocks(n) // columns, a column, a toggle's content, any other wrapper
+}
+
+// footnoteNumbers numbers a body's footnotes from 1: by where each is first referenced in
+// the text, then the notes nothing references, in the list's order.
+func footnoteNumbers(root *html.Node) map[string]int {
+	out := map[string]int{}
+	var defs []string
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if kind(n) == "footnote" {
+			id := attr(n, "data-note")
+			if n.Data == "sup" {
+				if _, ok := out[id]; !ok {
+					out[id] = len(out) + 1
+				}
+			} else {
+				defs = append(defs, id)
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(root)
+	for _, id := range defs {
+		if _, ok := out[id]; !ok {
+			out[id] = len(out) + 1
+		}
+	}
+	return out
 }
 
 // list renders ul/ol items, indenting each item's following lines under its marker.
@@ -300,6 +376,11 @@ func (m mdWriter) inline(n *html.Node) string {
 		return "[" + inner + "](" + linkTarget(href) + ")"
 	case "inline-math":
 		return "$" + attr(n, "data-latex") + "$"
+	case "footnote":
+		if n.Data == "sup" {
+			return fmt.Sprintf("[^%d]", m.notes[attr(n, "data-note")])
+		}
+		return m.inlines(n)
 	case "label", "input":
 		return ""
 	}

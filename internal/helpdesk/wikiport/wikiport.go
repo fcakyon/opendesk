@@ -129,6 +129,8 @@ type Page struct {
 	// Tags are the page's tags from its source's metadata (lower case, no "#"). They
 	// are also written as #tags at the end of the body, where the wiki reads tags.
 	Tags []string
+	// Aliases are the page's other names from its front matter (aliases, alias).
+	Aliases []string
 	// Links are the keys of the imported pages the body links to, each once.
 	Links []string
 }

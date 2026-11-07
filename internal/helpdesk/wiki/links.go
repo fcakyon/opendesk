@@ -22,9 +22,11 @@ import (
 )
 
 // Links and tags (contracts/wiki.md "Links and tags"): kept from each page's body as it is
-// saved. A link is a link to a page or a subpage block; a tag is #word in the text (at
-// least one letter, so "#42" is a number), never inside code. A ticket mention is the
-// sanitizer's `<a data-type="ticket" data-id="…">` (hd.SanitizeWiki).
+// saved. A link is a link to a page, a subpage block or a synced block (an embed of the page
+// or of one of its blocks, `<div data-type="transclusion" data-id="…">`): any data-id or
+// /wiki/ path naming a page of the workspace. A tag is #word in the text (at least one
+// letter, so "#42" is a number), never inside code. A ticket mention is the sanitizer's
+// `<a data-type="ticket" data-id="…">` (hd.SanitizeWiki).
 var (
 	linkRef   = regexp.MustCompile(`(?:/wiki/|data-id=")([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})`)
 	ticketRef = regexp.MustCompile(`data-type="ticket" data-id="([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"`)
@@ -213,7 +215,7 @@ func registerLinks(d *deps.Deps, api huma.API) {
 
 	huma.Register(api, huma.Operation{OperationID: "list-wiki-unlinked-mentions", Method: http.MethodGet, Path: "/v1/wiki/pages/{id}/mentions",
 		Summary: "List the pages that name a page without linking it", Tags: tags,
-		Description: "Pages whose text has the page's title as a phrase, and no link to it yet. An untitled page has none."},
+		Description: "Pages whose text has the page's title or one of its aliases as a phrase, and no link to it yet. An untitled page without aliases has none."},
 		func(ctx context.Context, in *struct {
 			ID string `path:"id"`
 		}) (*mentionsOut, error) {
@@ -222,27 +224,46 @@ func registerLinks(d *deps.Deps, api huma.API) {
 				return nil, err
 			}
 			me, hidden := v.args()
-			if strings.TrimSpace(title) == "" {
+			var aliases []string
+			if err := d.DB.Pool.QueryRow(ctx, `SELECT aliases FROM wiki_pages WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, id).Scan(&aliases); err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			names := pageNames(title, aliases)
+			if len(names) == 0 {
 				return &mentionsOut{httpx.Page[WikiMention]{Data: []WikiMention{}}}, nil
+			}
+			args := []any{p.WorkspaceID, id, me, hidden}
+			for _, n := range names {
+				args = append(args, n)
 			}
 			rows, err := d.DB.Pool.Query(ctx, `SELECT s.id, s.parent_id, s.title, s.icon, s.body_html, s.updated_at
 				FROM wiki_pages s
-				WHERE s.workspace_id = $1 AND s.id <> $2 AND s.search @@ phraseto_tsquery('simple', $3) AND `+liveSQL("s", 4, 5)+`
+				WHERE s.workspace_id = $1 AND s.id <> $2 AND s.search @@ `+phraseQuery(names, 5)+` AND `+liveSQL("s", 3, 4)+`
 				  AND NOT EXISTS (SELECT 1 FROM wiki_links l WHERE l.workspace_id = $1 AND l.from_id = s.id AND l.to_id = $2)
-				ORDER BY s.updated_at DESC LIMIT 100`, p.WorkspaceID, id, title, me, hidden)
+				ORDER BY s.updated_at DESC LIMIT 100`, args...)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			all, err := collect(rows, title)
-			if err != nil {
-				return nil, httpx.Wrap(err)
-			}
-			// The phrase search ignores punctuation; keep the pages whose text has the title itself.
 			out := []WikiMention{}
-			for _, m := range all {
-				if strings.Contains(strings.ToLower(m.Snippet), strings.ToLower(strings.TrimSpace(title))) {
-					out = append(out, m)
+			defer rows.Close()
+			for rows.Next() {
+				var m WikiMention
+				var body string
+				if err := rows.Scan(&m.ID, &m.ParentID, &m.Title, &m.Icon, &body, &m.UpdatedAt); err != nil {
+					return nil, httpx.Wrap(err)
 				}
+				// The phrase search ignores punctuation (and an alias may match only in the
+				// title, weighed as text): keep the pages whose text has a name itself.
+				text := hd.HTMLToText(body)
+				name := namedIn(text, names)
+				if name == "" {
+					continue
+				}
+				m.Snippet = snippet(text, name)
+				out = append(out, m)
+			}
+			if err := rows.Err(); err != nil {
+				return nil, httpx.Wrap(err)
 			}
 			return &mentionsOut{httpx.Page[WikiMention]{Data: out}}, nil
 		})

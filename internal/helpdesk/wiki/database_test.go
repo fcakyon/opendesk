@@ -141,3 +141,67 @@ func TestDatabases(t *testing.T) {
 		t.Fatalf("copy %s rows %d", copied.Kind, len(rows.Data))
 	}
 }
+
+func TestDatabaseFormsAndPairs(t *testing.T) {
+	e := hdtest.New(t, wiki.Register)
+	ws := e.NewWorkspace()
+	agent := ws.Agent.As(ws)
+
+	var db dbPage
+	e.Do("POST", "/v1/wiki/pages", agent, map[string]any{"title": "Tasks", "kind": "database"}).Want(t, 201).JSON(t, &db)
+	other := create(t, e, agent, map[string]any{"title": "Customers", "kind": "database"})
+	rel := func(id, name, target string) map[string]any {
+		return map[string]any{"id": id, "name": name, "type": "relation", "database_id": target}
+	}
+	props := []map[string]any{
+		{"id": "title", "name": "Name", "type": "title"},
+		rel("parent", "Parent item", db.ID), rel("subs", "Sub-items", db.ID),
+		rel("blocked", "Blocked by", db.ID), rel("blocking", "Blocking", db.ID),
+		rel("customer", "Customer", other.ID),
+		{"id": "notes", "name": "Notes", "type": "text"},
+	}
+	// A form is a view; its settings are the app's, kept as written.
+	form := map[string]any{"id": "form", "name": "Report a task", "type": "form", "settings": map[string]any{"form": map[string]any{
+		"title": "Report a task", "fields": []map[string]any{{"property": "title", "required": true}, {"property": "notes", "help": "What happened"}}, "submitted": "Thanks",
+	}}}
+	schema := map[string]any{
+		"properties":   props,
+		"views":        []map[string]any{{"id": "table", "name": "Table", "type": "table"}, form},
+		"sub_items":    map[string]any{"parent": "parent", "children": "subs"},
+		"dependencies": map[string]any{"blocked_by": "blocked", "blocking": "blocking"},
+	}
+	var saved dbPage
+	e.Do("PATCH", "/v1/wiki/pages/"+db.ID, agent, map[string]any{"database": schema}).Want(t, 200).JSON(t, &saved)
+	if saved.Database.Views[1].Type != "form" || saved.Database.SubItems == nil || saved.Database.SubItems.Children != "subs" || saved.Database.Dependencies.Blocking != "blocking" {
+		t.Fatalf("saved %+v", saved.Database)
+	}
+
+	// Each pair names two relation properties of the database, to one database, none used twice.
+	for _, pair := range []map[string]any{
+		{"sub_items": map[string]any{"parent": "parent", "children": "parent"}},
+		{"sub_items": map[string]any{"parent": "parent", "children": "notes"}},
+		{"sub_items": map[string]any{"parent": "parent", "children": "nothing"}},
+		{"sub_items": map[string]any{"parent": "parent", "children": "customer"}},
+		{"sub_items": map[string]any{"parent": "parent", "children": "subs"}, "dependencies": map[string]any{"blocked_by": "subs", "blocking": "blocking"}},
+	} {
+		bad := map[string]any{"properties": props, "views": schema["views"]}
+		for k, v := range pair {
+			bad[k] = v
+		}
+		e.Do("PATCH", "/v1/wiki/pages/"+saved.ID, agent, map[string]any{"database": bad}).Want(t, 422)
+	}
+	e.Do("PATCH", "/v1/wiki/pages/"+saved.ID, agent, map[string]any{"database": map[string]any{"properties": props, "views": []map[string]any{{"id": "x", "name": "X", "type": "survey"}}}}).Want(t, 422)
+
+	// A row has one parent item at most; sub-items and dependencies take many.
+	a := create(t, e, agent, map[string]any{"title": "A", "parent_id": saved.ID})
+	b := create(t, e, agent, map[string]any{"title": "B", "parent_id": saved.ID})
+	var c dbPage
+	e.Do("POST", "/v1/wiki/pages", agent, map[string]any{"title": "C", "parent_id": saved.ID, "props": map[string]any{"parent": []string{a.ID}, "blocked": []string{a.ID, b.ID}}}).Want(t, 201).JSON(t, &c)
+	if len(c.Props["blocked"].([]any)) != 2 {
+		t.Fatalf("blocked %+v", c.Props)
+	}
+	e.Do("PATCH", "/v1/wiki/pages/"+c.ID, agent, map[string]any{"props": map[string]any{"parent": []string{a.ID, b.ID}}}).Want(t, 422)
+	e.Do("PATCH", "/v1/wiki/pages/"+a.ID, agent, map[string]any{"props": map[string]any{"subs": []string{b.ID, c.ID}}}).Want(t, 200)
+	// Rows of another database aren't sub-items.
+	e.Do("PATCH", "/v1/wiki/pages/"+a.ID, agent, map[string]any{"props": map[string]any{"subs": []string{other.ID}}}).Want(t, 422)
+}

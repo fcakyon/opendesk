@@ -15,7 +15,7 @@ import (
 // https, colours only the named tones.
 var (
 	wikiTone     = regexp.MustCompile(`^(gray|brown|orange|yellow|green|blue|purple|pink|red)$`)
-	wikiDivTypes = regexp.MustCompile(`^(callout|columns|column|file|video|audio|bookmark|embed|toc|subpage|database|block-math|detailsContent|tickets)$`)
+	wikiDivTypes = regexp.MustCompile(`^(callout|columns|column|file|video|audio|bookmark|embed|toc|subpage|database|block-math|detailsContent|tickets|transclusion|button|footnotes|footnote)$`)
 	wikiSpanType = regexp.MustCompile(`^(mention|inline-math)$`)
 	wikiSrc      = regexp.MustCompile(`^(?i:https://[^\s"'<>]+|/v1/attachments/[0-9a-fA-F-]{36}(\?[^\s"'<>]*)?)$`)
 	httpsURL     = regexp.MustCompile(`^(?i:https://[^\s"'<>]+)$`)
@@ -36,6 +36,11 @@ var (
 		"contact": regexp.MustCompile(`^/contacts/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`),
 	}
 	relValue = regexp.MustCompile(`^[a-z ]{1,64}$`)
+	// A button block (contracts/wiki.md "Blocks"): what it says and what it does.
+	buttonLabel  = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,100}$`)
+	buttonAction = regexp.MustCompile(`^(template|todo|link|row)$`)
+	// A new row's values by property id, read by the app as data: one JSON object.
+	buttonProps = regexp.MustCompile(`^\{[^\x00-\x1f\x7f]{0,1000}\}$`)
 
 	wikiPolicy = newWikiPolicy()
 )
@@ -59,7 +64,8 @@ func newWikiPolicy() *bluemonday.Policy {
 	p.AllowAttrs("data-checked").Matching(regexp.MustCompile(`^(true|false)$`)).OnElements("li")
 
 	// Blocks drawn by the app: callouts, columns, files, media, bookmarks, embeds, the
-	// table of contents, subpages, equations, toggles' content.
+	// table of contents, subpages, equations, toggles' content, synced blocks, buttons and
+	// the footnotes list.
 	p.AllowAttrs("data-type").Matching(wikiDivTypes).OnElements("div")
 	p.AllowAttrs("data-icon").Matching(emojiText).OnElements("div")
 	p.AllowAttrs("data-tone").Matching(wikiTone).OnElements("div")
@@ -74,6 +80,18 @@ func newWikiPolicy() *bluemonday.Policy {
 	p.AllowAttrs("data-latex").Matching(latexText).OnElements("div", "span")
 	// The tickets block: a saved view's open tickets (data-id), how many show.
 	p.AllowAttrs("data-limit").Matching(integer).OnElements("div")
+	// A synced block: another page (data-id), or one block or heading's section of it.
+	p.AllowAttrs("data-block").Matching(uuidAttr).OnElements("div")
+	// A button: its label, its action and what the action needs (data-url, data-title above).
+	p.AllowAttrs("data-label").Matching(buttonLabel).OnElements("div")
+	p.AllowAttrs("data-action").Matching(buttonAction).OnElements("div")
+	p.AllowAttrs("data-template", "data-database").Matching(uuidAttr).OnElements("div")
+	p.AllowAttrs("data-props").Matching(buttonProps).OnElements("div")
+	// Footnotes: a reference in the text and its note in the list at the page's end.
+	p.AllowAttrs("data-type").Matching(regexp.MustCompile(`^footnote$`)).OnElements("sup")
+	p.AllowAttrs("data-note").Matching(uuidAttr).OnElements("sup", "div")
+	// A toggle heading: a toggle whose summary is a heading of that level.
+	p.AllowAttrs("data-heading").Matching(regexp.MustCompile(`^[123]$`)).OnElements("details")
 
 	// Inline: people (the rich policy's), equations, links to pages, tickets and contacts,
 	// dates, highlights. A ticket or contact link is reduced further by mentionLinks.

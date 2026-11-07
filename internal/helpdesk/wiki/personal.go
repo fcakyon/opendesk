@@ -2,7 +2,6 @@ package wiki
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -24,14 +23,6 @@ import (
 // journal of daily notes. People only: an API key has none of these.
 
 const maxFavorites = 100
-
-// recordVisit counts a person's read of a page. A failure is logged, never the read's.
-func recordVisit(ctx context.Context, d *deps.Deps, wid, uid, id uuid.UUID) {
-	if _, err := d.DB.Pool.Exec(ctx, `INSERT INTO wiki_visits (workspace_id, user_id, page_id) VALUES ($1, $2, $3)
-		ON CONFLICT (workspace_id, user_id, page_id) DO UPDATE SET visits = wiki_visits.visits + 1, last_at = now()`, wid, uid, id); err != nil {
-		slog.WarnContext(ctx, "wiki: record visit", "err", err)
-	}
-}
 
 // PageReader is someone who opened a page.
 type PageReader struct {

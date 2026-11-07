@@ -46,6 +46,7 @@ type ExportPage struct {
 	Canvas    *Canvas
 	Props     map[string]any
 	Tags      []string
+	Aliases   []string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -53,7 +54,7 @@ type ExportPage struct {
 // ExportOptions shape an export.
 type ExportOptions struct {
 	Format Format
-	// Frontmatter writes each Markdown page's title, icon, dates, tags and a row's values
+	// Frontmatter writes each Markdown page's title, icon, aliases, dates, tags and a row's values
 	// as YAML front matter.
 	Frontmatter bool
 	// Attachment opens one of the workspace's files a body uses, by its id; the export
@@ -393,6 +394,12 @@ func frontmatter(p *ExportPage, schema *Database) string {
 	}
 	if !p.UpdatedAt.IsZero() {
 		b.WriteString("updated: " + p.UpdatedAt.UTC().Format(time.RFC3339) + "\n")
+	}
+	if len(p.Aliases) > 0 {
+		b.WriteString("aliases:\n")
+		for _, a := range p.Aliases {
+			b.WriteString("  - " + yamlQuote(a) + "\n")
+		}
 	}
 	if len(p.Tags) > 0 {
 		b.WriteString("tags:\n")

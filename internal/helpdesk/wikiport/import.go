@@ -371,6 +371,7 @@ func (imp *importer) readMarkdown(n *node, f *file) {
 		n.Icon = ic
 	}
 	n.Tags = cleanTags(fm["tags"])
+	n.Aliases = append(fm["aliases"], fm["alias"]...)
 	if strings.Contains(body, "[[") && !imp.fs.notion {
 		imp.obsidian = true
 	}

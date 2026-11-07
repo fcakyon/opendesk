@@ -52,6 +52,16 @@ func TestSanitizeWikiKeepsEditorBlocks(t *testing.T) {
 		`<col style="min-width: 80px">`,
 		`<th colwidth="120">`,
 		`<td colspan="1" rowspan="1">`,
+		`data-block-id="4f1c2d3e-5a6b-4c7d-8e9f-0a1b2c3d4e5f" data-heading="2"><summary>Toggle heading</summary>`,
+		`data-id="3dcb61fa-abc6-47ac-9916-06acf5b7fdf7" data-type="transclusion"></div>`,
+		`data-id="3dcb61fa-abc6-47ac-9916-06acf5b7fdf7" data-block="c61e7b00-13ee-469c-9759-6c85e6e3453e" data-type="transclusion"></div>`,
+		`data-label="New escalation" data-action="template" data-template="9e0f1a2b-3c4d-4e5f-8a6b-7c8d9e0f1a2b" data-type="button"`,
+		`data-label="Add a to-do" data-action="todo" data-title="Call the customer back" data-type="button"`,
+		`data-label="Status page" data-action="link" data-url="https://status.example.com" data-type="button"`,
+		`data-label="Log a bug" data-action="row" data-database="3dcb61fa-abc6-47ac-9916-06acf5b7fdf7" data-title="New bug" data-props="{&#34;status&#34;:&#34;todo&#34;,&#34;urgent&#34;:true}" data-type="button"`,
+		`<code class="language-mermaid">graph TD; A--&gt;B</code>`,
+		`A claim<sup data-type="footnote" data-note="4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7a">1</sup> with a source.`,
+		`<div data-type="footnotes"><div data-type="footnote" data-note="4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7a"><p data-block-id="5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b">The source, page 4.</p></div></div>`,
 	}
 	for _, k := range keep {
 		if !strings.Contains(out, k) {
@@ -132,6 +142,63 @@ func TestSanitizeWikiMentionLinks(t *testing.T) {
 			`<a href="/tickets/42" rel="nofollow noreferrer">#42</a>`},
 		{"escaped text kept", `<p>a &amp; b <a data-type="ticket" data-id="` + tk + `" href="/tickets/1">#1 &lt;x&gt;</a> <a href="https://x.example/?a=1&amp;b=2">q</a></p>`,
 			`<p>a &amp; b <a data-type="ticket" data-id="` + tk + `" href="/tickets/1" rel="nofollow noreferrer">#1 &lt;x&gt;</a> <a href="https://x.example/?a=1&amp;b=2" rel="nofollow noreferrer noopener" target="_blank">q</a></p>`},
+	}
+	for _, c := range cases {
+		out := SanitizeWiki(c.in)
+		if out != c.want {
+			t.Errorf("%s:\n got %s\nwant %s", c.name, out, c.want)
+		}
+		if again := SanitizeWiki(out); again != out {
+			t.Errorf("%s: not stable: %s", c.name, again)
+		}
+	}
+}
+
+// The newer blocks keep each attribute only with a value of its shape: a synced block's page
+// and block ids, a button's label, action and targets, a footnote's id, a toggle heading's level.
+func TestSanitizeWikiNewBlocks(t *testing.T) {
+	const id = "3dcb61fa-abc6-47ac-9916-06acf5b7fdf7"
+	cases := []struct{ name, in, want string }{
+		{"synced page", `<div data-type="transclusion" data-id="` + id + `"></div>`,
+			`<div data-type="transclusion" data-id="` + id + `"></div>`},
+		{"synced block", `<div data-type="transclusion" data-id="` + id + `" data-block="` + id + `"></div>`,
+			`<div data-type="transclusion" data-id="` + id + `" data-block="` + id + `"></div>`},
+		{"synced block bad ids", `<div data-type="transclusion" data-id="../x" data-block="#top"></div>`,
+			`<div data-type="transclusion"></div>`},
+		{"synced block content", `<div data-type="transclusion" data-id="` + id + `"><script>alert(1)</script><p>copied</p></div>`,
+			`<div data-type="transclusion" data-id="` + id + `"><p>copied</p></div>`},
+		{"button link", `<div data-type="button" data-label="Open" data-action="link" data-url="https://x.example/a"></div>`,
+			`<div data-type="button" data-label="Open" data-action="link" data-url="https://x.example/a"></div>`},
+		{"button bad action", `<div data-type="button" data-label="Go" data-action="eval"></div>`,
+			`<div data-type="button" data-label="Go"></div>`},
+		{"button javascript url", `<div data-type="button" data-label="Go" data-action="link" data-url="javascript:alert(1)"></div>`,
+			`<div data-type="button" data-label="Go" data-action="link"></div>`},
+		{"button http url", `<div data-type="button" data-label="Go" data-action="link" data-url="http://x.example"></div>`,
+			`<div data-type="button" data-label="Go" data-action="link"></div>`},
+		{"button long label", `<div data-type="button" data-label="` + strings.Repeat("a", 101) + `" data-action="todo"></div>`,
+			`<div data-type="button" data-action="todo"></div>`},
+		{"button label newline", "<div data-type=\"button\" data-label=\"a\nb\" data-action=\"todo\"></div>",
+			`<div data-type="button" data-action="todo"></div>`},
+		{"button targets", `<div data-type="button" data-action="row" data-database="` + id + `" data-template="nope"></div>`,
+			`<div data-type="button" data-action="row" data-database="` + id + `"></div>`},
+		{"button props", `<div data-type="button" data-action="row" data-props='{"a":1}'></div>`,
+			`<div data-type="button" data-action="row" data-props="{&#34;a&#34;:1}"></div>`},
+		{"button props not an object", `<div data-type="button" data-action="row" data-props="[1]"></div>`,
+			`<div data-type="button" data-action="row"></div>`},
+		{"button props too long", `<div data-type="button" data-action="row" data-props='{"a":"` + strings.Repeat("x", 1000) + `"}'></div>`,
+			`<div data-type="button" data-action="row"></div>`},
+		{"button attrs elsewhere", `<p data-label="x" data-action="link" data-url="https://x.example">a</p>`,
+			`<p>a</p>`},
+		{"footnote", `<p>a<sup data-type="footnote" data-note="` + id + `">1</sup></p><div data-type="footnotes"><div data-type="footnote" data-note="` + id + `"><p>n</p></div></div>`,
+			`<p>a<sup data-type="footnote" data-note="` + id + `">1</sup></p><div data-type="footnotes"><div data-type="footnote" data-note="` + id + `"><p>n</p></div></div>`},
+		{"footnote bad id", `<p>a<sup data-type="footnote" data-note="1">1</sup></p><div data-type="footnote" data-note="1"></div>`,
+			`<p>a<sup data-type="footnote">1</sup></p><div data-type="footnote"></div>`},
+		{"footnote other type", `<p>a<sup data-type="mention" data-id="` + id + `" onclick="x()">1</sup></p>`,
+			`<p>a<sup>1</sup></p>`},
+		{"toggle heading", `<details data-heading="3"><summary>s</summary></details>`,
+			`<details data-heading="3"><summary>s</summary></details>`},
+		{"toggle heading level", `<details data-heading="4"><summary>s</summary></details><p data-heading="1">p</p>`,
+			`<details><summary>s</summary></details><p>p</p>`},
 	}
 	for _, c := range cases {
 		out := SanitizeWiki(c.in)

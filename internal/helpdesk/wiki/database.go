@@ -31,7 +31,7 @@ var propTypes = []string{"title", "text", "number", "select", "multi_select", "s
 // Types whose value is computed, never stored on a row.
 var computedTypes = []string{"title", "rollup", "formula", "created_time", "created_by", "edited_time", "edited_by", "unique_id"}
 
-var viewTypes = []string{"table", "board", "list", "gallery", "calendar", "timeline", "chart"}
+var viewTypes = []string{"table", "board", "list", "gallery", "calendar", "timeline", "chart", "form"}
 
 var tones = []string{"gray", "brown", "orange", "yellow", "green", "blue", "purple", "pink", "red"}
 
@@ -97,11 +97,27 @@ type DbView struct {
 	Settings map[string]any `json:"settings,omitempty"`
 }
 
+// DbSubItems names the two relations of a database to itself that nest its rows: each row's
+// parent item (one at most) and its sub-items. The app keeps the two in step.
+type DbSubItems struct {
+	Parent   string `json:"parent" doc:"The relation property naming a row's parent item"`
+	Children string `json:"children" doc:"The relation property naming a row's sub-items"`
+}
+
+// DbDependencies names the two relations of a database to itself that say which rows wait
+// on which. The app keeps the two in step.
+type DbDependencies struct {
+	BlockedBy string `json:"blocked_by" doc:"The relation property naming the rows a row waits on"`
+	Blocking  string `json:"blocking" doc:"The relation property naming the rows waiting on a row"`
+}
+
 // Database is what a database page keeps: its properties and views, and the next unique id.
 type Database struct {
-	Properties []DbProperty `json:"properties"`
-	Views      []DbView     `json:"views"`
-	NextID     int          `json:"next_id" doc:"The number the next row's unique id gets"`
+	Properties   []DbProperty    `json:"properties"`
+	Views        []DbView        `json:"views"`
+	NextID       int             `json:"next_id" doc:"The number the next row's unique id gets"`
+	SubItems     *DbSubItems     `json:"sub_items,omitempty" doc:"Rows nest under a parent item"`
+	Dependencies *DbDependencies `json:"dependencies,omitempty" doc:"Rows are blocked by other rows"`
 }
 
 // DateValue is a date property's value: a day or a moment, and an optional end.
@@ -224,6 +240,9 @@ func cleanDatabase(raw json.RawMessage, prev *Database) (Database, error) {
 			}
 		}
 	}
+	if err := checkPairs(db); err != nil {
+		return Database{}, err
+	}
 	views := map[string]bool{}
 	for i := range db.Views {
 		v := &db.Views[i]
@@ -238,6 +257,34 @@ func cleanDatabase(raw json.RawMessage, prev *Database) (Database, error) {
 		db.NextID = max(prev.NextID, 1)
 	}
 	return db, nil
+}
+
+// checkPairs makes sure sub-items and dependencies each name two different relation
+// properties of the database that relate to the same database, none of them used twice.
+func checkPairs(db Database) error {
+	var pairs [][2]string
+	if s := db.SubItems; s != nil {
+		pairs = append(pairs, [2]string{s.Parent, s.Children})
+	}
+	if d := db.Dependencies; d != nil {
+		pairs = append(pairs, [2]string{d.BlockedBy, d.Blocking})
+	}
+	used := map[string]bool{}
+	for _, pair := range pairs {
+		var target *uuid.UUID
+		for _, id := range pair {
+			i := slices.IndexFunc(db.Properties, func(p DbProperty) bool { return p.ID == id })
+			if i < 0 || db.Properties[i].Type != "relation" || used[id] {
+				return dbInvalid("Sub-items and dependencies each name two relation properties of the database.")
+			}
+			used[id] = true
+			if target != nil && *target != *db.Properties[i].DatabaseID {
+				return dbInvalid("Sub-items and dependencies relate the database to itself.")
+			}
+			target = db.Properties[i].DatabaseID
+		}
+	}
+	return nil
 }
 
 // propRefs are the people, related pages (by the database they must be rows of) and
@@ -283,6 +330,9 @@ func cleanProps(raw json.RawMessage, db Database, cur map[string]any) (map[strin
 		val, err := cleanValue(p, v, &refs)
 		if err != nil {
 			return nil, refs, err
+		}
+		if list, ok := val.([]uuid.UUID); ok && db.SubItems != nil && id == db.SubItems.Parent && len(list) > 1 {
+			return nil, refs, dbInvalid("%s names one parent item at most.", p.Name)
 		}
 		out[id] = val
 	}

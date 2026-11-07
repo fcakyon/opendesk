@@ -24,12 +24,14 @@ interface WikiNode {           // a page in the tree, without its body
   updated_at: string           // the last change of title, icon or body (moves do not count)
   created_by_id: string | null // who created it; null for an API key, or once the person deleted their account
   tags: string[]               // the #tags in its text, lower case, see "Links and tags"
+  aliases?: string[]           // other names it goes by, see "Aliases"; left out when none
 }
 
 interface WikiRef { id: string; title: string; icon: string }
 
 interface WikiPage extends WikiNode, PageSettings {
   body_html: string            // rich text, see "Body"
+  aliases: string[]            // always present on a page, [] when none
   created_by: UserRef | null   // null for an API key, or once the person deleted their account
   updated_by: UserRef | null
   created_at: string
@@ -84,7 +86,13 @@ last edited it; and the database's own templates (pages made with `{parent_id: <
 true}`), which a new row can start as a copy of. Wrong shapes are `422 invalid_database`.
 
 ```ts
-interface Database { properties: DbProperty[]; views: DbView[]; next_id: number }
+interface Database {
+  properties: DbProperty[]
+  views: DbView[]
+  next_id: number
+  sub_items?: { parent: string; children: string }          // two relation property ids (see below)
+  dependencies?: { blocked_by: string; blocking: string }   // two relation property ids (see below)
+}
 interface DbProperty {
   id: string            // [a-z0-9_]{1,24}; the first property is the title ("title"), the only one
   name: string          // 1..100
@@ -101,7 +109,7 @@ interface DbProperty {
   prefix?: string       // unique_id: letters before the number
   description?: string
 }
-interface DbView { id: string; name: string; type: "table" | "board" | "list" | "gallery" | "calendar" | "timeline" | "chart"; settings?: object }
+interface DbView { id: string; name: string; type: "table" | "board" | "list" | "gallery" | "calendar" | "timeline" | "chart" | "form"; settings?: object }
 ```
 
 | type | stored value |
@@ -122,8 +130,29 @@ interface DbView { id: string; name: string; type: "table" | "board" | "list" | 
 At most 100 properties, 50 views, 128 KB of schema and 64 KB of values per row. A view's `settings`
 belong to the app (`web/src/lib/api/types.ts` `DbViewSettings`): filters (rules in and/or groups),
 sorts, the property it groups by, the properties shown and their order and widths, the calendar's and
-timeline's date properties, card previews, chart settings and column calculations. Filtering, sorting,
+timeline's date properties, card previews, chart settings, column calculations and a form's questions. Filtering, sorting,
 grouping, formulas, rollups and calculations run in the app (`web/src/lib/wiki/db`).
+
+A **form** view (`type: "form"`) asks for a new row. Its `settings.form` is `{title?, description?, fields:
+[{property, required?, help?}], submitted?}`: the properties it asks in order (stored types only), whether
+each must be answered, a hint under each, and what it says once sent. The title is always asked first and
+always required. Sending it creates a row like any other (`POST /v1/wiki/pages`), so only members who can
+write rows (agents and up) send it; viewers read it. Forms are for members only, never public. The
+database's page opens on a view with `?view=<view id>`, the link a form is shared by.
+
+**Sub-items** and **dependencies** each pair two relation properties of a database to itself, named by
+`sub_items` (`parent`, `children`) and `dependencies` (`blocked_by`, `blocking`): two different relation
+properties of the schema with the same `database_id` (the database itself), no property in both pairs. A
+row's `parent` names one row at most; `422 invalid_database` otherwise. The API checks each value as a
+relation and writes only the row it is given: **the app keeps the two sides in step**, writing the other
+side on each row a change adds or removes (`pairedWrites` in `web/src/lib/wiki/db/pairs.ts`; a row moved
+under a new parent leaves its old one's `children`; a parent is never the row itself or one of its
+sub-items). Turning either off removes the pair from the schema and leaves both properties as plain
+relations. Tables and lists nest sub-items under their parent with a disclosure (filters and sorts apply
+within each level; a row whose parent is filtered out shows at the top); boards, galleries, calendars and
+charts show every row flat. The timeline draws an arrow from each blocking row to the row it blocks, red
+with the blocked row marked when it starts before its blocker ends; the row's page says so under
+"Blocked by".
 
 A page holds a database with the block `<div data-type="database" data-id="<database id>" data-view="<view id>">`:
 the database's view inside the page, with its controls. "/table", "/board", "/list", "/gallery", "/calendar"
@@ -245,6 +274,64 @@ Duplicate, Save as template and Use a template are all this. The app also offers
 its own (escalation, refunds, onboarding, meeting notes, incident review, how-to, project brief,
 decision record, customer call notes, FAQ, weekly sync), made in the reader's language.
 
+## Aliases
+
+A page goes by other names besides its title, as Obsidian's aliases (`wiki_pages.aliases`, migration
+`000728`): at most 10, each up to 100 characters with its whitespace folded like a title's; empty ones
+and repeats (in any case) are left out, more is `422`. `POST /v1/wiki/pages` takes `aliases`, and
+`PATCH` takes them replaced whole (`[]` removes them); like the page's look, changing them keeps the
+version and adds no revision, and `wiki_page.updated` carries `aliases`. A copy (Duplicate, a template)
+starts without them. They find the page:
+
+- search (`GET /v1/wiki/search`, the command palette) weighs them as its title;
+- the editor's `[[` and `@` page search, and the link field of the text toolbar, match them as the
+  title (the best match of the two is what ranks it);
+- unlinked mentions ("Links and tags") look for each alias as for the title, and the panel's Link links
+  the first name the other page has;
+- Markdown export writes them in the front matter (`aliases:`), and import reads `aliases` and `alias`
+  there (the first 10 it can keep).
+
+The app shows them under the title, small, as "Also called" chips (Add alias beside Add icon and Add
+cover; Enter or a comma adds one, Backspace on an empty field takes the last back), and in the page
+panel's Info, where editors change them.
+
+## Split view
+
+A second page opens beside the one in the address, as Obsidian's panes: `/wiki/<id>?beside=<id>`, so a
+split is a link and survives a reload (`web/src/lib/wiki/split.ts`). It opens from "Open beside" in the
+sidebar's page menu, "Open a page beside" in the page's menu (a searchable list, aliases included), and
+Alt-click (Option-click) on any link to a page; Mod-click stays the browser's new tab. A link followed
+inside the side page opens there. The side page has its own bar (swap the pages, open it as the main
+page, close) and is a full page with its own editor and saves, so both are edited at once; its edge
+drags to resize it (kept per person in the browser, `lib/panes.ts` `beside`). The main page keeps the
+window's title, the header, the page panel (beside the text from 1536 px while a page is beside it) and
+comments; presence (contracts/realtime.md) is joined
+for the main page only, since a member has one active wiki page. Below 1024 px the side page opens as
+a peek over the page.
+
+## Page analytics
+
+`GET /v1/wiki/pages/{id}/analytics?days=28` (viewer, `wiki:read`; a page the caller may see, else `404`;
+`days` 1..90) answers how the page was read, per day (UTC), counts only:
+
+```ts
+interface WikiPageAnalytics {
+  days: { date: string; views: number; viewers: number }[]   // every day of the range, today last
+  total_views: number
+  total_viewers: number                                       // different people over the range
+  edits: { date: string; count: number }[]                    // revisions started each day
+}
+```
+
+Each read of a page in the tree by a person (`GET /v1/wiki/pages/{id}`, the read that counts a visit)
+is a view of that day in `wiki_page_views (page_id, day, user_id, views)` (migration `000728`), except
+that reads by the same person less than 30 minutes apart are one view: a page read again as others
+save it, an author's own reloads, count once. Days are kept 90 days (the hourly `wiki.trash_purge`
+forgets older ones), and go with the page or the person. Who read it is never part of it: the readers
+list ("Favorites, recent pages and readers") is the only place names show. The page panel's Info shows
+"N views by M people" over the last 28 days, a bar per day (each day on hover and with the arrow keys,
+a table for screen readers) and the days it was edited as dots under them.
+
 ## Favorites, recent pages and readers
 
 People only (an API key is `403`): `GET`/`PUT /v1/wiki/favorites` `{page_ids}` (at most 100, in order;
@@ -357,9 +444,10 @@ bar", kept per browser). Every block is a plain element with data attributes, ea
 | inline colour | `<span data-color>`, `<mark data-bg>` (same tones) |
 | to-do list | `<ul data-type="taskList"><li data-type="taskItem" data-checked="true\|false">`; the checkbox is the app's to draw, never stored |
 | toggle | `<details><summary>…</summary><div data-type="detailsContent">…</div></details>` |
+| toggle heading | the toggle with `data-heading="1\|2\|3"`: its summary is a heading of that level, folding what is under it ("/toggle heading 1" to 3); exports write it as a heading |
 | callout | `<div data-type="callout" data-icon="<emoji>" data-tone="<tone>">blocks</div>` |
 | columns | `<div data-type="columns">` holding 2 to 5 `<div data-type="column">` |
-| code | `<pre><code class="language-<name>">`; the app highlights it |
+| code | `<pre><code class="language-<name>">`; the app highlights it. In `mermaid` it is a diagram: the app draws it (the `mermaid` library, loaded when a page has one, `securityLevel: "strict"`, the reader's light or dark theme) with its source a toggle away |
 | equation | `<div data-type="block-math" data-latex>`, `<span data-type="inline-math" data-latex>`; KaTeX in the app |
 | image | `<img src alt data-width="1..100" data-align="left\|right" data-caption>` (width in percent of the column) |
 | file, video, audio | `<div data-type="file\|video\|audio" data-src data-name data-size data-mime>`; `data-src` is https or one of our attachments |
@@ -367,18 +455,25 @@ bar", kept per browser). Every block is a plain element with data attributes, ea
 | embed | `<div data-type="embed" data-url>`, see "Embeds" |
 | table of contents | `<div data-type="toc">`: the app lists the page's headings |
 | subpage | `<div data-type="subpage" data-id="<page id>">`: the page shows where it sits in the text |
+| synced block | `<div data-type="transclusion" data-id="<page id>" data-block="<block id>">`: another page, or with `data-block` one block of it (a heading: the heading and what follows up to the next heading of its level or higher; a toggle heading counts as one), shown live and read-only with its title and "Edit original", as Notion's synced blocks and Obsidian's `![[Note#Heading]]`. "/synced block" or "![[" picks the page and then, optionally, a heading of it; a copied block link pasted on an empty line makes one. A page the reader can't see shows a stub without its title; an embed of the page itself, a loop through other embeds, or more than 3 inside each other shows "can't show this here". Markdown exports write `![[Note]]`; an article leaves it out (`left_out`) |
+| button | `<div data-type="button" data-label="<1..100 characters>" data-action="template\|todo\|link\|row">` with what the action needs: `data-template="<template page id>"` (its blocks go under the button, with new block, footnote and reminder ids and no comment marks), `data-title` (the to-do's text, or the new row's title), `data-url` (https, opened in a new tab; the only action a reader who can't edit may use), `data-database="<database id>"` and `data-props` (one JSON object of at most 1,000 characters: the new row's values by property id, for text, url, email, phone, number, checkbox, select and status properties; values that no longer fit the database are left out) |
 | link to a page | `<a data-type="page" data-id="<page id>" data-block="<block id>" href="/wiki/<id>">title when linked</a>`; the app shows the page's live title and icon |
 | ticket, contact | `<a data-type="ticket" data-id="<ticket id>" href="/tickets/<number>">`, `<a data-type="contact" data-id="<contact id>" href="/contacts/<contact id>">`; drawn live, see "Desk" |
 | ticket list | `<div data-type="tickets" data-id="<saved view id>" data-limit="<number>">`: the view's open tickets, see "Desk" |
 | date | `<time data-type="date" datetime="YYYY-MM-DD">`, or with a time `YYYY-MM-DDTHH:MM` (the writer's clock) or RFC 3339; `data-reminder="<uuid>"` makes it a reminder (see "Reminders") |
 | inline comment | `<span data-comment="<thread id>">commented text</span>`: the run of text a thread is on (see "Comments") |
+| footnote | `<sup data-type="footnote" data-note="<uuid>">n</sup>` in the text, and the notes in one list at the page's end: `<div data-type="footnotes">` of `<div data-type="footnote" data-note="<uuid>">` holding paragraphs. Numbered by where each note is first referenced (`n` is the number when saved); the app keeps the list in that order, adds a note for a new reference and drops the notes nothing references, in the same edit. "/footnote" or typing `[^` adds one; a reference shows its note on hover. A `<sup>` without both attributes is a plain superscript. Exports write `[^n]` and `[^n]: note`; an article `[n]` and a paragraph per note |
 | table | `table`, `colgroup`/`col` (`style` width or min-width in px), `th`/`td` (`colspan`, `rowspan`, `colwidth`) |
 | divider | `hr` |
 
-Blocks carry `data-block-id` (a uuid) so a link can point at one (`/wiki/<id>#<block id>`). The app adds
+Blocks carry `data-block-id` (a uuid) so a link can point at one (`/wiki/<id>#<block id>`), or a synced block show it. The app adds
 ids as a page loads without saving them: loading is never an edit, and the next save carries them.
 "Copy link to block" saves first. Nothing runs, loads a frame or styles freely: no `iframe`, `script`,
 `style` element or event handler survives, and a value that doesn't match is dropped.
+
+**Print or save as PDF** (the page menu, or Mod+P in the editor; `web/src/components/wiki/editor/print.ts`)
+prints a copy of the page alone: its cover, icon, title and text, in the light theme, toggles open, without the
+app around it or the editor's controls (anything marked `data-print="hide"`).
 
 ## Embeds
 
@@ -517,7 +612,7 @@ it and the pages under it are removed (`notification.deleted`), as tickets do. T
 As a page's body is saved (create, update, restore), the API keeps what it links to and its tags
 (`wiki_links`, `wiki_pages.tags`; migration `000721` read them from pages written before):
 
-- A link is a link to a page (`/wiki/<id>`, the page-link and subpage blocks) of the same workspace;
+- A link is a link to a page (`/wiki/<id>`, the page-link, subpage and synced blocks) of the same workspace;
   a link to a page that doesn't exist there is left out. Deleting a page removes its links both ways.
 - A ticket mention (`<a data-type="ticket" data-id>`) is kept as the page's link to that ticket
   (`wiki_ticket_links`), for the ticket's list of pages ("Desk"). Contact mentions are kept in the text only.
@@ -528,7 +623,7 @@ As a page's body is saved (create, update, restore), the API keeps what it links
 | method | path | | |
 | --- | --- | --- | --- |
 | GET | `/v1/wiki/pages/{id}/backlinks` | `wiki:read` | `Page<WikiMention>`: the pages linking to it, last edited first (at most 200) |
-| GET | `/v1/wiki/pages/{id}/mentions` | `wiki:read` | `Page<WikiMention>`: unlinked mentions, the pages whose text has its title as a phrase and no link to it (at most 100; none for an untitled page) |
+| GET | `/v1/wiki/pages/{id}/mentions` | `wiki:read` | `Page<WikiMention>`: unlinked mentions, the pages whose text has its title or one of its aliases as a phrase and no link to it (at most 100; none for an untitled page without aliases) |
 | GET | `/v1/wiki/graph` | `wiki:read` | `Page<{from, to}>`: every link in the workspace (the pages are the tree's) |
 
 ```ts
@@ -545,7 +640,7 @@ drawn as tags in the text; and a random page from the wiki's home.
 
 ## Search
 
-`GET /v1/wiki/search?q=` matches titles (weighted highest) and bodies, every word also as a
+`GET /v1/wiki/search?q=` matches titles and aliases (weighted highest) and bodies, every word also as a
 prefix ("refu" finds "refunds"), like the knowledge base's `prefixQuery`. `GET /v1/search` (the
 command palette) returns the top 5 pages in `wiki_pages` to callers that may read the wiki.
 
@@ -562,6 +657,7 @@ is `422`. Every emoji the app's picker offers passes (`TestPickerEmoji`).
 `wiki_page.created`, `wiki_page.updated`, `wiki_page.moved`: `{ wiki_page: WikiNode, updated_by }`;
 `wiki_page.updated` also carries `settings: PageSettings` when the page's look changed (it has no
 version to compare, so a client takes it as it comes).
+`wiki_page.updated` carries `aliases` when they changed (see "Aliases").
 `wiki_page.updated` carries `canvas` when a canvas's cards changed, or `canvas_changed: true` when the
 canvas is too large to carry (over 256 KB; read the page) (see "Canvas").
 `wiki_page.deleted`: `{ wiki_page_id, wiki_page_ids }` (the page and every subpage removed with it).
@@ -581,6 +677,7 @@ The web app patches the tree in place on `created`, `updated` and `deleted`, and
 | depth | 10 levels (`422 page_too_deep`, counting the subpages a move takes along) |
 | body | 512 KB (`422 page_too_large`) |
 | title | 200 characters (`422`; the app's title field stops at 200) |
+| aliases | 10 per page, 100 characters each (`422`) |
 | revisions per page | 100 |
 | comment | 20,000 characters of HTML, 50 mentions, 20 different reactions; an inline thread's quote 500 characters |
 | reminders per page | 100 (more are not kept) |
@@ -609,7 +706,7 @@ What it reads:
 
 | source | becomes |
 | --- | --- |
-| Obsidian vault (a zip with `.obsidian/`, or any Markdown) | a page per note, a page per folder (a folder note `X/X.md` or `X.md` beside `X/` is the folder's page), `[[links]]`, `[[note#heading]]`, `![[embeds]]` of notes and files, callouts, highlights, math, task lists, front matter (`title`, `tags`), `#tags`; comments `%%…%%` are dropped |
+| Obsidian vault (a zip with `.obsidian/`, or any Markdown) | a page per note, a page per folder (a folder note `X/X.md` or `X.md` beside `X/` is the folder's page), `[[links]]`, `[[note#heading]]`, `![[embeds]]` of notes and files, callouts, highlights, math, task lists, front matter (`title`, `tags`, `aliases`), `#tags`; comments `%%…%%` are dropped |
 | Notion export (Markdown & CSV, or HTML) | the page tree (Notion's ids leave titles), links between pages and to `notion.so` pages of the export, callouts, toggles, page icons; a database's CSV (the `_all` one when there are two) becomes a database: the first column its title, each other column's type read from its values (checkbox, number, date and date ranges, URL, email, select, multi-select, status; people and relations as text), each record a row with its values, matched by title to the row's own page so it keeps its text and subpages |
 | Confluence, Google Docs or other HTML | a page per HTML file, its title from `<title>` or its first heading, Confluence's info, note and warning panels as callouts |
 | Obsidian canvas (`.canvas`, JSON Canvas 1.0; in a vault or alone) | a canvas page ("Canvas"): text nodes' Markdown read as a note's (`[[links]]`, embeds, tags), `file` nodes naming a note or canvas of the upload page cards, other files of the upload file cards (stored as the page's files), https `link` nodes link cards, groups with their labels, connections between the cards kept; colours `"1"`..`"6"` and `#rrggbb` (`#rgb` written out) kept; ids the wiki takes kept, others replaced; positions and sizes brought within a canvas's bounds. Notes link to a canvas as `[[Name.canvas]]` |
@@ -659,7 +756,7 @@ pages past the last level go beside their ancestor there.
 | GET | `/v1/wiki/export?format=markdown\|html` | viewer; `wiki:read` | `Wiki <YYYY-MM-DD>.zip`: every page of the caller's tree: the workspace's, the teamspaces they may see, their own private pages; not the trash, not templates. Any member exports what they may read. `422 wiki_empty` without pages |
 
 `format` defaults to `markdown`: an Obsidian vault, a `.md` per page with YAML front matter (title,
-icon, dates, tags, a row's values), its subpages in a folder of the same name beside it, `[[links]]`
+icon, aliases, dates, tags, a row's values), its subpages in a folder of the same name beside it, `[[links]]`
 between pages, a database as a table of its rows and a `.csv` beside it, a canvas as a JSON Canvas
 `<title>.canvas` ("Canvas"). `html` is a standalone page per file, linked by relative paths; a canvas's
 page draws its cards and connections. A zip carries the files its pages use under `attachments/` when

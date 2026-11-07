@@ -2,6 +2,7 @@ package wiki_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
@@ -90,4 +91,42 @@ func TestLinksAndTags(t *testing.T) {
 		t.Fatalf("graph after %+v", graph.Data)
 	}
 	e.Do("GET", "/v1/wiki/pages/"+refunds.ID+"/backlinks", other.Owner.As(other), nil).Want(t, 404)
+}
+
+// A synced block is a link to the page it shows, whole or one block of it: the page's
+// backlinks and the graph count it, and a page embedding itself links nowhere.
+func TestTransclusionLinks(t *testing.T) {
+	e := hdtest.New(t, wiki.Register)
+	ws := e.NewWorkspace()
+	agent, viewer := ws.Agent.As(ws), ws.Viewer.As(ws)
+
+	source := create(t, e, agent, map[string]any{"title": "Escalation steps", "body_html": `<h2 data-block-id="c61e7b00-13ee-469c-9759-6c85e6e3453e">Steps</h2><p>Page the lead.</p>`})
+	whole := create(t, e, agent, map[string]any{"title": "On-call", "body_html": `<div data-type="transclusion" data-id="` + source.ID + `"></div>`})
+	section := create(t, e, agent, map[string]any{"title": "Runbook", "body_html": `<p>Steps:</p><div data-type="transclusion" data-id="` + source.ID + `" data-block="c61e7b00-13ee-469c-9759-6c85e6e3453e"></div>`})
+
+	got := ids(mentions(t, e, viewer, "/v1/wiki/pages/"+source.ID+"/backlinks"))
+	if len(got) != 2 || !slices.Contains(got, whole.ID) || !slices.Contains(got, section.ID) {
+		t.Fatalf("backlinks %v", got)
+	}
+	var graph struct {
+		Data []struct{ From, To string }
+	}
+	e.Do("GET", "/v1/wiki/graph", viewer, nil).Want(t, 200).JSON(t, &graph)
+	if len(graph.Data) != 2 || graph.Data[0].To != source.ID || graph.Data[1].To != source.ID {
+		t.Fatalf("graph %+v", graph.Data)
+	}
+
+	// The embed is kept as written; taking it out takes the link along.
+	var p struct {
+		BodyHTML string `json:"body_html"`
+	}
+	e.Do("GET", "/v1/wiki/pages/"+section.ID, viewer, nil).Want(t, 200).JSON(t, &p)
+	if want := `<div data-type="transclusion" data-id="` + source.ID + `" data-block="c61e7b00-13ee-469c-9759-6c85e6e3453e"></div>`; !strings.Contains(p.BodyHTML, want) {
+		t.Fatalf("body %s", p.BodyHTML)
+	}
+	e.Do("PATCH", "/v1/wiki/pages/"+section.ID, agent, map[string]any{"body_html": `<p>Steps moved.</p>`}).Want(t, 200)
+	e.Do("PATCH", "/v1/wiki/pages/"+source.ID, agent, map[string]any{"body_html": `<div data-type="transclusion" data-id="` + source.ID + `"></div>`}).Want(t, 200)
+	if got := ids(mentions(t, e, viewer, "/v1/wiki/pages/"+source.ID+"/backlinks")); len(got) != 1 || got[0] != whole.ID {
+		t.Fatalf("backlinks after %v", got)
+	}
 }

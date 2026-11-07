@@ -1,6 +1,7 @@
 package wikiconv
 
 import (
+	"fmt"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -13,10 +14,12 @@ import (
 // article's plain equivalents, and what belongs to the team stays behind. Teammates'
 // mentions and links to wiki pages keep only their text; comment anchors, dates and tones
 // their words. The workspace's own files and images, databases, ticket lists and subpage
-// links are left out; leftOut counts them so the app can say so. Links to tickets and contacts keep their text.
+// links are left out, and so are synced blocks and buttons that do more than open a link;
+// leftOut counts them so the app can say so. Links to tickets and contacts keep their text.
+// Footnotes become [1] in the text and a paragraph each at the end; a toggle heading a heading.
 func Article(body string) (out string, leftOut int) {
 	root := parse(body)
-	leftOut = toArticle(root)
+	leftOut = article{notes: footnoteNumbers(root)}.rewriteAll(root)
 	var b strings.Builder
 	for c := root.FirstChild; c != nil; c = c.NextSibling {
 		_ = html.Render(&b, c)
@@ -56,19 +59,24 @@ func replace(n, with *html.Node) {
 	n.Parent.RemoveChild(n)
 }
 
-// toArticle rewrites the tree in place and counts what it left out.
-func toArticle(n *html.Node) int {
+type article struct {
+	// notes numbers the page's footnotes by their id (footnoteNumbers).
+	notes map[string]int
+}
+
+// rewriteAll rewrites the tree in place and counts what it left out.
+func (a article) rewriteAll(n *html.Node) int {
 	left := 0
 	for c := n.FirstChild; c != nil; {
 		next := c.NextSibling
-		left += toArticle(c)
-		left += rewrite(c)
+		left += a.rewriteAll(c)
+		left += a.rewrite(c)
 		c = next
 	}
 	return left
 }
 
-func rewrite(n *html.Node) int {
+func (a article) rewrite(n *html.Node) int {
 	if n.Type != html.ElementNode || n.Parent == nil {
 		return 0
 	}
@@ -91,7 +99,48 @@ func rewrite(n *html.Node) int {
 		}
 		replace(n, q)
 	case "summary":
-		replace(n, element("p", atom.P, element("strong", atom.Strong, textNode(text(n)))))
+		switch attr(n.Parent, "data-heading") {
+		case "1":
+			replace(n, element("h1", atom.H1, textNode(text(n))))
+		case "2":
+			replace(n, element("h2", atom.H2, textNode(text(n))))
+		case "3":
+			replace(n, element("h3", atom.H3, textNode(text(n))))
+		default:
+			replace(n, element("p", atom.P, element("strong", atom.Strong, textNode(text(n)))))
+		}
+	case "footnote":
+		mark := textNode(fmt.Sprintf("[%d]", a.notes[attr(n, "data-note")]))
+		if n.Data == "sup" {
+			replace(n, mark)
+			return 0
+		}
+		// A note: its number before its text, as a paragraph of the article's end.
+		p := element("p", atom.P, mark, textNode(" "))
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode && c.Data == "p" {
+				for x := c.FirstChild; x != nil; {
+					next := x.NextSibling
+					c.RemoveChild(x)
+					p.AppendChild(x)
+					x = next
+				}
+				break
+			}
+		}
+		replace(n, p)
+	case "footnotes":
+		unwrap(n)
+	case "transclusion":
+		n.Parent.RemoveChild(n)
+		return 1
+	case "button":
+		if url := attr(n, "data-url"); attr(n, "data-action") == "link" && url != "" {
+			replace(n, link(url, attr(n, "data-label")))
+			return 0
+		}
+		n.Parent.RemoveChild(n)
+		return 1
 	case "details", "detailsContent", "columns", "column", "label":
 		if n.Data == "label" {
 			n.Parent.RemoveChild(n)

@@ -99,3 +99,59 @@ func TestEditorFixture(t *testing.T) {
 		t.Errorf("article:\n%s", out)
 	}
 }
+
+// The newer blocks: a synced block is an Obsidian embed in Markdown and stays out of an
+// article, a button is its link or nothing, footnotes are numbered by where they are first
+// referenced, and a toggle heading is a heading.
+const blocks = `<p>Claim<sup data-type="footnote" data-note="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa">9</sup> and another<sup data-type="footnote" data-note="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb">9</sup>, again<sup data-type="footnote" data-note="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa">9</sup>.</p>` +
+	`<details data-heading="2"><summary>Folded section</summary><div data-type="detailsContent"><p>Inside</p></div></details>` +
+	`<div data-type="transclusion" data-id="11111111-1111-4111-8111-111111111111"></div>` +
+	`<div data-type="transclusion" data-id="11111111-1111-4111-8111-111111111111" data-block="22222222-2222-4222-8222-222222222222"></div>` +
+	`<div data-type="transclusion" data-id="99999999-9999-4999-8999-999999999999"></div>` +
+	`<div data-type="button" data-label="Status page" data-action="link" data-url="https://status.example.com"></div>` +
+	`<div data-type="button" data-label="Add a to-do" data-action="todo"></div>` +
+	`<pre><code class="language-mermaid">graph TD; A--&gt;B</code></pre>` +
+	`<div data-type="footnotes"><div data-type="footnote" data-note="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"><p>Second <strong>source</strong></p></div><div data-type="footnote" data-note="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"><p>First source</p></div><div data-type="footnote" data-note="cccccccc-cccc-4ccc-8ccc-cccccccccccc"><p>Nobody cites me</p></div></div>`
+
+func TestNewBlocks(t *testing.T) {
+	md := Markdown(blocks, MarkdownOptions{PageLink: func(id string) (string, bool) {
+		if id == "11111111-1111-4111-8111-111111111111" {
+			return "[[Guides/Escalation|Escalation process]]", true
+		}
+		return "", false
+	}})
+	for _, want := range []string{
+		"Claim[^1] and another[^2], again[^1].",
+		"## Folded section\n\nInside",
+		"![[Guides/Escalation]]\n\n![[Guides/Escalation]]\n\n[Status page](https://status.example.com)",
+		"```mermaid\ngraph TD; A-->B\n```",
+		"[^2]: Second **source**\n[^1]: First source\n[^3]: Nobody cites me",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("missing %q in:\n%s", want, md)
+		}
+	}
+	if strings.Contains(md, "Add a to-do") || strings.Contains(md, "9999") || strings.Contains(md, "|Escalation") {
+		t.Errorf("markdown:\n%s", md)
+	}
+
+	out, left := Article(blocks)
+	if left != 4 { // three synced blocks and the to-do button
+		t.Errorf("left out %d", left)
+	}
+	for _, want := range []string{
+		"<p>Claim[1] and another[2], again[1].</p>",
+		"<h2>Folded section</h2><p>Inside</p>",
+		`<a href="https://status.example.com"`, ">Status page</a>",
+		"<p>[2] Second <strong>source</strong></p><p>[1] First source</p><p>[3] Nobody cites me</p>",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	for _, gone := range []string{"data-", "<sup", "Add a to-do", "<details"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("%q left in:\n%s", gone, out)
+		}
+	}
+}

@@ -240,8 +240,8 @@ func registerTrash(d *deps.Deps, api huma.API) {
 		})
 }
 
-// Periodic empties pages that have been in the trash for 30 days and sends the reminders
-// that are due.
+// Periodic empties pages that have been in the trash for 30 days (and forgets page views
+// past 90 days) and sends the reminders that are due.
 func Periodic() []*river.PeriodicJob {
 	return []*river.PeriodicJob{
 		river.NewPeriodicJob(river.PeriodicInterval(time.Hour),
@@ -265,7 +265,10 @@ type purgeWorker struct {
 }
 
 func (pw *purgeWorker) Work(ctx context.Context, _ *river.Job[jobs.WikiTrashPurgeArgs]) error {
-	return purgeTrash(ctx, pw.d, time.Now().Add(-trashKeep))
+	if err := purgeTrash(ctx, pw.d, time.Now().Add(-trashKeep)); err != nil {
+		return err
+	}
+	return purgeViews(ctx, pw.d)
 }
 
 // purgeTrash deletes for good every trashed page (with what went with it) trashed before.

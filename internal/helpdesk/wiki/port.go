@@ -495,9 +495,9 @@ func (im *importer) create(pg *wikiport.Page, parent *uuid.UUID, db *Database, a
 	}
 	// Each page is created a moment after the one before: what orders by creation (rows' unique
 	// ids) follows the import's order.
-	if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, team_id, template, kind, database, props, canvas, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, $15, clock_timestamp(), clock_timestamp())`, id, wid, parent, title, icon, body, position, im.p.ActorUserID(),
-		im.dest.owner, im.dest.team, im.dest.template, kind, dbValue, props, canvas); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, team_id, template, kind, database, props, canvas, created_at, updated_at, aliases)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, $15, clock_timestamp(), clock_timestamp(), $16)`, id, wid, parent, title, icon, body, position, im.p.ActorUserID(),
+		im.dest.owner, im.dest.team, im.dest.template, kind, dbValue, props, canvas, importAliases(pg.Aliases)); err != nil {
 		return id, err
 	}
 	if at < 0 {
@@ -586,7 +586,7 @@ func (im *importer) finish() error {
 // --- export -----------------------------------------------------------------------------
 
 // exportCols are what an export reads of a page aliased p.
-const exportCols = `p.id, p.parent_id, p.title, p.icon, p.body_html, p.kind, p.database, p.props, p.tags, p.created_at, p.updated_at, p.canvas`
+const exportCols = `p.id, p.parent_id, p.title, p.icon, p.body_html, p.kind, p.database, p.props, p.tags, p.created_at, p.updated_at, p.canvas, p.aliases`
 
 func scanExport(rows pgx.Rows, err error) ([]wikiport.ExportPage, error) {
 	if err != nil {
@@ -600,7 +600,7 @@ func scanExport(rows pgx.Rows, err error) ([]wikiport.ExportPage, error) {
 		var id uuid.UUID
 		var parent *uuid.UUID
 		var database, canvas []byte
-		if err := rows.Scan(&id, &parent, &pg.Title, &pg.Icon, &pg.BodyHTML, &pg.Kind, &database, &pg.Props, &pg.Tags, &pg.CreatedAt, &pg.UpdatedAt, &canvas); err != nil {
+		if err := rows.Scan(&id, &parent, &pg.Title, &pg.Icon, &pg.BodyHTML, &pg.Kind, &database, &pg.Props, &pg.Tags, &pg.CreatedAt, &pg.UpdatedAt, &canvas, &pg.Aliases); err != nil {
 			return nil, err
 		}
 		if total += len(pg.BodyHTML); total > maxExportText {
@@ -661,7 +661,7 @@ func exportRoot(ctx context.Context, q db.Querier, v Viewer, wid, id uuid.UUID) 
 	var database, canvas []byte
 	pg := &r.page
 	var pid uuid.UUID
-	if err := rows.Scan(&pid, &parent, &pg.Title, &pg.Icon, &pg.BodyHTML, &pg.Kind, &database, &pg.Props, &pg.Tags, &pg.CreatedAt, &pg.UpdatedAt, &canvas, &r.template); err != nil {
+	if err := rows.Scan(&pid, &parent, &pg.Title, &pg.Icon, &pg.BodyHTML, &pg.Kind, &database, &pg.Props, &pg.Tags, &pg.CreatedAt, &pg.UpdatedAt, &canvas, &pg.Aliases, &r.template); err != nil {
 		return rootPage{}, err
 	}
 	pg.ID = pid.String()
@@ -834,5 +834,23 @@ func (e *export) files(ctx context.Context) func(string) (string, io.ReadCloser,
 		used += size
 		body, err := e.d.Storage.Get(ctx, key)
 		return name, body, err
+	}
+}
+
+// importAliases are a source's aliases as the wiki keeps them: those over 100 characters
+// left out, then the first 10.
+func importAliases(raw []string) []string {
+	var keep []string
+	for _, a := range raw {
+		if one, err := cleanAliases([]string{a}); err == nil && len(one) == 1 {
+			keep = append(keep, one[0])
+		}
+	}
+	for {
+		out, err := cleanAliases(keep)
+		if err == nil {
+			return out
+		}
+		keep = keep[:len(keep)-1]
 	}
 }

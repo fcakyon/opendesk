@@ -22,15 +22,16 @@ import (
 var tags = []string{"Wiki"}
 
 type pageCreate struct {
-	ParentID *string `json:"parent_id,omitempty" required:"false" nullable:"true" doc:"The page to put it under; null or empty for the top level"`
-	Space    string  `json:"space,omitempty" enum:"workspace,private,team" doc:"Where a top-level page lives; a subpage lives where its parent does. Default workspace"`
-	TeamID   *string `json:"team_id,omitempty" doc:"The teamspace, with space team"`
-	Title    string  `json:"title,omitempty" maxLength:"200"`
-	Icon     string  `json:"icon,omitempty" maxLength:"64" doc:"One emoji, or empty"`
-	BodyHTML string  `json:"body_html,omitempty" doc:"Rich text, sanitized like an article's; up to 512 KB"`
-	Position *int    `json:"position,omitempty" minimum:"0" doc:"Where among its siblings, from 0; the end when left out"`
-	Template bool    `json:"template,omitempty" doc:"A new template at the top level of space, or a database's own template under it (contracts/wiki.md \"Templates\"); a subpage is a template when its parent is"`
-	Kind     string  `json:"kind,omitempty" enum:"page,database,canvas" doc:"database makes a database (contracts/wiki.md \"Databases\"), canvas a canvas (\"Canvas\"); default page"`
+	ParentID *string  `json:"parent_id,omitempty" required:"false" nullable:"true" doc:"The page to put it under; null or empty for the top level"`
+	Space    string   `json:"space,omitempty" enum:"workspace,private,team" doc:"Where a top-level page lives; a subpage lives where its parent does. Default workspace"`
+	TeamID   *string  `json:"team_id,omitempty" doc:"The teamspace, with space team"`
+	Title    string   `json:"title,omitempty" maxLength:"200"`
+	Icon     string   `json:"icon,omitempty" maxLength:"64" doc:"One emoji, or empty"`
+	BodyHTML string   `json:"body_html,omitempty" doc:"Rich text, sanitized like an article's; up to 512 KB"`
+	Position *int     `json:"position,omitempty" minimum:"0" doc:"Where among its siblings, from 0; the end when left out"`
+	Aliases  []string `json:"aliases,omitempty" maxItems:"10" doc:"Other names the page goes by: up to 10 of 100 characters"`
+	Template bool     `json:"template,omitempty" doc:"A new template at the top level of space, or a database's own template under it (contracts/wiki.md \"Templates\"); a subpage is a template when its parent is"`
+	Kind     string   `json:"kind,omitempty" enum:"page,database,canvas" doc:"database makes a database (contracts/wiki.md \"Databases\"), canvas a canvas (\"Canvas\"); default page"`
 	// A database's properties and views; left out, a title and tags in a table.
 	Database json.RawMessage `json:"database,omitempty"`
 	// A row's values, by property id, when the parent is a database.
@@ -60,6 +61,8 @@ type pagePatch struct {
 	// A canvas's cards and connections, replaced whole (a canvas only).
 	Canvas       json.RawMessage `json:"canvas,omitempty"`
 	VerifiedDays *int            `json:"verified_days,omitempty" minimum:"1" maximum:"3650" doc:"With verified: for how many days; left out, until someone changes it"`
+	// Other names the page goes by, replaced whole (contracts/wiki.md "Aliases"): never needs the version.
+	Aliases *[]string `json:"aliases,omitempty" maxItems:"10" doc:"Up to 10 of 100 characters; [] removes them"`
 }
 
 // settings applies the patch's look to cur.
@@ -175,6 +178,10 @@ func registerPages(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, err
 			}
+			aliases, err := cleanAliases(b.Aliases)
+			if err != nil {
+				return nil, err
+			}
 			v, err := viewerFor(ctx, d, p)
 			if err != nil {
 				return nil, httpx.Wrap(err)
@@ -255,9 +262,9 @@ func registerPages(d *deps.Deps, api huma.API) {
 				} else if len(b.Props) > 0 {
 					return dbInvalid("props go with a page in a database.")
 				}
-				if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, team_id, template, kind, database, props, canvas)
-					VALUES ($1, $2, $3, $4, $5, $6, 2147483647, $7, $7, $8, $9, $10, $11, $12, $13, $14)`, id, p.WorkspaceID, parentID(par), title, icon, body, p.ActorUserID(), owner, team, template,
-					kind, database, props, canvas); err != nil {
+				if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, team_id, template, kind, database, props, canvas, aliases)
+					VALUES ($1, $2, $3, $4, $5, $6, 2147483647, $7, $7, $8, $9, $10, $11, $12, $13, $14, $15)`, id, p.WorkspaceID, parentID(par), title, icon, body, p.ActorUserID(), owner, team, template,
+					kind, database, props, canvas, aliases); err != nil {
 					return err
 				}
 				if err := place(ctx, tx, p.WorkspaceID, parentID(par), owner, team, template, &id, b.Position); err != nil {
@@ -384,10 +391,14 @@ func registerPages(d *deps.Deps, api huma.API) {
 				if err != nil {
 					return err
 				}
+				aliasesChanged, err := applyAliases(ctx, tx, p.WorkspaceID, id, b.Aliases)
+				if err != nil {
+					return err
+				}
 				if pg, err = loadPage(ctx, tx, p.WorkspaceID, id); err != nil {
 					return err
 				}
-				if pg.Version == version && settings == cur && !verifyChanged && !dataChanged && !canvasChanged {
+				if pg.Version == version && settings == cur && !verifyChanged && !dataChanged && !canvasChanged && !aliasesChanged {
 					return nil
 				}
 				data := eventPage(pg)
@@ -409,6 +420,10 @@ func registerPages(d *deps.Deps, api huma.API) {
 				if canvasChanged {
 					// A canvas has no version either: viewers take it as it comes.
 					canvasEventData(data, pg.Canvas)
+				}
+				if aliasesChanged {
+					// Nor do aliases.
+					data["aliases"] = pg.Aliases
 				}
 				return pageEvent(ctx, tx, p.WorkspaceID, pg, "wiki_page.updated", data)
 			})
