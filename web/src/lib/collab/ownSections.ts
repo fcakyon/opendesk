@@ -5,6 +5,7 @@
 
 import type { SidebarItem, SidebarPrefs, SidebarSection, SidebarSectionId, Space, SpaceItem } from "../api/types";
 import { addItems, addSection, cleanName, findItem, hasItem, itemKey, moveItemTo, removeItem } from "../spaces/model";
+import { inboxKey, parseInboxKey, type InboxScope } from "./inboxSections";
 import { isHidden, sectionOrder, sectionsOffered } from "./sidebarPrefs";
 
 export const OWN_LIMITS = { sections: 20, sectionItems: 60, items: 300, title: 40 } as const;
@@ -13,42 +14,62 @@ const PREFIX = "custom:";
 export const ownKey = (id: string) => `${PREFIX}${id}`;
 const ownId = (key: string) => (key.startsWith(PREFIX) ? key.slice(PREFIX.length) : null);
 
-export type SidebarEntry = { kind: "builtin"; id: SidebarSectionId } | { kind: "custom"; section: SidebarSection };
-export const entryKey = (e: SidebarEntry) => (e.kind === "builtin" ? e.id : ownKey(e.section.id));
+/**
+ * A section of the sidebar: a built-in, one of the member's own, or a ticket inbox or team shown
+ * apart (lib/collab/inboxSections.ts, "mailbox:<id>" and "team:<id>" in `order`).
+ */
+export type SidebarEntry = { kind: "builtin"; id: SidebarSectionId } | { kind: "custom"; section: SidebarSection } | { kind: "inbox"; scope: InboxScope };
+export const entryKey = (e: SidebarEntry) => (e.kind === "builtin" ? e.id : e.kind === "custom" ? ownKey(e.section.id) : inboxKey(e.scope));
 
 /**
- * Every section in the member's order: the built-ins as `sectionOrder` places them, each own
- * section after the built-in it follows in the saved order (one the order lacks goes last).
+ * Every section in the member's order: the built-ins as `sectionOrder` places them, and each own
+ * or inbox section right after the entry before it in the saved order (one with nothing before
+ * it goes first; one after a built-in the app no longer knows, or an own section the order
+ * lacks, goes last).
  */
 export function sidebarEntries(p: SidebarPrefs): SidebarEntry[] {
   const own = new Map(p.sections.map((s) => [s.id, s]));
-  const after = new Map<string, SidebarSection[]>();
-  const placed = new Set<string>();
+  const floating = new Map<string, SidebarEntry>();
+  for (const key of p.order) {
+    if (floating.has(key)) continue;
+    const id = ownId(key);
+    const sec = id === null ? undefined : own.get(id);
+    if (sec) floating.set(key, { kind: "custom", section: sec });
+    const scope = id === null ? parseInboxKey(key) : null;
+    if (scope) floating.set(key, { kind: "inbox", scope });
+  }
+  const after = new Map<string, string[]>();
+  const anchored = new Set<string>();
   let last = "";
   for (const key of p.order) {
-    const id = ownId(key);
-    if (id === null) {
-      if (!key.includes(":")) last = key;
-      continue;
-    }
-    const sec = own.get(id);
-    if (!sec || placed.has(id)) continue;
-    placed.add(id);
-    after.set(last, [...(after.get(last) ?? []), sec]);
+    if (floating.has(key)) {
+      if (!anchored.has(key)) {
+        anchored.add(key);
+        after.set(last, [...(after.get(last) ?? []), key]);
+      }
+      last = key;
+    } else if (!key.includes(":")) last = key;
   }
-  const custom = (secs: SidebarSection[] | undefined): SidebarEntry[] => (secs ?? []).map((section) => ({ kind: "custom", section }));
-  const out: SidebarEntry[] = custom(after.get(""));
-  for (const id of sectionOrder(p)) out.push({ kind: "builtin", id }, ...custom(after.get(id)));
+  const out: SidebarEntry[] = [];
+  const done = new Set<string>();
+  const place = (key: string, entry: SidebarEntry) => {
+    if (done.has(key)) return;
+    done.add(key);
+    out.push(entry);
+    for (const k of after.get(key) ?? []) place(k, floating.get(k)!);
+  };
+  for (const k of after.get("") ?? []) place(k, floating.get(k)!);
+  for (const id of sectionOrder(p)) place(id, { kind: "builtin", id });
   // After a built-in the order no longer names, or not in the order at all: last.
-  for (const [k, secs] of after) if (k && !out.some((e) => e.kind === "builtin" && e.id === k)) out.push(...custom(secs));
-  out.push(...custom(p.sections.filter((s) => !placed.has(s.id))));
+  for (const [k, e] of floating) place(k, e);
+  for (const s of p.sections) place(ownKey(s.id), { kind: "custom", section: s });
   return out;
 }
 
 /** The sections that show: the built-ins offered and not hidden (without Collab, never Mail), and every own section. */
 export function visibleEntries(p: SidebarPrefs, collab = true): SidebarEntry[] {
   const offered = sectionsOffered(collab);
-  return sidebarEntries(p).filter((e) => e.kind === "custom" || (offered.includes(e.id) && !isHidden(p, `section:${e.id}`)));
+  return sidebarEntries(p).filter((e) => (e.kind === "builtin" ? offered.includes(e.id) : true) && !isHidden(p, `section:${entryKey(e)}`));
 }
 
 /** The order as saved: every entry's key, then what the app does not know, as it was. */
@@ -62,7 +83,7 @@ function withOrder(p: SidebarPrefs, entries: SidebarEntry[]): SidebarPrefs {
 export function moveEntry(p: SidebarPrefs, key: string, dir: -1 | 1, collab = true): SidebarPrefs {
   const list = sidebarEntries(p);
   const offered = sectionsOffered(collab);
-  const shown = (e: SidebarEntry) => e.kind === "custom" || offered.includes(e.id);
+  const shown = (e: SidebarEntry) => e.kind !== "builtin" || offered.includes(e.id);
   const i = list.findIndex((e) => entryKey(e) === key);
   let j = i + dir;
   while (j >= 0 && j < list.length && !shown(list[j])) j += dir;

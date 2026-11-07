@@ -902,7 +902,10 @@ Pending, Solved and Spam, each listing that reply address's tickets (`/inbox/<fo
 numbered from `TicketCounts.mailboxes` (contracts/api.md); a team's holds its inbox's tabs
 (`/teams/<id>?tab=`), Unassigned numbered from `TicketCounts.teams`. An entry naming a mailbox or team
 that is gone, or a private team the member is not on, is kept and skipped. Each row can be hidden as
-`mailbox:<id>:<folder>` or `team:<id>:<tab>`. A `mailbox` row in the member's own sections or a Space
+`mailbox:<id>:<folder>` or `team:<id>:<tab>`, and the whole section as `section:mailbox:<id>` or
+`section:team:<id>`. It is one of the sidebar's sections like the others: it moves among them (a
+reorder writes it into `order` where it lands), and edit mode and Customize list it with Back into
+Tickets or Teams, which takes its entry out of `order`. A `mailbox` row in the member's own sections or a Space
 opens that inbox's Unassigned folder, numbered like it.
 
 **Row order.** `row_order` keeps the member's order of the rows inside a built-in section, by

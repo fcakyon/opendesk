@@ -7,7 +7,7 @@
 // With a Space picked, the same mode edits that Space's sections and rows.
 
 import { motion, useReducedMotion } from "motion/react";
-import { Copy, Ellipsis, Eye, EyeOff, FolderInput, GripVertical, Hash, LayoutTemplate, ListTree, Pencil, Pin, PinOff, Plus, RotateCcw, Settings2, SlidersHorizontal, SmilePlus, Trash2, X } from "lucide-react";
+import { Copy, CornerUpLeft, Ellipsis, Eye, EyeOff, FolderInput, GripVertical, Hash, LayoutTemplate, ListTree, Pencil, Pin, PinOff, Plus, RotateCcw, Settings2, SlidersHorizontal, SmilePlus, Trash2, X } from "lucide-react";
 import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -27,6 +27,10 @@ import type { SidebarPin, SidebarPrefs, SidebarSectionId, Space, SpaceItem } fro
 import { cn } from "@/lib/cn";
 import { useCollab } from "@/lib/collab/hooks";
 import { copySpaceSections } from "@/lib/collab/copySpace";
+import { useBackIntoLabel } from "@/components/tickets/inboxes/backInto";
+import { useInboxParts } from "@/components/tickets/inboxes/InboxSection";
+import { useInboxNames } from "@/components/tickets/inboxes/inboxNames";
+import { inboxKey, setInboxSection, type InboxScope } from "@/lib/collab/inboxSections";
 import { asSpace, entryKey, newOwnSection, OWN_LIMITS, sectionOf, sidebarEntries, toggleInSection, withSpace, type SidebarEntry } from "@/lib/collab/ownSections";
 import { ownSectionsUi, type OwnRow } from "@/lib/collab/ownSectionsUi";
 import { applyRowOrder, isOrdered } from "@/lib/collab/rowOrder";
@@ -189,6 +193,8 @@ type BlockView = {
   own?: { emoji?: string; placeholder?: string; onRename: (v: string) => void; onEmoji: (v: string) => void; onDelete?: () => void; onAdd?: () => void };
   onHide?: () => void;
   empty?: string;
+  /** A ticket inbox or team shown apart: back into Tickets or Teams. */
+  back?: { label: string; run: () => void };
 };
 
 function EditList({
@@ -251,6 +257,7 @@ function EditList({
                   <span className="label-caps min-w-0 flex-1 truncate px-1">{b.label}</span>
                 )}
                 {b.onHide && <EyeToggle hidden={!!b.hidden} name={b.label} onToggle={b.onHide} />}
+                {b.back && <RemoveButton label={b.back.label} icon={<CornerUpLeft />} onClick={b.back.run} />}
                 {b.own?.onDelete && <RemoveButton label={t("ownSections.delete")} icon={<Trash2 />} onClick={b.own.onDelete} />}
               </div>
               {!b.hidden && (
@@ -411,8 +418,13 @@ function WorkspaceEditor() {
     toast.undo(message, () => change(before), t("edit.undo"));
   };
 
+  const { t: ti } = useTranslation("inbox");
+  const inboxNames = useInboxNames();
+  const inboxParts = useInboxParts();
+  const backMailbox = useBackIntoLabel("mailbox");
+  const backTeam = useBackIntoLabel("team");
   const offered = sectionsOffered(collab).filter((id) => products.tickets || (id !== "inbox" && id !== "teams" && id !== "views")).filter((id) => products.pages || id !== "pages");
-  const entries = sidebarEntries(prefs).filter((e) => e.kind === "custom" || offered.includes(e.id));
+  const entries = sidebarEntries(prefs).filter((e) => (e.kind === "builtin" ? offered.includes(e.id) : e.kind === "custom" || (products.tickets && !!inboxNames(e.scope))));
   const space = asSpace(prefs, wid);
   const name = (id: SidebarSectionId) => labels.section(id, collab);
 
@@ -603,8 +615,44 @@ function WorkspaceEditor() {
     };
   };
 
+  // A ticket inbox or team shown apart: its name and emoji, its folders or tabs to hide, and back into Tickets or Teams.
+  const inboxBlock = (scope: InboxScope): BlockView => {
+    const names = inboxNames(scope)!;
+    const key = inboxKey(scope);
+    const sk = `section:${key}`;
+    const hidden = isHidden(prefs, sk);
+    return {
+      key,
+      label: names.title,
+      hidden,
+      rows: inboxParts(scope).map((r): RowView => {
+        const off = isHidden(prefs, r.key);
+        return {
+          key: r.key,
+          label: r.label,
+          icon: r.icon,
+          hidden: off,
+          own: ownLabel(r.key, r.icon),
+          onHide: () => (off ? change(setHidden(prefs, r.key, false)) : undoable(setHidden(prefs, r.key, true), t("edit.hidden", { name: r.label }))),
+        };
+      }),
+      own: {
+        emoji: prefs.icons[sk],
+        placeholder: names.own,
+        onRename: (v: string) => change(setName(prefs, sk, v === names.own ? "" : v)),
+        onEmoji: (v: string) => change(setIcon(prefs, sk, v)),
+      },
+      onHide: () => (hidden ? change(setHidden(prefs, sk, false)) : undoable(setHidden(prefs, sk, true), t("edit.hidden", { name: names.title }))),
+      back: {
+        label: scope.kind === "mailbox" ? backMailbox : backTeam,
+        run: () => undoable(setInboxSection(prefs, scope, false), ti(scope.kind === "mailbox" ? "inboxes.backDone" : "inboxes.backTeamDone", { name: names.title })),
+      },
+    };
+  };
+
   const blocks: BlockView[] = entries.map((e) => {
     if (e.kind === "custom") return ownBlock(e);
+    if (e.kind === "inbox") return inboxBlock(e.scope);
     const hidden = isHidden(prefs, hid.section(e.id));
     const sk = sectionKey(e.id);
     return {

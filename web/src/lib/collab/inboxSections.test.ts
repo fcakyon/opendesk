@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { inboxSections, isInboxSection, moveInboxSection, parseInboxKey, placeInboxSections, setInboxSection } from "./inboxSections";
+import { inboxSections, isInboxSection, parseInboxKey, setInboxSection } from "./inboxSections";
+import { entryKey, moveEntry, reorderEntries, sidebarEntries, visibleEntries } from "./ownSections";
 import { defaultSidebarPrefs } from "./sidebarPrefs";
 
 const base = () => ({ ...defaultSidebarPrefs(), order: ["favorites", "inbox", "mail", "teams", "views", "pages", "workspace"] });
@@ -27,25 +28,16 @@ describe("inbox sections", () => {
     expect(isInboxSection(p, { kind: "mailbox", id: "b" })).toBe(true);
   });
 
-  it("places each section after the nearest one before it that shows", () => {
-    const order = ["mailbox:z", "favorites", "inbox", "mailbox:a", "mailbox:b", "mail", "views", "team:t"];
-    // Mail is hidden: team:t follows Views; mailbox:z had nothing before it and goes first.
-    expect(placeInboxSections(order, ["favorites", "inbox", "views"], ["mailbox:z", "mailbox:a", "mailbox:b", "team:t"])).toEqual([
-      "mailbox:z",
-      "favorites",
-      "inbox",
-      "mailbox:a",
-      "mailbox:b",
-      "views",
-      "team:t",
-    ]);
-  });
-
-  it("moves a section past its neighbours", () => {
-    const p = { ...base(), order: ["favorites", "inbox", "mailbox:a", "mail"] };
-    const shown = ["favorites", "inbox", "mailbox:a", "mail"];
-    expect(moveInboxSection(p, "mailbox:a", -1, shown).order).toEqual(["favorites", "mailbox:a", "inbox", "mail"]);
-    expect(moveInboxSection(p, "mailbox:a", 1, shown).order).toEqual(["favorites", "inbox", "mail", "mailbox:a"]);
-    expect(moveInboxSection(p, "favorites", -1, shown)).toBe(p);
+  it("is a section among the others: placed after the entry before it, moved and hidden like them", () => {
+    const p = { ...base(), order: ["mailbox:z", "favorites", "inbox", "mailbox:a", "mailbox:b", "mail", "views", "team:t"] };
+    expect(sidebarEntries(p).map(entryKey)).toEqual(["mailbox:z", "favorites", "inbox", "mailbox:a", "mailbox:b", "mail", "teams", "views", "team:t", "pages", "workspace"]);
+    // Mail hidden: the inboxes after it still follow Tickets.
+    expect(visibleEntries({ ...p, hidden: ["section:mail"] }).map(entryKey).slice(1, 5)).toEqual(["favorites", "inbox", "mailbox:a", "mailbox:b"]);
+    expect(visibleEntries({ ...p, hidden: ["section:mailbox:a"] }).map(entryKey)).not.toContain("mailbox:a");
+    // Moving any section keeps the inbox sections where they are.
+    const moved = moveEntry(p, "views", -1);
+    expect(sidebarEntries(moved).map(entryKey)).toEqual(["mailbox:z", "favorites", "inbox", "mailbox:a", "mailbox:b", "mail", "views", "teams", "team:t", "pages", "workspace"]);
+    expect(sidebarEntries(moveEntry(p, "mailbox:a", -1)).map(entryKey).slice(1, 5)).toEqual(["favorites", "mailbox:a", "inbox", "mailbox:b"]);
+    expect(sidebarEntries(reorderEntries(p, ["team:t", "favorites"])).map(entryKey).slice(0, 2)).toEqual(["team:t", "favorites"]);
   });
 });

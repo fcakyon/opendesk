@@ -5,7 +5,7 @@
 // PUT /v1/collab/sidebar. Every member has it; without Collab it arranges the ticket side
 // (Favorites, Inbox, Teams, Views, Pages, Workspace) and leaves out Mail and the mail options.
 
-import { ChevronDown, ChevronRight, Copy, Eye, EyeOff, Hash, Pencil, Pin, PinOff, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, CornerUpLeft, Eye, EyeOff, Hash, Pencil, Pin, PinOff, Plus, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { SidebarBadge, SidebarPrefs, SidebarSection, SidebarSectionId, Space } from "@/lib/api/types";
@@ -43,6 +43,9 @@ import { spaceUi, usePickedSpaceId } from "@/lib/spaces/store";
 import { useConfirm } from "@/components/ui/confirm";
 import { asSpace, entryKey, moveEntry, OWN_LIMITS, reorderEntries, sidebarEntries, withSpace } from "@/lib/collab/ownSections";
 import { copySpaceSections } from "@/lib/collab/copySpace";
+import { setInboxSection } from "@/lib/collab/inboxSections";
+import { useBackIntoLabel } from "@/components/tickets/inboxes/backInto";
+import { useInboxNames } from "@/components/tickets/inboxes/inboxNames";
 import { ownSectionsUi } from "@/lib/collab/ownSectionsUi";
 import { removeSection } from "@/lib/spaces/model";
 
@@ -209,8 +212,11 @@ export function CustomizeSidebar() {
 
   const change = (p: SidebarPrefs) => save.mutate(p, { onError: (e) => toast.error(e, t("customize.saveFailed")) });
   const offered = sectionsOffered(collab);
-  // The built-in sections offered and the member's own, in their order.
-  const order = sidebarEntries(prefs).filter((e) => e.kind === "custom" || offered.includes(e.id));
+  const inboxNames = useInboxNames();
+  const backMailbox = useBackIntoLabel("mailbox");
+  const backTeam = useBackIntoLabel("team");
+  // The built-in sections offered, the member's own and the inboxes shown apart, in their order.
+  const order = sidebarEntries(prefs).filter((e) => (e.kind === "builtin" ? offered.includes(e.id) : e.kind === "custom" || !!inboxNames(e.scope)));
   const name = (id: SidebarSectionId) => t(`customize.section.${id}`);
   const wid = useSession((s) => s.workspaceId) ?? "";
   const confirm = useConfirm();
@@ -334,6 +340,26 @@ export function CustomizeSidebar() {
                       <IconToggle on label={t("ownSections.addRows")} iconOn={<Plus />} iconOff={<Plus />} onClick={() => ownSectionsUi.add(s.id)} />
                       <IconToggle on label={t("ownSections.rename")} iconOn={<Pencil />} iconOff={<Pencil />} onClick={() => ownSectionsUi.name({ mode: "rename", id: s.id })} />
                       <IconToggle on label={t("ownSections.delete")} iconOn={<Trash2 />} iconOff={<Trash2 />} onClick={() => removeOwn(s)} />
+                    </div>
+                  </li>
+                );
+              }
+              if (entry.kind === "inbox") {
+                const names = inboxNames(entry.scope)!;
+                const inboxHidden = isHidden(prefs, `section:${key}`);
+                return (
+                  <li key={key} {...dragProps(key)} className={cn("relative border-b border-line-soft last:border-0", dragging === key && "opacity-50", dropLine && "before:absolute before:inset-x-2 before:-top-px before:h-0.5 before:rounded-full before:bg-tone-blue-solid")}>
+                    <div className="flex h-10 items-center gap-2 px-2">
+                      <ReorderButtons label={names.title} first={i === 0} last={i === order.length - 1} onUp={() => change(moveEntry(prefs, key, -1, collab))} onDown={() => change(moveEntry(prefs, key, 1, collab))} />
+                      <span className={cn("min-w-0 flex-1 truncate pl-5 text-[13px] font-medium", inboxHidden && "text-fg-4")}>{names.title}</span>
+                      <IconToggle on label={entry.scope.kind === "mailbox" ? backMailbox : backTeam} iconOn={<CornerUpLeft />} iconOff={<CornerUpLeft />} onClick={() => change(setInboxSection(prefs, entry.scope, false))} />
+                      <IconToggle
+                        on={!inboxHidden}
+                        label={inboxHidden ? t("customize.show", { name: names.title }) : t("customize.hide", { name: names.title })}
+                        iconOn={<Eye />}
+                        iconOff={<EyeOff />}
+                        onClick={() => change(setHidden(prefs, `section:${key}`, !inboxHidden))}
+                      />
                     </div>
                   </li>
                 );

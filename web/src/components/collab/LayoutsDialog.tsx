@@ -16,7 +16,8 @@ import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
 import { useCollab } from "@/lib/collab/hooks";
 import { applyLayout, hasLayout, LAYOUTS, type Layout, type LayoutId } from "@/lib/collab/layouts";
-import { visibleEntries } from "@/lib/collab/ownSections";
+import { entryKey, visibleEntries } from "@/lib/collab/ownSections";
+import { useInboxNames } from "@/components/tickets/inboxes/inboxNames";
 import { isHidden, livePins } from "@/lib/collab/sidebarPrefs";
 import { useProducts } from "@/lib/products";
 import { useOwnSidebar } from "./AddToSidebar";
@@ -37,13 +38,19 @@ function Preview({ layout }: { layout: Layout }) {
   const labels = useRowLabels();
   const { itemsOf, pinLabel } = useSidebarItems();
   const fav = useFavorites();
+  const inboxNames = useInboxNames();
   const d = useWorkspacesData(wid ? [wid] : [], { folders: () => true, wiki: () => true }).get(wid);
   const next = applyLayout(prefs, layout);
-  const entries = visibleEntries(next, collab).filter(
-    (e) => e.kind === "custom" || ((products.tickets || (e.id !== "inbox" && e.id !== "teams" && e.id !== "views")) && (products.pages || e.id !== "pages")),
+  const entries = visibleEntries(next, collab).filter((e) =>
+    e.kind === "custom"
+      ? true
+      : e.kind === "inbox"
+        ? products.tickets && !!inboxNames(e.scope)
+        : (products.tickets || (e.id !== "inbox" && e.id !== "teams" && e.id !== "views")) && (products.pages || e.id !== "pages"),
   );
   const rowsOf = (e: (typeof entries)[number]): string[] => {
     if (e.kind === "custom") return e.section.items.map((i) => i.name || (d && buildRow(i, d, { labels })?.label) || "").filter(Boolean);
+    if (e.kind === "inbox") return [];
     if (e.id === "favorites") return [...livePins(next, (p) => pinLabel(p)).map((x) => x.target), ...fav.list.map((n) => n.title.trim() || labels.untitled)];
     const rows = itemsOf(e.id).filter((x) => !x.depth && !x.key.startsWith("every:") && !(x.hideId && isHidden(next, x.hideId)));
     return (isOrdered(e.id) ? applyRowOrder(rows, (x) => x.hideId ?? x.key, next.row_order[e.id]) : rows).map((x) => x.label);
@@ -52,9 +59,9 @@ function Preview({ layout }: { layout: Layout }) {
     <div className="flex h-full flex-col gap-4 overflow-y-auto rounded-lg bg-chrome p-3 shadow-[inset_0_0_0_1px_var(--chrome-line)]">
       {entries.map((e) => {
         const rows = rowsOf(e);
-        const title = e.kind === "custom" ? e.section.title || t("ownSections.untitled") : labels.section(e.id, collab);
+        const title = e.kind === "custom" ? e.section.title || t("ownSections.untitled") : e.kind === "inbox" ? (inboxNames(e.scope)?.title ?? "") : labels.section(e.id, collab);
         return (
-          <div key={e.kind === "custom" ? e.section.id : e.id}>
+          <div key={entryKey(e)}>
             <p className="label-caps mb-1 truncate px-1.5">{title}</p>
             <div className="flex flex-col gap-px">
               {rows.slice(0, 3).map((r, i) => (

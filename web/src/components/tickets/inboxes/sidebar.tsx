@@ -9,10 +9,8 @@ import { useEditHintShown } from "@/components/collab/SidebarMenu";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
-import type { SidebarPrefs } from "@/lib/api/types";
-import { useCollab, useSaveSidebarPrefs, useSidebarPrefs } from "@/lib/collab/hooks";
-import { inboxKey, inboxSections, parseInboxKey, placeInboxSections, setInboxSection } from "@/lib/collab/inboxSections";
-import { entryKey, visibleEntries } from "@/lib/collab/ownSections";
+import { useSaveSidebarPrefs, useSidebarPrefs } from "@/lib/collab/hooks";
+import { inboxSections, parseInboxKey, setInboxSection } from "@/lib/collab/inboxSections";
 import { q } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { quickAdd } from "@/app/quickAdd";
@@ -21,19 +19,11 @@ import { InboxSection } from "./InboxSection";
 const headerBtn =
   "flex size-5 items-center justify-center rounded text-fg-4 opacity-0 transition-opacity hover:bg-chrome-hover hover:text-fg group-hover/section:opacity-100 focus-visible:opacity-100";
 
-/** The sidebar's section keys with the inbox sections put where the member placed them. */
-export function withInboxSections(prefs: SidebarPrefs, entries: string[]): string[] {
-  return placeInboxSections(prefs.order, entries, inboxSections(prefs).map(inboxKey));
-}
-
-/** The inbox section an order key names, among the sections shown (its Move up and down). */
+/** The inbox section an order key names. */
 export function InboxSectionAt({ id, first, rail }: { id: string; first: boolean; rail: boolean }) {
-  const prefs = useSidebarPrefs();
-  const collab = useCollab();
   const scope = parseInboxKey(id);
   if (!scope) return null;
-  const shown = withInboxSections(prefs, visibleEntries(prefs, collab.enabled).map(entryKey));
-  return <InboxSection scope={scope} first={first} rail={rail} shown={shown} />;
+  return <InboxSection scope={scope} first={first} rail={rail} />;
 }
 
 /** Tickets' "+": a new ticket inbox, in place. */

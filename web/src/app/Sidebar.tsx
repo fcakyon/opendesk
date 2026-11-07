@@ -66,7 +66,7 @@ import { ticketRowNumbers } from "@/lib/collab/badges";
 import { badgeFor, hid, isHidden, pickCount, type BadgeNumbers } from "@/lib/collab/sidebarPrefs";
 import { entryKey, visibleEntries } from "@/lib/collab/ownSections";
 import { AddSectionButton, OwnSection } from "@/components/collab/OwnSections";
-import { AddInboxButton, InboxOffer, InboxSectionAt, withInboxSections } from "@/components/tickets/inboxes/sidebar";
+import { AddInboxButton, InboxOffer, InboxSectionAt } from "@/components/tickets/inboxes/sidebar";
 import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
 
 // Collab's sections load with Collab: a workspace without it never downloads them.
@@ -703,11 +703,12 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
             <>
               <Draggable rail={rail} root={dragRoot}>
                 <SectionList
-                  ids={withInboxSections(prefs, order.map(entryKey))}
+                  ids={order.map(entryKey)}
                   render={(key, first) => {
                     const e = order.find((x) => entryKey(x) === key);
+                    if (!e) return null;
                     // A ticket inbox or team shown as a section of its own (components/tickets/inboxes).
-                    if (!e) return <InboxSectionAt id={key} first={first} rail={rail} />;
+                    if (e.kind === "inbox") return <InboxSectionAt id={key} first={first} rail={rail} />;
                     return e.kind === "builtin" ? render(e.id, first) : <OwnSection section={e.section} first={first} rail={rail} />;
                   }}
                 />

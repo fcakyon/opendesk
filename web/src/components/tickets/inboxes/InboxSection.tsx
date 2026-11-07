@@ -5,17 +5,20 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowDown, ArrowUp, CornerUpLeft, Ellipsis, Inbox, Layers, Plus, Settings } from "lucide-react";
+import { CornerUpLeft, Inbox, Layers, Plus, Settings } from "lucide-react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Section } from "@/app/sidebarParts";
+import { Section, type SectionEdit } from "@/app/sidebarParts";
+import { SectionMenu } from "@/components/collab/SectionMenu";
 import { RowMenu } from "@/components/collab/RowMenu";
 import { NavItemRow, ticketFolderIcons, type RowModel } from "@/components/spaces/rows";
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { MenuItem } from "@/components/ui/menu";
 import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useSaveSidebarPrefs, useSidebarPrefs } from "@/lib/collab/hooks";
 import { ticketRowNumbers } from "@/lib/collab/badges";
-import { inboxKey, moveInboxSection, setInboxSection, type InboxScope } from "@/lib/collab/inboxSections";
+import { inboxKey, setInboxSection, type InboxScope } from "@/lib/collab/inboxSections";
+import { setHidden, setIcon, setName } from "@/lib/collab/sidebarPrefs";
 import { folders, type TeamTab } from "@/lib/folders";
 import { q } from "@/lib/queries";
 import { atLeast, useRole, useSession } from "@/lib/session";
@@ -36,8 +39,19 @@ const TEAM_TABS: { tab: TeamTab; folder: "unassigned" | "open" | "pending" | nul
 /** The rows' hidden ids: mailbox:<id>:<folder>, team:<id>:<tab>. */
 export const inboxRowKey = (s: InboxScope, part: string) => `${inboxKey(s)}:${part}`;
 
-export function InboxSection({ scope, first, rail, shown }: { scope: InboxScope; first: boolean; rail: boolean; shown: string[] }) {
+/** A section's rows as the lists that arrange the sidebar show them: a mailbox's folders, a team's tabs. */
+export function useInboxParts(): (scope: InboxScope) => { key: string; label: string; icon: ReactNode }[] {
   const { t } = useTranslation("inbox");
+  const { t: tNav } = useTranslation("navigation");
+  return (scope) =>
+    scope.kind === "mailbox"
+      ? folders.map((f) => ({ key: inboxRowKey(scope, f.id), label: tNav(f.labelKey), icon: ticketFolderIcons[f.id] }))
+      : TEAM_TABS.map(({ tab, folder }) => ({ key: inboxRowKey(scope, tab), label: t(`teams.tab.${tab}`), icon: folder ? ticketFolderIcons[folder] : <Layers /> }));
+}
+
+export function InboxSection({ scope, first, rail }: { scope: InboxScope; first: boolean; rail: boolean }) {
+  const { t } = useTranslation("inbox");
+  const { t: tc } = useTranslation("collab");
   const { t: tNav } = useTranslation("navigation");
   const navigate = useNavigate();
   const role = useRole();
@@ -49,7 +63,6 @@ export function InboxSection({ scope, first, rail, shown }: { scope: InboxScope;
   const { data: mailboxes } = useQuery(q.mailboxes());
   const { data: teams } = useQuery(q.teams());
   const key = inboxKey(scope);
-  const at = shown.indexOf(key);
   const change = (next: typeof prefs) => save.mutate(next, { onError: (e) => toast.error(e, t("inboxes.saveFailed")) });
 
   const mailbox = scope.kind === "mailbox" ? mailboxes?.find((m) => m.id === scope.id) : undefined;
@@ -101,58 +114,64 @@ export function InboxSection({ scope, first, rail, shown }: { scope: InboxScope;
           };
         });
 
-  const action = (
-    <div className="flex items-center gap-0.5">
-      {scope.kind === "mailbox" && (
-        <Tooltip content={t("inboxes.add")}>
-          <button type="button" aria-label={t("inboxes.add")} onClick={() => quickAdd.inbox({})} className={headerBtn}>
-            <Plus className="size-3.5" />
-          </button>
-        </Tooltip>
-      )}
-      <Menu>
-        <MenuTrigger asChild>
-          <button type="button" aria-label={t("inboxes.menu", { name: title })} className={headerBtn}>
-            <Ellipsis className="size-3.5" />
-          </button>
-        </MenuTrigger>
-        <MenuContent align="end" className="w-[220px]">
-          <MenuItem icon={<CornerUpLeft />} onSelect={back}>
-            {backInto}
-          </MenuItem>
-          <MenuSeparator />
-          <MenuItem icon={<ArrowUp />} disabled={at <= 0} onSelect={() => change(moveInboxSection(prefs, key, -1, shown))}>
-            {t("inboxes.moveUp")}
-          </MenuItem>
-          <MenuItem icon={<ArrowDown />} disabled={at < 0 || at >= shown.length - 1} onSelect={() => change(moveInboxSection(prefs, key, 1, shown))}>
-            {t("inboxes.moveDown")}
-          </MenuItem>
-          {atLeast(role, "admin") && (mailbox || team) && (
-            <>
-              <MenuSeparator />
-              {mailbox ? (
-                <>
-                  <MenuItem icon={<Inbox />} onSelect={() => quickAdd.inbox({})}>
-                    {t("inboxes.add")}
-                  </MenuItem>
-                  <MenuItem icon={<Settings />} onSelect={() => void navigate({ to: "/settings/mailboxes/$mailboxId", params: { mailboxId: mailbox.id } })}>
-                    {t("inboxes.settings")}
-                  </MenuItem>
-                </>
-              ) : (
-                <MenuItem icon={<Settings />} onSelect={() => void navigate({ to: "/settings/teams" })}>
-                  {t("inboxes.teamSettings")}
-                </MenuItem>
-              )}
-            </>
-          )}
-        </MenuContent>
-      </Menu>
-    </div>
-  );
+  const action =
+    scope.kind === "mailbox" ? (
+      <Tooltip content={t("inboxes.add")}>
+        <button type="button" aria-label={t("inboxes.add")} onClick={() => quickAdd.inbox({})} className={headerBtn}>
+          <Plus className="size-3.5" />
+        </button>
+      </Tooltip>
+    ) : undefined;
+
+  // Its name and emoji of the member's own, its moves among the sections and hiding, as every
+  // section has them (components/collab/SectionMenu.tsx), with its own Back into and settings first.
+  const sk = `section:${key}`;
+  const edit: SectionEdit = {
+    key: sk,
+    placeholder: ownName,
+    renameLabel: tc("edit.rename", { name: title }),
+    onName: (v) => change(setName(prefs, sk, v === ownName ? "" : v)),
+    menu: (
+      <SectionMenu
+        id={sk}
+        name={title}
+        dragKey={key}
+        emoji={prefs.icons[sk]}
+        onIcon={(v) => change(setIcon(prefs, sk, v))}
+        onReset={prefs.names[sk] || prefs.icons[sk] ? () => change(setIcon(setName(prefs, sk, ""), sk, "")) : undefined}
+        onHide={() => {
+          const before = prefs;
+          change(setHidden(prefs, sk, true));
+          toast.undo(tc("edit.hidden", { name: title }), () => change(before), tc("edit.undo"));
+        }}
+        top={
+          <>
+            <MenuItem icon={<CornerUpLeft />} onSelect={back}>
+              {backInto}
+            </MenuItem>
+            {atLeast(role, "admin") && mailbox && (
+              <MenuItem icon={<Inbox />} onSelect={() => quickAdd.inbox({})}>
+                {t("inboxes.add")}
+              </MenuItem>
+            )}
+            {atLeast(role, "admin") && mailbox && (
+              <MenuItem icon={<Settings />} onSelect={() => void navigate({ to: "/settings/mailboxes/$mailboxId", params: { mailboxId: mailbox.id } })}>
+                {t("inboxes.settings")}
+              </MenuItem>
+            )}
+            {atLeast(role, "admin") && team && (
+              <MenuItem icon={<Settings />} onSelect={() => void navigate({ to: "/settings/teams" })}>
+                {t("inboxes.teamSettings")}
+              </MenuItem>
+            )}
+          </>
+        }
+      />
+    ),
+  };
 
   return (
-    <Section id={`inbox-${key}`} label={title} icon={prefs.icons[`section:${key}`]} rail={rail} first={first} action={rail ? undefined : action}>
+    <Section id={`inbox-${key}`} label={title} icon={prefs.icons[sk]} rail={rail} first={first} action={rail ? undefined : action} edit={rail ? undefined : edit} dragKey={key}>
       {rows
         .filter((r) => !prefs.hidden.includes(r.hideId))
         .map(({ model, hideId }) => (
