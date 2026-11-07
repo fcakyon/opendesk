@@ -57,21 +57,35 @@ export function previewReducer(s: Preview, a: PreviewAction): Preview {
   return { status: "failed", run: s.run, ask: s.ask, stopped: !!a.stopped };
 }
 
-const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", apos: "'", nbsp: " " };
+const BLOCKS = new Set(["P", "H1", "H2", "H3", "H4", "H5", "H6", "BLOCKQUOTE", "PRE", "UL", "OL", "DIV", "LI", "BR"]);
 
 /**
  * The streamed text as it reads so far: the raw delta is model HTML, possibly cut in the
- * middle of a tag. Blocks become lines, tags (and a half-written one at the end) go, and
- * the result is only ever shown as text. The sanitized HTML arrives at `done`.
+ * middle of a tag. The browser's parser reads it into an inert document (nothing in it runs
+ * or loads), blocks become lines and list items bullets, and only its text is kept: the
+ * preview is only ever shown as text. The sanitized HTML arrives at `done`.
  */
 export function previewText(raw: string): string {
-  return raw
-    .replace(/^\s*```(?:html)?\s*/i, "")
-    .replace(/<li\b[^>]*>/gi, "\n• ")
-    .replace(/<br\s*\/?>|<\/(p|h[1-6]|blockquote|pre|ul|ol|div)>/gi, "\n")
-    .replace(/<[^>]*>?/g, "")
-    .replace(/[<>]/g, "")
-    .replace(/&(amp|lt|gt|quot|#39|apos|nbsp);/g, (_m, e: string) => ENTITIES[e] ?? "")
+  let html = raw.trimStart();
+  if (html.startsWith("```")) html = html.slice(html.indexOf("\n") + 1 || html.length);
+  // A tag still being written at the end is left out until it closes.
+  if (html.lastIndexOf("<") > html.lastIndexOf(">")) html = html.slice(0, html.lastIndexOf("<"));
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  let out = "";
+  const walk = (n: Node) => {
+    if (n.nodeType === Node.TEXT_NODE) {
+      out += n.textContent ?? "";
+      return;
+    }
+    const tag = (n as Element).tagName;
+    if (tag === "SCRIPT" || tag === "STYLE" || tag === "TEMPLATE") return;
+    if (tag === "LI") out += "\n• ";
+    n.childNodes.forEach(walk);
+    if (BLOCKS.has(tag) && tag !== "LI") out += "\n";
+  };
+  walk(doc.body);
+  return out
+    .replace(/\u00a0/g, " ")
     .replace(/[ \t]+/g, " ")
     .replace(/ *\n */g, "\n")
     .replace(/\n{3,}/g, "\n\n")

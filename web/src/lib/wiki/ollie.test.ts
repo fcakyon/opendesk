@@ -53,5 +53,6 @@ describe("the streamed preview", () => {
   it("reads model HTML as text, a code fence and entities included", () => {
     expect(previewText("```html\n<h2>Steps</h2><ol><li>Check &amp; refund</li><li>Tell them</li></ol>")).toBe("Steps\n• Check & refund\n• Tell them");
     expect(previewText("<p>It&#39;s <a href")).toBe("It's");
+    expect(previewText("<p>Hi</p><script>alert(1)</script><style>p{}</style><p>&lt;b&gt; stays text</p>")).toBe("Hi\n<b> stays text");
   });
 });
