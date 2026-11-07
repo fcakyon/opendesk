@@ -29,7 +29,7 @@ var SidebarItemIDs = map[string][]string{
 }
 
 // SidebarUUIDKinds are the row kinds that name a uuid. A team row may also be "mine" (My teams).
-var SidebarUUIDKinds = []string{"team", "view", "account", "folder", "wiki_page", "wiki_space"}
+var SidebarUUIDKinds = []string{"team", "view", "account", "folder", "wiki_page", "wiki_space", "mailbox"}
 
 // Limits of a member's own sections, those of a Space (contracts/spaces.md).
 const (
@@ -104,7 +104,7 @@ func validateItem(in SidebarItem) (SidebarItem, error) {
 			out.ID = id.String()
 		}
 	} else {
-		return out, httpx.Validation("Each row's kind is ticket_folder, team, view, box, account, folder, page, wiki_page or wiki_space.")
+		return out, httpx.Validation("Each row's kind is ticket_folder, team, view, box, account, folder, page, wiki_page, wiki_space or mailbox.")
 	}
 	if in.Name != "" {
 		if utf8.RuneCountInString(displayname.Normalize(in.Name)) > maxOwnItemName {
@@ -125,6 +125,21 @@ func validateItem(in SidebarItem) (SidebarItem, error) {
 	}
 	out.Icon = icon
 	return out, nil
+}
+
+// orderEntryOK checks a sidebar order entry that names a ticket inbox or team shown as a
+// section of its own (contracts/collab.md "Inboxes as sections"): mailbox:<uuid>, team:<uuid>
+// or team:mine. Other entries are built-in or own section ids, kept as saved.
+func orderEntryOK(entry string) bool {
+	kind, id, ok := strings.Cut(entry, ":")
+	if !ok || (kind != "mailbox" && kind != "team") {
+		return true
+	}
+	if kind == "team" && id == "mine" {
+		return true
+	}
+	_, err := uuid.Parse(id)
+	return err == nil && len(id) == 36
 }
 
 // SidebarIcon checks the emoji a member's own section or row wears, in their sidebar and in

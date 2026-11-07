@@ -56,6 +56,8 @@ type SpaceItemKind =
   | "page"           // a workspace page: id "contacts" | "knowledge" | "wiki" | "reports"
   | "wiki_page"      // a wiki page (contracts/wiki.md): id: page uuid; shows its live title and icon, skipped
                      // while the page is in the trash, gone or out of the person's sight
+  | "mailbox"        // a ticket inbox: id: mailbox uuid; opens its Unassigned folder (contracts/collab.md "Inboxes as sections"),
+                     // skipped once the mailbox is removed
   | "wiki_space"     // a teamspace (contracts/wiki.md "Private pages and teamspaces"): id: team uuid; its pages,
                      // kept up to date; skipped while the team is out of sight or has no page the person sees
   | "everywhere"     // an Everywhere list across every workspace: id "mine" (assigned to me) | "mail" (all mail);

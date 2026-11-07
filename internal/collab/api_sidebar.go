@@ -147,6 +147,11 @@ func validateSidebar(p SidebarPrefs) error {
 			return httpx.Validation("Each number choice names a sidebar row or section and is unread, total, count or none.")
 		}
 	}
+	for _, id := range p.Order {
+		if !orderEntryOK(id) {
+			return httpx.Validation("A ticket inbox or team shown as its own section is named by its id.")
+		}
+	}
 	if len(p.MailTabs) > maxMailTabs {
 		return httpx.Validation("The folder bar holds at most 30 tabs.")
 	}

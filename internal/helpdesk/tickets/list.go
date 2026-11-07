@@ -585,9 +585,20 @@ type TicketCounts struct {
 	// Teams counts every team the caller can see; MyTeams the tickets of the caller's teams.
 	Teams   map[string]TeamCount `json:"teams" doc:"Every team the caller can see"`
 	MyTeams TeamCount            `json:"my_teams" doc:"Tickets of the caller's teams"`
+	// Mailboxes counts the folders of each reply address with tickets the caller can see, keyed by
+	// mailbox id: a ticket inbox shown as a section of its own in the sidebar.
+	Mailboxes map[string]MailboxCount `json:"mailboxes" doc:"Per reply address, its inbox folders' counts"`
 	// Stats breaks each sidebar row's tickets down, keyed by row id: ticket_folder:<unassigned|mine|open|pending>,
-	// team:<id>, team:mine and view:<id>, over the same tickets as the row's count.
+	// team:<id>, team:mine, view:<id> and mailbox:<id>:<unassigned|mine|open|pending>, over the same tickets as the row's count.
 	Stats map[string]TicketStats `json:"stats" doc:"Per sidebar row: awaiting a reply, urgent and overdue tickets"`
+}
+
+// MailboxCount counts a reply address's inbox folders, as TicketCounts counts the whole inbox's.
+type MailboxCount struct {
+	Unassigned int `json:"unassigned"`
+	Mine       int `json:"mine"`
+	Open       int `json:"open"`
+	Pending    int `json:"pending" doc:"Pending and on hold, as the Pending folder lists them"`
 }
 
 // TeamCount counts a team's open and pending tickets (spam excluded).
@@ -618,7 +629,7 @@ func statCols(a, cond string) string {
 func (s *TicketStats) dest() []any { return []any{&s.Awaiting, &s.Urgent, &s.Overdue} }
 
 func ticketCounts(ctx context.Context, q db.Querier, p *auth.Principal) (TicketCounts, error) {
-	c := TicketCounts{Views: map[string]int{}, Teams: map[string]TeamCount{}, Stats: map[string]TicketStats{}}
+	c := TicketCounts{Views: map[string]int{}, Teams: map[string]TeamCount{}, Mailboxes: map[string]MailboxCount{}, Stats: map[string]TicketStats{}}
 	const (
 		unassigned = `NOT spam AND status IN ('open','pending','on_hold') AND assignee_id IS NULL`
 		mine       = `NOT spam AND status IN ('open','pending','on_hold') AND assignee_id = $2`
@@ -693,6 +704,42 @@ func ticketCounts(ctx context.Context, q db.Querier, p *auth.Principal) (TicketC
 		}
 		c.Teams[id.String()] = tc
 		c.Stats["team:"+id.String()] = st
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return c, err
+	}
+	// Each reply address's folders, read once through the status index like the inbox's own.
+	rows, err = q.Query(ctx, `SELECT mailbox_id,
+		count(*) FILTER (WHERE `+unassigned+`),
+		count(*) FILTER (WHERE `+mine+`),
+		count(*) FILTER (WHERE `+open+`),
+		count(*) FILTER (WHERE `+pending+`),
+		`+statCols("", unassigned)+`,
+		`+statCols("", mine)+`,
+		`+statCols("", open)+`,
+		`+statCols("", pending)+`
+		FROM tickets WHERE workspace_id = $1 AND deleted_at IS NULL AND status IN ('open','pending','on_hold') AND mailbox_id IS NOT NULL
+			AND `+domain.VisibleSQLUser("tickets", 3, 2)+` GROUP BY mailbox_id`, p.WorkspaceID, p.ActorUserID(), hidden)
+	if err != nil {
+		return c, err
+	}
+	for rows.Next() {
+		var id uuid.UUID
+		var mc MailboxCount
+		var st [4]TicketStats
+		dest := []any{&id, &mc.Unassigned, &mc.Mine, &mc.Open, &mc.Pending}
+		for i := range st {
+			dest = append(dest, st[i].dest()...)
+		}
+		if err := rows.Scan(dest...); err != nil {
+			rows.Close()
+			return c, err
+		}
+		c.Mailboxes[id.String()] = mc
+		for i, f := range []string{"unassigned", "mine", "open", "pending"} {
+			c.Stats["mailbox:"+id.String()+":"+f] = st[i]
+		}
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {

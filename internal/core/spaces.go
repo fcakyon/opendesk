@@ -83,7 +83,7 @@ type CoreSpaceSection struct {
 // CoreSpaceItem is the contract shape SpaceItem.
 type CoreSpaceItem struct {
 	WorkspaceID string `json:"workspace_id"`
-	Kind        string `json:"kind" enum:"section,ticket_folder,team,view,box,account,folder,page,wiki_page,wiki_space,everywhere"`
+	Kind        string `json:"kind" enum:"section,ticket_folder,team,view,box,account,folder,page,wiki_page,wiki_space,mailbox,everywhere"`
 	ID          string `json:"id"`
 	Name        string `json:"name,omitempty"`
 	Badge       string `json:"badge,omitempty" enum:"unread,total,count,awaiting,urgent,overdue,open,none"`
@@ -247,7 +247,7 @@ func validateSpaceItem(in coreSpaceItemIn, workspace *uuid.UUID) (CoreSpaceItem,
 		}
 		out.ID = id
 	} else {
-		return out, httpx.Validation("Each row's kind is section, ticket_folder, team, view, box, account, folder, page, wiki_page, wiki_space or everywhere.")
+		return out, httpx.Validation("Each row's kind is section, ticket_folder, team, view, box, account, folder, page, wiki_page, wiki_space, mailbox or everywhere.")
 	}
 	if in.Name != "" {
 		if utf8.RuneCountInString(displayname.Normalize(in.Name)) > maxSpaceItemName {
@@ -284,6 +284,8 @@ func kindLabel(kind string) string {
 		return "wiki page"
 	case "wiki_space":
 		return "teamspace"
+	case "mailbox":
+		return "ticket inbox"
 	case spaceEverywhere:
 		return "everywhere"
 	}

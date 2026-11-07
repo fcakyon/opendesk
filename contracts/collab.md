@@ -847,8 +847,10 @@ interface CollabStatus {
 
 interface SidebarPrefs {
   order: string[]              // section ids, top to bottom: "favorites", "inbox", "mail", "teams", "views", "pages", "workspace" (the default),
-                               // and "custom:<id>" for the member's own sections; at most 40
+                               // "custom:<id>" for the member's own sections, and "mailbox:<id>" or "team:<id | mine>" for a ticket
+                               // inbox or team shown as a section of its own ("Inboxes as sections"); at most 80
   hidden: string[]             // "section:<id>", "box:<box>", "account:<id>", "folder:<id>", "folder:<inbox|starred|...>", "view:<id>", "team:<id>", "ticket_folder:<id>",
+                               // "mailbox:<id>:<folder>" for a folder of a ticket inbox shown as a section of its own,
                                // and in Pages "pages:<workspace|teamspaces|private|today|templates|trash>", "wiki_page:<id>", "wiki_space:<team id>" (contracts/wiki.md "In the main sidebar"),
                                // and in Workspace "page:<contacts|knowledge|wiki|reports>"
   pinned: { kind: "box" | "folder" | "account" | "view" | "team" | "ticket_folder" | "view_section"; id: string }[]  // shown under Favorites, in order, at most 30
@@ -876,7 +878,7 @@ interface SidebarSection {
 // A Space row (contracts/spaces.md SpaceItem) without its workspace, which is this one;
 // never "section" or "everywhere".
 interface SidebarItem {
-  kind: "ticket_folder" | "team" | "view" | "box" | "account" | "folder" | "page" | "wiki_page" | "wiki_space"
+  kind: "ticket_folder" | "team" | "view" | "box" | "account" | "folder" | "page" | "wiki_page" | "wiki_space" | "mailbox"
   id: string                   // the ids of SpaceItem; a team row may also be "mine" (My teams)
   name?: string                // the member's own label for the row, 1..64 characters
   badge?: SidebarBadge         // the number beside the row; left out: the row's default
@@ -890,6 +892,18 @@ key as in `hidden`: `ticket_folder:mine`, `row:waiting_chats`, `box:inbox`, `acc
 emoji of the member's own. They show wherever the sidebar draws that section or row (Favorites, its own
 section, a Space showing the whole section) and never rename the team, view or page for anyone else. A row
 of the member's own sections keeps its own `name` and `icon` first. An empty name or icon is dropped.
+
+**Inboxes as sections.** A ticket inbox (a mailbox, the reply address of its tickets) or a team can
+also show as a section of its own, as the member chooses: `order` holds `mailbox:<id>` or `team:<id>`
+(`team:mine` for My teams) where it shows, after the section before it. Tickets and Teams keep
+everything. The section is titled with the inbox's or team's name (`names` and `icons` take
+`section:mailbox:<id>` and `section:team:<id>`). A mailbox's holds its folders, Unassigned, Mine, Open,
+Pending, Solved and Spam, each listing that reply address's tickets (`/inbox/<folder>?mailbox=<id>`) and
+numbered from `TicketCounts.mailboxes` (contracts/api.md); a team's holds its inbox's tabs
+(`/teams/<id>?tab=`), Unassigned numbered from `TicketCounts.teams`. An entry naming a mailbox or team
+that is gone, or a private team the member is not on, is kept and skipped. Each row can be hidden as
+`mailbox:<id>:<folder>` or `team:<id>:<tab>`. A `mailbox` row in the member's own sections or a Space
+opens that inbox's Unassigned folder, numbered like it.
 
 **Row order.** `row_order` keeps the member's order of the rows inside a built-in section, by
 section id, as row keys spelled like `hidden`'s: `ticket_folder:<id>` and `row:waiting_chats` in
@@ -1313,6 +1327,31 @@ and the customer's answers come back to the ticket.
   "Visibility"), and the conversation links to it. On the ticket a reply sent this way says which
   address it went from (`Message.from_account`).
 
+## Using an account for tickets
+
+A shared address read in Mail can become a ticket inbox: `POST /v1/collab/accounts/{id}/use-for-tickets`
+(admins, a signed-in person) makes a support mailbox (contracts/api.md "Mailboxes") of an account. The
+caller must be the member who connected the account: anyone else's account is `404`, shared with them or
+not, and a member below admin is `403`. A sample account is `422`.
+
+- **The connection carries over.** A Google or Microsoft account's tokens belong to the Collab OAuth
+  client, so the mailbox reads its inbox through the provider's API with them (`oauth_grant: "api"`,
+  `oauth_client: "collab"`; `422 api_sync_unavailable` when the workspace cannot, as on connecting); an
+  account that needs reconnecting is `422 reconnect_needed`. An IMAP account brings its IMAP and SMTP
+  servers and passwords (`422 imap_off` while IMAP is off for the workspace). The secrets go from one
+  sealed column to the other (`d.Box`) and never leave the server.
+- **From now on.** The mailbox's first sync starts with new mail (`config.sync_start: "new"`): what the
+  account already holds stays in Mail and never becomes tickets.
+- **The body**: `{name?, team_id?, brand_id?, signature_html?, auto_reply_enabled?, auto_reply_subject?,
+  auto_reply_html?, keep_account?}`, checked as on creating a mailbox (the name defaults to the account's,
+  never an address; a team or brand of the workspace; an address another mailbox has is `409`). →
+  `201 {mailbox_id, account_removed}`.
+- **The account.** Unless `keep_account`, it is removed in the same transaction, with its mail in
+  opendesk, so nothing shows in both places; its grant is not revoked, since the mailbox goes on using
+  it. Kept, the address is read in both.
+- Audit-logged `mailbox.created_from_collab` (`{account_id, provider, email, account_removed}`), with
+  `mailbox.created` and `collab.accounts` events.
+
 ## Events
 
 Collab events carry ids only and reach only the members who see what changed: they are
@@ -1332,7 +1371,7 @@ webhooks.
 names; `signature_html` with `from_provider` for a pull, `out_of_office` for the automatic reply,
 `default_from` for the default address; an address added, changed or removed is `fields: ["identities"]`
 with its `identity_id` and `added`, `removed` or the changed `identity_fields`),
-`collab.account_disconnected`, `collab.categories_updated` (`{scope: "workspace" | "team", team_id?, enabled, keys}`; an
+`collab.account_disconnected`, `mailbox.created_from_collab` ("Using an account for tickets"), `collab.categories_updated` (`{scope: "workspace" | "team", team_id?, enabled, keys}`; an
 account's own choice is `collab.account_updated` with `fields: ["categories"]`), `collab.category_rule`
 (`{account_id, action: "added" | "removed", category}`, never the sender), `collab.history_import` (`{action: "started" | "paused" | "resumed" | "canceled",
 since, include_spam_trash}`), `collab.thread_shared` (`{thread_id, everyone, team_ids,

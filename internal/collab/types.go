@@ -372,7 +372,7 @@ type SidebarPin struct {
 }
 
 type SidebarPrefs struct {
-	Order            []string     `json:"order" maxItems:"40"`
+	Order            []string     `json:"order" maxItems:"80"`
 	Hidden           []string     `json:"hidden" maxItems:"500"`
 	Pinned           []SidebarPin `json:"pinned" maxItems:"30"`
 	ExpandedAccounts []string     `json:"expanded_accounts" maxItems:"200"`
@@ -418,7 +418,7 @@ type SidebarSection struct {
 // SidebarItem is one row of a member's own section: a Space row without its workspace,
 // which is the sidebar's.
 type SidebarItem struct {
-	Kind  string `json:"kind" enum:"ticket_folder,team,view,box,account,folder,page,wiki_page,wiki_space"`
+	Kind  string `json:"kind" enum:"ticket_folder,team,view,box,account,folder,page,wiki_page,wiki_space,mailbox"`
 	ID    string `json:"id" maxLength:"100"`
 	Name  string `json:"name,omitempty" maxLength:"300"`
 	Badge string `json:"badge,omitempty" enum:"unread,total,count,awaiting,urgent,overdue,open,none"`

@@ -1040,14 +1040,15 @@ func TestAPISidebarSections(t *testing.T) {
 	if st := doJSON(t, "GET", srv.URL+"/v1/collab/sidebar", nil, &prefs); st != 200 || prefs.Sections == nil || len(prefs.Sections) != 0 {
 		t.Fatalf("defaults: %d %+v", st, prefs.Sections)
 	}
-	page := uuid.New()
+	page, inbox := uuid.New(), uuid.New()
 	base := func() SidebarPrefs {
 		p := defaultSidebar()
-		p.Order = append([]string{"custom:launch"}, p.Order...)
+		p.Order = append([]string{"custom:launch", "mailbox:" + inbox.String(), "team:mine"}, p.Order...)
 		p.Sections = []SidebarSection{{ID: "launch", Title: "  Launch  ", Items: []SidebarItem{
 			{Kind: "folder", ID: strings.ToUpper(uuid.NewString())}, {Kind: "view", ID: uuid.NewString(), Name: "Bugs", Badge: "urgent"},
 			{Kind: "wiki_page", ID: page.String()}, {Kind: "wiki_space", ID: uuid.NewString()}, {Kind: "box", ID: "inbox"},
 			{Kind: "ticket_folder", ID: "mine"}, {Kind: "team", ID: "mine"}, {Kind: "page", ID: "reports"},
+			{Kind: "mailbox", ID: uuid.NewString()},
 		}}, {ID: "later", Collapsed: true}}
 		return p
 	}
@@ -1059,7 +1060,7 @@ func TestAPISidebarSections(t *testing.T) {
 		t.Fatalf("roundtrip: %d %+v", st, prefs)
 	}
 	got := prefs.Sections[0]
-	if got.Title != "Launch" || len(got.Items) != 8 || got.Items[0].ID != strings.ToLower(got.Items[0].ID) || got.Items[1].Name != "Bugs" ||
+	if got.Title != "Launch" || len(got.Items) != 9 || got.Items[0].ID != strings.ToLower(got.Items[0].ID) || got.Items[1].Name != "Bugs" ||
 		got.Items[1].Badge != "urgent" || !prefs.Sections[1].Collapsed || prefs.Sections[1].Items == nil {
 		t.Fatalf("stored: %+v", prefs.Sections)
 	}
@@ -1112,6 +1113,8 @@ func TestAPISidebarSections(t *testing.T) {
 		},
 		"row order empty id": func(p *SidebarPrefs) { p.RowOrder = map[string][]string{"teams": {""}} },
 		"row order too long": func(p *SidebarPrefs) { p.RowOrder = map[string][]string{"teams": make([]string, 301)} },
+		"inbox section id":   func(p *SidebarPrefs) { p.Order = append(p.Order, "mailbox:support") },
+		"team section id":    func(p *SidebarPrefs) { p.Order = append(p.Order, "team:billing") },
 	}
 	for name, f := range bad {
 		p := base()

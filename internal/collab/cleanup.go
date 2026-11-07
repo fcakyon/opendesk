@@ -23,6 +23,12 @@ const trashBatch = 500
 // briefly. Nothing is deleted at the provider. The caller audits and publishes.
 func (s *service) deleteAccount(ctx context.Context, tx pgx.Tx, a *accountRow) error {
 	s.revokeGoogle(ctx, a)
+	return dropAccount(ctx, tx, a)
+}
+
+// dropAccount is deleteAccount without revoking the grant: for an account whose connection a
+// ticket mailbox took over (api_handover.go), which still needs it.
+func dropAccount(ctx context.Context, tx pgx.Tx, a *accountRow) error {
 	if _, err := tx.Exec(ctx, `INSERT INTO collab_storage_trash (key)
 		SELECT raw_key FROM collab_messages WHERE account_id = $1 AND workspace_id = $2 AND raw_key <> ''
 		ON CONFLICT DO NOTHING`, a.ID, a.WorkspaceID); err != nil {
