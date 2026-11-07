@@ -138,6 +138,7 @@ export default defineConfig({
             { label: 'Routing', slug: 'guides/routing' },
             { label: 'Knowledge base and help center', slug: 'guides/knowledge-base' },
             { label: 'Changelog', slug: 'guides/changelog' },
+            { label: 'Pages', slug: 'guides/pages' },
             {
               label: 'Wiki',
               items: [
