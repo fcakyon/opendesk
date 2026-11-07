@@ -158,7 +158,7 @@ func TestObsidianVault(t *testing.T) {
 		entry{"Vault/attachments/report.pdf", "%PDF-1.4 x"},
 		entry{"Vault/attachments/run.sh", "#!/bin/sh\necho"},
 		entry{"Vault/attachments/unused.png", png},
-		entry{"Vault/Board.canvas", "{}"},
+		entry{"Vault/Tasks.base", "views: []"},
 	)
 	res := importOK(t, Options{}, upload("vault.zip", data))
 
@@ -216,7 +216,7 @@ func TestObsidianVault(t *testing.T) {
 	if assetByKey(res, "Vault/attachments/run.sh") != nil || !hasSkip(res, "Vault/attachments/run.sh", "executable") {
 		t.Errorf("a script became an asset: %+v", res.Skipped)
 	}
-	if !hasSkip(res, "Vault/Board.canvas", "unsupported") || !hasSkip(res, "Vault/attachments/unused.png", "unused") {
+	if !hasSkip(res, "Vault/Tasks.base", "unsupported") || !hasSkip(res, "Vault/attachments/unused.png", "unused") {
 		t.Errorf("skipped: %+v", res.Skipped)
 	}
 	if len(res.Assets) != 2 {

@@ -10,6 +10,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 
@@ -47,7 +48,7 @@ const (
 )
 
 type importForm struct {
-	Files    []huma.FormFile `form:"files" required:"true" doc:"One zip (Obsidian vault, Notion or Confluence export, Markdown or HTML files), or Markdown, HTML, CSV and text files with the files they use; up to 100 MB in all"`
+	Files    []huma.FormFile `form:"files" required:"true" doc:"One zip (Obsidian vault, Notion or Confluence export, Markdown or HTML files), or Markdown, HTML, CSV, text and Obsidian canvas files with the files they use; up to 100 MB in all"`
 	ParentID string          `form:"parent_id" required:"false" doc:"The page to import under; left out, the top level of space"`
 	Space    string          `form:"space" required:"false" doc:"workspace (default), private or team: where top-level pages go"`
 	TeamID   string          `form:"team_id" required:"false" doc:"The teamspace, with space team"`
@@ -86,8 +87,8 @@ func registerPort(d *deps.Deps, api huma.API) {
 	huma.Register(api, huma.Operation{OperationID: "import-wiki", Method: http.MethodPost, Path: "/v1/wiki/import",
 		Summary: "Import pages into the wiki", Tags: tags, DefaultStatus: http.StatusCreated, MaxBodyBytes: maxImportBody,
 		Middlewares: huma.Middlewares{portBody(api)},
-		Description: "Reads an Obsidian vault, a Notion, Confluence or Google Docs export, or Markdown, HTML, CSV and text files, and makes their pages " +
-			"under `parent_id` or at the top level of `space`, all at once: links between them, their files (as attachments) and Notion databases with their rows. " +
+		Description: "Reads an Obsidian vault, a Notion, Confluence or Google Docs export, or Markdown, HTML, CSV, text and canvas files, and makes their pages " +
+			"under `parent_id` or at the top level of `space`, all at once: links between them, their files (as attachments), Notion databases with their rows and Obsidian canvases. " +
 			"`422 wiki_full` when the pages would not fit in the workspace's 5,000. Programs and scripts are never imported."},
 		func(ctx context.Context, in *struct {
 			RawBody huma.MultipartFormFiles[importForm]
@@ -157,7 +158,8 @@ func registerPort(d *deps.Deps, api huma.API) {
 			if len(pages) == 1 {
 				return ex.file(pages[0])
 			}
-			name := strings.TrimSuffix(wikiport.ExportFileName(pages[0], format), "."+extOf(format)) + ".zip"
+			first := wikiport.ExportFileName(pages[0], format)
+			name := strings.TrimSuffix(first, path.Ext(first)) + ".zip"
 			return ex.zip(ctx, name, pages, &id)
 		})
 
@@ -421,6 +423,7 @@ type importer struct {
 type madePage struct {
 	id                uuid.UUID
 	title, icon, body string
+	canvas            string // a canvas's JSON: the files of its cards become the page's too
 }
 
 // create makes pg under parent (a page of the import, or where it lands) and then its
@@ -471,11 +474,30 @@ func (im *importer) create(pg *wikiport.Page, parent *uuid.UUID, db *Database, a
 	if database != nil {
 		dbValue = database
 	}
+	var canvas any
+	var canvasRaw string
+	if pg.Canvas != nil {
+		kind = "canvas"
+		c := emptyCanvas()
+		raw, err := json.Marshal(im.res.ResolveCanvas(pg.Canvas, im.ids))
+		if err == nil {
+			c, err = cleanCanvas(raw)
+		}
+		if err != nil {
+			// wikiport keeps a canvas within the wiki's rules; one it missed is made empty.
+			c = emptyCanvas()
+			im.skips = append(im.skips, wikiport.Skip{Path: pg.Key, Reason: "unreadable"})
+		}
+		canvas = c
+		if raw, err := json.Marshal(c); err == nil {
+			canvasRaw = string(raw)
+		}
+	}
 	// Each page is created a moment after the one before: what orders by creation (rows' unique
 	// ids) follows the import's order.
-	if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, team_id, template, kind, database, props, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, clock_timestamp(), clock_timestamp())`, id, wid, parent, title, icon, body, position, im.p.ActorUserID(),
-		im.dest.owner, im.dest.team, im.dest.template, kind, dbValue, props); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO wiki_pages (id, workspace_id, parent_id, title, icon, body_html, position, created_by, updated_by, private_to, team_id, template, kind, database, props, canvas, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, $15, clock_timestamp(), clock_timestamp())`, id, wid, parent, title, icon, body, position, im.p.ActorUserID(),
+		im.dest.owner, im.dest.team, im.dest.template, kind, dbValue, props, canvas); err != nil {
 		return id, err
 	}
 	if at < 0 {
@@ -483,7 +505,7 @@ func (im *importer) create(pg *wikiport.Page, parent *uuid.UUID, db *Database, a
 			return id, err
 		}
 	}
-	im.made = append(im.made, madePage{id: id, title: title, icon: icon, body: body})
+	im.made = append(im.made, madePage{id: id, title: title, icon: icon, body: body, canvas: canvasRaw})
 	for i, c := range pg.Children {
 		if _, err := im.create(c, &id, database, i); err != nil {
 			return id, err
@@ -531,6 +553,9 @@ func (im *importer) finish() error {
 		if err := bodySaved(ctx, tx, p, m.id, m.body, m.body); err != nil {
 			return err
 		}
+		if err := claimFiles(ctx, tx, p, m.id, m.canvas); err != nil {
+			return err
+		}
 	}
 	nodes, err := collectNodes(tx.Query(ctx, nodeSelect+` WHERE p.workspace_id = $1 AND p.id = ANY($2)`, p.WorkspaceID, list))
 	if err != nil {
@@ -561,7 +586,7 @@ func (im *importer) finish() error {
 // --- export -----------------------------------------------------------------------------
 
 // exportCols are what an export reads of a page aliased p.
-const exportCols = `p.id, p.parent_id, p.title, p.icon, p.body_html, p.kind, p.database, p.props, p.tags, p.created_at, p.updated_at`
+const exportCols = `p.id, p.parent_id, p.title, p.icon, p.body_html, p.kind, p.database, p.props, p.tags, p.created_at, p.updated_at, p.canvas`
 
 func scanExport(rows pgx.Rows, err error) ([]wikiport.ExportPage, error) {
 	if err != nil {
@@ -574,8 +599,8 @@ func scanExport(rows pgx.Rows, err error) ([]wikiport.ExportPage, error) {
 		var pg wikiport.ExportPage
 		var id uuid.UUID
 		var parent *uuid.UUID
-		var database []byte
-		if err := rows.Scan(&id, &parent, &pg.Title, &pg.Icon, &pg.BodyHTML, &pg.Kind, &database, &pg.Props, &pg.Tags, &pg.CreatedAt, &pg.UpdatedAt); err != nil {
+		var database, canvas []byte
+		if err := rows.Scan(&id, &parent, &pg.Title, &pg.Icon, &pg.BodyHTML, &pg.Kind, &database, &pg.Props, &pg.Tags, &pg.CreatedAt, &pg.UpdatedAt, &canvas); err != nil {
 			return nil, err
 		}
 		if total += len(pg.BodyHTML); total > maxExportText {
@@ -585,15 +610,30 @@ func scanExport(rows pgx.Rows, err error) ([]wikiport.ExportPage, error) {
 		if parent != nil {
 			pg.ParentID = parent.String()
 		}
-		if database != nil {
-			pg.Database = new(wikiport.Database)
-			if err := json.Unmarshal(database, pg.Database); err != nil {
-				return nil, err
-			}
+		if err := exportData(&pg, database, canvas); err != nil {
+			return nil, err
 		}
 		out = append(out, pg)
 	}
 	return out, rows.Err()
+}
+
+// exportData reads a database's schema and a canvas's cards into an exported page; wikiport's
+// Canvas is the stored canvas's JSON.
+func exportData(pg *wikiport.ExportPage, database, canvas []byte) error {
+	if database != nil {
+		pg.Database = new(wikiport.Database)
+		if err := json.Unmarshal(database, pg.Database); err != nil {
+			return err
+		}
+	}
+	if canvas != nil {
+		pg.Canvas = new(wikiport.Canvas)
+		if err := json.Unmarshal(canvas, pg.Canvas); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type rootPage struct {
@@ -618,18 +658,15 @@ func exportRoot(ctx context.Context, q db.Querier, v Viewer, wid, id uuid.UUID) 
 	}
 	var r rootPage
 	var parent *uuid.UUID
-	var database []byte
+	var database, canvas []byte
 	pg := &r.page
 	var pid uuid.UUID
-	if err := rows.Scan(&pid, &parent, &pg.Title, &pg.Icon, &pg.BodyHTML, &pg.Kind, &database, &pg.Props, &pg.Tags, &pg.CreatedAt, &pg.UpdatedAt, &r.template); err != nil {
+	if err := rows.Scan(&pid, &parent, &pg.Title, &pg.Icon, &pg.BodyHTML, &pg.Kind, &database, &pg.Props, &pg.Tags, &pg.CreatedAt, &pg.UpdatedAt, &canvas, &r.template); err != nil {
 		return rootPage{}, err
 	}
 	pg.ID = pid.String()
-	if database != nil {
-		pg.Database = new(wikiport.Database)
-		if err := json.Unmarshal(database, pg.Database); err != nil {
-			return rootPage{}, err
-		}
+	if err := exportData(pg, database, canvas); err != nil {
+		return rootPage{}, err
 	}
 	return r, rows.Err()
 }
@@ -660,13 +697,6 @@ func treePages(ctx context.Context, q db.Querier, v Viewer, wid uuid.UUID) ([]wi
 		ORDER BY p.private_to IS NOT NULL, p.team_id NULLS FIRST, p.parent_id NULLS FIRST, p.position, p.id`, wid, me, hidden))
 }
 
-func extOf(f wikiport.Format) string {
-	if f == wikiport.FormatHTML {
-		return "html"
-	}
-	return "md"
-}
-
 // export writes pages for a caller.
 type export struct {
 	d      *deps.Deps
@@ -689,13 +719,33 @@ func (e *export) options() wikiport.ExportOptions {
 // prepare names files by their plain path, which the export carries or links to the app.
 func prepare(pages []wikiport.ExportPage) {
 	for i := range pages {
-		pages[i].BodyHTML = plainFiles(pages[i].BodyHTML)
+		plainPage(&pages[i])
 	}
 }
 
-func (e *export) contentType() string {
-	if e.format == wikiport.FormatHTML {
+// plainPage names a page's files by their plain path: in its body, and in a canvas's text
+// cards and file cards.
+func plainPage(pg *wikiport.ExportPage) {
+	pg.BodyHTML = plainFiles(pg.BodyHTML)
+	if pg.Canvas == nil {
+		return
+	}
+	for i := range pg.Canvas.Nodes {
+		n := &pg.Canvas.Nodes[i]
+		n.HTML = plainFiles(n.HTML)
+		if m := attachmentSrc.FindStringSubmatch(n.Src); m != nil {
+			n.Src = "/v1/attachments/" + m[1]
+		}
+	}
+}
+
+// contentType is a single file's type, by its name.
+func contentType(name string) string {
+	switch path.Ext(name) {
+	case ".html":
 		return "text/html; charset=utf-8"
+	case ".canvas":
+		return "application/json; charset=utf-8"
 	}
 	return "text/markdown; charset=utf-8"
 }
@@ -711,13 +761,14 @@ func download(ctx huma.Context, contentType, name string) {
 
 // file answers one page as one file: its links and files point to the app.
 func (e *export) file(pg wikiport.ExportPage) (*huma.StreamResponse, error) {
-	pg.BodyHTML = plainFiles(pg.BodyHTML)
+	plainPage(&pg)
 	var buf bytes.Buffer
 	if err := wikiport.ExportFile(&buf, pg, e.options()); err != nil {
 		return nil, httpx.Wrap(err)
 	}
+	name := wikiport.ExportFileName(pg, e.format)
 	return &huma.StreamResponse{Body: func(ctx huma.Context) {
-		download(ctx, e.contentType(), wikiport.ExportFileName(pg, e.format))
+		download(ctx, contentType(name), name)
 		ctx.SetStatus(http.StatusOK)
 		_, _ = ctx.BodyWriter().Write(buf.Bytes())
 	}}, nil

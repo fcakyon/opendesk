@@ -11,7 +11,6 @@ import (
 
 	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
 	"github.com/useopendesk/opendesk/internal/helpdesk/wiki"
-	"github.com/useopendesk/opendesk/internal/helpdesk/wikiconv"
 )
 
 type canvasPage struct {
@@ -183,12 +182,98 @@ func TestCanvas(t *testing.T) {
 	e.Do("PATCH", "/v1/wiki/pages/"+copied.ID, agent, map[string]any{"canvas": full}).Want(t, 422)
 	e.Do("POST", "/v1/wiki/pages/"+copied.ID+"/restore", agent, nil).Want(t, 200)
 
-	// Export as JSON Canvas: Markdown text, files for pages that are exported.
-	var final canvasPage
-	e.Do("GET", "/v1/wiki/pages/"+cv.ID, viewer, nil).Want(t, 200).JSON(t, &final)
-	out := wiki.JSONCanvas(*final.Canvas, wikiconv.MarkdownOptions{}, func(id uuid.UUID) (string, bool) { return "Refund policy.md", id.String() == plain.ID })
-	raw, _ := json.Marshal(out)
-	if s := string(raw); !strings.Contains(s, `"text":"Ship the #launch on Friday"`) || !strings.Contains(s, `"file":"Refund policy.md"`) || !strings.Contains(s, `"toNode":"p1"`) {
-		t.Fatalf("json canvas %s", s)
+	// Export as JSON Canvas: Markdown text, page cards as the files of the pages exported with
+	// it; one left out is a link to the app or an empty text card.
+	files := unzip(t, e.Do("GET", "/v1/wiki/pages/"+cv.ID+"/export?subpages=true", viewer, nil).Want(t, 200).Body)
+	var jc struct {
+		Nodes []map[string]any `json:"nodes"`
+		Edges []map[string]any `json:"edges"`
 	}
+	if err := json.Unmarshal([]byte(files["Launch plan.canvas"]), &jc); err != nil {
+		t.Fatalf("Launch plan.canvas in %v: %v", keys(files), err)
+	}
+	nodes := map[string]map[string]any{}
+	for _, n := range jc.Nodes {
+		nodes[n["id"].(string)] = n
+	}
+	if nodes["t1"]["text"] != "Ship the #launch on Friday" || nodes["p2"]["type"] != "file" || nodes["p2"]["file"] != "Launch plan/Inside.md" ||
+		nodes["p1"]["type"] == "file" || nodes["g1"]["label"] != "Week one" || nodes["g1"]["color"] != "#aabbcc" || len(jc.Edges) != 1 || jc.Edges[0]["toNode"] != "p1" {
+		t.Fatalf("json canvas %s", files["Launch plan.canvas"])
+	}
+	if _, ok := files["Launch plan/Inside.md"]; !ok {
+		t.Fatalf("files %v", keys(files))
+	}
+	r := e.Do("GET", "/v1/wiki/pages/"+cv.ID+"/export", viewer, nil).Want(t, 200)
+	if r.Header.Get("Content-Type") != "application/json; charset=utf-8" || r.Header.Get("Content-Disposition") != `attachment; filename="Launch plan.canvas"` {
+		t.Fatalf("single canvas: %v", r.Header)
+	}
+	r = e.Do("GET", "/v1/wiki/pages/"+cv.ID+"/export?format=html", viewer, nil).Want(t, 200)
+	if s := string(r.Body); !strings.Contains(s, `<div class="canvas"`) || !strings.Contains(s, "Ship the #launch on Friday") || !strings.Contains(s, "<line ") {
+		t.Fatalf("html canvas: %s", s)
+	}
+}
+
+func TestImportCanvas(t *testing.T) {
+	e := hdtest.New(t, wiki.Register)
+	ws := e.NewWorkspace()
+	agent, viewer := ws.Agent.As(ws), ws.Viewer.As(ws)
+
+	board := `{"nodes": [
+		{"id": "t1", "type": "text", "text": "Read [[Alpha]] #launch", "x": 0, "y": 0, "width": 250, "height": 120},
+		{"id": "p1", "type": "file", "file": "Alpha.md", "x": 300, "y": 0, "width": 400, "height": 300},
+		{"id": "i1", "type": "file", "file": "attachments/diagram.png", "x": 0, "y": 200, "width": 300, "height": 200, "color": "5"},
+		{"id": "x1", "type": "file", "file": "attachments/fake.png", "x": 0, "y": 500, "width": 300, "height": 200}
+	], "edges": [
+		{"id": "e1", "fromNode": "t1", "toNode": "p1", "label": "see"},
+		{"id": "e2", "fromNode": "i1", "toNode": "x1"}
+	]}`
+	vault := zipOf(t,
+		portFile{"Vault/.obsidian/app.json", "{}"},
+		portFile{"Vault/Alpha.md", "Alpha's text"},
+		portFile{"Vault/Board.canvas", board},
+		portFile{"Vault/Broken.canvas", `{"nodes": [`},
+		portFile{"Vault/attachments/diagram.png", pngBytes},
+		portFile{"Vault/attachments/fake.png", "MZ\x90\x00 a program dressed as a picture"},
+	)
+	out := importOK(t, e, agent, nil, portFile{"vault.zip", string(vault)})
+	if out.Pages != 3 || !out.skipped("Vault/Broken.canvas", "unreadable") || !out.skipped("Vault/attachments/fake.png", "executable") ||
+		!out.skipped("Vault/Board.canvas", "canvas_simplified") {
+		t.Fatalf("import: %+v", out)
+	}
+	nodes := tree(t, e, viewer)
+	boardID, alphaID := idOf(t, nodes, "Board"), idOf(t, nodes, "Alpha")
+
+	// A canvas page: its cards point at the pages and files made with it.
+	var cv canvasPage
+	e.Do("GET", "/v1/wiki/pages/"+boardID, viewer, nil).Want(t, 200).JSON(t, &cv)
+	if cv.Kind != "canvas" || cv.Canvas == nil || len(cv.Canvas.Nodes) != 4 || len(cv.Canvas.Edges) != 2 {
+		t.Fatalf("canvas %+v", cv.Canvas)
+	}
+	c := cv.Canvas
+	if !strings.Contains(c.Nodes[0].HTML, `data-id="`+alphaID+`"`) || c.Nodes[1].Type != "page" || c.Nodes[1].PageID == nil || c.Nodes[1].PageID.String() != alphaID {
+		t.Fatalf("cards %+v", c.Nodes[:2])
+	}
+	var fileID uuid.UUID
+	var holder *uuid.UUID
+	e.Scalar(`SELECT id FROM attachments WHERE workspace_id = $1 AND imported`, &fileID, ws.ID)
+	e.Scalar(`SELECT wiki_page_id FROM attachments WHERE id = $1`, &holder, fileID)
+	if c.Nodes[2].Type != "file" || !strings.Contains(c.Nodes[2].Src, "/v1/attachments/"+fileID.String()) || c.Nodes[2].Name != "diagram.png" || c.Nodes[2].Color != "5" {
+		t.Fatalf("file card %+v", c.Nodes[2])
+	}
+	if holder == nil || holder.String() != boardID {
+		t.Fatalf("the picture is not the canvas's own file: %v", holder)
+	}
+	if c.Nodes[3].Type != "text" || !strings.Contains(c.Nodes[3].HTML, "fake.png") || c.Edges[0].Label != "see" {
+		t.Fatalf("refused file %+v, edges %+v", c.Nodes[3], c.Edges)
+	}
+	// Its cards count as its text: links and tags.
+	if !slices.Contains(cv.Tags, "launch") {
+		t.Fatalf("tags %v", cv.Tags)
+	}
+	if got := ids(mentions(t, e, viewer, "/v1/wiki/pages/"+alphaID+"/backlinks")); !slices.Contains(got, boardID) {
+		t.Fatalf("Alpha's backlinks %v", got)
+	}
+
+	// A canvas uploaded alone, unreadable: nothing to import, said plainly.
+	importFiles(t, e, agent, nil, portFile{"Board.canvas", "not json"}).Want(t, 422)
 }

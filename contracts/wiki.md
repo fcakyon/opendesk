@@ -180,9 +180,15 @@ interface CanvasEdge {
   the words on the cards (text, labels, link titles and descriptions, file names, connection labels) are
   searched (`wiki_pages.canvas_text`, kept by the API). Mentions of people and dates in text cards
   notify and remind nobody.
-- `wiki.JSONCanvas` is a canvas as a JSON Canvas file, for export: text cards in Markdown
-  (`internal/helpdesk/wikiconv`), page cards as `file` nodes naming the exported page (a text node when
-  the page is not exported), https files as links, groups and connections as they are.
+- Import and export ("Import and export") read and write a canvas as a JSON Canvas `.canvas` file, as
+  Obsidian keeps one (`internal/helpdesk/wikiport/canvas.go`, whose `Canvas` is this shape). Out: text
+  cards in Markdown (`internal/helpdesk/wikiconv`, page links as `[[links]]`), page cards as `file` nodes
+  naming the exported page's file, files the export carries as `file` nodes under `attachments/`, https
+  files and link cards as `link` nodes, groups (`label`) and connections as they are. A page or file the
+  export doesn't carry is a `link` node to the app, or an empty text node without the app's address. In:
+  the reverse, with JSON Canvas's own colours (`"1"`..`"6"` and hex) kept; a link card's title,
+  description and picture, and a canvas page's icon and `body_html`, have no place in the file. An HTML export draws the
+  canvas in its page: the cards where they sit, groups below the connections, connections as lines.
 
 The app (`web/src/components/wiki/canvas`) pans (drag empty space, Space and drag, scroll, arrow keys)
 and zooms (Ctrl or Cmd and scroll, pinch, +/−, Shift+1 fits, Shift+2 fits the selection); selects with a
@@ -606,6 +612,7 @@ What it reads:
 | Obsidian vault (a zip with `.obsidian/`, or any Markdown) | a page per note, a page per folder (a folder note `X/X.md` or `X.md` beside `X/` is the folder's page), `[[links]]`, `[[note#heading]]`, `![[embeds]]` of notes and files, callouts, highlights, math, task lists, front matter (`title`, `tags`), `#tags`; comments `%%…%%` are dropped |
 | Notion export (Markdown & CSV, or HTML) | the page tree (Notion's ids leave titles), links between pages and to `notion.so` pages of the export, callouts, toggles, page icons; a database's CSV (the `_all` one when there are two) becomes a database: the first column its title, each other column's type read from its values (checkbox, number, date and date ranges, URL, email, select, multi-select, status; people and relations as text), each record a row with its values, matched by title to the row's own page so it keeps its text and subpages |
 | Confluence, Google Docs or other HTML | a page per HTML file, its title from `<title>` or its first heading, Confluence's info, note and warning panels as callouts |
+| Obsidian canvas (`.canvas`, JSON Canvas 1.0; in a vault or alone) | a canvas page ("Canvas"): text nodes' Markdown read as a note's (`[[links]]`, embeds, tags), `file` nodes naming a note or canvas of the upload page cards, other files of the upload file cards (stored as the page's files), https `link` nodes link cards, groups with their labels, connections between the cards kept; colours `"1"`..`"6"` and `#rrggbb` (`#rgb` written out) kept; ids the wiki takes kept, others replaced; positions and sizes brought within a canvas's bounds. Notes link to a canvas as `[[Name.canvas]]` |
 | Markdown, text, CSV files | a page each; a CSV a database |
 
 Bodies are wiki HTML (`hd.SanitizeWiki`), as any other. Files the pages use become imported
@@ -631,28 +638,31 @@ pages past the last level go beside their ancestor there.
 
 | reason | |
 | --- | --- |
-| `unsupported` | a kind of file that isn't imported (Obsidian canvases and bases) |
+| `unsupported` | a kind of file that isn't imported (Obsidian bases) |
 | `unused` | a file no page uses |
 | `executable` | a program or a script, by its name or its bytes; never imported |
 | `too_large` | a file over 25 MB, or a page source over 4 MB |
-| `unreadable` | a file whose text or table could not be read, or a table the wiki can't keep as a database (its rows stay pages) |
-| `body_too_large` | a page whose text is over 512 KB; the page is made without it |
+| `unreadable` | a file whose text or table could not be read, a canvas that isn't a JSON Canvas object (no page is made), or a table the wiki can't keep as a database (its rows stay pages) |
+| `body_too_large` | a page whose text is over 512 KB, or a canvas over 1 MB; the page is made without it |
 | `moved_up` | a page deeper than the wiki holds, placed beside its ancestor at the last level |
 | `columns_dropped` | a table's columns past a database's 100 properties |
 | `nested_archive` | an archive inside the upload |
 | `files_limit` | a file past the plan's import limit; what used it is left out of the page |
+| `canvas_simplified` | a canvas with cards kept simpler, listed once per canvas: a card for a note's heading or block (`subpath`) shows the whole note; an http link, a file or note not in the upload, or a file not taken (a program, too large) is a text card; a group's background picture and nodes of types JSON Canvas doesn't define are left out |
+| `canvas_trimmed` | a canvas's nodes past 2,000 or connections past 4,000, left out |
 
 ### Export
 
 | method | path | | |
 | --- | --- | --- | --- |
-| GET | `/v1/wiki/pages/{id}/export?format=markdown\|html&subpages=false\|true` | viewer; `wiki:read` | a page the caller may see, not in the trash (`404` otherwise). Without subpages (or with none they may see): one file, `<title>.md` (`text/markdown; charset=utf-8`) or `<title>.html` (`text/html; charset=utf-8`), its links to pages and files pointing to the app. With `subpages=true`: `<title>.zip`, the page and every subpage the caller may see, not in the trash |
+| GET | `/v1/wiki/pages/{id}/export?format=markdown\|html&subpages=false\|true` | viewer; `wiki:read` | a page the caller may see, not in the trash (`404` otherwise). Without subpages (or with none they may see): one file, `<title>.md` (`text/markdown; charset=utf-8`), a canvas's `<title>.canvas` (`application/json; charset=utf-8`) or `<title>.html` (`text/html; charset=utf-8`), its links to pages and files pointing to the app. With `subpages=true`: `<title>.zip`, the page and every subpage the caller may see, not in the trash |
 | GET | `/v1/wiki/export?format=markdown\|html` | viewer; `wiki:read` | `Wiki <YYYY-MM-DD>.zip`: every page of the caller's tree: the workspace's, the teamspaces they may see, their own private pages; not the trash, not templates. Any member exports what they may read. `422 wiki_empty` without pages |
 
 `format` defaults to `markdown`: an Obsidian vault, a `.md` per page with YAML front matter (title,
 icon, dates, tags, a row's values), its subpages in a folder of the same name beside it, `[[links]]`
-between pages, a database as a table of its rows and a `.csv` beside it. `html` is a standalone page
-per file, linked by relative paths. A zip carries the files its pages use under `attachments/` when
+between pages, a database as a table of its rows and a `.csv` beside it, a canvas as a JSON Canvas
+`<title>.canvas` ("Canvas"). `html` is a standalone page per file, linked by relative paths; a canvas's
+page draws its cards and connections. A zip carries the files its pages use under `attachments/` when
 the caller may read them as `GET /v1/attachments/{id}` would let them (a page's file, their own
 upload not sent yet), up to 1 GB; a link to any other file or to a page it doesn't carry goes to the
 app. Signed links never leave in an export. Every download is `Content-Disposition: attachment`,

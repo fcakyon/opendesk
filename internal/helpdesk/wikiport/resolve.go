@@ -83,7 +83,7 @@ func (imp *importer) pageAt(p string) *node {
 	}
 	l := strings.ToLower(p)
 	if sourceKind(p) != "" {
-		l = strings.ToLower(stemOf(p))
+		l = strings.ToLower(linkStem(p))
 	}
 	return imp.stem[l]
 }
@@ -258,7 +258,7 @@ func pickNearest[T any](list []T, dir string, pathOf func(T) string) T {
 func (d *doc) embed(n *html.Node, target string) *html.Node {
 	name, _, _ := strings.Cut(target, "#")
 	ext := strings.ToLower(path.Ext(name))
-	if ext == "" || ext == ".md" {
+	if ext == "" || ext == ".md" || ext == ".canvas" {
 		if t, f := d.imp.wikiTarget(target, d); t != nil {
 			return d.pageLink(n, t, f)
 		}

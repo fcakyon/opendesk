@@ -33,6 +33,7 @@ type node struct {
 	table  *csvTable
 	cols   []string // a row's database's columns: Notion writes them as "Name: value" lines
 	row    int      // a row's place in its CSV, -1 for none
+	jc     *jsonCanvas
 }
 
 type importer struct {
@@ -52,6 +53,7 @@ type importer struct {
 	assets    map[string]*Asset // by path; nil when refused
 	order     []*Asset
 	blocks    map[string]string
+	canvases  map[*file]*jsonCanvas
 	obsidian  bool
 	dataN     int
 }
@@ -65,7 +67,7 @@ func Import(uploads []Upload, opt Options) (*Result, error) {
 	}
 	imp := &importer{fs: fs, opt: opt, res: &Result{refs: map[string]bool{}}, keys: map[string]*node{}, dirs: map[string]*node{},
 		refs: map[string]*node{}, base: map[string][]*node{}, stem: map[string]*node{}, notionIDs: map[string]*node{},
-		assetBase: map[string][]*file{}, assets: map[string]*Asset{}, blocks: map[string]string{}}
+		assetBase: map[string][]*file{}, assets: map[string]*Asset{}, blocks: map[string]string{}, canvases: map[*file]*jsonCanvas{}}
 	imp.layout()
 	if len(imp.all) > MaxPages {
 		return nil, ErrTooManyFiles
@@ -127,15 +129,24 @@ func stemOf(p string) string {
 func (imp *importer) layout() {
 	var sources []*file
 	for _, f := range imp.fs.list {
-		switch strings.ToLower(path.Ext(f.path)) {
-		case ".canvas", ".base":
+		if strings.EqualFold(path.Ext(f.path), ".base") {
 			imp.skip(f.path, "unsupported")
 			f.read = true // listed: not "unused" too
 			continue
 		}
-		if sourceKind(f.path) != "" && f.read {
-			sources = append(sources, f)
+		if sourceKind(f.path) == "" || !f.read {
+			continue
 		}
+		if sourceKind(f.path) == "canvas" {
+			c, err := readCanvas(f.data)
+			if err != nil {
+				imp.skip(f.path, "unreadable")
+				continue
+			}
+			imp.canvases[f] = c
+			imp.fs.obsidian = true // canvases are Obsidian's
+		}
+		sources = append(sources, f)
 	}
 	// One CSV per database: Notion's "_all" has every row.
 	byStem := map[string][]*file{}
@@ -145,9 +156,12 @@ func (imp *importer) layout() {
 	consumed := map[*file]bool{}
 	csvOf := map[string]*file{}
 	docOf := map[string]*file{}
+	canvasOf := map[string]*file{}
 	for st, group := range byStem {
 		for _, f := range group {
 			switch sourceKind(f.path) {
+			case "canvas":
+				canvasOf[st] = f
 			case "csv":
 				if cur := csvOf[st]; cur == nil || strings.HasSuffix(stemOfRaw(f.path), "_all") {
 					if cur != nil {
@@ -198,6 +212,8 @@ func (imp *importer) layout() {
 			n = imp.newNode(docOf[d], sourceKind(docOf[d].path), docOf[d].path)
 		case inside != nil && inside.read && !consumed[inside]:
 			n = imp.newNode(inside, "md", inside.path)
+		case canvasOf[d] != nil && !consumed[canvasOf[d]]:
+			n = imp.newNode(canvasOf[d], "canvas", canvasOf[d].path)
 		default:
 			n = imp.newNode(nil, "folder", d+"/")
 		}
@@ -263,6 +279,15 @@ func (imp *importer) layout() {
 
 func stemOfRaw(p string) string { return strings.TrimSuffix(p, path.Ext(p)) }
 
+// linkStem is what links name a source by: its path without the extension, but a canvas's
+// with it ([[Board.canvas]]), as Obsidian links them.
+func linkStem(p string) string {
+	if sourceKind(p) == "canvas" {
+		return p
+	}
+	return stemOf(p)
+}
+
 var (
 	exportWrapper = regexp.MustCompile(`(?i)^(export-[0-9a-f-]+(-part-\d+)?|[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$`)
 	notionSuffix  = regexp.MustCompile(`(?i)(^|\s)([0-9a-f]{32})$`)
@@ -310,6 +335,8 @@ func (imp *importer) read() {
 			continue
 		}
 		switch n.kind {
+		case "canvas":
+			n.jc = imp.canvases[n.src]
 		case "md":
 			imp.readMarkdown(n, n.src)
 		case "html":
@@ -458,7 +485,7 @@ func (imp *importer) index() {
 		case n.dir != "" && n.kind == "folder":
 			p = n.dir
 		case n.src != nil:
-			p = stemOf(n.src.path)
+			p = linkStem(n.src.path)
 		default:
 			continue
 		}
@@ -473,6 +500,10 @@ func (imp *importer) index() {
 
 // convert makes a page's body.
 func (imp *importer) convert(n *node) {
+	if n.kind == "canvas" {
+		imp.convertCanvas(n)
+		return
+	}
 	var root *html.Node
 	src := n.src
 	if n.kind == "csv" {

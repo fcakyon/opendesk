@@ -15,13 +15,12 @@ import (
 
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
-	"github.com/useopendesk/opendesk/internal/helpdesk/wikiconv"
 	"github.com/useopendesk/opendesk/internal/httpx"
 )
 
 // Canvases (contracts/wiki.md "Canvas"): a page that is a canvas keeps cards and the
 // connections between them, a superset of JSON Canvas 1.0. Text cards hold wiki HTML
-// (sanitized like a body); export writes JSON Canvas's Markdown `text` from it.
+// (sanitized like a body). wikiport imports and exports canvases as JSON Canvas files.
 
 const (
 	maxCanvasBytes = 1 << 20
@@ -352,52 +351,4 @@ func applyCanvas(ctx context.Context, tx pgx.Tx, v Viewer, p *auth.Principal, id
 		return false, err
 	}
 	return true, indexBody(ctx, tx, p.WorkspaceID, id, body)
-}
-
-// JSONCanvas is a canvas as a JSON Canvas 1.0 file (https://jsoncanvas.org): text cards
-// as Markdown, page cards as file cards naming the exported page (pagePath; ok false, a
-// page left out of the export, writes the card as text), links and files as they are.
-func JSONCanvas(c Canvas, opt wikiconv.MarkdownOptions, pagePath func(id uuid.UUID) (path string, ok bool)) map[string]any {
-	nodes := make([]map[string]any, 0, len(c.Nodes))
-	for _, n := range c.Nodes {
-		out := map[string]any{"id": n.ID, "x": int(n.X), "y": int(n.Y), "width": int(n.Width), "height": int(n.Height)}
-		if n.Color != "" {
-			out["color"] = n.Color
-		}
-		switch n.Type {
-		case "text":
-			out["type"], out["text"] = "text", strings.TrimSpace(wikiconv.Markdown(n.HTML, opt))
-		case "page":
-			if path, ok := pagePath(*n.PageID); ok {
-				out["type"], out["file"] = "file", path
-			} else {
-				out["type"], out["text"] = "text", ""
-			}
-		case "link":
-			out["type"], out["url"] = "link", n.URL
-		case "file":
-			if strings.HasPrefix(n.Src, "https://") {
-				out["type"], out["url"] = "link", n.Src
-			} else {
-				out["type"], out["file"] = "file", n.Src
-			}
-		case "group":
-			out["type"] = "group"
-			if n.Label != "" {
-				out["label"] = n.Label
-			}
-		}
-		nodes = append(nodes, out)
-	}
-	edges := make([]map[string]any, 0, len(c.Edges))
-	for _, e := range c.Edges {
-		out := map[string]any{"id": e.ID, "fromNode": e.FromNode, "toNode": e.ToNode}
-		for k, v := range map[string]string{"fromSide": e.FromSide, "toSide": e.ToSide, "fromEnd": e.FromEnd, "toEnd": e.ToEnd, "color": e.Color, "label": e.Label} {
-			if v != "" {
-				out[k] = v
-			}
-		}
-		edges = append(edges, out)
-	}
-	return map[string]any{"nodes": nodes, "edges": edges}
 }

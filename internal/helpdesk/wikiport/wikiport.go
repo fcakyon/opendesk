@@ -23,6 +23,10 @@
 //	file, media      <div data-type="file|video|audio" data-src="/v1/attachments/<ref>" data-name data-size data-mime></div>
 //	link to a file   <a href="/v1/attachments/<ref>">text</a>
 //
+// A canvas (Page.Canvas) holds them too: a page card's page_id is a page's ref, a file
+// card's src is /v1/attachments/<ref>, and text cards are bodies. Result.ResolveCanvas
+// resolves a canvas as Resolve does a body.
+//
 // Headings carry a data-block-id of their own (a link to a heading names it in data-block
 // and after "#" in its href): those are final, not refs.
 //
@@ -116,6 +120,9 @@ type Page struct {
 	Children []*Page
 	// Database makes the page a database (kind "database"): its children are its rows.
 	Database *Database
+	// Canvas makes the page a canvas (kind "canvas"), from an Obsidian canvas: page cards
+	// hold the refs of the pages they show, file cards of their files (Result.ResolveCanvas).
+	Canvas *Canvas
 	// Props are a row's values by property id, shaped as contracts/wiki.md "Databases"
 	// stores them; set only on the children of a database.
 	Props map[string]any
@@ -142,15 +149,19 @@ type Skip struct {
 	// Path is the file or page in the upload (a page's Key).
 	Path string `json:"path"`
 	// Reason is a stable code:
-	//   unsupported     a kind of file that isn't imported (Obsidian canvases and bases)
+	//   unsupported     a kind of file that isn't imported (Obsidian bases)
 	//   unused          a file no page uses
 	//   executable      a program or a script; never imported
 	//   too_large       a file over MaxFileBytes, or a page source over MaxDocumentBytes
 	//   unreadable      a file whose text or table could not be read
-	//   body_too_large  a page whose text is over the wiki's 512 KB; the page is made without it
+	//   body_too_large  a page whose text is over the wiki's 512 KB, or a canvas over 1 MB; the page is made without it
 	//   moved_up        a page deeper than the wiki holds, placed beside its ancestor at the last level
 	//   columns_dropped a table's columns past the database's 100 properties
 	//   nested_archive  an archive inside an archive inside the upload
+	//   canvas_simplified a canvas with cards the wiki keeps simpler: a card for a note's heading shows the
+	//                   note, an http link or a file not in the upload is text, a group's picture and nodes
+	//                   of unknown types are left out
+	//   canvas_trimmed  a canvas's cards past 2,000 or connections past 4,000, left out
 	Reason string `json:"reason"`
 }
 

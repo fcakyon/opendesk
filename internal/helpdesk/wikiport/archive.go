@@ -296,6 +296,8 @@ func sourceKind(p string) string {
 		return "txt"
 	case ".csv":
 		return "csv"
+	case ".canvas":
+		return "canvas"
 	}
 	return ""
 }

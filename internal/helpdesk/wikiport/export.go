@@ -25,7 +25,8 @@ type Format string
 
 const (
 	// FormatMarkdown is an Obsidian vault: a Markdown file per page, a folder beside it
-	// for its subpages, [[links]] between pages, a CSV and a table per database.
+	// for its subpages, [[links]] between pages, a CSV and a table per database, a JSON
+	// Canvas file (.canvas) per canvas.
 	FormatMarkdown Format = "markdown"
 	// FormatHTML is a standalone HTML file per page, linked to each other by relative paths.
 	FormatHTML Format = "html"
@@ -39,9 +40,10 @@ type ExportPage struct {
 	Title    string
 	Icon     string
 	BodyHTML string
-	// Kind is "page" or "database".
+	// Kind is "page", "database" or "canvas".
 	Kind      string
 	Database  *Database
+	Canvas    *Canvas
 	Props     map[string]any
 	Tags      []string
 	CreatedAt time.Time
@@ -134,11 +136,21 @@ func ExportZip(w io.Writer, pages []ExportPage, opt ExportOptions) error {
 func (e *exporter) place(ps []*exportPage, folder string) {
 	for _, p := range ps {
 		name := e.unique(folder, fileName(p.Title))
-		p.file = path.Join(folder, name+e.ext)
+		p.file = path.Join(folder, name+e.extOf(p.ExportPage))
 		p.folder = path.Join(folder, name)
 		e.place(p.kids, p.folder)
 	}
 }
+
+// extOf is a page's file extension: a canvas in a vault is a JSON Canvas file.
+func (e *exporter) extOf(p *ExportPage) string {
+	if isCanvas(p) && e.opt.Format == FormatMarkdown {
+		return ".canvas"
+	}
+	return e.ext
+}
+
+func isCanvas(p *ExportPage) bool { return p.Kind == "canvas" && p.Canvas != nil }
 
 func (e *exporter) unique(folder, name string) string {
 	try := name
@@ -166,7 +178,7 @@ func fileName(title string) string {
 }
 
 // links settles how [[ ]] names each page: its file name where that is the only one, else
-// its path in the vault.
+// its path in the vault; a canvas with its extension, as Obsidian names one.
 func (e *exporter) links(list []*exportPage) {
 	count := map[string]int{}
 	for _, p := range list {
@@ -178,6 +190,9 @@ func (e *exporter) links(list []*exportPage) {
 		} else {
 			p.link = p.folder
 		}
+		if ext := e.extOf(p.ExportPage); ext == ".canvas" {
+			p.link += ext
+		}
 	}
 }
 
@@ -187,12 +202,9 @@ func (e *exporter) create(name string) (io.Writer, error) {
 
 func (e *exporter) write(p *exportPage) error {
 	dir := path.Dir(p.file)
-	body := e.prepare(p.BodyHTML, dir)
-	var out string
-	if e.opt.Format == FormatHTML {
-		out = e.htmlPage(p, body, dir)
-	} else {
-		out = e.markdownPage(p, body)
+	out, err := e.render(p, dir)
+	if err != nil {
+		return err
 	}
 	w, err := e.create(p.file)
 	if err != nil {
@@ -209,6 +221,17 @@ func (e *exporter) write(p *exportPage) error {
 		return writeCSV(w, p, e)
 	}
 	return nil
+}
+
+// render is a page's file.
+func (e *exporter) render(p *exportPage, dir string) (string, error) {
+	switch {
+	case e.opt.Format == FormatHTML:
+		return e.htmlPage(p, e.prepare(p.BodyHTML, dir), dir), nil
+	case isCanvas(p.ExportPage):
+		return e.canvasJSON(p, dir)
+	}
+	return e.markdownPage(p, e.prepare(p.BodyHTML, dir)), nil
 }
 
 // prepare rewrites a body's links for the export: files it carries by relative path,
@@ -567,6 +590,9 @@ func (e *exporter) htmlPage(p *exportPage, body, dir string) string {
 	if p.Kind == "database" && p.Database != nil {
 		b.WriteString(e.htmlTable(p, dir))
 	}
+	if isCanvas(p.ExportPage) {
+		b.WriteString(e.htmlCanvas(p, dir))
+	}
 	b.WriteString("</div></article></body></html>\n")
 	return b.String()
 }
@@ -659,8 +685,8 @@ func orUntitled(s string) string {
 	return s
 }
 
-const pageCSS = `:root{color-scheme:light dark;--ink:#18181b;--muted:#71717a;--line:#e4e4e7;--soft:#f4f4f5}
-@media (prefers-color-scheme:dark){:root{--ink:#e4e4e7;--muted:#a1a1aa;--line:#3f3f46;--soft:#27272a}}
+const pageCSS = `:root{color-scheme:light dark;--ink:#18181b;--muted:#71717a;--line:#e4e4e7;--soft:#f4f4f5;--bg:#fff}
+@media (prefers-color-scheme:dark){:root{--ink:#e4e4e7;--muted:#a1a1aa;--line:#3f3f46;--soft:#27272a;--bg:#18181b}}
 body{margin:0;font:16px/1.6 Geist,ui-sans-serif,system-ui,sans-serif;color:var(--ink)}
 .page{max-width:760px;margin:0 auto;padding:48px 24px}
 .page-header-icon{font-size:48px;line-height:1}
@@ -687,14 +713,25 @@ details{margin:.5em 0}summary{cursor:pointer}
 div[data-type=block-math]{text-align:center;margin:1em 0}
 div[data-type=file],div[data-type=bookmark],div[data-type=embed]{border:1px solid var(--line);border-radius:6px;padding:10px 14px;margin:1em 0}
 video,audio{max-width:100%}
+.canvas-wrap{overflow:auto;margin:1em 0;border:1px solid var(--line);border-radius:6px;background:var(--soft)}
+.canvas{position:relative}.canvas>svg{position:absolute;left:0;top:0;overflow:visible}
+.card{position:absolute;box-sizing:border-box;overflow:auto;padding:8px 12px;border:1px solid var(--line);border-top:3px solid var(--tone,var(--line));border-radius:6px;background:var(--bg);font-size:14px;line-height:1.5}
+.card>:first-child{margin-top:0}.card>:last-child{margin-bottom:0}.card img{display:block;max-height:100%;margin:0 auto}
+.card.group{background:transparent;border:1.5px dashed var(--tone,var(--muted));overflow:visible}
+.group-label{position:absolute;top:-1.7em;left:0;font-size:13px;color:var(--muted)}
+.card-title{font-weight:500}.muted{color:var(--muted)}.edge-label{font-size:12px;fill:var(--ink)}
 [data-color=gray]{color:#71717a}[data-color=brown]{color:#a16207}[data-color=orange]{color:#ea580c}[data-color=yellow]{color:#ca8a04}[data-color=green]{color:#16a34a}[data-color=blue]{color:#2563eb}[data-color=purple]{color:#9333ea}[data-color=pink]{color:#db2777}[data-color=red]{color:#dc2626}
 [data-bg=gray]{background:#f4f4f5}[data-bg=brown]{background:#fef3c7}[data-bg=orange]{background:#ffedd5}[data-bg=yellow]{background:#fef9c3}[data-bg=green]{background:#dcfce7}[data-bg=blue]{background:#dbeafe}[data-bg=purple]{background:#f3e8ff}[data-bg=pink]{background:#fce7f3}[data-bg=red]{background:#fee2e2}
 `
 
-// ExportFileName is the file a single page exports to.
+// ExportFileName is the file a single page exports to: a canvas in Markdown is a JSON
+// Canvas file.
 func ExportFileName(page ExportPage, format Format) string {
-	if format == FormatHTML {
+	switch {
+	case format == FormatHTML:
 		return fileName(page.Title) + ".html"
+	case isCanvas(&page):
+		return fileName(page.Title) + ".canvas"
 	}
 	return fileName(page.Title) + ".md"
 }
@@ -706,16 +743,13 @@ func ExportFile(w io.Writer, page ExportPage, opt ExportOptions) error {
 	opt.Attachment = nil
 	e.opt = opt
 	p := &exportPage{ExportPage: &page, file: ExportFileName(page, opt.Format)}
-	body := e.prepare(page.BodyHTML, ".")
-	var out string
-	switch opt.Format {
-	case FormatHTML:
-		out = e.htmlPage(p, body, ".")
-	case FormatMarkdown:
-		out = e.markdownPage(p, body)
-	default:
+	if opt.Format != FormatHTML && opt.Format != FormatMarkdown {
 		return fmt.Errorf("wikiport: unknown format %q", opt.Format)
 	}
-	_, err := io.WriteString(w, out)
+	out, err := e.render(p, ".")
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(w, out)
 	return err
 }
