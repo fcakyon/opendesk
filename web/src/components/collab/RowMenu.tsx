@@ -5,7 +5,7 @@
 // or without Collab; with `enabled` false it holds the row's actions alone, and a row without
 // any is left as it is. Saved at once with PUT /v1/collab/sidebar.
 
-import { Ellipsis, EyeOff, PencilRuler, Pin, PinOff, Settings } from "lucide-react";
+import { Ellipsis, EyeOff, Pencil, PencilRuler, Pin, PinOff, Settings } from "lucide-react";
 import { forwardRef, useRef, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Slot } from "radix-ui";
@@ -37,7 +37,7 @@ import {
 } from "@/lib/collab/sidebarPrefs";
 import { sidebarEdit } from "@/lib/collab/sidebarEdit";
 import { AddToSidebar } from "./AddToSidebar";
-import type { OwnRow } from "@/lib/collab/ownSectionsUi";
+import { ownSectionsUi, type OwnRow } from "@/lib/collab/ownSectionsUi";
 import { canColor, LABEL_TONES, toneHex, toneOf, useSetLabelColor } from "./labelColor";
 
 export type RowMenuProps = {
@@ -53,6 +53,8 @@ export type RowMenuProps = {
   rail?: boolean;
   /** The row's name, for the ⋯ button's label. */
   label?: string;
+  /** The row's own name, before the member's (Rename in sidebar resets to it). */
+  ownName?: string;
   /** A Gmail label or Outlook category: its colour is chosen here too. */
   labelColor?: { folder: MailFolder; provider: string };
   /** What the row needs done first (an account to reconnect), on top of the menu. */
@@ -81,7 +83,7 @@ const contextParts: Parts = { context: true, Label: ContextMenuLabel, Choice: Co
 const dropdownParts: Parts = { context: false, Label: MenuLabel, Choice: MenuChoice, Item: MenuItem, Separator: MenuSeparator };
 
 /** Forwards props and ref to its one child, so it can sit inside the rail's tooltip. */
-export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ enabled, prefs, badge, pin, hideId, rail, label, labelColor, action, items, settings, children, ...rest }, ref) {
+export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ enabled, prefs, badge, pin, hideId, rail, label, ownName, labelColor, action, items, settings, children, ...rest }, ref) {
   const { t } = useTranslation("collab");
   const save = useSaveSidebarPrefs();
   const setColor = useSetLabelColor();
@@ -153,6 +155,11 @@ export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ 
           }}
         >
           {t("rowMenu.hide")}
+        </Item>
+      )}
+      {(hideId || pin) && (
+        <Item icon={<Pencil />} onSelect={() => ownSectionsUi.renameRow({ key: hideId ?? `${pin!.kind}:${pin!.id}`, fallback: ownName ?? label ?? "" })}>
+          {t("edit.renameInSidebar")}
         </Item>
       )}
       {(pin || hideId) && <Separator />}

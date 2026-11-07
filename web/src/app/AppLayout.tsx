@@ -286,7 +286,7 @@ export function AppLayout() {
   const collab = useCollab();
   const { tickets: ticketsOn } = useProducts();
   const spaceEditor = useSpaceUi((s) => !!s.editor);
-  const ownSectionPopup = useOwnSectionsUi((s) => !!s.naming || !!s.adding || !!s.addingToSpace);
+  const ownSectionPopup = useOwnSectionsUi((s) => !!s.naming || !!s.adding || !!s.addingToSpace || s.addingFavorites || !!s.renamingRow);
   const editingSidebar = useSidebarEdit((s) => s.editing);
   // Once loaded the add dialogs stay, so one closing plays its animation.
   const quickAddAsked = useQuickAdd(quickAddOpen);

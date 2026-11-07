@@ -855,7 +855,21 @@
     "hintTitle": "Faites de la barre latérale la vôtre",
     "hintBody": "Faites glisser sections et lignes, masquez ce qui ne vous sert pas et ajoutez vos propres sections.",
     "hintDismiss": "Ignorer",
-    "dropNew": "Déposez ici pour une nouvelle section"
+    "dropNew": "Déposez ici pour une nouvelle section",
+    "rowMenu": "Plus pour {{name}}",
+    "renameRow": "Renommer",
+    "pickIcon": "Changer l'icône",
+    "resetName": "Rétablir le nom et l'icône",
+    "moveToSection": "Ajouter à une section",
+    "show": "Afficher dans la barre latérale",
+    "renameInSidebar": "Renommer dans la barre latérale",
+    "renameTitle": "Renommer dans votre barre latérale",
+    "renameHint": "Vous seul voyez ce nom. {{name}} garde le sien pour les autres.",
+    "renameLabel": "Nom",
+    "renameSave": "Enregistrer",
+    "favoritesTitle": "Ajouter aux favoris",
+    "favoritesHint": "Les dossiers de la boîte de réception, équipes, vues, boîtes mail et pages peuvent être des favoris.",
+    "notFavorite": "Cet élément ne peut pas être un favori. Ajoutez-le plutôt à l'une de vos sections."
   },
   "layouts": {
     "title": "Partir d'une disposition",

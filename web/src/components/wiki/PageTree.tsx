@@ -4,6 +4,8 @@
 // each other, also into another space. Keyboard: arrows move through the rows (Right opens,
 // Left closes or goes up), Enter opens a page, Alt+arrows move the focused page.
 
+import { useSidebarPrefs } from "@/lib/collab/hooks";
+import { RowEmoji } from "@/components/spaces/rows";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRight, Columns2, Copy, EyeOff, FileText, FolderInput, LayoutDashboard, Link2, MoreHorizontal, Plus, Star, StarOff, Table2 } from "lucide-react";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
@@ -381,6 +383,10 @@ function TreeRow({
   const split = useSplit();
   const [menu, setMenu] = useState(false);
   const nav = variant === "nav";
+  // In the main sidebar the row wears the member's own name and emoji for it, if any (contracts/collab.md "Names and icons").
+  const sidebar = useSidebarPrefs();
+  const label = (nav && sidebar.names[`wiki_page:${n.id}`]) || title(n.title);
+  const glyph = nav ? sidebar.icons[`wiki_page:${n.id}`] : undefined;
   const indent = nav ? 8 + depth * 12 : 6 + depth * 14;
   // The buttons' hover, on the sidebar's grey or the wiki column's white.
   const tool = cn("flex size-5 items-center justify-center rounded-sm text-fg-3 hover:text-fg", nav ? "hover:bg-chrome-active" : "hover:bg-active");
@@ -442,12 +448,12 @@ function TreeRow({
             }}
             className="group/fold relative flex size-[15px] shrink-0 items-center justify-center rounded-sm text-fg-3 hover:text-fg"
           >
-            <PageIcon icon={n.icon} kind={n.kind} className="transition-opacity group-hover:opacity-0" />
+            {glyph ? <span className="transition-opacity group-hover:opacity-0"><RowEmoji emoji={glyph} /></span> : <PageIcon icon={n.icon} kind={n.kind} className="transition-opacity group-hover:opacity-0" />}
             <ChevronRight className={cn("absolute size-3.5 opacity-0 transition-[transform,opacity] duration-150 group-hover:opacity-100 motion-reduce:transition-none", open && "rotate-90")} />
           </button>
         ) : (
           <span className="flex size-[15px] shrink-0 items-center justify-center">
-            <PageIcon icon={n.icon} kind={n.kind} />
+            {glyph ? <RowEmoji emoji={glyph} /> : <PageIcon icon={n.icon} kind={n.kind} />}
           </span>
         )
       ) : (
@@ -474,7 +480,7 @@ function TreeRow({
         }}
         className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch outline-none">
         {!nav && <PageIcon icon={n.icon} kind={n.kind} />}
-        <span className={cn("truncate", !n.title.trim() && "text-fg-3")}>{title(n.title)}</span>
+        <span className={cn("truncate", !n.title.trim() && !sidebar.names[`wiki_page:${n.id}`] && "text-fg-3")}>{label}</span>
         {n.verified && <VerifiedMark />}
       </Link>
       {/* In the main sidebar the tools take no room until wanted, so titles keep the row's width. */}

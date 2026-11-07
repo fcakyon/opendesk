@@ -10,6 +10,8 @@ import { AnimatedNumber } from "@/components/motion";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
 import { tone, toneFor } from "@/lib/tones";
+import { useSidebarPrefs } from "@/lib/collab/hooks";
+import { iconOf, nameOf, SECTION_IDS } from "@/lib/collab/sidebarPrefs";
 
 // The two row shapes share one element so the icon never moves while the label
 // fades and the column narrows.
@@ -150,6 +152,11 @@ export function Section({
   children: ReactNode;
 }) {
   const mark = useContext(SectionMarkCtx);
+  // A built-in section shows the member's own name and emoji for it (contracts/collab.md "Names and icons").
+  const prefs = useSidebarPrefs();
+  const builtin = (SECTION_IDS as readonly string[]).includes(id);
+  const title = builtin ? nameOf(prefs, `section:${id}`, label) : label;
+  const emoji = icon ?? (builtin ? iconOf(prefs, `section:${id}`) : undefined);
   const key = `od-nav-fold-${id}`;
   const [foldedHere, setFolded] = useState(() => {
     try {
@@ -178,8 +185,8 @@ export function Section({
             onClick={toggle}
             className="label-caps flex min-w-0 flex-1 items-center gap-1 text-left outline-none transition-colors hover:text-fg-2 focus-visible:text-fg"
           >
-            {icon && <span aria-hidden className="text-[11px] normal-case leading-none tracking-normal">{icon}</span>}
-            <span className="truncate">{label}</span>
+            {emoji && <span aria-hidden className="text-[11px] normal-case leading-none tracking-normal">{emoji}</span>}
+            <span className="truncate">{title}</span>
             {mark && <span className="ml-0.5 flex shrink-0 normal-case tracking-normal">{mark}</span>}
             <ChevronDown
               aria-hidden

@@ -7,7 +7,7 @@
 // With a Space picked, the same mode edits that Space's sections and rows.
 
 import { motion, useReducedMotion } from "motion/react";
-import { Copy, Ellipsis, Eye, EyeOff, GripVertical, LayoutTemplate, ListTree, Plus, RotateCcw, Settings2, SlidersHorizontal, SmilePlus, Trash2, X } from "lucide-react";
+import { Copy, Ellipsis, Eye, EyeOff, FolderInput, GripVertical, Hash, LayoutTemplate, ListTree, Pencil, Pin, PinOff, Plus, RotateCcw, Settings2, SlidersHorizontal, SmilePlus, Trash2, X } from "lucide-react";
 import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -17,7 +17,7 @@ import { SpaceGlyph } from "@/components/spaces/icons";
 import { useSpaceActions } from "@/components/spaces/actions";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuTrigger } from "@/components/ui/menu";
+import { Menu, MenuChoice, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuTrigger } from "@/components/ui/menu";
 import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
 import { IconPicker } from "@/components/wiki/IconPicker";
@@ -27,13 +27,13 @@ import type { SidebarPin, SidebarPrefs, SidebarSectionId, Space, SpaceItem } fro
 import { cn } from "@/lib/cn";
 import { useCollab } from "@/lib/collab/hooks";
 import { copySpaceSections } from "@/lib/collab/copySpace";
-import { asSpace, entryKey, newOwnSection, OWN_LIMITS, sidebarEntries, withSpace, type SidebarEntry } from "@/lib/collab/ownSections";
-import { ownSectionsUi } from "@/lib/collab/ownSectionsUi";
+import { asSpace, entryKey, newOwnSection, OWN_LIMITS, sectionOf, sidebarEntries, toggleInSection, withSpace, type SidebarEntry } from "@/lib/collab/ownSections";
+import { ownSectionsUi, type OwnRow } from "@/lib/collab/ownSectionsUi";
 import { applyRowOrder, isOrdered } from "@/lib/collab/rowOrder";
 import { canDrop, dropInSpace, dropOnSidebar, FAVORITES, pinKey, starKey, type EditSource, type EditTarget } from "@/lib/collab/sidebarEditModel";
 import { sidebarEdit } from "@/lib/collab/sidebarEdit";
 import { resetPrefs } from "@/lib/collab/layouts";
-import { hid, isHidden, sectionsOffered, setHidden, togglePin } from "@/lib/collab/sidebarPrefs";
+import { badgeChoices, badgeFor, badgeWord, hid, isHidden, isPinned, nameOf, sectionKey, sectionsOffered, setBadge, setHidden, setIcon, setName, togglePin } from "@/lib/collab/sidebarPrefs";
 import { collabUi } from "@/lib/collab/ui";
 import { useProducts } from "@/lib/products";
 import { useSession } from "@/lib/session";
@@ -42,7 +42,7 @@ import { addSection, isEverywhere, isSectionId, itemKey, pickedSpace, removeItem
 import { spaceUi, usePickedSpaceId } from "@/lib/spaces/store";
 import { useOwnSidebar } from "./AddToSidebar";
 import { layoutsUi } from "./LayoutsDialog";
-import { ownRowOf, useSidebarItems, type Item } from "./sidebarItems";
+import { ownRowOf, useSidebarItems, type Item, type ItemBadge } from "./sidebarItems";
 import { useEditDrag } from "./useEditDrag";
 
 // ─── Parts ──────────────────────────────────────────────────────────────────
@@ -103,7 +103,7 @@ function InlineName({ value, placeholder, label, editing, onEditing, onSave, cla
           setDraft(value);
           onEditing(true);
         }}
-        className={cn("min-w-0 flex-1 truncate rounded px-1 py-0.5 text-left outline-none transition-colors hover:bg-chrome-hover focus-visible:shadow-[0_0_0_2px_var(--focus)]", className)}
+        className={cn("min-w-0 flex-1 cursor-text truncate rounded px-1 py-0.5 text-left outline-none transition-colors hover:bg-chrome-hover hover:shadow-[inset_0_0_0_1px_var(--line)] focus-visible:shadow-[0_0_0_2px_var(--focus)]", className)}
       >
         {value || placeholder}
       </button>
@@ -138,8 +138,10 @@ function InlineName({ value, placeholder, label, editing, onEditing, onSave, cla
 }
 
 /** The emoji slot of an own section or row: its emoji, or its own icon (a quiet smiley for a section), and the picker on click. */
-function EmojiSlot({ value, fallback, label, onChange }: { value?: string; fallback?: ReactNode; label: string; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(false);
+function EmojiSlot({ value, fallback, label, onChange, open: openProp, onOpenChange }: { value?: string; fallback?: ReactNode; label: string; onChange: (v: string) => void; open?: boolean; onOpenChange?: (o: boolean) => void }) {
+  const [openHere, setOpenHere] = useState(false);
+  const open = openProp ?? openHere;
+  const setOpen = onOpenChange ?? setOpenHere;
   return (
     <IconPicker
       value={value ?? ""}
@@ -170,7 +172,10 @@ type RowView = {
   header?: boolean;
   source?: EditSource;
   /** Its own name and emoji, in a section of the member's own or a Space. */
+  /** Its name and emoji of the member's own: every row has them, a built-in one in `names` and `icons`. */
   own?: { name?: string; emoji?: string; fallbackIcon: ReactNode; onRename: (v: string) => void; onEmoji: (v: string) => void };
+  /** The row's ⋯ menu in edit mode. */
+  menu?: (start: { rename: () => void; icon: () => void }) => ReactNode;
   onHide?: () => void;
   onRemove?: { label: string; run: () => void; icon?: ReactNode };
 };
@@ -180,7 +185,8 @@ type BlockView = {
   label: string;
   hidden?: boolean;
   rows: RowView[];
-  own?: { emoji?: string; onRename: (v: string) => void; onEmoji: (v: string) => void; onDelete: () => void; onAdd: () => void };
+  /** Its name and emoji: the member's own section's, or the member's own for a built-in one. */
+  own?: { emoji?: string; placeholder?: string; onRename: (v: string) => void; onEmoji: (v: string) => void; onDelete?: () => void; onAdd?: () => void };
   onHide?: () => void;
   empty?: string;
 };
@@ -194,7 +200,11 @@ function EditList({
   step,
   renaming,
   setRenaming,
+  picking,
+  setPicking,
 }: {
+  picking: string | null;
+  setPicking: (k: string | null) => void;
   blocks: BlockView[];
   rootRef: React.RefObject<HTMLDivElement | null>;
   drag: ReturnType<typeof useEditDrag<EditSource>>["drag"];
@@ -226,11 +236,11 @@ function EditList({
             >
               <div data-edit-head="" className={cn("group/head mx-2.5 flex h-7 items-center gap-1 pl-0.5 pr-1", b.hidden && "opacity-50")}>
                 <Handle label={t("edit.move", { name: b.label })} props={handle(sectionSource, b.label)} onStep={(dir) => step(sectionSource, dir)} />
-                {b.own && <EmojiSlot value={b.own.emoji} label={t("edit.icon", { name: b.label })} onChange={b.own.onEmoji} />}
+                {b.own && <EmojiSlot value={b.own.emoji} label={t("edit.icon", { name: b.label })} onChange={b.own.onEmoji} open={picking === b.key} onOpenChange={(o) => setPicking(o ? b.key : null)} />}
                 {b.own ? (
                   <InlineName
                     value={b.label}
-                    placeholder={t("ownSections.untitled")}
+                    placeholder={b.own.placeholder ?? t("ownSections.untitled")}
                     label={t("edit.rename", { name: b.label })}
                     editing={renaming === b.key}
                     onEditing={(on) => setRenaming(on ? b.key : null)}
@@ -241,7 +251,7 @@ function EditList({
                   <span className="label-caps min-w-0 flex-1 truncate px-1">{b.label}</span>
                 )}
                 {b.onHide && <EyeToggle hidden={!!b.hidden} name={b.label} onToggle={b.onHide} />}
-                {b.own && <RemoveButton label={t("ownSections.delete")} icon={<Trash2 />} onClick={b.own.onDelete} />}
+                {b.own?.onDelete && <RemoveButton label={t("ownSections.delete")} icon={<Trash2 />} onClick={b.own.onDelete} />}
               </div>
               {!b.hidden && (
                 <div className="flex flex-col gap-px">
@@ -257,7 +267,14 @@ function EditList({
                         >
                           {r.source ? <Handle label={t("edit.move", { name: r.label })} props={handle(r.source, r.label)} onStep={(dir) => step(r.source!, dir)} /> : <span aria-hidden className="w-4 shrink-0" />}
                           {r.own ? (
-                            <EmojiSlot value={r.own.emoji} fallback={r.own.fallbackIcon} label={t("edit.icon", { name: r.label })} onChange={r.own.onEmoji} />
+                            <EmojiSlot
+                              value={r.own.emoji}
+                              fallback={r.own.fallbackIcon}
+                              label={t("edit.icon", { name: r.label })}
+                              onChange={r.own.onEmoji}
+                              open={picking === `${b.key}|${r.key}`}
+                              onOpenChange={(o) => setPicking(o ? `${b.key}|${r.key}` : null)}
+                            />
                           ) : (
                             <span className={cn("flex size-5 shrink-0 items-center justify-center text-fg-3 [&_svg]:size-[15px]", r.header && "text-fg-4")}>{r.icon}</span>
                           )}
@@ -265,7 +282,7 @@ function EditList({
                             <InlineName
                               value={r.own.name || r.label}
                               placeholder={r.label}
-                              label={t("edit.rename", { name: r.label })}
+                              label={t("edit.rename", { name: r.own.name || r.label })}
                               editing={renaming === `${b.key}|${r.key}`}
                               onEditing={(on) => setRenaming(on ? `${b.key}|${r.key}` : null)}
                               onSave={r.own.onRename}
@@ -273,6 +290,20 @@ function EditList({
                             />
                           ) : (
                             <span className={cn("min-w-0 flex-1 truncate px-1", r.header ? "text-[11.5px] text-fg-4" : "text-fg-2")}>{r.label}</span>
+                          )}
+                          {r.menu && (
+                            <Menu>
+                              <Tooltip content={t("edit.rowMenu", { name: r.own?.name || r.label })}>
+                                <MenuTrigger asChild>
+                                  <button type="button" aria-label={t("edit.rowMenu", { name: r.own?.name || r.label })} className={cn(tool, "data-[state=open]:bg-chrome-hover data-[state=open]:text-fg")}>
+                                    <Ellipsis />
+                                  </button>
+                                </MenuTrigger>
+                              </Tooltip>
+                              <MenuContent align="end" className="w-[210px]">
+                                {r.menu({ rename: () => setRenaming(`${b.key}|${r.key}`), icon: () => setTimeout(() => setPicking(`${b.key}|${r.key}`), 0) })}
+                              </MenuContent>
+                            </Menu>
                           )}
                           {r.onHide && <EyeToggle hidden={!!r.hidden} name={r.label} onToggle={r.onHide} />}
                           {r.onRemove && <RemoveButton label={r.onRemove.label} icon={r.onRemove.icon} onClick={r.onRemove.run} />}
@@ -282,7 +313,7 @@ function EditList({
                   })}
                   {lineBeforeRow(b.key, null) && <Line />}
                   {!b.rows.length && b.empty && <p className="mx-2.5 flex h-7 items-center px-6 text-[12px] text-fg-4">{b.empty}</p>}
-                  {b.own && (
+                  {b.own?.onAdd && (
                     <button type="button" onClick={b.own.onAdd} className={cn(rowCls, "w-[calc(100%-1.25rem)] gap-2 pl-6 text-fg-4 outline-none hover:bg-chrome-hover hover:text-fg-2 focus-visible:shadow-[0_0_0_2px_var(--focus)] [&>svg]:size-3.5")}>
                       <Plus />
                       <span>{t("edit.add")}</span>
@@ -358,6 +389,7 @@ function WorkspaceEditor() {
   const { spaces } = useSpaces();
   const rootRef = useRef<HTMLDivElement>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [picking, setPicking] = useState<string | null>(null);
 
   // Saves, and offers the way back for what takes something away.
   const undoable = (next: SidebarPrefs, message: string) => {
@@ -376,34 +408,109 @@ function WorkspaceEditor() {
     return (d && buildRow({ kind: p.kind, id: p.id }, d, { labels })?.icon) ?? null;
   };
 
+  // Every row's name and emoji of the member's own (contracts/collab.md "Names and icons"): an empty name resets it.
+  const ownLabel = (key: string, fallbackIcon: ReactNode) => ({
+    name: prefs.names[key],
+    emoji: prefs.icons[key],
+    fallbackIcon,
+    onRename: (v: string) => change(setName(prefs, key, v)),
+    onEmoji: (v: string) => change(setIcon(prefs, key, v)),
+  });
+  // A row's ⋯ menu in edit mode: rename, icon, number, hide, favorite, a section of the member's own, remove.
+  const rowMenu =
+    (o: { key: string; label: string; hideId?: string; pin?: SidebarPin; row?: OwnRow | null; badge?: ItemBadge; remove?: { label: string; run: () => void } }) =>
+    ({ rename, icon }: { rename: () => void; icon: () => void }) => {
+      const hidden = o.hideId ? isHidden(prefs, o.hideId) : false;
+      const where = o.row ? sectionOf(prefs, wid, o.row) : null;
+      return (
+        <>
+          <MenuItem icon={<Pencil />} onSelect={rename}>
+            {t("edit.renameRow")}
+          </MenuItem>
+          <MenuItem icon={<SmilePlus />} onSelect={icon}>
+            {t("edit.pickIcon")}
+          </MenuItem>
+          {(prefs.names[o.key] || prefs.icons[o.key]) && (
+            <MenuItem icon={<RotateCcw />} onSelect={() => change(setIcon(setName(prefs, o.key, ""), o.key, ""))}>
+              {t("edit.resetName")}
+            </MenuItem>
+          )}
+          {o.badge && (
+            <MenuSub icon={<Hash />} label={t("rowMenu.number")}>
+              {badgeChoices(o.badge.kind).map((v) => (
+                <MenuChoice key={v} checked={badgeFor(prefs, o.badge!.key, o.badge!.sections, o.badge!.kind) === v} onSelect={() => change(setBadge(prefs, o.badge!.key, v))}>
+                  {v === "none" ? t("rowMenu.hideNumber") : t(`customize.badge.${badgeWord(v, o.badge!.kind)}`)}
+                </MenuChoice>
+              ))}
+            </MenuSub>
+          )}
+          <MenuSeparator />
+          {o.pin && o.pin.kind !== "view_section" && (
+            <MenuItem icon={isPinned(prefs, o.pin) ? <PinOff /> : <Pin />} onSelect={() => change(togglePin(prefs, o.pin!))}>
+              {isPinned(prefs, o.pin) ? t("rowMenu.unpin") : t("rowMenu.pin")}
+            </MenuItem>
+          )}
+          {o.row && (
+            <MenuSub icon={<FolderInput />} label={t("edit.moveToSection")}>
+              {prefs.sections.map((sec) => (
+                <MenuChoice key={sec.id} checked={where?.id === sec.id} onSelect={() => change(toggleInSection(prefs, wid, sec.id, o.row!))}>
+                  {sec.title || t("ownSections.untitled")}
+                </MenuChoice>
+              ))}
+              {prefs.sections.length > 0 && <MenuSeparator />}
+              <MenuItem icon={<Plus />} onSelect={() => change(newOwnSection(prefs, wid, o.label.slice(0, OWN_LIMITS.title), o.row!).prefs)}>
+                {t("ownSections.newSection")}
+              </MenuItem>
+            </MenuSub>
+          )}
+          {o.hideId && (
+            <MenuItem icon={hidden ? <Eye /> : <EyeOff />} onSelect={() => (hidden ? change(setHidden(prefs, o.hideId!, false)) : undoable(setHidden(prefs, o.hideId!, true), t("edit.hidden", { name: o.label })))}>
+              {hidden ? t("edit.show") : t("rowMenu.hide")}
+            </MenuItem>
+          )}
+          {o.remove && (
+            <MenuItem icon={<X />} onSelect={o.remove.run}>
+              {o.remove.label}
+            </MenuItem>
+          )}
+        </>
+      );
+    };
+
   // The rows of a built-in section as the sidebar shows them, in the member's order.
   const builtinRows = (id: SidebarSectionId): RowView[] => {
     if (id === "favorites") {
       const pins = prefs.pinned.filter((p) => pinLabel(p)).map((p): RowView => {
         const label = pinLabel(p) ?? "";
         const row = ownRowOf({ pin: p });
+        const remove = { label: t("customize.unpin", { name: label }), run: () => undoable(togglePin(prefs, p), t("edit.unpinned", { name: label })) };
         return {
           key: pinKey(p),
           label,
           icon: pinIcon(p),
+          own: ownLabel(pinKey(p), pinIcon(p)),
+          menu: rowMenu({ key: pinKey(p), label, row, remove }),
           source: { kind: "row", from: FAVORITES, key: pinKey(p), pin: p, row: row ?? undefined },
-          onRemove: { label: t("customize.unpin", { name: label }), run: () => undoable(togglePin(prefs, p), t("edit.unpinned", { name: label })) },
+          onRemove: remove,
         };
       });
       const stars = fav.list.map((n): RowView => {
         const label = n.title.trim() || labels.untitled;
+        const remove = {
+          label: t("edit.unstar", { name: label }),
+          run: () => {
+            fav.toggle(n);
+            toast.undo(t("edit.unpinned", { name: label }), () => fav.toggle(n), t("edit.undo"));
+          },
+        };
         return {
           key: starKey(n.id),
           label,
           icon: <PageIcon icon={n.icon} kind={n.kind} />,
+          own: ownLabel(hid.wikiPage(n.id), <PageIcon icon={n.icon} kind={n.kind} />),
+          menu: rowMenu({ key: hid.wikiPage(n.id), label, row: { kind: "wiki_page", id: n.id }, remove }),
           source: { kind: "row", from: FAVORITES, key: starKey(n.id), page: n.id, row: { kind: "wiki_page", id: n.id } },
-          onRemove: {
-            label: t("edit.unstar", { name: label }),
-            run: () => {
-              fav.toggle(n);
-              toast.undo(t("edit.unpinned", { name: label }), () => fav.toggle(n), t("edit.undo"));
-            },
-          },
+          onRemove: remove,
         };
       });
       return [...pins, ...stars];
@@ -429,6 +536,8 @@ function WorkspaceEditor() {
         key,
         label: x.label,
         icon: model?.icon ?? x.icon,
+        own: header ? undefined : ownLabel(key, model?.icon ?? x.icon),
+        menu: header ? undefined : rowMenu({ key, label: nameOf(prefs, key, x.label), hideId: x.hideId, pin: x.pin, row, badge: x.badge }),
         depth: x.depth,
         hidden,
         header,
@@ -461,6 +570,7 @@ function WorkspaceEditor() {
             onRename: (v) => save(updateItem(space, key, { name: !v || v === model.label ? null : v })),
             onEmoji: (v) => save(updateItem(space, key, { icon: v || null })),
           },
+          menu: rowMenu({ key, label, row: { kind: item.kind, id: item.id }, remove: { label: t("edit.remove", { name: label }), run: () => undoable(withSpace(prefs, removeItem(space, key)), t("edit.removed", { name: label })) } }),
           onRemove: { label: t("edit.remove", { name: label }), run: () => undoable(withSpace(prefs, removeItem(space, key)), t("edit.removed", { name: label })) },
         },
       ];
@@ -483,12 +593,20 @@ function WorkspaceEditor() {
   const blocks: BlockView[] = entries.map((e) => {
     if (e.kind === "custom") return ownBlock(e);
     const hidden = isHidden(prefs, hid.section(e.id));
+    const sk = sectionKey(e.id);
     return {
       key: e.id,
-      label: name(e.id),
+      label: nameOf(prefs, sk, name(e.id)),
       hidden,
       rows: builtinRows(e.id),
       empty: e.id === "favorites" ? t("edit.emptyFavorites") : undefined,
+      own: {
+        emoji: prefs.icons[sk],
+        placeholder: name(e.id),
+        onRename: (v: string) => change(setName(prefs, sk, v === name(e.id) ? "" : v)),
+        onEmoji: (v: string) => change(setIcon(prefs, sk, v)),
+        onAdd: e.id === "favorites" ? () => ownSectionsUi.addFavorites() : undefined,
+      },
       onHide: () => (hidden ? change(setHidden(prefs, hid.section(e.id), false)) : undoable(setHidden(prefs, hid.section(e.id), true), t("edit.hidden", { name: name(e.id) }))),
     };
   });
@@ -584,7 +702,7 @@ function WorkspaceEditor() {
   return (
     <>
       <EditBar title={t("edit.title")} menu={menu} onReset={reset} />
-      <EditList blocks={blocks} rootRef={rootRef} drag={drag} target={target} handle={handle} step={step} renaming={renaming} setRenaming={setRenaming} />
+      <EditList blocks={blocks} rootRef={rootRef} drag={drag} target={target} handle={handle} step={step} renaming={renaming} setRenaming={setRenaming} picking={picking} setPicking={setPicking} />
       <button type="button" onClick={newSection} className={cn(rowCls, "mt-3 w-[calc(100%-1.25rem)] gap-2 pl-1.5 text-fg-3 outline-none hover:bg-chrome-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)] [&>svg]:size-3.5")}>
         <Plus />
         <span>{t("edit.newSection")}</span>
@@ -609,6 +727,7 @@ function SpaceEditor({ spaces, space }: { spaces: Space[]; space: Space }) {
   const data = useWorkspacesData(wids, { folders: () => true, wiki: () => true });
   const rootRef = useRef<HTMLDivElement>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [picking, setPicking] = useState<string | null>(null);
   const save = (next: Space) => actions.put(replaceSpace(spaces, next));
   const undoable = (next: Space, message: string) => {
     const before = space;
@@ -704,7 +823,7 @@ function SpaceEditor({ spaces, space }: { spaces: Space[]; space: Space }) {
         }
         menu={menu}
       />
-      <EditList blocks={blocks} rootRef={rootRef} drag={drag} target={target} handle={handle} step={step} renaming={renaming} setRenaming={setRenaming} />
+      <EditList blocks={blocks} rootRef={rootRef} drag={drag} target={target} handle={handle} step={step} renaming={renaming} setRenaming={setRenaming} picking={picking} setPicking={setPicking} />
       <button type="button" onClick={newSection} className={cn(rowCls, "mt-3 w-[calc(100%-1.25rem)] gap-2 pl-1.5 text-fg-3 outline-none hover:bg-chrome-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)] [&>svg]:size-3.5")}>
         <Plus />
         <span>{t("edit.newSection")}</span>

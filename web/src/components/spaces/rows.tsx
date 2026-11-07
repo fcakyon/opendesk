@@ -540,7 +540,9 @@ export function NavItemRow({
   const { t } = useTranslation("shell");
   const who = useOpener();
   const target = rowTarget(model.link);
-  const name = label || model.label;
+  // The person's own name and emoji: the row's in its section first, then the sidebar's for that row.
+  const name = label || prefs.names[model.key] || model.label;
+  const glyph = emoji ?? prefs.icons[model.key];
   const { n, choice } = rowNumber(model, prefs, own);
   // Mail and team rows show a number above zero; inbox folders and views show their count, zero too.
   const count = n !== undefined && (model.badge?.kind === "ticket" || n > 0) ? n : undefined;
@@ -559,7 +561,7 @@ export function NavItemRow({
       {(active) => (
         <>
           {active && <ActivePill />}
-          {emoji ? <RowEmoji emoji={emoji} /> : model.icon}
+          {glyph ? <RowEmoji emoji={glyph} /> : model.icon}
           <Label rail={rail}>
             <span className="flex min-w-0 items-center gap-1">
               <span className="truncate">{name}</span>

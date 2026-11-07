@@ -13,14 +13,14 @@ import { Fragment, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivePill, Count, givesWay, Label, markOpener, NavTip, rowActive, rowBase, rowIdle, rowShape, Section, useOpener } from "@/app/sidebarParts";
 import { useFoldedSections, useOpenView, ViewSectionGroup } from "@/app/ViewSectionGroup";
-import { buildRow, NavItemRow, rowNumber, useMailLocation, useRowLabels, type MailHere, type RowModel } from "@/components/spaces/rows";
+import { buildRow, NavItemRow, RowEmoji, rowNumber, useMailLocation, useRowLabels, type MailHere, type RowModel } from "@/components/spaces/rows";
 import { useWaitingFor } from "@/components/tickets/useUrgentChats";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { MailAccount, MailBox, MailCounts, MailFolder, SidebarPin, SidebarPrefs, SidebarSectionId, View } from "@/lib/api/types";
 import { accountAssignedNumbers, accountNumbers, allInboxNumbers, folderNumbers, listBoxNumbers, type RowNumbers } from "@/lib/collab/badges";
 import { ACCOUNT_BOXES, accountName, buildFolderTree, flattenTree, folderWithRole } from "@/lib/collab/boxes";
 import { useAllFolders, useMailAccounts, useSaveSidebarPrefs } from "@/lib/collab/hooks";
-import { badgeFor, hid, livePins, pickCount, toggleExpanded, type MailBadge } from "@/lib/collab/sidebarPrefs";
+import { badgeFor, hid, iconOf, livePins, nameOf, pickCount, toggleExpanded, type MailBadge } from "@/lib/collab/sidebarPrefs";
 import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
 import { useOpenWorkspaceData } from "@/lib/spaces/hooks";
@@ -79,6 +79,10 @@ function MailRow({
   menu?: Menu;
 }) {
   const count = shown?.count;
+  // The member's own name and emoji for the row (contracts/collab.md "Names and icons").
+  const rowKey = menu?.hideId ?? "";
+  const name = rowKey ? nameOf(prefs, rowKey, label) : label;
+  const glyph = rowKey ? iconOf(prefs, rowKey) : undefined;
   // Pinned to Favorites as well, the row clicked lights up alone (app/sidebarParts.tsx).
   const who = useOpener();
   const target = `mail:${link.box}:${link.account ?? ""}:${link.folder ?? ""}`;
@@ -86,7 +90,7 @@ function MailRow({
   // The menu lists what each choice would show.
   const withNums: Menu | undefined = menu?.badge && shown?.nums ? { ...menu, badge: { ...menu.badge, numbers: shown.nums } } : menu;
   return (
-    <NavTip rail={rail} label={label}>
+    <NavTip rail={rail} label={name}>
       <RowMenu enabled={!!menu} prefs={prefs} rail={rail} label={label} {...withNums}>
       <Link
         to="/mail/$box/{-$threadId}"
@@ -101,8 +105,8 @@ function MailRow({
         style={!rail && depth ? { paddingLeft: `${8 + depth * 14}px` } : undefined}
       >
         {lit && <ActivePill />}
-        {icon}
-        <Label rail={rail}>{label}</Label>
+        {glyph ? <RowEmoji emoji={glyph} /> : icon}
+        <Label rail={rail}>{name}</Label>
         {!rail && tag}
         {end}
         {!end && count !== undefined && count > 0 && <Count n={count} rail={rail} />}

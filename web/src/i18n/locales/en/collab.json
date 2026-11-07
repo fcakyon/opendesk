@@ -955,7 +955,21 @@
     "hintTitle": "Make the sidebar yours",
     "hintBody": "Drag sections and rows, hide what you don't use and add sections of your own.",
     "hintDismiss": "Dismiss",
-    "dropNew": "Drop here for a new section"
+    "dropNew": "Drop here for a new section",
+    "rowMenu": "More for {{name}}",
+    "renameRow": "Rename",
+    "pickIcon": "Change icon",
+    "resetName": "Reset name and icon",
+    "moveToSection": "Add to a section",
+    "show": "Show in sidebar",
+    "renameInSidebar": "Rename in sidebar",
+    "renameTitle": "Rename in your sidebar",
+    "renameHint": "Only you see this name. {{name}} keeps its own for everyone else.",
+    "renameLabel": "Name",
+    "renameSave": "Save",
+    "favoritesTitle": "Add to favorites",
+    "favoritesHint": "Inbox folders, teams, views, mail boxes and pages can be favorites.",
+    "notFavorite": "This can't be a favorite. Add it to a section of your own instead."
   },
   "layouts": {
     "title": "Start from a layout",

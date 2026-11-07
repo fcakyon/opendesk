@@ -3392,6 +3392,10 @@ export type SidebarPrefs = {
   sections: SidebarSection[];
   /** The member's order of a built-in section's rows ("inbox", "mail", "teams", "workspace"), as row keys spelled like `hidden`'s. Default {}. */
   row_order: Record<string, string[]>;
+  /** The member's own labels: "section:<id>" for a built-in section, a row key as in `hidden`. Default {}. */
+  names: Record<string, string>;
+  /** The member's own emoji, keyed like `names`. Default {}. */
+  icons: Record<string, string>;
 };
 
 /** A row of a member's own section: a Space row of this workspace. */

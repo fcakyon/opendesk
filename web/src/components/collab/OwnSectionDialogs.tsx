@@ -11,7 +11,10 @@ import { Dialog } from "@/components/ui/dialog";
 import { Field, TextInput } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
 import { asSpace, hasRoom, newOwnSection, OWN_LIMITS, sectionOf, toggleInSection, withSpace } from "@/lib/collab/ownSections";
-import { ownSectionsUi, useOwnSectionsUi, type Naming, type SpaceAdding } from "@/lib/collab/ownSectionsUi";
+import { ownSectionsUi, useOwnSectionsUi, type Naming, type RenamingRow, type SpaceAdding } from "@/lib/collab/ownSectionsUi";
+import { useFavorites } from "@/components/wiki/hooks";
+import type { SidebarPin, SpaceItem } from "@/lib/api/types";
+import { isPinned, MAX_PINS, setName, togglePin } from "@/lib/collab/sidebarPrefs";
 import { useSpaceActions } from "@/components/spaces/actions";
 import { useSession } from "@/lib/session";
 import { useSpaces, useWorkspacesData } from "@/lib/spaces/hooks";
@@ -171,10 +174,115 @@ function AddToSpaceDialog({ spaceId, sectionId }: SpaceAdding) {
   );
 }
 
+/** Names a row in the member's sidebar: their own label, which nobody else sees; empty goes back to its own name. */
+function RenameRowDialog({ row }: { row: RenamingRow }) {
+  const { t } = useTranslation("collab");
+  const { t: ui } = useTranslation("ui");
+  const { prefs, change } = useOwnSidebar();
+  const [name, setNameValue] = useState(prefs.names[row.key] ?? row.fallback);
+  const submit = () => {
+    change(setName(prefs, row.key, name.trim() === row.fallback ? "" : name));
+    ownSectionsUi.close();
+  };
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => !o && ownSectionsUi.close()}
+      size="sm"
+      title={t("edit.renameTitle")}
+      description={t("edit.renameHint", { name: row.fallback })}
+      footer={
+        <>
+          {prefs.names[row.key] && (
+            <Button variant="ghost" className="mr-auto" onClick={() => (change(setName(prefs, row.key, "")), ownSectionsUi.close())}>
+              {t("edit.resetName")}
+            </Button>
+          )}
+          <Button variant="ghost" onClick={() => ownSectionsUi.close()}>
+            {ui("cancel")}
+          </Button>
+          <Button variant="primary" onClick={submit}>
+            {t("edit.renameSave")}
+          </Button>
+        </>
+      }
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <Field label={t("edit.renameLabel")}>
+          {(f) => <TextInput {...f} autoFocus value={name} maxLength={64} placeholder={row.fallback} onChange={(e) => setNameValue(e.target.value)} onFocus={(e) => e.currentTarget.select()} />}
+        </Field>
+      </form>
+    </Dialog>
+  );
+}
+
+/** "+ Add" under Favorites: what the workspace offers that can be a favorite, checked when it is. */
+function AddFavoritesDialog() {
+  const { t } = useTranslation("collab");
+  const { prefs, wid, change } = useOwnSidebar();
+  const labels = useRowLabels();
+  const fav = useFavorites();
+  const memberships = useSession((s) => s.memberships);
+  const ws = memberships.find((m) => m.workspace.id === wid)?.workspace;
+  const data = useWorkspacesData(wid ? [wid] : [], { folders: () => true, wiki: () => true });
+  if (!ws) return null;
+  const items: SpaceItem[] = [
+    ...prefs.pinned.filter((p) => p.kind !== "view_section").map((p) => ({ workspace_id: wid, kind: p.kind as SpaceItem["kind"], id: p.id })),
+    ...fav.list.map((n) => ({ workspace_id: wid, kind: "wiki_page" as const, id: n.id })),
+  ];
+  const space = { id: "favorites", name: "", icon: "", color: "grey" as const, marks: false, sections: [{ id: "favorites", title: "", collapsed: false, items }] };
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => !o && ownSectionsUi.close()}
+      size="md"
+      title={t("edit.favoritesTitle")}
+      description={t("edit.favoritesHint")}
+      footer={
+        <Button variant="primary" onClick={() => ownSectionsUi.close()}>
+          {t("ownSections.done")}
+        </Button>
+      }
+    >
+      <div className="flex h-[min(420px,52vh)] flex-col">
+        <AddFrom
+          space={space}
+          workspaces={[{ id: ws.id, name: ws.name, logo: ws.avatar_url }]}
+          data={data}
+          active={ws.id}
+          onActive={() => undefined}
+          labels={labels}
+          omit={["sections"]}
+          onToggle={(item) => {
+            if (item.kind === "wiki_page") {
+              const node = data.get(wid)?.wiki?.find((n) => n.id === item.id);
+              if (node) fav.toggle(node);
+              return;
+            }
+            if (!PIN_KINDS.includes(item.kind)) return void toast.error(t("edit.notFavorite"));
+            const pin = { kind: item.kind, id: item.id } as SidebarPin;
+            if (!isPinned(prefs, pin) && prefs.pinned.length >= MAX_PINS) return void toast.error(t("customize.pinLimit"));
+            change(togglePin(prefs, pin));
+          }}
+        />
+      </div>
+    </Dialog>
+  );
+}
+
+const PIN_KINDS: readonly string[] = ["ticket_folder", "team", "view", "box", "account", "folder"];
+
 export function OwnSectionDialogs() {
-  const { naming, adding, addingToSpace } = useOwnSectionsUi();
+  const { naming, adding, addingToSpace, addingFavorites, renamingRow } = useOwnSectionsUi();
   return (
     <>
+      {addingFavorites && <AddFavoritesDialog />}
+      {renamingRow && <RenameRowDialog key={renamingRow.key} row={renamingRow} />}
       {naming && <NameDialog key={naming.mode === "rename" ? naming.id : "new"} naming={naming} />}
       {adding && <AddRowsDialog sectionId={adding} />}
       {addingToSpace && <AddToSpaceDialog {...addingToSpace} />}

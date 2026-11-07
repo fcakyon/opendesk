@@ -26,6 +26,8 @@ export function defaultSidebarPrefs(): SidebarPrefs {
     auto_pins: [],
     sections: [],
     row_order: {},
+    names: {},
+    icons: {},
   };
 }
 
@@ -55,6 +57,8 @@ export function normalizePrefs(p: Partial<SidebarPrefs> | null | undefined): Sid
     auto_pins: Array.isArray(p.auto_pins) ? p.auto_pins.filter((x): x is string => typeof x === "string") : d.auto_pins,
     sections: Array.isArray(p.sections) ? p.sections.map(readSection).filter((x): x is SidebarSection => !!x) : d.sections,
     row_order: readRowOrder(p.row_order) ?? d.row_order,
+    names: readStrings(p.names) ?? d.names,
+    icons: readStrings(p.icons) ?? d.icons,
   };
 }
 
@@ -76,6 +80,13 @@ function readSection(v: unknown): SidebarSection | null {
   }
   const out: SidebarSection = { id: x.id, title: typeof x.title === "string" ? x.title : "", collapsed: x.collapsed === true, items };
   if (typeof x.icon === "string" && x.icon) out.icon = x.icon;
+  return out;
+}
+
+function readStrings(v: unknown): Record<string, string> | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const out: Record<string, string> = {};
+  for (const [k, x] of Object.entries(v)) if (typeof x === "string" && x) out[k] = x;
   return out;
 }
 
@@ -204,6 +215,38 @@ export const hid = {
   /** A row of the Workspace section: contacts, knowledge, wiki or reports. */
   page: (id: string) => `page:${id}`,
 };
+
+// ── Names and icons of the member's own ──────────────────────────────────
+
+/** The key of a built-in section in `names` and `icons`. */
+export const sectionKey = (id: SidebarSectionId) => `section:${id}`;
+
+/** A section's or row's label: the member's own, else `fallback`. */
+export function nameOf(p: SidebarPrefs, key: string, fallback: string): string {
+  return p.names[key] || fallback;
+}
+
+/** A section's or row's emoji of the member's own, if any. */
+export function iconOf(p: SidebarPrefs, key: string): string | undefined {
+  return p.icons[key] || undefined;
+}
+
+/** Sets or clears (empty) a label of the member's own. */
+export function setName(p: SidebarPrefs, key: string, name: string): SidebarPrefs {
+  const next = { ...p.names };
+  const v = name.trim().replace(/\s+/g, " ");
+  if (v) next[key] = v;
+  else delete next[key];
+  return { ...p, names: next };
+}
+
+/** Sets or clears (empty) an emoji of the member's own. */
+export function setIcon(p: SidebarPrefs, key: string, icon: string): SidebarPrefs {
+  const next = { ...p.icons };
+  if (icon) next[key] = icon;
+  else delete next[key];
+  return { ...p, icons: next };
+}
 
 /** The parts of the Pages section a member can hide, in the order it shows them. */
 export const PAGES_PARTS = ["workspace", "teamspaces", "private", "today", "templates", "trash"] as const;

@@ -931,7 +931,21 @@
     "hintTitle": "Gestalte deine Seitenleiste",
     "hintBody": "Ziehe Bereiche und Zeilen, blende aus, was du nicht brauchst, und lege eigene Bereiche an.",
     "hintDismiss": "Ausblenden",
-    "dropNew": "Hier ablegen für einen neuen Bereich"
+    "dropNew": "Hier ablegen für einen neuen Bereich",
+    "rowMenu": "Mehr für {{name}}",
+    "renameRow": "Umbenennen",
+    "pickIcon": "Symbol ändern",
+    "resetName": "Name und Symbol zurücksetzen",
+    "moveToSection": "Zu einem Bereich hinzufügen",
+    "show": "In der Seitenleiste anzeigen",
+    "renameInSidebar": "In der Seitenleiste umbenennen",
+    "renameTitle": "In deiner Seitenleiste umbenennen",
+    "renameHint": "Nur du siehst diesen Namen. {{name}} behält für alle anderen seinen eigenen.",
+    "renameLabel": "Name",
+    "renameSave": "Speichern",
+    "favoritesTitle": "Zu Favoriten hinzufügen",
+    "favoritesHint": "Posteingangsordner, Teams, Ansichten, Postfächer und Seiten können Favoriten sein.",
+    "notFavorite": "Das kann kein Favorit sein. Füge es stattdessen einem eigenen Bereich hinzu."
   },
   "layouts": {
     "title": "Mit einem Layout beginnen",

@@ -2072,8 +2072,11 @@ export function registerCollab() {
     if (own > 32 * 1024) throw invalid("Your sections are too large.");
     const saved = state(ctx.ws).prefs[db.meId] ?? defaultSidebarPrefs();
     // Like the API: a client that leaves out the numbers, the tabs, the pins added by themselves or its own sections keeps them as saved.
-    const p = normalizePrefs({ ...body, badges: body.badges ?? saved.badges, mail_tabs: body.mail_tabs ?? saved.mail_tabs, auto_pins: body.auto_pins ?? saved.auto_pins, sections: body.sections ?? saved.sections, row_order: body.row_order ?? saved.row_order });
+    const p = normalizePrefs({ ...body, badges: body.badges ?? saved.badges, mail_tabs: body.mail_tabs ?? saved.mail_tabs, auto_pins: body.auto_pins ?? saved.auto_pins, sections: body.sections ?? saved.sections, row_order: body.row_order ?? saved.row_order, names: body.names ?? saved.names, icons: body.icons ?? saved.icons });
     const emoji = (v: string | undefined) => !v || isEmoji(v.trim());
+    for (const k of Object.keys(p.names)) if (!p.names[k].trim()) delete p.names[k];
+    if (Object.keys(p.names).length > 300 || Object.keys(p.icons).length > 300) throw invalid("At most 300 sections and rows can have a name or an icon of your own.");
+    if (Object.values(p.names).some((n) => n.trim().length > 64) || Object.values(p.icons).some((i) => !emoji(i))) throw invalid("A name is 64 characters or less, and an icon one emoji.");
     if (p.sections.some((x) => !emoji(x.icon) || x.items.some((i) => !emoji(i.icon)))) throw invalid("An icon is one emoji.");
     if (Object.entries(p.row_order).some(([k, rows]) => !(SECTION_IDS as readonly string[]).includes(k) || rows.length > 300 || new Set(rows).size !== rows.length || rows.some((r) => !r || r.length > 100)))
       throw invalid("Each row in a section's order is 1 to 100 characters, once, in a built-in section.");

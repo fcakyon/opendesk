@@ -12,6 +12,8 @@ import { DropdownMenu as M } from "radix-ui";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Fragment, lazy, Suspense, useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { applyRowOrder } from "@/lib/collab/rowOrder";
+import { iconOf, nameOf } from "@/lib/collab/sidebarPrefs";
+import { RowEmoji } from "@/components/spaces/rows";
 import { useTranslation } from "react-i18next";
 import { ChecklistMini, ProgressRing, stepsLeft } from "@/components/onboarding/Checklist";
 import { useUrgentChats, useWaitingFor } from "@/components/tickets/useUrgentChats";
@@ -154,11 +156,13 @@ function TeamRow({
 }) {
   const { t } = useTranslation("shell");
   const who = useOpener();
+  const name = nameOf(rp.prefs, hid.team(teamId), label);
+  const glyph = iconOf(rp.prefs, hid.team(teamId));
   const key = hid.team(teamId);
   const n = pickCount(badgeFor(rp.prefs, key, "teams", "team"), nums);
   const own = teamId !== "mine";
   return (
-    <NavTip rail={rail} label={label}>
+    <NavTip rail={rail} label={name}>
       <RowMenu
         enabled
         prefs={rp.prefs}
@@ -166,17 +170,18 @@ function TeamRow({
         pin={own ? { kind: "team", id: teamId } : undefined}
         hideId={own ? key : undefined}
         rail={rail}
-        label={label}
+        label={name}
+        ownName={label}
       >
       <Link
         to="/teams/$teamId/{-$ticketId}"
         params={{ teamId, ticketId: undefined }}
         className={cn(rowBase, rowShape(rail), rowIdle, muted && "text-fg-3")}
         {...litLink(who, `team:${teamId}`, "teams", <>
-        <span className="flex size-[15px] shrink-0 items-center justify-center">{icon}</span>
+        <span className="flex size-[15px] shrink-0 items-center justify-center">{glyph ? <RowEmoji emoji={glyph} /> : icon}</span>
         <Label rail={rail}>
           <span className="flex min-w-0 items-center gap-1">
-            <span className="truncate">{label}</span>
+            <span className="truncate">{name}</span>
             {locked && <Lock aria-label={t("nav.privateTeam")} className="size-[11px] shrink-0 text-fg-4" />}
           </span>
         </Label>
@@ -184,7 +189,7 @@ function TeamRow({
         {n !== undefined && n > 0 && <Count n={n} rail={rail} />}
         {rail && n !== undefined && n > 0 && <span className="absolute right-1 top-1 size-1.5 rounded-full bg-fg ring-2 ring-chrome" />}
       </>)}
-        aria-label={rail ? label : undefined}
+        aria-label={rail ? name : undefined}
         title={rail ? undefined : title}
        />
       </RowMenu>
@@ -400,11 +405,12 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
             prefs.row_order.inbox,
           ).map(({ key, f }) => {
             if (!f) return <WaitingChats key={key} rail={rail} />;
+            const folderName = nameOf(prefs, key, tNav(f.labelKey));
             const counted = f.id !== "solved" && f.id !== "spam";
             const nums = ticketRowNumbers(counts, key);
             const n = counted ? shown(key, "inbox", nums) : undefined;
             return (
-            <NavTip key={f.id} rail={rail} label={tNav(f.labelKey)}>
+            <NavTip key={f.id} rail={rail} label={folderName}>
               <RowMenu
                 enabled
                 prefs={prefs}
@@ -412,22 +418,23 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
                 pin={{ kind: "ticket_folder", id: f.id }}
                 hideId={key}
                 rail={rail}
-                label={tNav(f.labelKey)}
+                label={folderName}
+                ownName={tNav(f.labelKey)}
               >
               <Link
                 to="/inbox/$folder/{-$ticketId}"
                 params={{ folder: f.id, ticketId: undefined }}
                 className={cn(rowBase, rowShape(rail), rowIdle)}
                 {...litLink(who, `ticket_folder:${f.id}`, "inbox", <>
-                {folderIcons[f.id]}
-                <Label rail={rail}>{tNav(f.labelKey)}</Label>
+                {iconOf(prefs, key) ? <RowEmoji emoji={iconOf(prefs, key)!} /> : folderIcons[f.id]}
+                <Label rail={rail}>{folderName}</Label>
                 <WaitingBadge n={waitingFor({ kind: "ticket_folder", id: f.id })} rail={rail} />
                 <Count n={n} rail={rail} />
                 {rail && f.id === "unassigned" && (n ?? 0) > 0 && (
                   <span className="absolute right-1 top-1 size-1.5 rounded-full bg-fg ring-2 ring-chrome" />
                 )}
               </>)}
-                aria-label={rail ? tNav(f.labelKey) : undefined}
+                aria-label={rail ? folderName : undefined}
                />
               </RowMenu>
             </NavTip>
@@ -467,9 +474,10 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
               waiting={(v) => waitingFor({ kind: "view", id: v.id })}
               prefs={prefs}
               row={(v, nested) => {
+                const vName = nameOf(prefs, hid.view(v.id), viewName(v));
                 const nums = ticketRowNumbers(counts, hid.view(v.id));
                 return (
-                <NavTip rail={rail} label={viewName(v)}>
+                <NavTip rail={rail} label={vName}>
                   <RowMenu
                     enabled
                     prefs={prefs}
@@ -485,19 +493,20 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
                         : undefined
                     }
                     rail={rail}
-                    label={viewName(v)}
+                    label={vName}
+                    ownName={viewName(v)}
                   >
                   <Link
                     to="/views/$viewId/{-$ticketId}"
                     params={{ viewId: v.id, ticketId: undefined }}
                     className={cn(rowBase, rowShape(rail), rowIdle, nested && "pl-[22px]")}
                     {...litLink(who, `view:${v.id}`, "views", <>
-                    <ViewIcon icon={v.icon} />
-                    <Label rail={rail}>{viewName(v)}</Label>
+                    {iconOf(prefs, hid.view(v.id)) ? <RowEmoji emoji={iconOf(prefs, hid.view(v.id))!} /> : <ViewIcon icon={v.icon} />}
+                    <Label rail={rail}>{vName}</Label>
                     <WaitingBadge n={waitingFor({ kind: "view", id: v.id })} rail={rail} />
                     <Count n={shown(hid.view(v.id), "views", nums)} rail={rail} />
                   </>)}
-                    aria-label={rail ? viewName(v) : undefined}
+                    aria-label={rail ? vName : undefined}
                    />
                   </RowMenu>
                 </NavTip>
@@ -522,8 +531,8 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
           label: t("nav.contacts"),
           el: (
             <Link to="/contacts/{-$contactId}" params={{ contactId: undefined }} className={cn(rowBase, rowShape(rail), rowIdle)} aria-label={rail ? t("nav.contacts") : undefined} {...litLink(who, "page:contacts", "workspace", <>
-              <Users />
-              <Label rail={rail}>{t("nav.contacts")}</Label>
+              {iconOf(prefs, hid.page("contacts")) ? <RowEmoji emoji={iconOf(prefs, hid.page("contacts"))!} /> : <Users />}
+              <Label rail={rail}>{nameOf(prefs, hid.page("contacts"), t("nav.contacts"))}</Label>
             </>)} />
           ),
         },
@@ -532,8 +541,8 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
           label: t("nav.kb"),
           el: (
             <Link to="/kb" className={cn(rowBase, rowShape(rail), rowIdle)} aria-label={rail ? t("nav.kb") : undefined} {...litLink(who, "page:knowledge", "workspace", <>
-              <BookOpen />
-              <Label rail={rail}>{t("nav.kb")}</Label>
+              {iconOf(prefs, hid.page("knowledge")) ? <RowEmoji emoji={iconOf(prefs, hid.page("knowledge"))!} /> : <BookOpen />}
+              <Label rail={rail}>{nameOf(prefs, hid.page("knowledge"), t("nav.kb"))}</Label>
             </>)} />
           ),
         },
@@ -543,8 +552,8 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
           el: (
             // The wiki's home: a page is current in Pages, not here.
             <Link to="/wiki" activeOptions={{ exact: true }} className={cn(rowBase, rowShape(rail), rowIdle)} aria-label={rail ? t("nav.wiki") : undefined} {...litLink(who, "page:wiki", "workspace", <>
-              <NotebookText />
-              <Label rail={rail}>{t("nav.wiki")}</Label>
+              {iconOf(prefs, hid.page("wiki")) ? <RowEmoji emoji={iconOf(prefs, hid.page("wiki"))!} /> : <NotebookText />}
+              <Label rail={rail}>{nameOf(prefs, hid.page("wiki"), t("nav.wiki"))}</Label>
             </>)} />
           ),
         },
@@ -553,8 +562,8 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
           label: t("nav.reports"),
           el: (
             <Link to="/reports" className={cn(rowBase, rowShape(rail), rowIdle)} aria-label={rail ? t("nav.reports") : undefined} {...litLink(who, "page:reports", "workspace", <>
-              <BarChart3 />
-              <Label rail={rail}>{t("nav.reports")}</Label>
+              {iconOf(prefs, hid.page("reports")) ? <RowEmoji emoji={iconOf(prefs, hid.page("reports"))!} /> : <BarChart3 />}
+              <Label rail={rail}>{nameOf(prefs, hid.page("reports"), t("nav.reports"))}</Label>
             </>)} />
           ),
         },
@@ -564,8 +573,8 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
       return (
         <Section id="workspace" label={t("nav.workspace")} rail={rail} first={first}>
           {rows.map((x) => (
-            <NavTip key={x.id} rail={rail} label={x.label}>
-              <RowMenu enabled prefs={prefs} hideId={hid.page(x.id)} rail={rail} label={x.label}>
+            <NavTip key={x.id} rail={rail} label={nameOf(prefs, hid.page(x.id), x.label)}>
+              <RowMenu enabled prefs={prefs} hideId={hid.page(x.id)} rail={rail} label={nameOf(prefs, hid.page(x.id), x.label)} ownName={x.label}>
                 {x.el}
               </RowMenu>
             </NavTip>

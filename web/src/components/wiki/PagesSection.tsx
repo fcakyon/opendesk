@@ -18,8 +18,9 @@ import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
 import { TeamDot, useTeamsCtx } from "@/components/tickets/teams";
 import type { SidebarPrefs, Team } from "@/lib/api/types";
-import { useSaveSidebarPrefs } from "@/lib/collab/hooks";
-import { hid, setHidden, type PagesPart } from "@/lib/collab/sidebarPrefs";
+import { useSaveSidebarPrefs, useSidebarPrefs } from "@/lib/collab/hooks";
+import { RowEmoji } from "@/components/spaces/rows";
+import { hid, iconOf, nameOf, setHidden, type PagesPart } from "@/lib/collab/sidebarPrefs";
 import { cn } from "@/lib/cn";
 import { atLeast, useRole, useSession } from "@/lib/session";
 import { buildTree, childrenOf, spaceBody, type SpaceKey } from "@/lib/wiki/tree";
@@ -166,7 +167,7 @@ function PagesTree({ prefs, rail, first }: { prefs: SidebarPrefs; rail: boolean;
           {shown("private") && (
             <Group
               icon={<Lock className="size-[13px]" />}
-              label={tw("sidebar.private")}
+              label={nameOf(prefs, hid.pages("private"), tw("sidebar.private"))}
               folded={folded.has("private")}
               onToggle={() => toggle("private")}
               onAdd={canEdit ? () => create.mutate(spaceBody("private")) : undefined}
@@ -183,7 +184,7 @@ function PagesTree({ prefs, rail, first }: { prefs: SidebarPrefs; rail: boolean;
         {canEdit && shown("today") && (
           <button type="button" onClick={() => void openToday()} className={cn(rowBase, rowShape(false), rowIdle, placeRow)}>
             <CalendarDays />
-            <Label rail={false}>{tw("journal.today")}</Label>
+            <Label rail={false}>{nameOf(prefs, hid.pages("today"), tw("journal.today"))}</Label>
           </button>
         )}
         {shown("templates") && (
@@ -191,7 +192,7 @@ function PagesTree({ prefs, rail, first }: { prefs: SidebarPrefs; rail: boolean;
             {withPill(
               <>
                 <LayoutTemplate />
-                <Label rail={false}>{tw("templatesPage.title")}</Label>
+                <Label rail={false}>{nameOf(prefs, hid.pages("templates"), tw("templatesPage.title"))}</Label>
               </>,
             )}
           </Link>
@@ -201,7 +202,7 @@ function PagesTree({ prefs, rail, first }: { prefs: SidebarPrefs; rail: boolean;
             {withPill(
               <>
                 <Trash2 />
-                <Label rail={false}>{tw("trash.title")}</Label>
+                <Label rail={false}>{nameOf(prefs, hid.pages("trash"), tw("trash.title"))}</Label>
               </>,
             )}
           </Link>
@@ -230,10 +231,12 @@ export function TeamspaceGroup({
   const create = useCreatePage();
   const space: SpaceKey = `team:${team.id}`;
   const view = useSpaceView(space);
+  const prefs = useSidebarPrefs();
+  const glyph = iconOf(prefs, hid.wikiSpace(team.id));
   return (
     <Group
-      icon={<TeamDot team={team} />}
-      label={team.name}
+      icon={glyph ? <RowEmoji emoji={glyph} /> : <TeamDot team={team} />}
+      label={nameOf(prefs, hid.wikiSpace(team.id), team.name)}
       locked={team.private}
       folded={folded}
       onToggle={onToggle}
@@ -342,6 +345,7 @@ function Group({
  * of sight is skipped.
  */
 export function FavoritePageRows({ rail }: { rail: boolean }) {
+  const sidebarPrefs = useSidebarPrefs();
   const { t } = useTranslation("wiki");
   const title = useTitle();
   const fav = useFavorites();
@@ -353,7 +357,8 @@ export function FavoritePageRows({ rail }: { rail: boolean }) {
       {fav.list.map((saved) => {
         const n = tree.byId.get(saved.id);
         if (!n) return null;
-        const label = title(n.title);
+        const label = nameOf(sidebarPrefs, hid.wikiPage(n.id), title(n.title));
+        const glyph = iconOf(sidebarPrefs, hid.wikiPage(n.id));
         const active = openHere(who, openId, n.id, "favorites");
         return (
           <div key={n.id} className="group/row relative">
@@ -367,7 +372,7 @@ export function FavoritePageRows({ rail }: { rail: boolean }) {
                 {/* Drawn by hand, not from the route: the same page's row in the tree may be the one lit. */}
                 {active && <ActivePill />}
                 <span className="flex size-[15px] shrink-0 items-center justify-center">
-                  <PageIcon icon={n.icon} kind={n.kind} />
+                  {glyph ? <RowEmoji emoji={glyph} /> : <PageIcon icon={n.icon} kind={n.kind} />}
                 </span>
                 <Label rail={rail}>{label}</Label>
               </Link>
