@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useEditHintShown } from "@/components/collab/SidebarMenu";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -67,8 +68,10 @@ export function InboxOffer({ rail }: { rail: boolean }) {
       return true;
     }
   });
+  // One prompt at a time: the sidebar's own hint goes first.
+  const hint = useEditHintShown();
   const list = mailboxes ?? [];
-  if (rail || gone || list.length < 2 || inboxSections(prefs).some((s) => s.kind === "mailbox")) return null;
+  if (rail || gone || hint || list.length < 2 || inboxSections(prefs).some((s) => s.kind === "mailbox")) return null;
   const end = () => {
     try {
       localStorage.setItem(offerKey(uid, wid), "1");

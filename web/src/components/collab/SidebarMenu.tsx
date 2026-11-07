@@ -3,7 +3,7 @@
 // that the sidebar can be arranged, shown until the member edits it or dismisses it.
 
 import { PencilRuler, Plus, SlidersHorizontal, X } from "lucide-react";
-import { useState, type PointerEvent, type ReactElement } from "react";
+import { type PointerEvent, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -51,21 +51,23 @@ export function SidebarMenu({ enabled, children }: { enabled: boolean; children:
  * "Make the sidebar yours": while the member has arranged nothing, until they edit or dismiss
  * it. It says how (drag, double-click) and points at Customize below it, which stays.
  */
-export function EditHint() {
-  const { t } = useTranslation("collab");
+export function useEditHintShown(): boolean {
   const uid = useSession((s) => s.user?.id ?? "");
   const prefs = useSidebarPrefs();
   const space = usePickedSpaceId();
   const editing = useSidebarEdit((s) => s.editing);
-  // Read for the signed-in member: the session may still be loading on the first render.
-  const [closed, setClosed] = useState<string | null>(null);
+  const closed = useSidebarEdit((s) => s.hintClosed);
   const untouched = !prefs.sections.length && !prefs.hidden.length && !Object.keys(prefs.row_order).length && !Object.keys(prefs.names).length;
+  // Read for the signed-in member: the session may still be loading on the first render.
   // Opening edit mode counts as having seen it (sidebarEdit.start).
-  if (!uid || closed === uid || hintDismissed(uid) || space || !untouched || editing) return null;
-  const close = () => {
-    dismissHint(uid);
-    setClosed(uid);
-  };
+  return !!uid && closed !== uid && !hintDismissed(uid) && !space && untouched && !editing;
+}
+
+export function EditHint() {
+  const { t } = useTranslation("collab");
+  const uid = useSession((s) => s.user?.id ?? "");
+  if (!useEditHintShown()) return null;
+  const close = () => dismissHint(uid);
   return (
     <div className="mx-2.5 mb-1 shrink-0 animate-rise-in rounded-lg bg-surface px-3 py-2.5 shadow-[0_0_0_1px_var(--line)] motion-reduce:animate-none">
       <div className="flex items-start gap-2">

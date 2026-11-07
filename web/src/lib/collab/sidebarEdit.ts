@@ -17,9 +17,11 @@ type EditState = {
   renaming: string | null;
   /** The row or section whose emoji picker is open, by the same id. */
   picking: string | null;
+  /** The member who dismissed the hint in this tab, so whatever waits for it shows at once. */
+  hintClosed: string | null;
 };
 
-export const useSidebarEdit = create<EditState>(() => ({ editing: false, railBefore: false, renaming: null, picking: null }));
+export const useSidebarEdit = create<EditState>(() => ({ editing: false, railBefore: false, renaming: null, picking: null, hintClosed: null }));
 
 /** Below this width the sidebar is the drawer (md in the app's breakpoints). */
 const DRAWER_BELOW = 768;
@@ -87,4 +89,5 @@ export function dismissHint(uid: string) {
   } catch {
     /* storage unavailable */
   }
+  useSidebarEdit.setState({ hintClosed: uid });
 }
