@@ -64,8 +64,9 @@ import { useCollab, useSidebarPrefs } from "@/lib/collab/hooks";
 import { useProducts } from "@/lib/products";
 import { ticketRowNumbers } from "@/lib/collab/badges";
 import { badgeFor, hid, isHidden, pickCount, type BadgeNumbers } from "@/lib/collab/sidebarPrefs";
-import { entryKey, visibleEntries, type SidebarEntry } from "@/lib/collab/ownSections";
+import { entryKey, visibleEntries } from "@/lib/collab/ownSections";
 import { AddSectionButton, OwnSection } from "@/components/collab/OwnSections";
+import { AddInboxButton, InboxOffer, InboxSectionAt, withInboxSections } from "@/components/tickets/inboxes/sidebar";
 import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
 
 // Collab's sections load with Collab: a workspace without it never downloads them.
@@ -409,7 +410,8 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
   switch (id) {
     case "inbox":
       return (
-        <Section id="inbox" label={collab.enabled ? t("nav.tickets") : t("nav.inbox")} rail={rail} first={first}>
+        <Section id="inbox" label={collab.enabled ? t("nav.tickets") : t("nav.inbox")} rail={rail} first={first} action={rail ? undefined : <AddInboxButton />}>
+          <InboxOffer rail={rail} />
           {applyRowOrder(
             [
               ...(isHidden(prefs, hid.waitingChats) ? [] : [{ key: hid.waitingChats, f: null }]),
@@ -451,6 +453,8 @@ function BuiltinSection({ id, first, rail, drawer }: { id: SidebarSectionId; fir
               <Link
                 to="/inbox/$folder/{-$ticketId}"
                 params={{ folder: f.id, ticketId: undefined }}
+                search={{ mailbox: undefined }}
+                activeOptions={{ explicitUndefined: true }}
                 className={cn(rowBase, rowShape(rail), rowIdle)}
                 {...litLink(who, `ticket_folder:${f.id}`, "inbox", <>
                 {iconOf(prefs, key) ? <RowEmoji emoji={iconOf(prefs, key)!} /> : folderIcons[f.id]}
@@ -699,9 +703,11 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
             <>
               <Draggable rail={rail} root={dragRoot}>
                 <SectionList
-                  ids={order.map(entryKey)}
+                  ids={withInboxSections(prefs, order.map(entryKey))}
                   render={(key, first) => {
-                    const e = order.find((x) => entryKey(x) === key) as SidebarEntry;
+                    const e = order.find((x) => entryKey(x) === key);
+                    // A ticket inbox or team shown as a section of its own (components/tickets/inboxes).
+                    if (!e) return <InboxSectionAt id={key} first={first} rail={rail} />;
                     return e.kind === "builtin" ? render(e.id, first) : <OwnSection section={e.section} first={first} rail={rail} />;
                   }}
                 />

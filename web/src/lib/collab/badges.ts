@@ -2,7 +2,7 @@
 // and every conversation (MailFolder.total); for tickets, the row's count and its stats (GET
 // /v1/tickets/counts). Pure, so the sidebar, its menus and the folder bar count alike.
 
-import type { MailAccount, MailCounts, MailFolder, TicketCounts } from "../api/types";
+import type { MailAccount, MailCounts, MailFolder, MailboxCount, TicketCounts } from "../api/types";
 import { folderById } from "../folders";
 import { folderWithRole, type TabBox } from "./boxes";
 import type { BadgeNumbers } from "./sidebarPrefs";
@@ -86,5 +86,12 @@ export function ticketRowNumbers(counts: TicketCounts | undefined, rowId: string
     out.count = c?.unassigned;
     out.open = c?.open;
   } else if (kind === "view") out.count = counts.views?.[id];
+  else if (kind === "mailbox") {
+    // A ticket inbox's folder, mailbox:<id>:<folder>; the inbox itself counts its Unassigned.
+    const [mailbox, folder = "unassigned"] = id.split(":");
+    const c = counts.mailboxes?.[mailbox];
+    out.count = c ? (c[folder as keyof MailboxCount] ?? undefined) : counts.mailboxes ? 0 : undefined;
+    if (!rowId.slice(i + 1).includes(":")) Object.assign(out, counts.stats?.[`${rowId}:unassigned`]);
+  }
   return out;
 }

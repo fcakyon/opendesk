@@ -8,7 +8,7 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { inWorkspace } from "../api/client";
 import { api } from "../api/endpoints";
-import type { CollabStatus, MailAccount, MailCounts, MailFolder, Role, SidebarPrefs, Space, SpacesResponse, Team, TicketCounts, View, WikiNode, WorkspaceOverview } from "../api/types";
+import type { CollabStatus, MailAccount, Mailbox, MailCounts, MailFolder, Role, SidebarPrefs, Space, SpacesResponse, Team, TicketCounts, View, WikiNode, WorkspaceOverview } from "../api/types";
 import { normalizePrefs } from "../collab/sidebarPrefs";
 import { productsOf } from "../products";
 import { q, qk } from "../queries";
@@ -121,6 +121,8 @@ export type WorkspaceData = {
   teams: Team[] | undefined;
   myTeams: ReadonlySet<string>;
   views: View[] | undefined;
+  /** Its ticket inboxes (a mailbox row, an inbox shown as a section of its own). */
+  mailboxes: Mailbox[] | undefined;
   accounts: MailAccount[] | undefined;
   mailCounts: MailCounts | undefined;
   folders: Record<string, MailFolder[] | undefined>;
@@ -160,6 +162,7 @@ export function useWorkspacesData(wids: string[], opts: { folders?: (wid: string
   const counts = useQueries({ queries: wids.map((w) => inWorkspace(w, () => ({ ...q.counts(), enabled: on && w === focus }))) });
   const teams = useQueries({ queries: each(() => ({ ...q.teams(), enabled: on })) });
   const views = useQueries({ queries: each(() => ({ ...q.views(), enabled: on })) });
+  const mailboxes = useQueries({ queries: each(() => ({ ...q.mailboxes(), enabled: on })) });
   const accounts = useQueries({ queries: wids.map((w, i) => inWorkspace(w, () => ({ ...q.mailAccounts(), enabled: on && collabOf(i) === true }))) });
   const mailCounts = useQueries({ queries: wids.map((w, i) => inWorkspace(w, () => ({ ...q.mailCounts(), enabled: on && w === focus && collabOf(i) === true }))) });
   const sidebar = useQueries({ queries: wids.map((w) => inWorkspace(w, () => ({ ...q.mailSidebar(), enabled: on }))) });
@@ -191,6 +194,7 @@ export function useWorkspacesData(wids: string[], opts: { folders?: (wid: string
       teams: tm,
       myTeams: new Set(teamsOf(tm ?? [], uid)),
       views: views[i]?.data,
+      mailboxes: mailboxes[i]?.data,
       accounts: collab ? accounts[i]?.data : undefined,
       mailCounts: collab ? ((open ? mailCounts[i]?.data : undefined) ?? o?.mail_counts ?? undefined) : undefined,
       folders: fs,

@@ -814,7 +814,7 @@ function patchReceiving(ctx: Ctx, m: Mailbox) {
   throw invalid(kind === "imap" ? "Add the mailbox again to receive over IMAP." : "Reconnect the mailbox to sync it.");
 }
 
-function mailbox(ws: WsData, init: Pick<Mailbox, "name" | "email" | "display_name" | "inbound_kind" | "outbound_kind" | "config" | "team_id">): Mailbox {
+export function mailbox(ws: WsData, init: Pick<Mailbox, "name" | "email" | "display_name" | "inbound_kind" | "outbound_kind" | "config" | "team_id">): Mailbox {
   const m: Mailbox = {
     ...init,
     brand_id: defaultBrand(ws)?.id ?? "",

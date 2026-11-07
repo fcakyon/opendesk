@@ -894,6 +894,11 @@ export const api = {
       update: (id: string, b: CollabAccountPatch) => http.patch<T.MailAccount>(`/v1/collab/accounts/${id}`, b),
       /** Removes the account and its mail from opendesk; nothing is deleted at the provider. */
       remove: (id: string) => http.del(`/v1/collab/accounts/${id}`),
+      /**
+       * Makes a ticket inbox of an account the caller connected, read with its own connection
+       * from new mail on; the account goes unless keep_account (contracts/collab.md "Using an account for tickets").
+       */
+      useForTickets: (id: string, b: T.UseForTicketsBody) => http.post<{ mailbox_id: string; account_removed: boolean }>(`/v1/collab/accounts/${id}/use-for-tickets`, b),
       sync: (id: string) => http.post<void>(`/v1/collab/accounts/${id}/sync`),
       /** Starts a history import, or starts it again with this scope (contracts/collab.md "History"). */
       startHistory: (id: string, b: { since: string | null; include_spam_trash?: boolean }) =>

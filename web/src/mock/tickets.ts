@@ -11,6 +11,7 @@ import type {
   SlaPolicy,
   TagRef,
   Ticket,
+  MailboxCount,
   TicketCounts,
   TicketListSummary,
   TicketStats,
@@ -236,8 +237,23 @@ export function counts(ws: WsData, meId: string): TicketCounts {
   };
   for (const id of Object.keys(teams)) stats[`team:${id}`] = ticketStats(ns.filter((t) => t.team_id === id && (t.status === "open" || t.status === "pending")));
   for (const v of ws.views) stats[`view:${v.id}`] = ticketStats(live.filter((t) => matches(ws, t, { view_id: v.id }, meId)));
+  // Each reply address's folders, for a ticket inbox shown as a section of its own.
+  const mailboxes: Record<string, MailboxCount> = {};
+  for (const m of ws.mailboxes) {
+    const its = ns.filter((t) => t.mailbox_id === m.id && OPENISH.includes(t.status));
+    if (!its.length) continue;
+    const parts = {
+      unassigned: its.filter((t) => !t.assignee),
+      mine: its.filter((t) => t.assignee?.id === meId),
+      open: its.filter((t) => t.status === "open"),
+      pending: its.filter((t) => t.status === "pending" || t.status === "on_hold"),
+    };
+    mailboxes[m.id] = { unassigned: parts.unassigned.length, mine: parts.mine.length, open: parts.open.length, pending: parts.pending.length };
+    for (const [f, list] of Object.entries(parts)) stats[`mailbox:${m.id}:${f}`] = ticketStats(list);
+  }
   return {
     teams,
+    mailboxes,
     stats,
     my_teams: teamCount(ns.filter((t) => !!t.team_id && mine.has(t.team_id))),
     unassigned: ns.filter((t) => OPENISH.includes(t.status) && !t.assignee).length,

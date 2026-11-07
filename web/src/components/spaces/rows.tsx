@@ -23,15 +23,16 @@ import { accountNumbers, allInboxNumbers, boxTabNumbers, folderNumbers, listBoxN
 import { accountName, isMailBox, isTabBox, type MailSearch } from "@/lib/collab/boxes";
 import { badgeFor, hid, pickCount, type BadgeKind, type BadgeNumbers, type MailBadge, type TicketBadge } from "@/lib/collab/sidebarPrefs";
 import { cn } from "@/lib/cn";
-import { folderById, type FolderId } from "@/lib/folders";
+import { folderById, type FolderId, type TeamTab } from "@/lib/folders";
 import { canSeeTeam, type WorkspaceData } from "@/lib/spaces/hooks";
 import { isEverywhereList, isSpacePage, type EverywhereList, type SpacePage } from "@/lib/spaces/model";
 import { useOpenInWorkspace } from "@/lib/workspaces";
 import { useCollab } from "@/lib/collab/hooks";
 
 export type RowLink =
-  | { kind: "inbox"; folder: FolderId }
-  | { kind: "team"; teamId: string }
+  | { kind: "inbox"; folder: FolderId; mailbox?: string }
+  /** With `tab` (undefined for Unassigned), one of the team inbox's tabs, lit apart from the others. */
+  | { kind: "team"; teamId: string; tab?: TeamTab }
   | { kind: "view"; viewId: string }
   | { kind: "mail"; box: MailBox | "folder"; account?: string; folder?: string }
   | { kind: "page"; page: SpacePage }
@@ -48,9 +49,11 @@ export function rowHref(l: RowLink, ws?: string): string {
   switch (l.kind) {
     case "inbox":
       path = `/inbox/${l.folder}`;
+      if (l.mailbox) p.set("mailbox", l.mailbox);
       break;
     case "team":
       path = `/teams/${encodeURIComponent(l.teamId)}`;
+      if (l.tab) p.set("tab", l.tab);
       break;
     case "view":
       path = `/views/${encodeURIComponent(l.viewId)}`;
@@ -79,9 +82,9 @@ export function rowHref(l: RowLink, ws?: string): string {
 export function rowNavigate(l: RowLink): NavigateOptions {
   switch (l.kind) {
     case "inbox":
-      return { to: "/inbox/$folder/{-$ticketId}", params: { folder: l.folder, ticketId: undefined } } as NavigateOptions;
+      return { to: "/inbox/$folder/{-$ticketId}", params: { folder: l.folder, ticketId: undefined }, search: { mailbox: l.mailbox } } as NavigateOptions;
     case "team":
-      return { to: "/teams/$teamId/{-$ticketId}", params: { teamId: l.teamId, ticketId: undefined } } as NavigateOptions;
+      return { to: "/teams/$teamId/{-$ticketId}", params: { teamId: l.teamId, ticketId: undefined }, search: { tab: l.tab } } as NavigateOptions;
     case "view":
       return { to: "/views/$viewId/{-$ticketId}", params: { viewId: l.viewId, ticketId: undefined } } as NavigateOptions;
     case "mail":
@@ -270,6 +273,21 @@ export function buildRow(item: { kind: string; id: string }, d: WorkspaceData, c
         locked: team.private,
       };
     }
+    case "mailbox": {
+      // A ticket inbox opens its Unassigned folder; one removed is skipped.
+      const m = d.mailboxes?.find((x) => x.id === item.id);
+      if (!m) return null;
+      const key = `mailbox:${m.id}`;
+      return {
+        key,
+        label: m.name || m.email,
+        title: m.email,
+        icon: <Inbox />,
+        badge: { kind: "ticket", sections: [...via, "inbox"], nums: ticketRowNumbers(d.counts, key) },
+        link: { kind: "inbox", folder: "unassigned", mailbox: m.id },
+        railDot: "count",
+      };
+    }
     case "view": {
       const v = d.views?.find((x) => x.id === item.id);
       if (!v) return null;
@@ -391,9 +409,9 @@ type AnchorProps = {
 export function rowTarget(l: RowLink): string {
   switch (l.kind) {
     case "inbox":
-      return `ticket_folder:${l.folder}`;
+      return l.mailbox ? `mailbox:${l.mailbox}:${l.folder}` : `ticket_folder:${l.folder}`;
     case "team":
-      return `team:${l.teamId}`;
+      return l.tab ? `team:${l.teamId}:${l.tab}` : `team:${l.teamId}`;
     case "view":
       return `view:${l.viewId}`;
     case "mail":
@@ -431,14 +449,29 @@ const RowAnchor = forwardRef<HTMLAnchorElement, AnchorProps>(function RowAnchor(
   const fn = ({ isActive }: { isActive: boolean }) => children(isActive && !away);
   switch (link.kind) {
     case "inbox":
+      // A folder of one ticket inbox (?mailbox=) and the folder of every inbox light up apart.
       return (
-        <Link to="/inbox/$folder/{-$ticketId}" params={{ folder: link.folder, ticketId: undefined }} activeProps={lit} {...common}>
+        <Link
+          to="/inbox/$folder/{-$ticketId}"
+          params={{ folder: link.folder, ticketId: undefined }}
+          search={{ mailbox: link.mailbox }}
+          activeOptions={{ explicitUndefined: true }}
+          activeProps={lit}
+          {...common}
+        >
           {fn}
         </Link>
       );
     case "team":
       return (
-        <Link to="/teams/$teamId/{-$ticketId}" params={{ teamId: link.teamId, ticketId: undefined }} activeProps={lit} {...common}>
+        <Link
+          to="/teams/$teamId/{-$ticketId}"
+          params={{ teamId: link.teamId, ticketId: undefined }}
+          search={"tab" in link ? { tab: link.tab } : undefined}
+          activeOptions={"tab" in link ? { explicitUndefined: true } : undefined}
+          activeProps={lit}
+          {...common}
+        >
           {fn}
         </Link>
       );

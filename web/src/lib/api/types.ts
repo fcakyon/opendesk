@@ -1571,9 +1571,26 @@ export type TicketCounts = {
   /** Every team the caller can see. */
   teams?: Record<string, { open: number; unassigned: number }>;
   my_teams?: { open: number; unassigned: number };
-  /** Per sidebar row id (ticket_folder:<id>, team:<id>, team:mine, view:<id>), over the row's own tickets. */
+  /** Each reply address's folders, for a ticket inbox shown as a section of its own. */
+  mailboxes?: Record<string, MailboxCount>;
+  /** Per sidebar row id (ticket_folder:<id>, team:<id>, team:mine, view:<id>, mailbox:<id>:<folder>), over the row's own tickets. */
   stats?: Record<string, TicketStats>;
 };
+
+/** POST /v1/collab/accounts/{id}/use-for-tickets: how the ticket inbox starts. */
+export type UseForTicketsBody = {
+  name?: string;
+  team_id?: string | null;
+  brand_id?: string | null;
+  signature_html?: string;
+  auto_reply_enabled?: boolean;
+  auto_reply_subject?: string;
+  auto_reply_html?: string;
+  keep_account?: boolean;
+};
+
+/** A ticket inbox's folder counts (pending with on hold), as TicketCounts counts the whole inbox's. */
+export type MailboxCount = { unassigned: number; mine: number; open: number; pending: number };
 
 /** A sidebar row's tickets awaiting a reply (the customer wrote last), urgent, and overdue. */
 export type TicketStats = { awaiting: number; urgent: number; overdue: number };
@@ -3475,7 +3492,7 @@ export type WorkspaceOverview = {
 export type SpaceColor = "grey" | "blue" | "violet" | "teal" | "green" | "amber" | "red" | "pink";
 
 /** What a Space row names: a whole built-in section, or one row of a workspace. */
-export type SpaceItemKind = "section" | "ticket_folder" | "team" | "view" | "box" | "account" | "folder" | "page" | "wiki_page" | "wiki_space" | "everywhere";
+export type SpaceItemKind = "section" | "ticket_folder" | "team" | "view" | "box" | "account" | "folder" | "page" | "wiki_page" | "wiki_space" | "mailbox" | "everywhere";
 
 export type SpaceItem = {
   /** A workspace the user is a member of; "" for an everywhere row (it spans them all). */

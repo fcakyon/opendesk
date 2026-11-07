@@ -23,6 +23,7 @@ import type {
   MailThreadAction,
   MailThreadDetail,
   SidebarPrefs,
+  UseForTicketsBody,
 } from "@/lib/api/types";
 import { collabFromName } from "@/lib/collab/identities";
 import { LABEL_TONES, toneHex, type LabelTone } from "@/lib/collab/labelTones";
@@ -33,6 +34,7 @@ import { publish } from "../gateway";
 import { isEmoji } from "@/lib/botlook";
 import { del, get, HttpError, invalid, notFound, patch, post, put, respond, strArr, type Ctx } from "../router";
 import { escapeHtml, isRecord, nowIso, uuid } from "../util";
+import { mailbox as createMailbox } from "./resources";
 import { collabSignatureProblems, fillForSender } from "./templates";
 import { defaultChoice, newRule, parseCategories, parseSender, registerCollabCategories, resolveCategories, sortMail, type AccountChoice } from "./collabCategories";
 import { PRIMARY } from "@/lib/collab/categories";
@@ -1542,6 +1544,43 @@ export function registerCollab() {
     return respond(204);
   });
 
+  // Like the API (contracts/collab.md "Using an account for tickets"): an admin makes a ticket
+  // inbox of an account they connected; anyone else's is not found, shared or not.
+  post("/v1/collab/accounts/:id/use-for-tickets", (ctx) => {
+    requireCollab(ctx.ws);
+    if (!isAdmin(ctx.ws, db.meId)) throw new HttpError(403, "forbidden", "Only workspace admins add ticket inboxes.");
+    const a = state(ctx.ws).accounts.find((x) => x.id === ctx.params.id);
+    if (!a || a.ownerId !== db.meId) throw notFound("Account");
+    if (ctx.ws.mailboxes.some((m) => m.email === a.email || m.aliases.includes(a.email))) throw new HttpError(409, "conflict", "A mailbox with that address already exists in this workspace.");
+    const b = ctx.body as UseForTicketsBody;
+    const kind = a.provider === "imap" ? "imap" : a.provider;
+    const name = (b.name ?? "").trim() || (a.name.includes("@") ? `${a.provider === "imap" ? "IMAP" : a.provider === "google" ? "Google" : "Microsoft"} mailbox` : a.name);
+    const team = typeof b.team_id === "string" && ctx.ws.teams.some((t) => t.id === b.team_id) ? b.team_id : null;
+    const m = createMailbox(ctx.ws, {
+      name,
+      email: a.email,
+      display_name: a.display_name ?? "",
+      inbound_kind: kind,
+      outbound_kind: kind === "imap" ? "smtp" : kind,
+      config: kind === "imap" ? { sync_start: "new" } : { oauth_email: a.email, oauth_grant: "api", oauth_client: "collab", sync_start: "new" },
+      team_id: team,
+    });
+    if (typeof b.brand_id === "string" && ctx.ws.brands.some((x) => x.id === b.brand_id)) m.brand_id = b.brand_id;
+    if (b.auto_reply_enabled) Object.assign(m, { auto_reply_enabled: true, auto_reply_subject: b.auto_reply_subject ?? "", auto_reply_html: b.auto_reply_html ?? "" });
+    if (b.signature_html) m.signature_html = b.signature_html;
+    publish(ctx.ws, "mailbox.created", { mailbox: m });
+    if (!b.keep_account) {
+      const users = audienceOf(ctx.ws, a.id, []);
+      const s = state(ctx.ws);
+      s.accounts = s.accounts.filter((x) => x.id !== a.id);
+      s.folders = s.folders.filter((f) => f.account_id !== a.id);
+      s.messages = s.messages.filter((x) => x.account_id !== a.id);
+      for (const [id, t] of s.threads) if (t.account_id === a.id) s.threads.delete(id);
+      emit(ctx.ws, "collab.accounts", { account_id: a.id }, users);
+    }
+    return respond(201, { mailbox_id: m.id, account_removed: !b.keep_account });
+  });
+
   post("/v1/collab/accounts/:id/sync", (ctx) => {
     requireCollab(ctx.ws);
     const a = accountOr404(ctx.ws, ctx.params.id);
@@ -2080,6 +2119,9 @@ export function registerCollab() {
     if (p.sections.some((x) => !emoji(x.icon) || x.items.some((i) => !emoji(i.icon)))) throw invalid("An icon is one emoji.");
     if (Object.entries(p.row_order).some(([k, rows]) => !(SECTION_IDS as readonly string[]).includes(k) || rows.length > 300 || new Set(rows).size !== rows.length || rows.some((r) => !r || r.length > 100)))
       throw invalid("Each row in a section's order is 1 to 100 characters, once, in a built-in section.");
+    // A ticket inbox or team shown as a section of its own is named by its id.
+    if (p.order.some((k) => /^(mailbox|team):/.test(k) && !/^(mailbox:[0-9a-f-]{36}|team:(mine|[0-9a-f-]{36}))$/i.test(k)))
+      throw invalid("A ticket inbox or team shown as its own section is named by its id.");
     if (p.sections.length > 20) throw invalid("The sidebar holds at most 20 sections of your own.");
     if (p.sections.some((x) => x.items.length > 60) || p.sections.reduce((n, x) => n + x.items.length, 0) > 300) throw invalid("A section holds at most 60 rows, and your sections 300.");
     if (new Set(p.sections.map((x) => x.id)).size !== p.sections.length || p.sections.some((x) => !/^[A-Za-z0-9_-]{1,40}$/.test(x.id) || x.title.trim().length > 40)) throw invalid("Each section needs an id once and a title of at most 40 characters.");

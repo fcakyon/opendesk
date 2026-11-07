@@ -24,12 +24,17 @@ type QuickAdd = {
   team: boolean;
   view: ViewEdit | null;
   mail: boolean;
+  /** A new ticket inbox: a new address, or one of the caller's Collab accounts handed over. */
+  inbox: InboxStart | null;
 };
 
-export const useQuickAdd = create<QuickAdd>(() => ({ newPage: null, importing: null, importNonce: 0, team: false, view: null, mail: false }));
+/** Where adding a ticket inbox starts: from nothing, or from a Collab mail account (contracts/collab.md "Using an account for tickets"). */
+export type InboxStart = { accountId?: string };
+
+export const useQuickAdd = create<QuickAdd>(() => ({ newPage: null, importing: null, importNonce: 0, team: false, view: null, mail: false, inbox: null }));
 
 /** Whether anything is open, so the dialogs load only once one is asked for. */
-export const quickAddOpen = (s: QuickAdd) => !!(s.newPage || s.importing || s.team || s.view || s.mail);
+export const quickAddOpen = (s: QuickAdd) => !!(s.newPage || s.importing || s.team || s.view || s.mail || s.inbox);
 
 export const quickAdd = {
   page: (space?: SpaceKey, area?: WikiArea) => useQuickAdd.setState({ newPage: { space, area } }),
@@ -37,6 +42,7 @@ export const quickAdd = {
   team: (open = true) => useQuickAdd.setState({ team: open }),
   view: (edit: ViewEdit | null) => useQuickAdd.setState({ view: edit }),
   mail: (open = true) => useQuickAdd.setState({ mail: open }),
+  inbox: (start: InboxStart | null) => useQuickAdd.setState({ inbox: start }),
   closeImport: () => useQuickAdd.setState({ importing: null }),
 };
 

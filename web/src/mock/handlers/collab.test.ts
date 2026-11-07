@@ -29,6 +29,29 @@ describe("mock Collab", () => {
     expect(typeof counts.boxes.inbox).toBe("number");
   });
 
+  it("makes a ticket inbox of an account the caller connected, counted on its own", async () => {
+    const accounts = (await call("GET", "/v1/collab/accounts")).body as { id: string; email: string; owner: { id: string } | null }[];
+    const mine = accounts.find((a) => a.owner?.id === db.meId)!;
+    const theirs = accounts.find((a) => a.owner && a.owner.id !== db.meId);
+    if (theirs) expect((await call("POST", `/v1/collab/accounts/${theirs.id}/use-for-tickets`, {})).status).toBe(404);
+    const r = await call("POST", `/v1/collab/accounts/${mine.id}/use-for-tickets`, { name: "Sales desk", keep_account: true });
+    expect(r.status).toBe(201);
+    expect(r.body.account_removed).toBe(false);
+    const box = (await call("GET", `/v1/mailboxes/${r.body.mailbox_id}`)).body;
+    expect(box).toMatchObject({ name: "Sales desk", email: mine.email, config: { sync_start: "new" } });
+    expect(((await call("GET", "/v1/collab/accounts")).body as { id: string }[]).some((a) => a.id === mine.id)).toBe(true);
+    expect((await call("POST", `/v1/collab/accounts/${mine.id}/use-for-tickets`, { keep_account: true })).status).toBe(409);
+    // Each reply address's folders are counted for its own sidebar section.
+    const counts = (await call("GET", "/v1/tickets/counts")).body as { mailboxes: Record<string, { unassigned: number }> };
+    expect(Object.keys(counts.mailboxes).length).toBeGreaterThan(0);
+    // An inbox shown as a section of its own is named by its id in the order.
+    const prefs = (await call("GET", "/v1/collab/sidebar")).body;
+    expect((await call("PUT", "/v1/collab/sidebar", { ...prefs, order: [...prefs.order, `mailbox:${r.body.mailbox_id}`] })).status).toBe(200);
+    expect((await call("PUT", "/v1/collab/sidebar", { ...prefs, order: [...prefs.order, "mailbox:sales"] })).status).toBe(422);
+    await call("PUT", "/v1/collab/sidebar", prefs);
+    await call("DELETE", `/v1/mailboxes/${r.body.mailbox_id}`);
+  });
+
   it("counts each address of an account with aliases like the list's to=", async () => {
     const accounts = (await call("GET", "/v1/collab/accounts")).body as { id: string; identities: { email: string; primary: boolean }[] }[];
     const a = accounts.find((x) => x.identities.some((i) => !i.primary))!;

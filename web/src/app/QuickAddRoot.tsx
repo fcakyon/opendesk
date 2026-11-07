@@ -6,6 +6,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { ConnectAccountDialog } from "@/components/collab/ConnectAccount";
 import { NewTeamDialog } from "@/components/settings2/NewTeamDialog";
+import { AddInboxDialog } from "@/components/tickets/inboxes/AddInboxDialog";
 import { ViewDrawer } from "@/components/settings2/ViewDrawer";
 import { ImportDialogHost } from "@/components/wiki/ImportDialog";
 import { NewPageDialog } from "@/components/wiki/NewPageDialog";
@@ -15,7 +16,7 @@ import { orderViews } from "@/lib/viewSections";
 import { quickAdd, useQuickAdd } from "./quickAdd";
 
 export default function QuickAddRoot() {
-  const { newPage, team, view, mail } = useQuickAdd();
+  const { newPage, team, view, mail, inbox } = useQuickAdd();
   const navigate = useNavigate();
   const collab = useCollab();
   return (
@@ -25,6 +26,7 @@ export default function QuickAddRoot() {
       {team && <NewTeamDialog onClose={() => quickAdd.team(false)} onCreated={(t) => void navigate({ to: "/teams/$teamId/{-$ticketId}", params: { teamId: t.id, ticketId: undefined } })} />}
       {view && <ViewEditor />}
       {collab.status && <ConnectAccountDialog open={mail} onOpenChange={quickAdd.mail} status={collab.status} />}
+      {inbox && <AddInboxDialog start={inbox} />}
     </>
   );
 }
