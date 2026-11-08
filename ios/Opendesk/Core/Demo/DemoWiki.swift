@@ -32,7 +32,10 @@ struct DemoWiki: Sendable {
     static func revisionID(_ n: Int, _ r: Int) -> String { demoKBID(0x24, n * 100 + r) }
 
     static func seed(_ ws: DemoWorkspace) -> DemoWiki {
-        ws.id == DemoSeed.marginID ? margin() : ws.id == DemoSeed.lumenID ? lumen() : DemoWiki()
+        guard ws.id == DemoSeed.marginID else { return ws.id == DemoSeed.lumenID ? lumen() : DemoWiki() }
+        var wiki = margin()
+        wiki.addPagesWork()
+        return wiki
     }
 
     private struct Spec {
@@ -285,6 +288,7 @@ struct DemoWiki: Sendable {
         guard var page = page(id) else { return nil }
         page.breadcrumbs = ancestors(of: id).map { WikiRef(id: $0.id, title: $0.title, icon: $0.icon) }
         page.children = children(of: id).map { WikiRef(id: $0.id, title: $0.title, icon: $0.icon) }
+        page.extras.tags = Self.tags(in: page.bodyHTML)
         return page
     }
 

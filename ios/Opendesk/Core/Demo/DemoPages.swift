@@ -16,7 +16,8 @@ extension DemoBackend {
         if call.match("GET", "wiki/pages") != nil {
             let area = call.query["area"].flatMap(WikiArea.init(rawValue:)) ?? .wiki
             if area == .pages, !pagesOn { throw pagesOff() }
-            return .some(encode(ListBody(data: ws.kb.wiki.pages.filter { $0.area == area }.map(\.node))))
+            let wiki = ws.kb.wiki
+            return .some(encode(ListBody(data: wiki.pages.filter { $0.area == area }.map { wiki.nodeJSON($0) })))
         }
         if let id = call.match("GET", "wiki/pages/*")?.first, ws.kb.wiki.page(id)?.area == .pages, !pagesOn {
             throw pagesOff()
