@@ -145,6 +145,8 @@ private struct ShortcutKeys: ViewModifier {
     }
 
     private func available(_ command: ShortcutCommand) -> Bool {
+        // A page's own keys answer on the page alone (`WikiPageShortcutKeys`).
+        if command.group == .page { return false }
         let products = env.products
         switch command.id {
         case "global.new", "go.mine", "go.team", "go.reports": return products.tickets

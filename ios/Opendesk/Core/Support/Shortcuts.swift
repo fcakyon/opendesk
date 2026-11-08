@@ -9,12 +9,15 @@ import SwiftUI
 struct ShortcutCommand: Identifiable, Hashable, Sendable {
     enum Group: String, CaseIterable, Sendable {
         case anywhere, go, sidebar
+        /// On a page of Pages or the wiki (`WikiPageShortcutKeys`).
+        case page
 
         var title: String {
             switch self {
             case .anywhere: "Anywhere"
             case .go: "Go to"
             case .sidebar: "Sidebar"
+            case .page: "On a page"
             }
         }
     }
@@ -48,6 +51,18 @@ enum ShortcutRegistry {
         ShortcutCommand(id: "go.shortcuts", keys: "g ?", title: "Shortcut settings", group: .go),
         ShortcutCommand(id: "sidebar.toggle", keys: "b", title: "Open the sidebar", group: .sidebar),
         ShortcutCommand(id: "sidebar.edit", keys: "g e", title: "Edit the sidebar", group: .sidebar),
+        ShortcutCommand(id: "page.new", keys: "n", title: "New page", group: .page),
+        ShortcutCommand(id: "page.newSubpage", keys: "shift+n", title: "New subpage", group: .page),
+        ShortcutCommand(id: "page.parent", keys: "u", title: "Go to the parent page", group: .page),
+        ShortcutCommand(id: "page.favorite", keys: "s", title: "Add to or remove from favorites", group: .page),
+        ShortcutCommand(id: "page.move", keys: "m", title: "Move the page", group: .page),
+        ShortcutCommand(id: "page.copyLink", keys: "l", title: "Copy the page's link", group: .page),
+        ShortcutCommand(id: "page.panel", keys: "mod+shift+;", title: "About this page", group: .page),
+        ShortcutCommand(id: "page.history", keys: "shift+h", title: "Page history", group: .page),
+        ShortcutCommand(id: "page.publish", keys: "shift+p", title: "Publish to help center", group: .page),
+        ShortcutCommand(id: "page.export", keys: "shift+e", title: "Export the page", group: .page),
+        ShortcutCommand(id: "page.lock", keys: "shift+l", title: "Lock or unlock the page", group: .page),
+        ShortcutCommand(id: "page.save", keys: "mod+s", title: "Save now", group: .page),
     ]
 
     static func command(_ id: String) -> ShortcutCommand? { commands.first { $0.id == id } }

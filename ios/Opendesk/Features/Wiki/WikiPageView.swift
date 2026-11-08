@@ -129,10 +129,70 @@ struct WikiPageScreen: View {
             }
         }
         .background(Theme.surface.ignoresSafeArea())
+        .background {
+            if saver != nil { WikiPageShortcutKeys(editing: editing, run: shortcut) }
+        }
         .toolbarVisibility(.visible, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar }
         .tabBarHidden()
+    }
+
+    /// A page shortcut pressed on a hardware keyboard (`WikiPageShortcutKeys`).
+    private func shortcut(_ command: String) {
+        guard let saver else { return }
+        let node = store.node(id) ?? saver.page.node
+        let writes = env.session.canWrite && !saver.page.inTrash
+        switch command {
+        case "page.new" where writes:
+            Task { await WikiCreate.page(WikiPageCreate(area: node.area), env: env) }
+        case "page.newSubpage" where canEdit && !node.isDatabase:
+            addSubpage()
+        case "page.parent":
+            if let parent = saver.page.parentID { env.router.push(.wikiPage(parent)) } else { env.router.show(node.area.appArea, []) }
+        case "page.favorite":
+            let on = !store.isFavorite(id)
+            Haptics.selection()
+            Task {
+                do {
+                    try await store.setFavorite(id, on)
+                    env.toasts.show(on ? "Added to favorites" : "Removed from favorites", kind: .success)
+                } catch {
+                    env.toasts.error(error)
+                }
+            }
+        case "page.move" where writes:
+            moving = node
+        case "page.copyLink":
+            WikiLink.copy(id, in: env)
+        case "page.panel":
+            tools.info = true
+        case "page.history":
+            showHistory = true
+        case "page.publish" where env.session.canWrite && !saver.page.template && !saver.page.journal && !saver.page.isDatabase && !saver.page.isCanvas:
+            tools.publish = true
+        case "page.export" where !tools.exporting:
+            tools.exporting = true
+            Task {
+                tools.export = await WikiExport.file(page: saver.page, format: "markdown", subpages: false, env: env)
+                tools.exporting = false
+            }
+        case "page.lock" where writes:
+            let lock = !saver.page.locked
+            Task {
+                do {
+                    saver.takeLook(try await store.setLook(id, WikiLookPatch(locked: lock)))
+                    if lock, editing { stopEditing() }
+                    env.toasts.show(lock ? "Page locked" : "Page unlocked", kind: .success)
+                } catch {
+                    env.toasts.error(error)
+                }
+            }
+        case "page.save":
+            Task { await saver.flush() }
+        default:
+            break
+        }
     }
 
     /// The page is gone; typing left on it can still be copied.

@@ -150,6 +150,55 @@ struct WikiPageToolsSheets: ViewModifier {
     }
 }
 
+/// A page's own keyboard shortcuts with a hardware keyboard (`ShortcutCommand.Group.page`), on the
+/// person's keys: a key alone answers only while nothing is being typed.
+struct WikiPageShortcutKeys: View {
+    /// The page is in its editor.
+    let editing: Bool
+    let run: (String) -> Void
+
+    @State private var typing = false
+
+    private var store: ShortcutsStore { .shared }
+
+    private struct Entry: Identifiable {
+        var id: String
+        var title: String
+        var key: KeyEquivalent
+        var modifiers: EventModifiers
+    }
+
+    private var entries: [Entry] {
+        var out: [Entry] = []
+        for command in ShortcutRegistry.commands where command.group == .page {
+            guard let binding = store.binding(command), let steps = ShortcutBinding.steps(binding), steps.count == 1,
+                  let step = steps.first, let key = step.equivalent else { continue }
+            if editing || typing, step.mods.isEmpty || step.mods == ["shift"] { continue }
+            out.append(Entry(id: command.id, title: command.title, key: key, modifiers: step.modifiers))
+        }
+        return out
+    }
+
+    var body: some View {
+        ZStack {
+            if !store.recording {
+                ForEach(entries) { entry in
+                    Button(entry.title) { run(entry.id) }
+                        .keyboardShortcut(entry.key, modifiers: entry.modifiers)
+                }
+            }
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { _ in typing = true }
+        .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidEndEditingNotification)) { _ in typing = false }
+        .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidBeginEditingNotification)) { _ in typing = true }
+        .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidEndEditingNotification)) { _ in typing = false }
+    }
+}
+
 extension View {
     func wikiPageTools(_ tools: Binding<WikiPageToolsState>, saver: WikiSaver?, onBody: @escaping (String, Bool) -> Void) -> some View {
         modifier(WikiPageToolsSheets(tools: tools, saver: saver, onBody: onBody))

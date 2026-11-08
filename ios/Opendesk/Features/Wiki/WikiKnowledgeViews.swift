@@ -238,12 +238,15 @@ struct WikiGraphLayout {
 
     init(nodes all: [WikiNode], links graph: [WikiGraphLink], orphans: Bool) {
         let ids = Set(all.map(\.id))
-        links = graph.filter { $0.from != $0.to && ids.contains($0.from) && ids.contains($0.to) }
-        for link in links {
-            degree[link.from, default: 0] += 1
-            degree[link.to, default: 0] += 1
+        let kept = graph.filter { $0.from != $0.to && ids.contains($0.from) && ids.contains($0.to) }
+        var counts: [String: Int] = [:]
+        for link in kept {
+            counts[link.from, default: 0] += 1
+            counts[link.to, default: 0] += 1
         }
-        nodes = Array((orphans ? all : all.filter { degree[$0.id] != nil }).prefix(400))
+        links = kept
+        degree = counts
+        nodes = Array((orphans ? all : all.filter { counts[$0.id] != nil }).prefix(400))
         let count = nodes.count
         guard count > 0 else { return }
         let side = CGFloat(max(600, sqrt(Double(count)) * 140))
