@@ -468,8 +468,6 @@ input.field { height: 36px; border: 1px solid var(--line); border-radius: var(--
 input.field:hover { border-color: var(--line-2); }
 input.field:focus { border-color: var(--fg-4); box-shadow: 0 0 0 3px var(--ring); }
 .err { color: var(--danger); font-size: 12px; margin-top: 6px; }
-.foot { display: flex; align-items: center; justify-content: center; gap: 5px; height: 30px; font-size: 11px; color: var(--fg-4); border-top: 1px solid var(--line); text-decoration: none; flex: none; transition: color .12s; }
-.foot:hover { color: var(--fg-2); }
 [dir="rtl"] .flip svg { transform: scaleX(-1); }
 [dir="rtl"] .link-row:hover .flip svg { transform: scaleX(-1) translate(1px, -1px); }
 .time, .day, .meta { unicode-bidi: plaintext; }

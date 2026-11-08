@@ -8,7 +8,7 @@ import { canAttach, fileProblem, readBot } from "./config";
 import { NEW, type Controller } from "./controller";
 import { canRecord, clock, useRecorder, VoicePlayer, type Recording } from "./voice";
 import { current, dayLabel, isRtl, relTime, t } from "./i18n";
-import { Arrow, Back, ChatIc, Clip, Clock, Down, Ext, FileIc, Mic, OdMark, StopIc, Trash, Up, X } from "./icons";
+import { Arrow, Back, ChatIc, Clip, Clock, Down, Ext, FileIc, Mic, StopIc, Trash, Up, X } from "./icons";
 import { repliesFor, type LiveReply } from "./live";
 import { AiMessage, AvatarStack, BotGreeting, Bubble, Dots, HandedOff, LiveReplyView, reducedMotion, type Offer } from "./messages";
 import { primeSound } from "./sound";
@@ -350,10 +350,6 @@ function Home({ c }: { c: Controller }) {
           )}
         </div>
       </div>
-      <a class="foot" href="https://opendesk.sh" target="_blank" rel="noopener noreferrer">
-        <OdMark />
-        {t("poweredBy")}
-      </a>
     </>
   );
 }

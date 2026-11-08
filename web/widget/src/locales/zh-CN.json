@@ -15,7 +15,6 @@
   "newConversation": "新对话",
   "typing": "{name}正在输入…",
   "searchHelp": "搜索帮助中心",
-  "poweredBy": "由 opendesk 提供支持",
   "back": "返回对话列表",
   "emptyHint": "有任何问题都可以问我们。我们会在这里回复；如果你留下邮箱，也会通过邮件回复。",
   "automated": "自动回复",

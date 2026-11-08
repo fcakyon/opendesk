@@ -65,16 +65,6 @@ export const Spinner = () => (
   </svg>
 );
 
-/** The opendesk mark (footer). */
-export const OdMark = ({ s = 10 }: { s?: number }) => (
-  <svg width={s} height={s} viewBox="0 0 64 64" aria-hidden="true">
-    <path
-      fill="currentColor"
-      d="M11 4h12a7 7 0 0 1 7 7v12a7 7 0 0 1-7 7h-12a7 7 0 0 1-7-7v-12a7 7 0 0 1 7-7Z M47 4a13 13 0 1 1 0 26a13 13 0 1 1 0-26Z M11 34h12a7 7 0 0 1 7 7v12a7 7 0 0 1-7 7h-12a7 7 0 0 1-7-7v-12a7 7 0 0 1 7-7Z M41 34h12a7 7 0 0 1 7 7v12a7 7 0 0 1-7 7h-12a7 7 0 0 1-7-7v-12a7 7 0 0 1 7-7Z"
-    />
-  </svg>
-);
-
 /** A look as SVG markup, cached by look (rows re-render often; the markup is a pure function of it). */
 const faces = new Map<string, string>();
 function faceSvg(look: unknown): string {

@@ -113,7 +113,8 @@ from `../akyonlabs/.env` with `claude-haiku-5-5` for normal, fast and widget res
 and `support/instructions.txt` using its `support/opendesk.json` IDs and ignored
 `OPENDESK_API_KEY`. Add `--test` to exercise `support/questions.json` and review the
 returned answers. Widget signing secrets are separate per product. Keep human handoff
-available without asking anonymous visitors for email first.
+available without asking anonymous visitors for email first. The embedded widget omits
+the vendor footer on this branch and keeps each product's own branding.
 
 Merging to `main` deploys opendesk.sh on its own (`.github/workflows/deploy.yml`): Terraform plans and
 applies (a new task definition revision applies by itself; deleting or replacing anything else waits for

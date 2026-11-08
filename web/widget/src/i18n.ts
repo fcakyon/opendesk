@@ -21,7 +21,6 @@ export const en = {
   newConversation: "New conversation",
   typing: "{name} is typing…",
   searchHelp: "Search the help center",
-  poweredBy: "Powered by opendesk",
   back: "Back to conversations",
   emptyHint: "Ask us anything. We'll reply here, and by email if you leave one.",
   automated: "Automated",
