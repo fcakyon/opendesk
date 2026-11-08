@@ -44,6 +44,7 @@ struct WikiPageScreen: View {
     @State private var showComments = false
     @State private var focusThread: String?
     @State private var restoring = false
+    @State private var tools = WikiPageToolsState()
     @FocusState private var titleFocused: Bool
     @FocusState private var bodyFocused: Bool
 
@@ -108,6 +109,7 @@ struct WikiPageScreen: View {
                     .presentationDetents([.medium, .large])
                     .presentationCornerRadius(Theme.Radius.sheet)
             }
+            .wikiPageTools($tools, saver: saver, onBody: applyOllie)
         #if DEBUG
             .onChange(of: env.router.demoAction) { _, action in demo(action) }
         #endif
@@ -153,6 +155,11 @@ struct WikiPageScreen: View {
     private func page(_ saver: WikiSaver) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                if !saver.page.extras.cover.isEmpty {
+                    WikiCoverStrip(cover: saver.page.extras.cover, icon: "", height: 110, apiBase: env.session.instance.apiURL)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+                        .padding(.bottom, 14)
+                }
                 banners(saver)
                 if saver.page.inTrash {
                     trashNotice(saver)
@@ -161,6 +168,14 @@ struct WikiPageScreen: View {
                 breadcrumbs
                     .padding(.bottom, 14)
                 head(saver)
+                if let parent = saver.page.parentID, store.node(parent)?.isDatabase == true {
+                    WikiRowProperties(rowID: id, databaseID: parent)
+                        .padding(.top, 18)
+                }
+                if saver.page.isCanvas {
+                    WikiCanvasBoard(canvas: saver.page.extras.canvas ?? WikiCanvas()) { tools.canvas = true }
+                        .padding(.top, 18)
+                }
                 if editing {
                     KBBodyEditor(form: $text, preview: $preview, focused: $bodyFocused, noun: "page", prompt: "Write something, or paste it in. Start a line with ## for a heading, - for a list.") {
                         env.toasts.show("This HTML can't be shown as text without losing something.", kind: .info)
@@ -376,13 +391,34 @@ struct WikiPageScreen: View {
                     .foregroundStyle(saver.draft.title.trimmingCharacters(in: .whitespaces).isEmpty ? Theme.fg3 : Theme.fg)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if !saver.page.extras.aliases.isEmpty {
+                Text("Also called \(saver.page.extras.aliases.joined(separator: ", "))")
+                    .font(ODFont.sans(12.5))
+                    .foregroundStyle(Theme.fg3)
+            }
+            if !saver.page.extras.tags.isEmpty {
+                WikiChipFlow(spacing: 4) {
+                    ForEach(saver.page.extras.tags, id: \.self) { tag in
+                        Button("#\(tag)") { tools.tag = WikiTagTarget(tag: tag) }
+                            .font(ODFont.sans(12, weight: .medium))
+                            .foregroundStyle(Tone.blue.text)
+                            .buttonStyle(.plain)
+                    }
+                }
+            }
             if let verification = saver.page.verification {
                 WikiVerifiedLine(verification: verification)
             }
             if saver.page.locked, env.session.canWrite, !saver.page.inTrash {
-                Label("This page is locked. Unlock it on the web to edit it.", systemImage: "lock.fill")
-                    .font(ODFont.sans(12.5, weight: .medium))
-                    .foregroundStyle(Theme.fg3)
+                HStack(spacing: 8) {
+                    Label("This page is locked.", systemImage: "lock.fill")
+                        .font(ODFont.sans(12.5, weight: .medium))
+                        .foregroundStyle(Theme.fg3)
+                    Button("Unlock") { unlock() }
+                        .font(ODFont.sans(12.5, weight: .semibold))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Theme.fg)
+                }
             }
             WikiEditedLine(page: saver.page)
         }
@@ -412,7 +448,8 @@ struct WikiPageScreen: View {
             KBArticleWebView(
                 html: WikiBody.readable(saver.draft.body, apiBase: env.session.instance.apiURL, title: { store.node($0)?.displayTitle }),
                 height: $bodyHeight,
-                extraCSS: WikiBody.css(dark: scheme == .dark),
+                fontSize: saver.page.extras.smallText ? 14 : 16,
+                extraCSS: WikiBody.css(dark: scheme == .dark) + WikiPageToolsState.fontCSS(saver.page.extras.font),
                 onLink: { handle($0) }
             )
             .frame(height: bodyHeight)
@@ -509,6 +546,7 @@ struct WikiPageScreen: View {
                                 following: comments?.following,
                                 onFollow: toggleFollow
                             )
+                            WikiPageMoreMenu(page: saver.page, canEdit: canEdit, tools: $tools)
                         } label: {
                             Image(systemName: "ellipsis")
                         }
@@ -693,6 +731,27 @@ struct WikiPageScreen: View {
         restoring = true
         defer { restoring = false }
         if let page = await WikiTrash.restore(saver.page.node, env: env) { take(page) }
+    }
+
+    /// Unlocks a locked page for everyone (contracts/wiki.md "Page settings").
+    private func unlock() {
+        Task {
+            do {
+                let fresh = try await store.setLook(id, WikiLookPatch(locked: false))
+                saver?.takeLook(fresh)
+                Haptics.success()
+            } catch {
+                env.toasts.error(error)
+            }
+        }
+    }
+
+    /// Ollie's answer, chosen by the member: in place of the text or below it, saved as typing is.
+    private func applyOllie(_ html: String, replace: Bool) {
+        guard let saver, canEdit else { return }
+        let next = replace ? html : saver.draft.body + html
+        saver.edit(body: next)
+        if editing { text = KBBody(html: next) }
     }
 
     // MARK: Comments and following
