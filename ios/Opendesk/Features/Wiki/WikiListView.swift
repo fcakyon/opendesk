@@ -1,11 +1,15 @@
 import SwiftUI
 
-/// The wiki (contracts/wiki.md): the team's runbooks, policies and how-tos, as a
-/// tree of pages. The pages edited lately, the person's favorites, then the pages
-/// of each teamspace, the workspace and their own private pages, each with its
-/// subpages folded under it, and the trash; search finds words in titles and text.
-/// Agents and admins add pages here and under any page; viewers read.
+/// The wiki (contracts/wiki.md), the team's runbooks, policies and how-tos, or Pages
+/// (contracts/pages.md), the workspace's own pages, databases and canvases: one area's tree
+/// of pages. The pages edited lately, the person's favorites, then the pages of each
+/// teamspace, the workspace and their own private pages, each with its subpages folded
+/// under it, today's note, templates and the trash; search finds words in titles and text
+/// in both areas, this one's first. Agents and admins add pages here and under any page;
+/// viewers read.
 struct WikiListView: View {
+    var area: WikiArea = .wiki
+
     @Environment(AppEnvironment.self) private var env
     @State private var query = ""
     @FocusState private var searchFocused: Bool
@@ -17,19 +21,23 @@ struct WikiListView: View {
     @State private var moving: WikiNode?
     @State private var creating = false
     @State private var listener: UUID?
+    /// Where the new page popup adds, while it is open.
+    @State private var adding: WikiNewPagePlace?
 
     private var store: WikiStore { WikiStore.shared }
     private var term: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// This area's pages, templates left out.
+    private var pagesHere: [WikiNode] { store.nodes(in: area).filter { !$0.template } }
 
     private var subtitle: Text? {
-        guard store.loadedOnce, !store.nodes.isEmpty else { return nil }
-        return Text(Format.plural(store.nodes.count, "page"))
+        guard store.loadedOnce, !pagesHere.isEmpty else { return nil }
+        return Text(Format.plural(pagesHere.count, "page"))
     }
 
     var body: some View {
         VStack(spacing: 0) {
             GlassHeaderBar(
-                title: "Wiki",
+                title: area.title,
                 subtitle: subtitle,
                 query: $query,
                 searchPrompt: "Search pages",
@@ -37,8 +45,8 @@ struct WikiListView: View {
                 menuLabel: "Folders and views",
                 onMenu: { showScopes = true }
             ) {
-                if env.session.canWrite, !store.nodes.isEmpty {
-                    HeaderPrimaryButton(symbol: "plus", label: "New page") { create(WikiPageCreate()) }
+                if env.session.canWrite, !pagesHere.isEmpty {
+                    HeaderPrimaryButton(symbol: "plus", label: "New page") { adding = WikiNewPagePlace(area: area) }
                         .disabled(creating)
                 }
             }
@@ -62,6 +70,11 @@ struct WikiListView: View {
                 .presentationDetents([.medium, .large])
                 .presentationCornerRadius(Theme.Radius.sheet)
         }
+        .sheet(item: $adding) { place in
+            WikiNewPageSheet(place: place)
+                .presentationDetents([.medium, .large])
+                .presentationCornerRadius(Theme.Radius.sheet)
+        }
         #if DEBUG
         .onChange(of: env.router.demoAction) { _, action in demo(action) }
         #endif
@@ -76,9 +89,9 @@ struct WikiListView: View {
                 .scrollDisabled(true)
                 .panelSurface()
         } else if let error = store.error, !store.loadedOnce {
-            ErrorState(title: "Couldn't load the wiki", message: error) { store.reload() }
+            ErrorState(title: area == .pages ? "Couldn't load Pages" : "Couldn't load the wiki", message: error) { store.reload() }
                 .frame(maxHeight: .infinity)
-        } else if store.nodes.isEmpty && term.isEmpty {
+        } else if pagesHere.isEmpty && term.isEmpty {
             ScrollView { firstRun }
                 .panelSurface()
                 .refreshable { await store.refresh() }
@@ -98,8 +111,8 @@ struct WikiListView: View {
 
     @ViewBuilder
     private var tree: some View {
-        let recent = Array(store.recent.filter { !$0.template }.prefix(5))
-        if store.nodes.count > 3 {
+        let recent = Array(store.recent(in: area).filter { !$0.template }.prefix(5))
+        if pagesHere.count > 3 {
             header("Recently edited")
             ForEach(recent) { node in
                 Button { open(node.id) } label: {
@@ -112,7 +125,7 @@ struct WikiListView: View {
                 .contextMenu { menu(node) }
             }
         }
-        let favorites = store.favoriteNodes
+        let favorites = store.favoriteNodes(in: area)
         if !favorites.isEmpty {
             header("Favorites")
             ForEach(favorites) { node in
@@ -123,29 +136,46 @@ struct WikiListView: View {
                     .contextMenu { menu(node) }
             }
         }
-        ForEach(store.teamspaces, id: \.self) { team in
+        ForEach(store.teamspaces(in: area), id: \.self) { team in
             header(env.directory.teams.first { $0.id == team }?.name ?? "Teamspace")
             pages(in: .team(team))
             if env.session.canWrite {
-                newPageRow("New page") { create(WikiPageCreate(space: "team", teamID: team)) }
+                newPageRow("New page") { create(WikiPageCreate(space: "team", teamID: team, area: area)) }
             }
         }
         header("Workspace")
         pages(in: .workspace)
         if env.session.canWrite {
-            newPageRow("New page") { create(WikiPageCreate()) }
+            newPageRow("New page") { create(WikiPageCreate(area: area)) }
         }
-        if env.session.canWrite || !store.roots(of: .personal).isEmpty {
+        if env.session.canWrite || !store.roots(of: .personal, in: area).isEmpty {
             header("Private")
             pages(in: .personal)
             if env.session.canWrite {
-                newPageRow("New private page") { create(WikiPageCreate(space: "private")) }
+                newPageRow("New private page") { create(WikiPageCreate(space: "private", area: area)) }
             }
         }
-        Button { env.router.pick(.wikiTrash) } label: {
+        Color.clear.frame(height: 12)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(Theme.surface)
+        if env.session.canWrite {
+            placeRow("Today\u{2019}s note", symbol: "calendar", picked: store.today(in: area).map { env.router.picked == .wikiPage($0.id) } ?? false) {
+                Task { await WikiCreate.today(in: area, env: env) }
+            }
+            placeRow("Templates", symbol: "square.on.square", picked: env.router.picked == .wikiTemplates(area)) {
+                env.router.pick(.wikiTemplates(area))
+            }
+        }
+        placeRow("Trash", symbol: "trash", picked: env.router.picked == .wikiTrash(area)) { env.router.pick(.wikiTrash(area)) }
+    }
+
+    /// One of the area's own views under its tree: today's note, templates, the trash.
+    private func placeRow(_ title: String, symbol: String, picked: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             HStack(spacing: 10) {
-                Image(systemName: "trash").font(.system(size: 13, weight: .medium)).frame(width: 28)
-                Text("Trash").font(ODFont.sans(15))
+                Image(systemName: symbol).font(.system(size: 13, weight: .medium)).frame(width: 28)
+                Text(title).font(ODFont.sans(15))
                 Spacer()
                 Chevron()
             }
@@ -156,16 +186,15 @@ struct WikiListView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(RowPressStyle())
-        .padding(.top, 12)
         .listRowInsets(EdgeInsets())
         .listRowSeparator(.hidden)
-        .listRowBackground(env.router.picked == .wikiTrash ? Theme.hover : Theme.surface)
+        .listRowBackground(picked ? Theme.hover : Theme.surface)
     }
 
     /// The pages of one section, each with its subpages folded under it.
     @ViewBuilder
     private func pages(in section: WikiSection) -> some View {
-        ForEach(store.outline(in: section)) { item in
+        ForEach(store.outline(in: section, area: area)) { item in
             let subpages = store.treeChildren(of: item.node.id).count
             WikiTreeRow(node: item.node, level: item.level, subpages: subpages, expanded: store.expanded.contains(item.node.id), onToggle: {
                 Haptics.selection()
@@ -223,14 +252,23 @@ struct WikiListView: View {
             .listRowSeparator(.hidden)
             .listRowBackground(Theme.surface)
         } else {
-            ForEach(hits) { hit in
-                Button { open(hit.id) } label: { WikiSearchRow(hit: hit) }
-                    .buttonStyle(RowPressStyle())
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(rowBackground(hit.id))
+            // This area's pages first, then the other's under its name (contracts/pages.md "Search").
+            let here = hits.filter { $0.area == area }
+            let there = hits.filter { $0.area != area }
+            ForEach(here) { hit in hitRow(hit) }
+            if !there.isEmpty {
+                header(area == .pages ? "In the wiki" : "In Pages")
+                ForEach(there) { hit in hitRow(hit) }
             }
         }
+    }
+
+    private func hitRow(_ hit: WikiSearchHit) -> some View {
+        Button { open(hit.id) } label: { WikiSearchRow(hit: hit) }
+            .buttonStyle(RowPressStyle())
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(rowBackground(hit.id))
     }
 
     /// The page open beside the list stands out in it.
@@ -248,8 +286,49 @@ struct WikiListView: View {
             .listRowBackground(Theme.surface)
     }
 
-    /// A new workspace: what the wiki is for, the first page, and starter outlines.
+    /// A new area: what it is for, the first page, and starter outlines.
+    @ViewBuilder
     private var firstRun: some View {
+        if area == .pages {
+            pagesFirstRun
+        } else {
+            wikiFirstRun
+        }
+    }
+
+    /// Pages before its first page: the ways to start (contracts/pages.md "Home").
+    private var pagesFirstRun: some View {
+        VStack(spacing: 8) {
+            EmptyState(
+                symbol: "doc.richtext",
+                title: "Your workspace\u{2019}s own pages",
+                message: env.session.canWrite
+                    ? "Docs, notes, plans and projects, beside the wiki. Start with a page, a database or a canvas."
+                    : "No one has added a page yet. Agents and admins can add the first one."
+            )
+            if env.session.canWrite {
+                WikiStartPanel(area: area, busy: creating) { kind in
+                    switch kind {
+                    case let .kind(kind): create(WikiPageCreate(area: area, kind: kind == "page" ? nil : kind))
+                    case .template: adding = WikiNewPagePlace(area: area, templates: true)
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+            Button { env.router.pick(.wikiTrash(area)) } label: {
+                Label("Open the trash", systemImage: "trash")
+                    .font(ODFont.sans(14, weight: .medium))
+                    .foregroundStyle(Theme.fg3)
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 8)
+        }
+        .padding(.bottom, 90)
+    }
+
+    /// The wiki before its first page: what it is for, the first page, and starter outlines.
+    private var wikiFirstRun: some View {
         VStack(spacing: 8) {
             EmptyState(
                 symbol: "book.pages",
@@ -258,7 +337,7 @@ struct WikiListView: View {
                     ? "The wiki holds your team's runbooks, policies and how-tos. Only members see it: customers, the help center and the chat widget never do."
                     : "Your team hasn't written any pages yet. Agents and admins can add the first one.",
                 actionTitle: env.session.canWrite ? "Create the first page" : nil
-            ) { create(WikiPageCreate()) }
+            ) { create(WikiPageCreate(area: area)) }
             if env.session.canWrite {
                 VStack(alignment: .leading, spacing: 8) {
                     SectionLabel("Start from a template")
@@ -266,7 +345,7 @@ struct WikiListView: View {
                         ForEach(Array(WikiTemplate.all.enumerated()), id: \.element.id) { index, template in
                             if index > 0 { Hairline(inset: 52) }
                             Button {
-                                create(WikiPageCreate(title: template.title, icon: template.icon, bodyHTML: template.bodyHTML))
+                                create(WikiPageCreate(title: template.title, icon: template.icon, bodyHTML: template.bodyHTML, area: area))
                             } label: {
                                 HStack(spacing: 12) {
                                     Text(template.icon).font(.system(size: 20)).frame(width: 28)
@@ -288,7 +367,7 @@ struct WikiListView: View {
                 }
                 .padding(.horizontal, 20)
             }
-            Button { env.router.pick(.wikiTrash) } label: {
+            Button { env.router.pick(.wikiTrash(area)) } label: {
                 Label("Open the trash", systemImage: "trash")
                     .font(ODFont.sans(14, weight: .medium))
                     .foregroundStyle(Theme.fg3)
@@ -365,16 +444,18 @@ struct WikiListView: View {
     }
 
     #if DEBUG
-    /// QA states: `/demo/wiki-expand`, `/demo/wiki-move`, `/demo/wiki-trash`.
+    /// QA states: `/demo/wiki-expand`, `/demo/wiki-move`, `/demo/wiki-trash`, `/demo/wiki-new`.
     private func demo(_ action: String?) {
         guard let action, action.hasPrefix("wiki-") else { return }
         switch action {
         case "wiki-expand":
-            store.expand(store.nodes.map(\.id))
+            store.expand(store.nodes(in: area).map(\.id))
         case "wiki-move":
-            moving = store.children(of: nil).last
+            moving = store.children(of: nil).last(where: { $0.area == area })
         case "wiki-trash":
-            env.router.pick(.wikiTrash)
+            env.router.pick(.wikiTrash(area))
+        case "wiki-new":
+            adding = WikiNewPagePlace(area: area)
         default:
             return
         }

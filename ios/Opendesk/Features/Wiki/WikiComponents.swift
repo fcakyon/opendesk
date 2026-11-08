@@ -3,15 +3,16 @@ import SwiftUI
 extension WikiStore {
     /// Binds the shared store to the signed-in workspace and keeps it live while `listener` is held.
     func attach(_ env: AppEnvironment) {
-        attach(api: env.session.api, workspaceID: env.session.workspace?.workspace.id)
+        attach(api: env.session.api, workspaceID: env.session.workspace?.workspace.id, pagesOn: env.products.pages)
     }
 }
 
 @MainActor
 enum WikiLink {
-    /// The page on the web app, for copying and sharing.
+    /// The page on the web app, for copying and sharing: `/pages/<id>` for a page of Pages.
     static func url(_ id: String, in env: AppEnvironment) -> URL? {
-        env.session.instance.webURL(path: "/wiki/\(id)")
+        let area = WikiStore.shared.node(id)?.area ?? .wiki
+        return env.session.instance.webURL(path: "\(area.path)/\(id)")
     }
 
     static func copy(_ id: String, in env: AppEnvironment) {
@@ -220,6 +221,19 @@ struct WikiPageMenu: View {
                 Button(action: onAddSubpage) { Label("Add a subpage", systemImage: "plus") }
             }
             Button(action: onMove) { Label("Move to…", systemImage: "folder") }
+            // A page goes to the other area with its subpages (contracts/pages.md "Areas"); a
+            // journal and a template stay where they are.
+            if !node.journal, !node.template {
+                if node.area == .wiki, env.products.pages {
+                    Button { Task { await WikiCreate.move(node, to: .pages, env: env) } } label: {
+                        Label("Move to Pages", systemImage: "doc.richtext")
+                    }
+                } else if node.area == .pages {
+                    Button { Task { await WikiCreate.move(node, to: .wiki, env: env) } } label: {
+                        Label("Move to the wiki", systemImage: "book.pages")
+                    }
+                }
+            }
         }
         Button { toggleFavorite(!favorite) } label: {
             Label(favorite ? "Remove from favorites" : "Add to favorites", systemImage: favorite ? "star.slash" : "star")
@@ -399,6 +413,43 @@ enum WikiCreate {
             let page = try await WikiStore.shared.create(body)
             Haptics.tap()
             env.router.push(.wikiPage(page.id))
+        } catch {
+            Haptics.error()
+            env.toasts.error(error)
+        }
+    }
+
+    /// Opens the person's note of today in `area`, making it when there is none.
+    static func today(in area: WikiArea, env: AppEnvironment) async {
+        do {
+            let page = try await WikiStore.shared.daily(.now, in: area)
+            Haptics.tap()
+            env.router.pick(.wikiPage(page.id))
+        } catch {
+            Haptics.error()
+            env.toasts.error(error)
+        }
+    }
+
+    /// A new page copied from a template, opened.
+    static func fromTemplate(_ template: WikiNode, in area: WikiArea, parentID: String? = nil, space: String? = nil, teamID: String? = nil, env: AppEnvironment) async {
+        do {
+            let page = try await WikiStore.shared.use(template: template.id, in: area, parentID: parentID, space: space, teamID: teamID)
+            Haptics.tap()
+            env.router.push(.wikiPage(page.id))
+        } catch {
+            Haptics.error()
+            env.toasts.error(error)
+        }
+    }
+
+    /// Moves the page with its subpages to the other area, and says where it went.
+    static func move(_ node: WikiNode, to area: WikiArea, env: AppEnvironment) async {
+        do {
+            _ = try await WikiStore.shared.move(node.id, to: area)
+            Haptics.success()
+            env.toasts.show(area == .pages ? "Moved \u{201C}\(node.displayTitle)\u{201D} to Pages" : "Moved \u{201C}\(node.displayTitle)\u{201D} to the wiki", kind: .success)
+            env.router.pageLoaded(node.id, area: area)
         } catch {
             Haptics.error()
             env.toasts.error(error)

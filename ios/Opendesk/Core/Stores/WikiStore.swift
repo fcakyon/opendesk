@@ -1,10 +1,10 @@
 import Foundation
 import Observation
 
-/// The wiki of the open workspace (contracts/wiki.md): every page without its
-/// body, as a tree, kept live from `wiki_page.*` events while a wiki screen is
-/// up, and the savers of the pages being edited. One store per workspace,
-/// shared by the list and the page screens (`WikiStore.shared`).
+/// The wiki and Pages of the open workspace (contracts/wiki.md, contracts/pages.md): every
+/// page of both areas without its body, as two trees (each node says its area), kept live
+/// from `wiki_page.*` events while a wiki screen is up, and the savers of the pages being
+/// edited. One store per workspace, shared by the lists and the page screens (`WikiStore.shared`).
 @MainActor
 @Observable
 final class WikiStore {
@@ -30,15 +30,25 @@ final class WikiStore {
 
     @ObservationIgnored private(set) var api: APIClient?
     @ObservationIgnored private(set) var workspaceID: String?
+    /// Whether the workspace has Pages on: its tree is read only then (contracts/pages.md "The product").
+    @ObservationIgnored private(set) var pagesOn = true
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var savers: [String: WikiSaver] = [:]
 
     /// Binds the store to the session's workspace; a new workspace starts from nothing.
-    func attach(api: APIClient, workspaceID: String?) {
-        if self.workspaceID == workspaceID, self.api === api { return }
+    func attach(api: APIClient, workspaceID: String?, pagesOn: Bool = true) {
+        if self.workspaceID == workspaceID, self.api === api {
+            // Pages turned on or off while the store was up: its tree comes or goes.
+            if self.pagesOn != pagesOn {
+                self.pagesOn = pagesOn
+                reload()
+            }
+            return
+        }
         flushAll()
         self.api = api
         self.workspaceID = workspaceID
+        self.pagesOn = pagesOn
         nodes = []
         expanded = []
         fresh = []
@@ -67,12 +77,16 @@ final class WikiStore {
         guard let api else { return }
         loading = true
         defer { loading = false }
+        let pagesOn = self.pagesOn
         do {
             async let favorite: Page<WikiNode>? = try? api.get("v1/wiki/favorites")
-            let page: Page<WikiNode> = try await api.get("v1/wiki/pages")
+            async let pages = Self.pagesTree(api, on: pagesOn)
+            let wiki = try await Self.tree(api, .wiki)
             let favored = await favorite
+            let ownPages = await pages
             guard !Task.isCancelled else { return }
-            nodes = page.data
+            // Pages' tree that couldn't be read this time stays as it was.
+            nodes = wiki + (ownPages ?? nodes.filter { $0.area == .pages })
             if let favored { favorites = favored.data.map(\.id) }
             error = nil
             loadedOnce = true
@@ -82,7 +96,23 @@ final class WikiStore {
         }
     }
 
+    /// One area's tree. A page that says no area is the wiki's, so a server from before Pages
+    /// answering the wiki's tree to `area=pages` adds nothing to Pages.
+    private nonisolated static func tree(_ api: APIClient, _ area: WikiArea) async throws -> [WikiNode] {
+        let page: Page<WikiNode> = try await api.get("v1/wiki/pages", query: [URLQueryItem(name: "area", value: area.rawValue)])
+        return page.data.filter { $0.area == area }
+    }
+
+    /// Pages' tree: none while the workspace has it off, nil when it couldn't be read.
+    private nonisolated static func pagesTree(_ api: APIClient, on: Bool) async -> [WikiNode]? {
+        guard on else { return [] }
+        return try? await tree(api, .pages)
+    }
+
     // MARK: Tree
+
+    /// The pages of `area` (templates included).
+    func nodes(in area: WikiArea) -> [WikiNode] { nodes.filter { $0.area == area } }
 
     func node(_ id: String?) -> WikiNode? {
         guard let id else { return nil }
@@ -108,15 +138,17 @@ final class WikiStore {
         return .workspace
     }
 
-    /// The top-level pages of `section`, in order.
-    func roots(of section: WikiSection) -> [WikiNode] {
-        treeChildren(of: nil).filter { self.section(of: $0) == section }
+    /// The top-level pages of `section`, in order; with `area`, of that tree alone.
+    func roots(of section: WikiSection, in area: WikiArea? = nil) -> [WikiNode] {
+        treeChildren(of: nil).filter { self.section(of: $0) == section && (area == nil || $0.area == area) }
     }
 
-    /// The teamspaces with pages, in the order their first page sits.
-    var teamspaces: [String] {
+    /// The teamspaces with pages, in the order their first page sits; with `area`, in that tree.
+    var teamspaces: [String] { teamspaces(in: nil) }
+
+    func teamspaces(in area: WikiArea?) -> [String] {
         var out: [String] = []
-        for root in treeChildren(of: nil) {
+        for root in treeChildren(of: nil) where area == nil || root.area == area {
             if case let .team(id) = section(of: root), !out.contains(id) { out.append(id) }
         }
         return out
@@ -159,13 +191,18 @@ final class WikiStore {
     /// The newest edits first.
     var recent: [WikiNode] { nodes.sorted { $0.updatedAt > $1.updatedAt } }
 
+    /// The newest edits of one area first.
+    func recent(in area: WikiArea) -> [WikiNode] { recent.filter { $0.area == area } }
+
     /// The tree flattened in reading order with each page's level, following `expanded`
-    /// (or every page with `all`); with `section`, only the pages living there.
-    func outline(all: Bool = false, in section: WikiSection? = nil) -> [WikiOutlineItem] {
+    /// (or every page with `all`); with `section`, only the pages living there, and with
+    /// `area`, only that tree's.
+    func outline(all: Bool = false, in section: WikiSection? = nil, area: WikiArea? = nil) -> [WikiOutlineItem] {
         var out: [WikiOutlineItem] = []
         func walk(_ parent: String?, _ level: Int) {
             for child in treeChildren(of: parent) {
                 if level == 0, let section, self.section(of: child) != section { continue }
+                if level == 0, let area, child.area != area { continue }
                 out.append(WikiOutlineItem(node: child, level: level))
                 if all || expanded.contains(child.id) { walk(child.id, level + 1) }
             }
@@ -179,7 +216,7 @@ final class WikiStore {
     func moveTargets(for id: String) -> [WikiOutlineItem] {
         let blocked = Set([id] + descendants(of: id).map(\.id))
         let tall = height(of: id)
-        return outline(all: true).filter { !blocked.contains($0.node.id) && depth(of: $0.node.id) + tall <= WikiText.maxDepth }
+        return outline(all: true, area: node(id)?.area).filter { !blocked.contains($0.node.id) && depth(of: $0.node.id) + tall <= WikiText.maxDepth }
     }
 
     func expand(_ ids: [String]) {
@@ -274,6 +311,79 @@ final class WikiStore {
         }
     }
 
+    /// Moves a top-level page, or one out of its parent, to the other area's top level with its
+    /// subpages (contracts/pages.md "Areas"), last among that area's pages. Not for a journal or a template.
+    func move(_ id: String, to area: WikiArea) async throws -> WikiPage {
+        guard let api else { throw APIError.signedOut }
+        let position = roots(of: node(id).map(section(of:)) ?? .workspace, in: area).count
+        let before = nodes
+        let moved = Set([id] + descendants(of: id).map(\.id))
+        if let index = nodes.firstIndex(where: { $0.id == id }) {
+            let oldParent = nodes[index].parentID
+            nodes[index].parentID = nil
+            nodes[index].position = position
+            renumber(oldParent)
+        }
+        for index in nodes.indices where moved.contains(nodes[index].id) { nodes[index].area = area }
+        do {
+            let page: WikiPage = try await api.post("v1/wiki/pages/\(id)/move", body: WikiMove(parentID: nil, position: position, area: area))
+            upsert(page.node)
+            return page
+        } catch {
+            nodes = before
+            throw error
+        }
+    }
+
+    /// Opens the person's note of `date` in `area`, making it (and their journal) when there is
+    /// none (contracts/wiki.md "Journal"). A new journal joins the tree with the note.
+    func daily(_ date: Date, in area: WikiArea) async throws -> WikiPage {
+        guard let api else { throw APIError.signedOut }
+        let day = Self.dayFormatter.string(from: date)
+        let title = date.formatted(.dateTime.weekday(.wide).month(.wide).day())
+        let page: WikiPage = try await api.post("v1/wiki/daily", body: WikiDailyOpen(date: day, title: title, journalTitle: "Journal", area: area))
+        if let parent = page.parentID, node(parent) == nil {
+            await refresh()
+        } else {
+            upsert(page.node)
+        }
+        if let parent = page.parentID { expand([parent]) }
+        return page
+    }
+
+    /// The person's daily note of today in `area`, when the tree holds it.
+    func today(in area: WikiArea) -> WikiNode? {
+        let day = Self.dayFormatter.string(from: .now)
+        return nodes.first { $0.area == area && $0.dailyDate == day }
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    /// The templates the person may use, in either area (contracts/wiki.md "Templates").
+    func templates() async throws -> [WikiNode] {
+        guard let api else { throw APIError.signedOut }
+        let page: Page<WikiNode> = try await api.get("v1/wiki/templates")
+        return page.data
+    }
+
+    /// A new page of the tree copied from a template, with its subpages: at the top level of
+    /// `area`, or under `parentID`.
+    func use(template id: String, in area: WikiArea, parentID: String? = nil, space: String? = nil, teamID: String? = nil) async throws -> WikiPage {
+        guard let api else { throw APIError.signedOut }
+        let body = WikiDuplicate(parentID: parentID, space: parentID == nil ? space : nil, teamID: parentID == nil ? teamID : nil, area: parentID == nil ? area : nil, template: false)
+        let page: WikiPage = try await api.post("v1/wiki/pages/\(id)/duplicate", body: body)
+        // Its subpages came with it: read the tree again for them.
+        upsert(page.node)
+        reload()
+        return page
+    }
+
     /// Deletes the page and every page under it, for good.
     func delete(_ id: String) async throws {
         guard let api else { throw APIError.signedOut }
@@ -298,10 +408,10 @@ final class WikiStore {
         return page
     }
 
-    /// The pages in the trash, last trashed first.
-    func trashed() async throws -> [WikiTrashedPage] {
+    /// The pages in an area's trash, last trashed first.
+    func trashed(in area: WikiArea = .wiki) async throws -> [WikiTrashedPage] {
         guard let api else { throw APIError.signedOut }
-        let page: Page<WikiTrashedPage> = try await api.get("v1/wiki/trash")
+        let page: Page<WikiTrashedPage> = try await api.get("v1/wiki/trash", query: [URLQueryItem(name: "area", value: area.rawValue)])
         return page.data
     }
 
@@ -311,6 +421,9 @@ final class WikiStore {
 
     /// The favorite pages in the tree, in order.
     var favoriteNodes: [WikiNode] { favorites.compactMap { node($0) } }
+
+    /// The favorite pages of one area, in order.
+    func favoriteNodes(in area: WikiArea) -> [WikiNode] { favoriteNodes.filter { $0.area == area } }
 
     /// Adds the page last to the favorites, or takes it out; shown at once.
     func setFavorite(_ id: String, _ on: Bool) async throws {
@@ -364,9 +477,12 @@ final class WikiStore {
         return rows.data
     }
 
-    func search(_ text: String) async throws -> [WikiSearchHit] {
+    /// Pages of both areas matching `text` (each hit says its area), or of `area` alone.
+    func search(_ text: String, area: WikiArea? = nil) async throws -> [WikiSearchHit] {
         guard let api else { throw APIError.signedOut }
-        let page: Page<WikiSearchHit> = try await api.get("v1/wiki/search", query: [URLQueryItem(name: "q", value: text), URLQueryItem(name: "limit", value: "30")])
+        var query = [URLQueryItem(name: "q", value: text), URLQueryItem(name: "limit", value: "30")]
+        if let area { query.append(URLQueryItem(name: "area", value: area.rawValue)) }
+        let page: Page<WikiSearchHit> = try await api.get("v1/wiki/search", query: query)
         return page.data
     }
 

@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// The wiki's trash (contracts/wiki.md "Trash"): the pages moved there, last first, each
+/// An area's trash (contracts/wiki.md "Trash"), the wiki's or Pages': the pages moved there, last first, each
 /// with where it was and when it goes for good. A page opens to read; agents and admins
 /// restore it, and Delete for good follows the rule deleting a page always had.
 struct WikiTrashView: View {
+    var area: WikiArea = .wiki
+
     @Environment(AppEnvironment.self) private var env
     @State private var pages: [WikiTrashedPage] = []
     @State private var loaded = false
@@ -148,7 +150,7 @@ struct WikiTrashView: View {
 
     private func load() async {
         do {
-            pages = try await store.trashed()
+            pages = try await store.trashed(in: area)
             error = nil
         } catch {
             guard !error.isCancellation else { return }

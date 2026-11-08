@@ -318,7 +318,8 @@ struct WikiPageScreen: View {
             : (saver?.page.breadcrumbs ?? [])
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
-                Button { env.router.show(.wiki, []) } label: { Text("Wiki") }
+                let area = store.node(id)?.area ?? saver?.page.area ?? .wiki
+                Button { env.router.show(area.appArea, []) } label: { Text(area.title) }
                     .buttonStyle(.plain)
                     .foregroundStyle(Theme.fg3)
                 ForEach(crumbs) { crumb in
@@ -589,6 +590,7 @@ struct WikiPageScreen: View {
             let fresh = try await store.page(id)
             loadError = nil
             missing = false
+            env.router.pageLoaded(id, area: fresh.area)
             if let saver {
                 if !saver.busy, saver.status == .saved, saver.isNewer(fresh.version) { take(fresh) }
             } else {
@@ -748,7 +750,7 @@ struct WikiPageScreen: View {
 
     private func go(_ link: DeepLink) {
         switch link {
-        case let .wiki(page?): env.router.push(.wikiPage(page))
+        case let .wiki(page?), let .pages(page?): env.router.push(.wikiPage(page))
         case let .ticket(ticket, _): env.router.push(.ticket(TicketRoute(id: ticket)))
         case let .contact(contact?): env.router.push(.contact(contact))
         case let .company(company?): env.router.push(.company(company))

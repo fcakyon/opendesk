@@ -4,6 +4,21 @@ import Foundation
 // `WikiRevision`, `WikiSearchHit`, the trash, database rows and comments. Keys are
 // copied through explicit CodingKeys.
 
+/// Which tree a page is in (contracts/pages.md "Areas"): the wiki's, or Pages', the
+/// workspace's own pages beside it. A page from before Pages, or one that says none, is the wiki's.
+enum WikiArea: String, Codable, Hashable, Sendable, CaseIterable {
+    case wiki, pages
+
+    /// The area's name in the app.
+    var title: String { self == .pages ? "Pages" : "Wiki" }
+
+    /// Its web route's first segment: `/wiki/<id>` or `/pages/<id>`.
+    var path: String { "/\(rawValue)" }
+
+    /// The area menu's entry for it.
+    var appArea: AppArea { self == .pages ? .pages : .wiki }
+}
+
 /// A page in the tree, without its body.
 struct WikiNode: Codable, Hashable, Sendable, Identifiable {
     var id: String
@@ -25,11 +40,13 @@ struct WikiNode: Codable, Hashable, Sendable, Identifiable {
     var dailyDate: String?
     /// Verified, and not past the day it was verified until.
     var verified: Bool
-    /// `page`, or `database`: a database's subpages are its rows.
+    /// `page`, `database` (its subpages are its rows) or `canvas`.
     var kind: String
+    /// The tree it is in; its subpages are in the same one.
+    var area: WikiArea
 
     enum CodingKeys: String, CodingKey {
-        case id, title, icon, position, version, template, journal, verified, kind
+        case id, title, icon, position, version, template, journal, verified, kind, area
         case parentID = "parent_id"
         case updatedAt = "updated_at"
         case createdByID = "created_by_id"
@@ -39,7 +56,7 @@ struct WikiNode: Codable, Hashable, Sendable, Identifiable {
     }
 
     init(id: String, parentID: String?, title: String, icon: String, position: Int, version: Int, updatedAt: Date, createdByID: String?,
-         isPrivate: Bool = false, teamID: String? = nil, template: Bool = false, journal: Bool = false, dailyDate: String? = nil, verified: Bool = false, kind: String = "page") {
+         isPrivate: Bool = false, teamID: String? = nil, template: Bool = false, journal: Bool = false, dailyDate: String? = nil, verified: Bool = false, kind: String = "page", area: WikiArea = .wiki) {
         self.id = id
         self.parentID = parentID
         self.title = title
@@ -55,6 +72,7 @@ struct WikiNode: Codable, Hashable, Sendable, Identifiable {
         self.dailyDate = dailyDate
         self.verified = verified
         self.kind = kind
+        self.area = area
     }
 
     init(from decoder: Decoder) throws {
@@ -63,6 +81,7 @@ struct WikiNode: Codable, Hashable, Sendable, Identifiable {
         parentID = c.lenient(String.self, forKey: .parentID)
         title = c.lenient(String.self, forKey: .title) ?? ""
         icon = c.lenient(String.self, forKey: .icon) ?? ""
+        area = c.lenient(WikiArea.self, forKey: .area) ?? .wiki
         position = c.lenient(Int.self, forKey: .position) ?? 0
         version = c.lenient(Int.self, forKey: .version) ?? 1
         updatedAt = c.lenient(Date.self, forKey: .updatedAt) ?? .now
@@ -93,10 +112,12 @@ struct WikiNode: Codable, Hashable, Sendable, Identifiable {
         try c.encodeIfPresent(dailyDate, forKey: .dailyDate)
         try c.encode(verified, forKey: .verified)
         try c.encode(kind, forKey: .kind)
+        try c.encode(area, forKey: .area)
     }
 
     var displayTitle: String { WikiText.title(title) }
     var isDatabase: Bool { kind == "database" }
+    var isCanvas: Bool { kind == "canvas" }
 }
 
 struct WikiRef: Codable, Hashable, Sendable, Identifiable {
@@ -152,9 +173,10 @@ struct WikiPage: Codable, Hashable, Sendable, Identifiable {
     var deletedBy: UserRef?
     /// A database's properties; nil for a page.
     var database: WikiDatabase?
+    var area: WikiArea = .wiki
 
     enum CodingKeys: String, CodingKey {
-        case id, title, icon, position, version, breadcrumbs, children, template, journal, kind, locked, verification, database
+        case id, title, icon, position, version, breadcrumbs, children, template, journal, kind, locked, verification, database, area
         case parentID = "parent_id"
         case bodyHTML = "body_html"
         case createdBy = "created_by"
@@ -210,6 +232,7 @@ struct WikiPage: Codable, Hashable, Sendable, Identifiable {
         deletedAt = c.lenient(Date.self, forKey: .deletedAt)
         deletedBy = c.lenient(UserRef.self, forKey: .deletedBy)
         database = c.lenient(WikiDatabase.self, forKey: .database)
+        area = c.lenient(WikiArea.self, forKey: .area) ?? .wiki
     }
 
     func encode(to encoder: Encoder) throws {
@@ -238,17 +261,19 @@ struct WikiPage: Codable, Hashable, Sendable, Identifiable {
         try c.encodeIfPresent(deletedAt, forKey: .deletedAt)
         try c.encodeIfPresent(deletedBy, forKey: .deletedBy)
         try c.encodeIfPresent(database, forKey: .database)
+        try c.encode(area, forKey: .area)
     }
 
     /// The page as the tree holds it.
     var node: WikiNode {
         WikiNode(id: id, parentID: parentID, title: title, icon: icon, position: position, version: version, updatedAt: updatedAt, createdByID: createdBy?.id,
                  isPrivate: isPrivate, teamID: teamID, template: template, journal: journal, dailyDate: dailyDate,
-                 verified: verification.map { !$0.expired } ?? false, kind: kind)
+                 verified: verification.map { !$0.expired } ?? false, kind: kind, area: area)
     }
 
     var displayTitle: String { WikiText.title(title) }
     var isDatabase: Bool { kind == "database" }
+    var isCanvas: Bool { kind == "canvas" }
     var inTrash: Bool { deletedAt != nil }
 }
 
@@ -542,14 +567,16 @@ struct WikiSearchHit: Codable, Hashable, Sendable, Identifiable {
     var snippet: String
     var path: [WikiRef]
     var updatedAt: Date
+    var area: WikiArea = .wiki
 
     enum CodingKeys: String, CodingKey {
-        case id, title, icon, snippet, path
+        case id, title, icon, snippet, path, area
         case parentID = "parent_id"
         case updatedAt = "updated_at"
     }
 
-    init(id: String, parentID: String?, title: String, icon: String, snippet: String, path: [WikiRef], updatedAt: Date) {
+    init(id: String, parentID: String?, title: String, icon: String, snippet: String, path: [WikiRef], updatedAt: Date, area: WikiArea = .wiki) {
+        self.area = area
         self.id = id
         self.parentID = parentID
         self.title = title
@@ -568,6 +595,7 @@ struct WikiSearchHit: Codable, Hashable, Sendable, Identifiable {
         snippet = c.lenient(String.self, forKey: .snippet) ?? ""
         path = c.lenient([WikiRef].self, forKey: .path) ?? []
         updatedAt = c.lenient(Date.self, forKey: .updatedAt) ?? .now
+        area = c.lenient(WikiArea.self, forKey: .area) ?? .wiki
     }
 
     var displayTitle: String { WikiText.title(title) }
@@ -582,9 +610,13 @@ struct WikiPageCreate: Encodable, Sendable {
     /// Where a top-level page lives: `workspace` (the default), `private` or `team` with `teamID`.
     var space: String?
     var teamID: String?
+    /// The tree a top-level page goes in (`wiki` when left out); a subpage goes in its parent's.
+    var area: WikiArea?
+    /// `page` when left out, `database` or `canvas` (contracts/wiki.md "Databases", "Canvas").
+    var kind: String?
 
     enum CodingKeys: String, CodingKey {
-        case title, icon, space
+        case title, icon, space, area, kind
         case parentID = "parent_id"
         case bodyHTML = "body_html"
         case teamID = "team_id"
@@ -598,6 +630,50 @@ struct WikiPageCreate: Encodable, Sendable {
         try c.encodeIfPresent(bodyHTML, forKey: .bodyHTML)
         try c.encodeIfPresent(space, forKey: .space)
         try c.encodeIfPresent(teamID, forKey: .teamID)
+        try c.encodeIfPresent(area, forKey: .area)
+        try c.encodeIfPresent(kind, forKey: .kind)
+    }
+}
+
+/// Body of `POST /v1/wiki/pages/{id}/duplicate`: Use a template copies the template here.
+struct WikiDuplicate: Encodable, Sendable {
+    var parentID: String?
+    var space: String?
+    var teamID: String?
+    var title: String?
+    var area: WikiArea?
+    /// Left out, the copy is what the page is: Use a template sends false, for a page of the tree.
+    var template: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case space, title, area, template
+        case parentID = "parent_id"
+        case teamID = "team_id"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(parentID, forKey: .parentID)
+        try c.encodeIfPresent(space, forKey: .space)
+        try c.encodeIfPresent(teamID, forKey: .teamID)
+        try c.encodeIfPresent(title, forKey: .title)
+        try c.encodeIfPresent(area, forKey: .area)
+        try c.encodeIfPresent(template, forKey: .template)
+    }
+}
+
+/// Body of `POST /v1/wiki/daily`: opens the caller's note of `date`, making it (and their
+/// journal) when there is none (contracts/wiki.md "Journal").
+struct WikiDailyOpen: Encodable, Sendable {
+    /// `YYYY-MM-DD`.
+    var date: String
+    var title: String
+    var journalTitle: String
+    var area: WikiArea
+
+    enum CodingKeys: String, CodingKey {
+        case date, title, area
+        case journalTitle = "journal_title"
     }
 }
 
@@ -628,9 +704,11 @@ struct WikiPagePatch: Encodable, Sendable {
 struct WikiMove: Encodable, Sendable {
     var parentID: String?
     var position: Int
+    /// At the top level, the tree it moves to with its subpages (contracts/pages.md "Areas").
+    var area: WikiArea?
 
     enum CodingKeys: String, CodingKey {
-        case position
+        case position, area
         case parentID = "parent_id"
     }
 
@@ -638,6 +716,7 @@ struct WikiMove: Encodable, Sendable {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(parentID, forKey: .parentID)
         try c.encode(position, forKey: .position)
+        try c.encodeIfPresent(area, forKey: .area)
     }
 }
 

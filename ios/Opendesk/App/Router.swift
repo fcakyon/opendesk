@@ -21,10 +21,14 @@ enum AppRoute: Hashable {
     case article(String)
     /// A changelog entry; `"new"` starts one.
     case changelogEntry(String)
-    /// A wiki page.
+    /// A page of the wiki or of Pages (the page says which).
     case wikiPage(String)
-    /// The wiki's trash.
-    case wikiTrash
+    /// An area's trash.
+    case wikiTrash(WikiArea)
+    /// The templates new pages start from (shared by both areas, made in this one).
+    case wikiTemplates(WikiArea)
+    /// One teamspace's pages in an area.
+    case wikiTeamspace(WikiArea, String)
     case search
 
     static func ticket(_ ticket: Ticket) -> AppRoute { .ticket(TicketRoute(id: ticket.id, seed: ticket)) }
@@ -32,7 +36,7 @@ enum AppRoute: Hashable {
 
 /// What the Inbox tab shows at its root, chosen from the menu.
 enum AppArea: String, CaseIterable, Identifiable, Sendable {
-    case tickets, mail, contacts, companies, kb, wiki, reports
+    case tickets, mail, contacts, companies, kb, wiki, pages, reports
     /// An Everywhere list across workspaces (`Router.everywhere` says which).
     case everywhere
 
@@ -46,6 +50,7 @@ enum AppArea: String, CaseIterable, Identifiable, Sendable {
         case .companies: "Companies"
         case .kb: "Knowledge base"
         case .wiki: "Wiki"
+        case .pages: "Pages"
         case .reports: "Reports"
         case .everywhere: "Everywhere"
         }
@@ -59,6 +64,7 @@ enum AppArea: String, CaseIterable, Identifiable, Sendable {
         case .companies: "building.2"
         case .kb: "book.closed"
         case .wiki: "book.pages"
+        case .pages: "doc.richtext"
         case .reports: "chart.bar.xaxis"
         case .everywhere: "globe"
         }
@@ -192,7 +198,17 @@ final class Router {
             KBStore.shared.mode = .changelog
             show(.kb, id.map { [.changelogEntry($0)] } ?? [])
         case let .wiki(id):
-            show(.wiki, id.map { [.wikiPage($0)] } ?? [])
+            if let id { openPage(id, area: .wiki) } else { show(.wiki, []) }
+        case let .pages(id):
+            if let id { openPage(id, area: .pages) } else { show(.pages, []) }
+        case let .wikiPlace(area, place):
+            switch place {
+            case .trash: show(area.appArea, [.wikiTrash(area)])
+            case .templates: show(area.appArea, [.wikiTemplates(area)])
+            case let .teamspace(team): show(area.appArea, [.wikiTeamspace(area, team)])
+            // The graph and tags are the web's: the area's home is the nearest here.
+            case .graph, .tags: show(area.appArea, [])
+            }
         case .reports:
             show(.reports, [])
         }
@@ -213,6 +229,23 @@ final class Router {
             }
         }
         tab = .inbox
+    }
+
+    /// Opens a page of the wiki or of Pages with its area's list behind it. A link may name the
+    /// other area (contracts/pages.md "Routes"): the tree's own answer wins, and a page not in it
+    /// yet moves to its area once it loads (`pageLoaded`).
+    func openPage(_ id: String, area: WikiArea) {
+        let known = WikiStore.shared.node(id)?.area ?? area
+        show(known.appArea, [.wikiPage(id)])
+    }
+
+    /// A page opened from a link reads its own area: the Inbox tab moves to that area's list
+    /// when it was opened under the other one, as the web redirects `/wiki/<id>` and `/pages/<id>`.
+    func pageLoaded(_ id: String, area: WikiArea) {
+        guard tab == .inbox, shownArea == .wiki || shownArea == .pages, shownArea != area.appArea,
+              inboxPath.first == .wikiPage(id), environment?.products.allows(area.appArea) ?? true
+        else { return }
+        self.area = area.appArea
     }
 
     /// Never leaves the Inbox tab on an area the workspace no longer offers (a switch, or a
@@ -273,7 +306,8 @@ final class Router {
             return AssistantPageContext(page: "ticket", path: env.inbox.scope.webPath(ticketID: route.id), ticketID: route.id)
         }
         if case let .wikiPage(id)? = top {
-            return AssistantPageContext(page: "wiki", path: "/wiki/\(id)", wikiPageID: id)
+            let area = WikiStore.shared.node(id)?.area ?? (shownArea == .pages ? .pages : .wiki)
+            return AssistantPageContext(page: "wiki", path: "\(area.path)/\(id)", wikiPageID: id)
         }
         switch (tab, shownArea) {
         case (.inbox, .tickets):
@@ -289,6 +323,7 @@ final class Router {
         case (.inbox, .contacts), (.inbox, .companies): return AssistantPageContext(page: "contacts", path: "/" + area.rawValue)
         case (.inbox, .kb): return AssistantPageContext(page: "kb", path: "/kb")
         case (.inbox, .wiki): return AssistantPageContext(page: "wiki", path: "/wiki")
+        case (.inbox, .pages): return AssistantPageContext(page: "wiki", path: "/pages")
         case (.inbox, .reports): return AssistantPageContext(page: "reports", path: "/reports")
         case (.inbox, .mail): return AssistantPageContext(page: "mail", path: "/mail")
         case (.account, _): return AssistantPageContext(page: "settings", path: "/settings/profile")
