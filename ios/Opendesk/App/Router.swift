@@ -279,7 +279,7 @@ final class Router {
         case (.inbox, .tickets):
             var context = AssistantPageContext(page: "inbox", path: env.inbox.scope.webPath())
             switch env.inbox.scope {
-            case let .folder(folder): context.folder = folder.rawValue
+            case let .folder(folder), let .mailbox(_, folder): context.folder = folder.rawValue
             case let .view(id):
                 context.page = "view"
                 context.viewID = id

@@ -618,14 +618,42 @@ struct TicketCounts: Codable, Hashable, Sendable {
     /// Open and unassigned tickets per team the caller can see, and summed over the caller's teams.
     var teams: [String: TeamCount] = [:]
     var myTeams: TeamCount?
+    /// The folders of each ticket inbox (reply address) with tickets the caller can see, for an
+    /// inbox shown as a section of its own; an address without such tickets is left out.
+    var mailboxes: [String: MailboxCount] = [:]
 
     struct TeamCount: Codable, Hashable, Sendable {
         var open: Int
         var unassigned: Int
     }
 
+    /// One inbox's folders, `pending` with on hold.
+    struct MailboxCount: Codable, Hashable, Sendable {
+        var unassigned = 0
+        var mine = 0
+        var open = 0
+        var pending = 0
+
+        enum CodingKeys: String, CodingKey { case unassigned, mine, open, pending }
+
+        init(unassigned: Int = 0, mine: Int = 0, open: Int = 0, pending: Int = 0) {
+            self.unassigned = unassigned
+            self.mine = mine
+            self.open = open
+            self.pending = pending
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            unassigned = c.lenient(Int.self, forKey: .unassigned) ?? 0
+            mine = c.lenient(Int.self, forKey: .mine) ?? 0
+            open = c.lenient(Int.self, forKey: .open) ?? 0
+            pending = c.lenient(Int.self, forKey: .pending) ?? 0
+        }
+    }
+
     enum CodingKeys: String, CodingKey {
-        case unassigned, mine, open, pending, solved, spam, views, teams
+        case unassigned, mine, open, pending, solved, spam, views, teams, mailboxes
         case onHold = "on_hold"
         case myTeams = "my_teams"
     }
@@ -642,6 +670,7 @@ struct TicketCounts: Codable, Hashable, Sendable {
         views = c.lenient([String: Int].self, forKey: .views) ?? [:]
         teams = c.lenient([String: TeamCount].self, forKey: .teams) ?? [:]
         myTeams = c.lenient(TeamCount.self, forKey: .myTeams)
+        mailboxes = c.lenient([String: MailboxCount].self, forKey: .mailboxes) ?? [:]
     }
 }
 

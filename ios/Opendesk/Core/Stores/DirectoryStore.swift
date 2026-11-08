@@ -14,6 +14,13 @@ final class DirectoryStore {
     /// Custom field definitions for tickets, contacts and companies, archived ones included.
     private(set) var fields: [CustomField] = []
     private(set) var counts: TicketCounts?
+    /// The workspace's ticket inboxes (its helpdesk mailboxes, the reply addresses of tickets), by name.
+    private(set) var mailboxes: [InboxMailbox] = []
+    /// The ticket inboxes the member shows as sections of their own, in their order
+    /// (`SidebarPrefs.order` entries `mailbox:<id>`, contracts/collab.md "Inboxes as sections").
+    private(set) var inboxSections: [String] = []
+    /// The member's own names for sidebar sections and rows (`SidebarPrefs.names`).
+    private(set) var sidebarNames: [String: String] = [:]
     private(set) var ai: AIConfig = .off
     /// Collab mail for this workspace; the Mail area shows only when it is on.
     private(set) var collab: CollabAvailability = .off
@@ -36,6 +43,9 @@ final class DirectoryStore {
         savedReplies = []
         fields = []
         counts = nil
+        mailboxes = []
+        inboxSections = []
+        sidebarNames = [:]
         ai = .off
         collab = .off
         loaded = false
@@ -55,6 +65,8 @@ final class DirectoryStore {
         async let ai: AIConfig? = try? api.get("v1/ai/config")
         async let collab: CollabAvailability? = try? api.get("v1/collab")
         async let counts: TicketCounts? = try? api.get("v1/tickets/counts")
+        async let mailboxes: Page<InboxMailbox>? = try? api.get("v1/mailboxes")
+        async let sidebar: JSONValue? = try? api.get("v1/collab/sidebar")
 
         if let all = await members { self.members = all }
         if let page = await teams { self.teams = page.data.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending } }
@@ -65,7 +77,77 @@ final class DirectoryStore {
         if let config = await ai { self.ai = config }
         if let status = await collab { self.collab = status }
         if let value = await counts { self.counts = value }
+        if let page = await mailboxes { self.mailboxes = Self.byName(page.data) }
+        if let prefs = await sidebar { applySidebar(prefs) }
         loaded = true
+    }
+
+    func refreshMailboxes() async {
+        guard let api, let page: Page<InboxMailbox> = try? await api.get("v1/mailboxes") else { return }
+        mailboxes = Self.byName(page.data)
+    }
+
+    private static func byName(_ list: [InboxMailbox]) -> [InboxMailbox] {
+        list.sorted { ($0.name.isEmpty ? $0.email : $0.name).localizedCaseInsensitiveCompare($1.name.isEmpty ? $1.email : $1.name) == .orderedAscending }
+    }
+
+    func mailbox(_ id: String?) -> InboxMailbox? {
+        guard let id else { return nil }
+        return mailboxes.first { $0.id == id }
+    }
+
+    // MARK: Ticket inboxes as sections
+
+    private func applySidebar(_ prefs: JSONValue) {
+        let order = prefs.object?["order"]?.array?.compactMap(\.string) ?? []
+        var sections: [String] = []
+        for key in order where key.hasPrefix("mailbox:") {
+            let id = String(key.dropFirst(8))
+            if !id.isEmpty, !sections.contains(id) { sections.append(id) }
+        }
+        inboxSections = sections
+        var names: [String: String] = [:]
+        for (key, value) in prefs.object?["names"]?.object ?? [:] {
+            if let name = value.string { names[key] = name }
+        }
+        sidebarNames = names
+    }
+
+    func refreshSidebar() async {
+        guard let api, let prefs: JSONValue = try? await api.get("v1/collab/sidebar") else { return }
+        applySidebar(prefs)
+    }
+
+    /// What a ticket inbox is called in the sidebar: the member's name for its section, else
+    /// the mailbox's name, else its address.
+    func inboxTitle(_ mailbox: InboxMailbox) -> String {
+        let own = mailbox.name.isEmpty ? mailbox.email : mailbox.name
+        return sidebarNames["section:mailbox:" + mailbox.id].flatMap { $0.isEmpty ? nil : $0 } ?? own
+    }
+
+    func isInboxSection(_ id: String) -> Bool { inboxSections.contains(id) }
+
+    /// Shows a ticket inbox as a section of its own, or puts it back into Tickets, as the web's
+    /// `setInboxSection`: the member's saved preferences are read and written back whole, with
+    /// only `order` changed. A new section goes after the last inbox section, else after Tickets.
+    func setInboxSection(_ id: String, _ on: Bool) async throws {
+        guard let api else { return }
+        let current: JSONValue = try await api.get("v1/collab/sidebar")
+        guard var prefs = current.object else { return }
+        let key = "mailbox:" + id
+        let order = prefs["order"]?.array?.compactMap(\.string) ?? []
+        var rest = order.filter { $0 != key }
+        if on {
+            guard rest.count == order.count else { return applySidebar(current) }
+            let anchor = rest.lastIndex { $0.hasPrefix("mailbox:") } ?? rest.firstIndex(of: "inbox")
+            if let anchor { rest.insert(key, at: anchor + 1) } else { rest.append(key) }
+        } else {
+            guard rest.count != order.count else { return applySidebar(current) }
+        }
+        prefs["order"] = .array(rest.map(JSONValue.string))
+        applySidebar(.object(prefs))
+        let saved: JSONValue = try await api.send(APIRequest(method: "PUT", path: "v1/collab/sidebar", body: try APICoding.encoder.encode(JSONValue.object(prefs))))
+        applySidebar(saved)
     }
 
     func refreshCounts() async {
@@ -145,6 +227,11 @@ final class DirectoryStore {
             scheduleCounts()
             return
         }
+        // A mailbox event carries the members' view: read the list again.
+        if type.hasPrefix("mailbox.") {
+            Task { await refreshMailboxes() }
+            return
+        }
         switch type {
         case "member.added", "member.updated":
             if let member = envelope.member("member", as: Member.self) { setMember(member) }
@@ -175,6 +262,8 @@ final class DirectoryStore {
             if let reply = envelope.member("saved_reply", as: SavedReply.self) { upsert(&savedReplies, reply) }
         case "saved_reply.deleted":
             if let id = envelope.string("saved_reply_id") { savedReplies.removeAll { $0.id == id } }
+        case "collab.sidebar":
+            Task { await refreshSidebar() }
         case "workspace.updated":
             Task { [weak self] in
                 guard let self, let api = self.api else { return }

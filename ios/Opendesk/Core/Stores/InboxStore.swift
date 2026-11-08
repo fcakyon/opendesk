@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// The ticket list for one folder, view or team inbox, with filters, sort and
+/// The ticket list for one folder, view, team inbox or ticket inbox, with filters, sort and
 /// search, patched in place by realtime events.
 @MainActor
 @Observable
@@ -83,14 +83,15 @@ final class InboxStore {
 
     func setScope(_ next: InboxScope) {
         guard next != scope else { return }
-        // Moving between a team inbox's tabs keeps the filters, as on the web.
+        // Moving between a team inbox's tabs, or a ticket inbox's folders, keeps the filters, as on the web.
         let sameTeam = next.teamID != nil && next.teamID == scope.teamID
+        let sameMailbox = next.mailboxID != nil && next.mailboxID == scope.mailboxID
         scope = next
         if let instance { Preferences.setLastFolder(next.key, for: instance) }
         tickets = []
         nextCursor = nil
         loadedOnce = false
-        if !sameTeam {
+        if !sameTeam, !sameMailbox {
             filters = InboxFilters()
             sort = rememberedSort
         }
@@ -101,6 +102,12 @@ final class InboxStore {
     func setTeamTab(_ tab: TeamTab) {
         guard case let .team(id, current) = scope, current != tab else { return }
         setScope(.team(id, tab))
+    }
+
+    /// A ticket inbox's folder.
+    func setMailboxFolder(_ folder: Folder) {
+        guard case let .mailbox(id, current) = scope, current != folder else { return }
+        setScope(.mailbox(id, folder))
     }
 
     func setSearch(_ text: String) {
@@ -135,6 +142,12 @@ final class InboxStore {
             // A team inbox is already one team (or the caller's teams).
             filters.teams = []
             filters.teamsNot = []
+        case let .mailbox(id, folder):
+            items += folder.query
+            items.append(URLQueryItem(name: "mailbox_id", value: id))
+            // A ticket inbox is already one address.
+            filters.mailboxID = nil
+            filters.mailboxesNot = []
         }
         items += filters.query
         if !search.isEmpty { items.append(URLQueryItem(name: "q", value: search)) }
@@ -358,6 +371,11 @@ final class InboxStore {
             filters.teams = []
             filters.teamsNot = []
             return inTeam && tab.contains(ticket) && filters.matches(ticket, myTeams: myTeamIDs)
+        case let .mailbox(id, folder):
+            var filters = filters
+            filters.mailboxID = nil
+            filters.mailboxesNot = []
+            return ticket.mailboxID == id && folder.contains(ticket, me: me) && filters.matches(ticket, myTeams: myTeamIDs)
         case .view:
             return nil
         }

@@ -29,7 +29,7 @@ enum DeepLink: Hashable, Sendable {
         var workspaceID: String?
     }
 
-    /// An app path such as `/inbox/mine/<id>`, `/views/<view>/<id>`, `/inbox/open`, `/contacts/<id>`,
+    /// An app path such as `/inbox/mine/<id>`, `/views/<view>/<id>`, `/inbox/open`, `/inbox/unassigned?mailbox=<id>`, `/contacts/<id>`,
     /// `/companies/<id>`, `/mail/<box>/<thread_id>`, `/kb/articles/<id>`, `/kb/changelog/<id>`, `/wiki/<id>` or `/reports`.
     static func parse(path raw: String) -> DeepLink? {
         let path = raw.split(separator: "?", maxSplits: 1).first.map(String.init) ?? raw
@@ -38,6 +38,12 @@ enum DeepLink: Hashable, Sendable {
         switch head {
         case "inbox":
             let folder = segments.count > 1 ? Folder(rawValue: segments[1]) : nil
+            // One ticket inbox's folder (`/inbox/<folder>[/<ticket_id>]?mailbox=<id>`), Unassigned by default.
+            if let mailbox = URLComponents(string: raw)?.queryItems?.first(where: { $0.name == "mailbox" })?.value, !mailbox.isEmpty {
+                let scope = InboxScope.mailbox(mailbox, folder ?? .unassigned)
+                if segments.count >= 3, let id = segments.last { return .ticket(id: id, scope: scope) }
+                return .scope(scope)
+            }
             if segments.count >= 3, let id = segments.last {
                 return .ticket(id: id, scope: folder.map(InboxScope.folder))
             }

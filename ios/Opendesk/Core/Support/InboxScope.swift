@@ -39,6 +39,19 @@ enum Folder: String, CaseIterable, Identifiable, Sendable, Codable {
         }
     }
 
+    /// What waits in this folder of one ticket inbox (`TicketCounts.mailboxes`); Solved and Spam aren't counted.
+    func count(in counts: TicketCounts?, mailbox id: String) -> Int? {
+        guard let counts else { return nil }
+        let inbox = counts.mailboxes[id] ?? TicketCounts.MailboxCount()
+        switch self {
+        case .unassigned: return inbox.unassigned
+        case .mine: return inbox.mine
+        case .open: return inbox.open
+        case .pending: return inbox.pending
+        case .solved, .spam: return nil
+        }
+    }
+
     func count(in counts: TicketCounts?) -> Int? {
         guard let counts else { return nil }
         switch self {
@@ -103,12 +116,14 @@ enum TeamTab: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// What the inbox list shows: a folder, a saved view, or a team inbox
-/// (one team, or `"mine"` for every team the caller is on).
+/// What the inbox list shows: a folder, a saved view, a team inbox (one team, or `"mine"`
+/// for every team the caller is on), or a folder of one ticket inbox: the tickets whose reply
+/// address is that mailbox (`/inbox/<folder>?mailbox=<id>`, contracts/collab.md "Inboxes as sections").
 enum InboxScope: Hashable, Sendable {
     case folder(Folder)
     case view(String)
     case team(String, TeamTab)
+    case mailbox(String, Folder)
 
     static let myTeams = "mine"
 
@@ -117,6 +132,7 @@ enum InboxScope: Hashable, Sendable {
         case let .folder(folder): "folder:" + folder.rawValue
         case let .view(id): "view:" + id
         case let .team(id, tab): "team:" + id + ":" + tab.rawValue
+        case let .mailbox(id, folder): "mailbox:" + id + ":" + folder.rawValue
         }
     }
 
@@ -129,18 +145,44 @@ enum InboxScope: Hashable, Sendable {
             let parts = key.dropFirst(5).split(separator: ":").map(String.init)
             guard let id = parts.first, !id.isEmpty else { return nil }
             self = .team(id, parts.count > 1 ? TeamTab(rawValue: parts[1]) ?? .unassigned : .unassigned)
+        } else if key.hasPrefix("mailbox:") {
+            let parts = key.dropFirst(8).split(separator: ":").map(String.init)
+            guard let id = parts.first, !id.isEmpty else { return nil }
+            self = .mailbox(id, parts.count > 1 ? Folder(rawValue: parts[1]) ?? .unassigned : .unassigned)
         } else {
             return nil
         }
     }
 
-    /// The team of a team inbox (`"mine"` for My teams).
-    /// The list whose order is remembered: a team inbox's tabs share one, as on the web.
+    /// The list whose order is remembered: a team inbox's tabs share one, as on the web, and
+    /// so do a ticket inbox's folders.
     var listKey: String {
         if case let .team(id, _) = self { return "team:" + id }
+        if case let .mailbox(id, _) = self { return "mailbox:" + id }
         return key
     }
 
+    /// The ticket inbox (mailbox) a scope lists.
+    var mailboxID: String? {
+        if case let .mailbox(id, _) = self { return id }
+        return nil
+    }
+
+    /// The folder of a plain folder or of a ticket inbox.
+    var folder: Folder? {
+        switch self {
+        case let .folder(folder), let .mailbox(_, folder): folder
+        case .view, .team: nil
+        }
+    }
+
+    /// The same folder in `mailbox`, or across every inbox for nil; nil for views and team inboxes.
+    func inMailbox(_ mailbox: String?) -> InboxScope? {
+        guard let folder else { return nil }
+        return mailbox.map { .mailbox($0, folder) } ?? .folder(folder)
+    }
+
+    /// The team of a team inbox (`"mine"` for My teams).
     var teamID: String? {
         if case let .team(id, _) = self { return id }
         return nil
@@ -151,7 +193,8 @@ enum InboxScope: Hashable, Sendable {
         return nil
     }
 
-    /// The web path of a ticket in this scope (`/inbox/<folder>/<id>`, `/views/<view>/<id>`, `/teams/<team>/<id>`).
+    /// The web path of a ticket in this scope (`/inbox/<folder>/<id>`, `/views/<view>/<id>`,
+    /// `/teams/<team>/<id>`, `/inbox/<folder>/<id>?mailbox=<mailbox>`).
     func webPath(ticketID: String? = nil) -> String {
         let base: String
         var search = ""
@@ -161,6 +204,9 @@ enum InboxScope: Hashable, Sendable {
         case let .team(id, tab):
             base = "/teams/\(id)"
             if tab != .unassigned { search = "?tab=" + tab.rawValue }
+        case let .mailbox(id, folder):
+            base = "/inbox/\(folder.rawValue)"
+            search = "?mailbox=" + id
         }
         guard let ticketID else { return base + search }
         return base + "/" + ticketID + search
