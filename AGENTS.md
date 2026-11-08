@@ -114,7 +114,11 @@ and `support/instructions.txt` using its `support/opendesk.json` IDs and ignored
 `OPENDESK_API_KEY`. Add `--test` to exercise `support/questions.json` and review the
 returned answers. Widget signing secrets are separate per product. Keep human handoff
 available without asking anonymous visitors for email first. The embedded widget omits
-the vendor footer on this branch and keeps each product's own branding.
+the vendor footer on this branch and keeps each product's own branding. Widget
+`settings.forward_email` sends each complete visitor message through the system mail
+queue to a private recipient. Configure it through the admin widget API and keep
+addresses out of site code and public widget responses. Attachments and replies stay
+in the linked conversation. Notification emails remain separate, paced previews.
 
 Merging to `main` deploys opendesk.sh on its own (`.github/workflows/deploy.yml`): Terraform plans and
 applies (a new task definition revision applies by itself; deleting or replacing anything else waits for

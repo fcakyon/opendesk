@@ -329,3 +329,64 @@ func TestWidgetPublicPerBrand(t *testing.T) {
 	e.Do("GET", "/v1/widget/config?key="+w.Key, hdtest.Auth{Header: shop}, nil).Want(t, 404)
 	e.Do("GET", "/v1/widget/conversations", da, nil).Want(t, 200)
 }
+
+func TestWidgetForwardsFullMessagesPrivately(t *testing.T) {
+	e, ws := setup(t)
+	admin := ws.Admin.As(ws)
+	recipient := "owner-" + ws.ID.String() + "@example.com"
+	patch := map[string]any{"settings": map[string]any{"forward_email": recipient}}
+	e.Do("PATCH", "/v1/widgets/"+ws.WidgetID.String(), ws.Agent.As(ws), patch).Want(t, 403)
+	e.Do("PATCH", "/v1/widgets/"+ws.WidgetID.String(), admin,
+		map[string]any{"settings": map[string]any{"forward_email": "invalid"}}).Want(t, 422)
+	e.Do("PATCH", "/v1/widgets/"+ws.WidgetID.String(), admin, patch).Want(t, 200)
+	config := e.Do("GET", "/v1/widget/config?key="+ws.WidgetKey, hdtest.Auth{}, nil).Want(t, 200)
+	if strings.Contains(string(config.Body), recipient) || strings.Contains(string(config.Body), "forward_email") {
+		t.Fatal("public widget config exposed the forwarding recipient")
+	}
+	visitor := start(t, e, map[string]any{"key": ws.WidgetKey, "name": "Visitor", "email": "visitor@example.com"})
+	va := hdtest.Auth{Visitor: visitor.VisitorToken}
+	body := strings.Repeat("A complete message. ", 50) + "<script>alert(1)</script>"
+	var created struct {
+		Conversation struct {
+			ID string `json:"id"`
+		} `json:"conversation"`
+	}
+	response := e.Do("POST", "/v1/widget/conversations", va, map[string]any{"body": body}).Want(t, 201)
+	response.JSON(t, &created)
+	if strings.Contains(string(response.Body), recipient) {
+		t.Fatal("visitor response exposed the forwarding recipient")
+	}
+	e.Do("POST", "/v1/widget/conversations/"+created.Conversation.ID+"/messages", va, map[string]any{"body": "Second message"}).Want(t, 201)
+	var raw []byte
+	e.Scalar(`SELECT jsonb_agg(args ORDER BY id) FROM river_job WHERE kind = 'mail.system' AND args->>'to' = $1`, &raw, recipient)
+	var messages []struct {
+		To, Text, HTML string
+		Headers        map[string]string
+	}
+	if err := json.Unmarshal(raw, &messages); err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 2 || messages[0].Headers["Reply-To"] != "visitor@example.com" || messages[0].To != recipient || !strings.Contains(messages[0].Text, body) || !strings.Contains(messages[1].Text, "Second message") {
+		t.Fatalf("forwarded messages did not preserve both full bodies: %s", raw)
+	}
+	if strings.Contains(messages[0].HTML, "<script>") || !strings.Contains(messages[0].HTML, "&lt;script&gt;") {
+		t.Fatal("forwarded HTML did not escape visitor markup")
+	}
+	other := e.NewWorkspace()
+	otherRecipient := "owner-" + other.ID.String() + "@example.com"
+	e.Do("PATCH", "/v1/widgets/"+other.WidgetID.String(), other.Admin.As(other), map[string]any{"settings": map[string]any{"forward_email": otherRecipient}}).Want(t, 200)
+	ov := start(t, e, map[string]any{"key": other.WidgetKey})
+	e.Do("POST", "/v1/widget/conversations", hdtest.Auth{Visitor: ov.VisitorToken}, map[string]any{"body": "Other workspace"}).Want(t, 201)
+	var otherBody string
+	e.Scalar(`SELECT args->>'text' FROM river_job WHERE kind = 'mail.system' AND args->>'to' = $1`, &otherBody, otherRecipient)
+	if !strings.Contains(otherBody, "Other workspace") || strings.Contains(otherBody, body) {
+		t.Fatal("the second recipient did not receive only its own message")
+	}
+	e.Do("PATCH", "/v1/widgets/"+ws.WidgetID.String(), admin, map[string]any{"settings": map[string]any{"forward_email": ""}}).Want(t, 200)
+	e.Do("POST", "/v1/widget/conversations/"+created.Conversation.ID+"/messages", va, map[string]any{"body": "Forwarding is now off"}).Want(t, 201)
+	var count int
+	e.Scalar(`SELECT count(*) FROM river_job WHERE kind = 'mail.system' AND args->>'to' = $1`, &count, recipient)
+	if count != 2 {
+		t.Fatalf("disabled or unrelated widget forwarded a message: %d", count)
+	}
+}
