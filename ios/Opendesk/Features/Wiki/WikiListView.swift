@@ -307,8 +307,8 @@ struct WikiListView: View {
                     : "No one has added a page yet. Agents and admins can add the first one."
             )
             if env.session.canWrite {
-                WikiStartPanel(area: area, busy: creating) { kind in
-                    switch kind {
+                WikiStartPanel(area: area, busy: creating) { start in
+                    switch start {
                     case let .kind(kind): create(WikiPageCreate(area: area, kind: kind == "page" ? nil : kind))
                     case .template: adding = WikiNewPagePlace(area: area, templates: true)
                     }
