@@ -16,6 +16,7 @@ struct SpaceEditorSheet: View {
     @State private var problem: String?
     @State private var saving = false
     @State private var confirmDiscard: AccountConfirm?
+    @State private var iconFor: IconTarget?
     private let original: Space
 
     init(draft: SpaceDraft) {
@@ -34,6 +35,14 @@ struct SpaceEditorSheet: View {
         var section: String
         var item: String
         var id: String { section + "/" + item }
+    }
+
+    /// A section's emoji, or a row's when `item` is set.
+    private struct IconTarget: Identifiable {
+        var section: String
+        var item: String?
+        var title: String
+        var id: String { section + "/" + (item ?? "") }
     }
 
     var body: some View {
@@ -106,6 +115,11 @@ struct SpaceEditorSheet: View {
         .sheet(item: $renaming) { ref in
             renameSheet(ref)
                 .presentationDetents([.height(250)])
+                .presentationCornerRadius(Theme.Radius.sheet)
+        }
+        .sheet(item: $iconFor) { target in
+            SidebarIconSheet(title: target.title, current: icon(of: target)) { setIcon($0, for: target) }
+                .presentationDetents([.medium])
                 .presentationCornerRadius(Theme.Radius.sheet)
         }
         .accountConfirm($confirmDiscard)
@@ -211,11 +225,15 @@ struct SpaceEditorSheet: View {
             .deleteDisabled(true)
         } header: {
             HStack(spacing: 8) {
+                if let icon = section.icon { Text(icon).font(.system(size: 14)) }
                 TextField("Section title", text: titleBinding(section.id), prompt: Text(index == 0 ? "No title" : "Section title").foregroundStyle(Theme.fg4))
                     .font(ODFont.sans(13, weight: .semibold))
                     .foregroundStyle(Theme.fg2)
                     .textCase(nil)
                 Menu {
+                    Button {
+                        iconFor = IconTarget(section: section.id, item: nil, title: section.title.isEmpty ? "this section" : section.title)
+                    } label: { Label("Change icon", systemImage: "face.smiling") }
                     if index > 0 {
                         Button { moveSection(section.id, by: -1) } label: { Label("Move up", systemImage: "arrow.up") }
                     }
@@ -249,6 +267,9 @@ struct SpaceEditorSheet: View {
                     renameText = item.name ?? ""
                     renaming = RowRef(section: section.id, item: item.id)
                 } label: { Label("Rename in this Space", systemImage: "pencil") }
+                Button {
+                    iconFor = IconTarget(section: section.id, item: item.id, title: described.title)
+                } label: { Label("Change icon", systemImage: "face.smiling") }
                 Button {
                     update(item.id) { $0.badge = $0.hidesNumber ? nil : "none" }
                 } label: {
@@ -329,6 +350,20 @@ struct SpaceEditorSheet: View {
                 change(&space.sections[s].items[i])
                 return
             }
+        }
+    }
+
+    private func icon(of target: IconTarget) -> String? {
+        guard let section = space.sections.first(where: { $0.id == target.section }) else { return nil }
+        guard let item = target.item else { return section.icon }
+        return section.items.first { $0.id == item }?.icon
+    }
+
+    private func setIcon(_ icon: String?, for target: IconTarget) {
+        if let item = target.item {
+            update(item) { $0.icon = icon }
+        } else if let index = space.sections.firstIndex(where: { $0.id == target.section }) {
+            space.sections[index].icon = icon
         }
     }
 
