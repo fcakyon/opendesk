@@ -61,6 +61,7 @@ struct WSGeneralValues: Equatable, Sendable {
     var name = ""
     var ticketsEnabled = true
     var mailEnabled = true
+    var pagesEnabled = true
     var timezone = "UTC"
     var locale = "en"
     var localeFixed = false
@@ -105,7 +106,7 @@ struct WSWorkspaceInfo: Decodable, Sendable {
     }
 
     enum SettingsKeys: String, CodingKey {
-        case tickets_enabled, mail_enabled, timezone, locale, locale_fixed, help_center_enabled, help_center_title
+        case tickets_enabled, mail_enabled, pages_enabled, timezone, locale, locale_fixed, help_center_enabled, help_center_title
         case csat_enabled, undo_send_seconds, undo_send_chat_seconds, snooze_presets, message_delete
         case collab_ticket_replies, collab_ticket_reply_to, brand_color, gravatar, domain_logos, agent_online_time
         case status_labels, priority_labels, send_and_finish_button, severity_enabled, auto_assign
@@ -132,6 +133,7 @@ struct WSWorkspaceInfo: Decodable, Sendable {
         if let s = try? c.nestedContainer(keyedBy: SettingsKeys.self, forKey: .settings) {
             v.ticketsEnabled = s.lenient(Bool.self, forKey: .tickets_enabled) ?? true
             v.mailEnabled = s.lenient(Bool.self, forKey: .mail_enabled) ?? true
+            v.pagesEnabled = s.lenient(Bool.self, forKey: .pages_enabled) ?? true
             v.timezone = s.lenient(String.self, forKey: .timezone) ?? "UTC"
             v.locale = WSLocales.match(s.lenient(String.self, forKey: .locale)) ?? "en"
             v.localeFixed = s.lenient(Bool.self, forKey: .locale_fixed) ?? false

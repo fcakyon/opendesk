@@ -132,6 +132,8 @@ struct WorkspaceSettings: Codable, Hashable, Sendable {
     var undoSendChatSeconds: Int?
     /// Ticketing is on for the workspace (default true); off, the app is Mail only.
     var ticketsEnabled: Bool?
+    /// Pages, the workspace's own pages, databases and canvases, is on (default true; contracts/pages.md).
+    var pagesEnabled: Bool?
 
     enum CodingKeys: String, CodingKey {
         case brandColor = "brand_color"
@@ -144,6 +146,7 @@ struct WorkspaceSettings: Codable, Hashable, Sendable {
         case undoSendSeconds = "undo_send_seconds"
         case undoSendChatSeconds = "undo_send_chat_seconds"
         case ticketsEnabled = "tickets_enabled"
+        case pagesEnabled = "pages_enabled"
     }
 }
 
@@ -160,6 +163,7 @@ extension WorkspaceSettings {
         undoSendSeconds = c.lenient(Int.self, forKey: .undoSendSeconds)
         undoSendChatSeconds = c.lenient(Int.self, forKey: .undoSendChatSeconds)
         ticketsEnabled = c.lenient(Bool.self, forKey: .ticketsEnabled)
+        pagesEnabled = c.lenient(Bool.self, forKey: .pagesEnabled)
     }
 }
 
@@ -181,10 +185,12 @@ struct Workspace: Codable, Hashable, Sendable, Identifiable {
     }
 }
 
-/// What the workspace offers (contracts/api.md, `tickets_enabled` and `mail_available`): both until it says otherwise.
+/// What the workspace offers (contracts/api.md, `tickets_enabled`, `mail_available` and
+/// `pages_enabled`): each until it says otherwise.
 extension Workspace {
     var ticketsOn: Bool { settings?.ticketsEnabled != false }
     var mailOn: Bool { mailAvailable != false }
+    var pagesOn: Bool { settings?.pagesEnabled != false }
 }
 
 struct Membership: Codable, Hashable, Sendable, Identifiable {
