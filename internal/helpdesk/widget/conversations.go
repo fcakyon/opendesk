@@ -18,11 +18,13 @@ import (
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/domain"
+	"github.com/useopendesk/opendesk/internal/emails"
 	"github.com/useopendesk/opendesk/internal/events"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 	"github.com/useopendesk/opendesk/internal/helpdesk/routing"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/jobs"
+	"github.com/useopendesk/opendesk/internal/mailer"
 )
 
 const maxBodyRunes = 10000
@@ -263,7 +265,7 @@ func (h *handler) registerConversations(api huma.API) {
 						return err
 					}
 				}
-				m, err := domain.AddMessage(ctx, tx, h.d.Jobs, h.visitorMessage(p, t.ID, body, attIDs, jobs.TriggerTicketCreated))
+				m, err := h.addVisitorMessage(ctx, tx, p, t.ID, body, attIDs, jobs.TriggerTicketCreated)
 				if err != nil {
 					return err
 				}
@@ -417,7 +419,7 @@ func (h *handler) registerConversations(api huma.API) {
 				if err := hd.ExpireAIActions(ctx, tx, p.WorkspaceID, c.ID); err != nil {
 					return err
 				}
-				m, err := domain.AddMessage(ctx, tx, h.d.Jobs, h.visitorMessage(p, c.ID, body, attIDs, ""))
+				m, err := h.addVisitorMessage(ctx, tx, p, c.ID, body, attIDs, "")
 				if err != nil {
 					return err
 				}
@@ -570,8 +572,36 @@ func (h *handler) registerAgentRoutes(api huma.API) {
 		})
 }
 
-func (h *handler) visitorMessage(p *auth.Principal, ticketID uuid.UUID, body string, attIDs []uuid.UUID, trigger string) domain.NewMessage {
-	return domain.NewMessage{WorkspaceID: p.WorkspaceID, TicketID: ticketID, Kind: "reply", Direction: "inbound",
-		AuthorType: "contact", AuthorContactID: &p.ContactID, BodyHTML: hd.TextToHTML(body), BodyText: body,
-		AttachmentIDs: attIDs, Trigger: trigger}
+// addVisitorMessage stores a visitor message and queues its configured email in the same transaction.
+func (h *handler) addVisitorMessage(ctx context.Context, tx pgx.Tx, p *auth.Principal, ticketID uuid.UUID, body string, attIDs []uuid.UUID, trigger string) (domain.Message, error) {
+	m, err := domain.AddMessage(ctx, tx, h.d.Jobs, domain.NewMessage{WorkspaceID: p.WorkspaceID, TicketID: ticketID, Kind: "reply", Direction: "inbound",
+		AuthorType: "contact", AuthorContactID: &p.ContactID, BodyHTML: hd.TextToHTML(body), BodyText: body, AttachmentIDs: attIDs, Trigger: trigger})
+	if err != nil {
+		return m, err
+	}
+	var recipient, brand, name string
+	var address *string
+	err = tx.QueryRow(ctx, `SELECT COALESCE(g.settings->>'forward_email', ''), COALESCE(b.name, ''), c.name, c.email::text
+		FROM tickets t JOIN contacts c ON c.id = t.contact_id LEFT JOIN widgets g ON g.id = t.widget_id LEFT JOIN brands b ON b.id = g.brand_id
+		WHERE t.workspace_id = $1 AND t.id = $2`, p.WorkspaceID, ticketID).Scan(&recipient, &brand, &name, &address)
+	if err != nil || recipient == "" {
+		return m, err
+	}
+	subject := "New message for " + brand
+	email := mailer.Email{Subject: subject, Heading: subject, Intro: strings.Split(body, "\n"),
+		Facts:  []mailer.Fact{{Label: "Visitor", Value: name}},
+		Button: &mailer.Button{Label: "Open conversation", URL: emails.SiteFrom(h.d.Cfg).App("/inbox/all/"+ticketID.String(), "ws", p.WorkspaceID.String())},
+		Footer: mailer.Footer{Reason: "You receive messages sent through this contact form."}}
+	headers := map[string]string{}
+	if address != nil {
+		email.Facts = append(email.Facts, mailer.Fact{Label: "Visitor email", Value: *address})
+		headers["Reply-To"] = *address
+	}
+	if len(attIDs) > 0 {
+		email.Outro = []string{"Attachments are available in the conversation."}
+	}
+	html, text := mailer.Render(email)
+	_, err = h.d.Jobs.InsertTx(ctx, tx, jobs.SystemEmailArgs{To: recipient, Subject: subject, Text: text, HTML: html, Headers: headers},
+		&river.InsertOpts{Queue: jobs.QueueEmail, MaxAttempts: 8})
+	return m, err
 }

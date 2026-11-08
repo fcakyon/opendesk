@@ -31,13 +31,13 @@ func TestRenderEscapes(t *testing.T) {
 
 func TestBuildHeaders(t *testing.T) {
 	msg := Build("opendesk <team@opendesk.sh>", Mail{To: "a@example.com", Subject: "Hello\r\nBcc: evil@example.com", Text: "t", HTML: "h",
-		Headers: map[string]string{"List-Unsubscribe": "<https://api.example/u?token=x>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+		Headers: map[string]string{"Reply-To": "visitor@example.com", "List-Unsubscribe": "<https://api.example/u?token=x>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
 			"References": "<ticket-1@app.example>\r\nBcc: evil@example.com", "X-Not-Allowed": "nope"}})
 	head, _, _ := strings.Cut(msg, "\r\n\r\n")
 	if strings.Contains(head, "\r\nBcc:") || strings.Contains(head, "X-Not-Allowed") {
 		t.Fatalf("header injection:\n%s", head)
 	}
-	for _, want := range []string{"List-Unsubscribe: <https://api.example/u?token=x>", "List-Unsubscribe-Post: List-Unsubscribe=One-Click", "References: <ticket-1@app.example> Bcc: evil@example.com"} {
+	for _, want := range []string{"Reply-To: visitor@example.com", "List-Unsubscribe: <https://api.example/u?token=x>", "List-Unsubscribe-Post: List-Unsubscribe=One-Click", "References: <ticket-1@app.example> Bcc: evil@example.com"} {
 		if !strings.Contains(head, want) {
 			t.Errorf("missing %q in\n%s", want, head)
 		}

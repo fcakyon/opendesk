@@ -37,7 +37,7 @@ type Mail struct {
 }
 
 // allowedHeaders are the extra headers a Mail may carry.
-var allowedHeaders = []string{"List-Unsubscribe", "List-Unsubscribe-Post", "References", "In-Reply-To", "X-Entity-Ref-ID"}
+var allowedHeaders = []string{"Reply-To", "List-Unsubscribe", "List-Unsubscribe-Post", "References", "In-Reply-To", "X-Entity-Ref-ID"}
 
 // extraHeaders returns m's allowed headers in a fixed order, values flattened to one line.
 func extraHeaders(m Mail) [][2]string {

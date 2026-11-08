@@ -47,6 +47,7 @@ type widgetSettingsPatch struct {
 	Topics          *[]topicIn `json:"topics,omitempty" maxItems:"20" doc:"At most 8; asked before the first message, the pick routes the conversation"`
 	OfflineMessage  *string    `json:"offline_message,omitempty" maxLength:"1000" doc:"Up to 300 characters; \"\" = the translated default"`
 	EmailFollowUp   *bool      `json:"email_follow_up,omitempty"`
+	ForwardEmail    *string    `json:"forward_email,omitempty" maxLength:"254"`
 	Attachments     *bool      `json:"attachments,omitempty"`
 	AttachmentTypes *[]string  `json:"attachment_types,omitempty" maxItems:"50" doc:"Ids of the file type catalog (contracts/api.md); [] takes any file but a program or a script"`
 	VoiceMessages   *bool      `json:"voice_messages,omitempty"`
@@ -202,6 +203,14 @@ func applyPatch(ctx context.Context, q db.Querier, wid uuid.UUID, w hd.WidgetSet
 	if b.Sound != nil {
 		w.Sound = *b.Sound
 		fields = append(fields, "sound")
+	}
+	if b.ForwardEmail != nil {
+		email, err := normalizeEmail(*b.ForwardEmail)
+		if err != nil {
+			return w, nil, err
+		}
+		w.ForwardEmail = email
+		fields = append(fields, "forward_email")
 	}
 	if b.EmailFollowUp != nil {
 		w.EmailFollowUp = *b.EmailFollowUp

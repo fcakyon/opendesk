@@ -50,6 +50,7 @@ type WidgetSettings struct {
 	Topics         []WidgetTopic `json:"topics"`
 	OfflineMessage string        `json:"offline_message"`
 	EmailFollowUp  bool          `json:"email_follow_up"`
+	ForwardEmail   string        `json:"forward_email" doc:"Private recipient for full visitor messages, empty disables forwarding"`
 	// Attachments lets visitors send files: of AttachmentTypes (FileTypes ids), or any
 	// file but a program or a script when that is empty.
 	Attachments     bool     `json:"attachments"`

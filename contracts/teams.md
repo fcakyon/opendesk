@@ -61,6 +61,9 @@ type Widget = {
 //     the widget asks "What can we help with?" before the first message; the pick routes the conversation.
 //   offline_message: string  up to 300; shown while the routed team (else the workspace) is closed. "" = the translated default.
 //   show_team: true now shows the widget team's members (available first), else any members.
+//   forward_email: string, empty by default. Admin-only recipient for full visitor message emails.
+//     Never returned by the public widget config. Messages use the conversation's original widget,
+//     queue with the message transaction, and include a private conversation link for replies and attachments.
 //   email_follow_up: boolean  default true. A visitor who left an email and is not on the page gets agents' replies by email
 //     from the conversation's reply address ("Chat follow-up" below).
 
