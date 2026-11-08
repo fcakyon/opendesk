@@ -10,6 +10,8 @@ struct DemoInboxExtras: Sendable {
     var contacts: [Contact] = []
     /// Help center articles search finds (the knowledge base area serves the articles themselves).
     var articles: [SearchArticle] = []
+    /// The member's saved sidebar preferences (`PUT /v1/collab/sidebar`), as written.
+    var sidebar: [String: JSONValue]?
 
     static func seed(_ ws: DemoWorkspace) -> DemoInboxExtras {
         var extras = DemoInboxExtras()
@@ -42,6 +44,13 @@ extension DemoBackend {
             return .some(encode(ListBody(data: slice, nextCursor: next)))
         }
         if call.match("GET", "mailboxes") != nil { return .some(encode(ListBody(data: inboxMailboxes(ws)))) }
+        if call.match("GET", "collab/sidebar") != nil { return .some(encode(JSONValue.object(inboxSidebar(ws)))) }
+        if call.match("PUT", "collab/sidebar") != nil {
+            var saved = inboxSidebar(ws)
+            for (key, value) in call.body.object ?? [:] { saved[key] = value }
+            ws.inboxExtras.sidebar = saved
+            return .some(encode(JSONValue.object(saved)))
+        }
         if call.match("GET", "search") != nil { return .some(encode(inboxSearch(query["q"] ?? "", in: ws))) }
         if call.match("GET", "ai/search") != nil { return .some(encode(inboxMeaningSearch(query["q"] ?? "", in: ws))) }
         if call.match("POST", "tickets") != nil { return .some(encode(try inboxCreate(call.body, in: &ws))) }
@@ -120,7 +129,33 @@ extension DemoBackend {
         for team in ws.teams { teams[team.id] = count(live.filter { $0.teamID == team.id }) }
         base["teams"] = .object(teams)
         base["my_teams"] = count(live.filter { $0.teamID.map(mine.contains) ?? false })
+        // Each reply address's folders, for an inbox shown as a section of its own.
+        var mailboxes: [String: JSONValue] = [:]
+        for id in Set(live.compactMap(\.mailboxID)) {
+            let tickets = live.filter { $0.mailboxID == id }
+            let waiting = tickets.filter { [.open, .pending, .onHold].contains($0.status) }
+            mailboxes[id] = .object([
+                "unassigned": .number(Double(waiting.filter { $0.assignee == nil }.count)),
+                "mine": .number(Double(waiting.filter { $0.assignee?.id == world.user.id }.count)),
+                "open": .number(Double(tickets.filter { $0.status == .open }.count)),
+                "pending": .number(Double(tickets.filter { $0.status == .pending || $0.status == .onHold }.count)),
+            ])
+        }
+        base["mailboxes"] = .object(mailboxes)
         return .object(base)
+    }
+
+    /// `GET /v1/collab/sidebar`: what was saved, else the defaults; Billing starts as a section of its own.
+    private func inboxSidebar(_ ws: DemoWorkspace) -> [String: JSONValue] {
+        if let saved = ws.inboxExtras.sidebar { return saved }
+        let billing = inboxMailboxes(ws).contains { $0["id"]?.string == DemoSeed.billingMailbox }
+        var order: [JSONValue] = [.string("favorites"), .string("inbox")]
+        if billing { order.append(.string("mailbox:" + DemoSeed.billingMailbox)) }
+        order += [.string("mail"), .string("teams"), .string("views"), .string("workspace")]
+        return [
+            "order": .array(order), "collapsed": .array([]), "hidden": .array([]), "pinned": .array([]),
+            "names": .object([:]), "icons": .object([:]), "sections": .array([]), "show_waiting_chats": .bool(false),
+        ]
     }
 
     /// `GET /v1/tickets` with what the shared matcher leaves out: team lists (`mine`, `none`),
@@ -190,19 +225,16 @@ extension DemoBackend {
         }
     }
 
+    /// The workspace's mailboxes as members read them (Settings › Mailboxes holds the rest), so
+    /// one added there or made from a Mail account shows in the inbox too.
     private func inboxMailboxes(_ ws: DemoWorkspace) -> [JSONValue] {
-        let used = Set(ws.tickets.compactMap(\.mailboxID))
-        guard used.contains(DemoSeed.supportMailbox) || used.contains(DemoSeed.billingMailbox) else { return [] }
-        func mailbox(_ id: String, _ name: String, _ email: String, _ team: String) -> JSONValue {
+        ws.settings.channels.mailboxes.map { box in
             .object([
-                "id": .string(id), "name": .string(name), "email": .string(email), "team_id": .string(team),
-                "status": .string("active"), "sending": .string("ok"), "private": .bool(false),
+                "id": box["id"] ?? .null, "name": box["name"] ?? .string(""), "email": box["email"] ?? .string(""),
+                "team_id": box["team_id"] ?? .null, "status": box["status"] ?? .string("active"),
+                "sending": box["sending"] ?? .string("ok"), "private": box["private"] ?? .bool(false),
             ])
         }
-        return [
-            mailbox(DemoSeed.supportMailbox, "Support", "support@margin.app", DemoSeed.support),
-            mailbox(DemoSeed.billingMailbox, "Billing", "billing@margin.app", DemoSeed.billing),
-        ]
     }
 
     // MARK: Search
