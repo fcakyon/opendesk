@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 // What a wiki page carries besides its title, icon and body (contracts/wiki.md "Page settings",

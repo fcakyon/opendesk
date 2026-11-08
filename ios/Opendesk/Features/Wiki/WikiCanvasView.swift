@@ -59,7 +59,7 @@ struct WikiCanvasBoard: View {
             }
         }
         .frame(height: height)
-        .frame(maxHeight: height == nil ? .infinity : nil)
+        .frame(maxHeight: height == nil ? CGFloat.infinity : nil)
         .background(Theme.sunken)
         .clipShape(RoundedRectangle(cornerRadius: height == nil ? 0 : Theme.Radius.card, style: .continuous))
         .overlay {
