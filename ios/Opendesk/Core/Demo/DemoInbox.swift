@@ -131,15 +131,19 @@ extension DemoBackend {
         base["my_teams"] = count(live.filter { $0.teamID.map(mine.contains) ?? false })
         // Each reply address's folders, for an inbox shown as a section of its own.
         var mailboxes: [String: JSONValue] = [:]
+        let userID = world.user.id
         for id in Set(live.compactMap(\.mailboxID)) {
-            let tickets = live.filter { $0.mailboxID == id }
-            let waiting = tickets.filter { [.open, .pending, .onHold].contains($0.status) }
-            mailboxes[id] = .object([
-                "unassigned": .number(Double(waiting.filter { $0.assignee == nil }.count)),
-                "mine": .number(Double(waiting.filter { $0.assignee?.id == world.user.id }.count)),
-                "open": .number(Double(tickets.filter { $0.status == .open }.count)),
-                "pending": .number(Double(tickets.filter { $0.status == .pending || $0.status == .onHold }.count)),
-            ])
+            let tickets: [Ticket] = live.filter { $0.mailboxID == id }
+            let waiting: [Ticket] = tickets.filter { $0.status == .open || $0.status == .pending || $0.status == .onHold }
+            let unassigned: Int = waiting.filter { $0.assignee == nil }.count
+            let own: Int = waiting.filter { $0.assignee?.id == userID }.count
+            let open: Int = tickets.filter { $0.status == .open }.count
+            let pending: Int = tickets.filter { $0.status == .pending || $0.status == .onHold }.count
+            let folders: [String: JSONValue] = [
+                "unassigned": .number(Double(unassigned)), "mine": .number(Double(own)),
+                "open": .number(Double(open)), "pending": .number(Double(pending)),
+            ]
+            mailboxes[id] = .object(folders)
         }
         base["mailboxes"] = .object(mailboxes)
         return .object(base)
