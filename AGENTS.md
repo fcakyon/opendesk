@@ -106,6 +106,14 @@ OpenShip 0.9.11 imports optional Compose profiles as services. The HTTP proxy ro
 gateway use one trusted proxy hop. OpenShip owns TLS and Cloudflare DNS.
 Keep the generated runtime secrets, especially `CREDENTIALS_KEY`, in OpenShip and the
 ignored `.env` alongside database backups. The branch CI gates automatic deployments.
+MuviSafe, Fast & Rational and My AI Patient use separate workspaces because AI source
+retrieval is workspace-scoped. The OpenDesk app service uses the shared Anthropic key
+from `../akyonlabs/.env` with `claude-haiku-5-5` for normal, fast and widget responses.
+`node scripts/sync-support.mjs <app-repo>` publishes that repo's `support/knowledge.txt`
+and `support/instructions.txt` using its `support/opendesk.json` IDs and ignored
+`OPENDESK_API_KEY`. Add `--test` to exercise `support/questions.json` and review the
+returned answers. Widget signing secrets are separate per product. Keep human handoff
+available without asking anonymous visitors for email first.
 
 Merging to `main` deploys opendesk.sh on its own (`.github/workflows/deploy.yml`): Terraform plans and
 applies (a new task definition revision applies by itself; deleting or replacing anything else waits for
