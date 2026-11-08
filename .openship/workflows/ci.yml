@@ -1,0 +1,22 @@
+name: CI
+on:
+  push:
+    branches: [fatih/openship]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  config:
+    runs-on: [self-hosted, openship, linux]
+    env:
+      POSTGRES_PASSWORD: validation-only
+      AUTH_SECRET: validation-only
+      CREDENTIALS_KEY: validation-only
+      NATS_TOKEN: validation-only
+      INBOUND_SECRET: validation-only
+      SECRET_KEY_BASE: validation-only
+      SMTP_USERNAME: validation-only
+      SMTP_PASSWORD: validation-only
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose -f compose.openship.yml config --quiet

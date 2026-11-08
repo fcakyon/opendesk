@@ -1,0 +1,13 @@
+:80 {
+	@socket path /socket /socket/*
+	handle @socket {
+		reverse_proxy realtime:4000 {
+			header_up X-Forwarded-For {http.request.header.X-Forwarded-For}
+		}
+	}
+	handle {
+		reverse_proxy opendesk:8080 {
+			header_up X-Forwarded-For {http.request.header.X-Forwarded-For}
+		}
+	}
+}

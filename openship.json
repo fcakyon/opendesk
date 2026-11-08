@@ -1,0 +1,29 @@
+{
+  "$schema": "https://openship.io/openship.schema.json",
+  "composePath": "compose.openship.yml",
+  "domains": [
+    {
+      "domain": "desk.akyonlabs.com",
+      "port": 80
+    }
+  ],
+  "autoDeployPaths": {
+    "include": [
+      "openship.json",
+      "compose.openship.yml",
+      "deploy/docker/**",
+      "deploy/openship/**",
+      "cmd/**",
+      "internal/**",
+      "migrations/**",
+      "go.mod",
+      "go.sum",
+      "web/**",
+      "admin/**",
+      "brand/**",
+      "contracts/**",
+      "realtime/**",
+      ".dockerignore"
+    ]
+  }
+}
