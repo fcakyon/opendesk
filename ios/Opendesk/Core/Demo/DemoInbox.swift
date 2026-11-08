@@ -44,12 +44,15 @@ extension DemoBackend {
             return .some(encode(ListBody(data: slice, nextCursor: next)))
         }
         if call.match("GET", "mailboxes") != nil { return .some(encode(ListBody(data: inboxMailboxes(ws)))) }
-        if call.match("GET", "collab/sidebar") != nil { return .some(encode(JSONValue.object(inboxSidebar(ws)))) }
+        if call.match("GET", "collab/sidebar") != nil { return .some(encode(sidebarOut(ws))) }
         if call.match("PUT", "collab/sidebar") != nil {
+            // Left out, the fields that keep their saved value do.
             var saved = inboxSidebar(ws)
             for (key, value) in call.body.object ?? [:] { saved[key] = value }
             ws.inboxExtras.sidebar = saved
-            return .some(encode(JSONValue.object(saved)))
+            if let value = try? call.body.decode(MailSidebarPrefs.self) { ws.mail.prefs = value }
+            publish("collab.sidebar", [:], in: &ws)
+            return .some(encode(sidebarOut(ws)))
         }
         if call.match("GET", "search") != nil { return .some(encode(inboxSearch(query["q"] ?? "", in: ws))) }
         if call.match("GET", "ai/search") != nil { return .some(encode(inboxMeaningSearch(query["q"] ?? "", in: ws))) }
@@ -149,16 +152,35 @@ extension DemoBackend {
         return .object(base)
     }
 
-    /// `GET /v1/collab/sidebar`: what was saved, else the defaults; Billing starts as a section of its own.
+    /// The saved preferences with the mail ones the app reads (`mark_read_on_open`, `mail_tabs`).
+    private func sidebarOut(_ ws: DemoWorkspace) -> JSONValue {
+        var out = inboxSidebar(ws)
+        out["mark_read_on_open"] = .bool(ws.mail.prefs.markReadOnOpen)
+        out["mail_tabs"] = .array(ws.mail.prefs.mailTabs.map(JSONValue.string))
+        return .object(out)
+    }
+
+    /// `GET /v1/collab/sidebar`: what was saved, else the defaults; Billing starts as a section of
+    /// its own, My tickets is a favorite and a section of the member's own holds two rows.
     private func inboxSidebar(_ ws: DemoWorkspace) -> [String: JSONValue] {
         if let saved = ws.inboxExtras.sidebar { return saved }
         let billing = inboxMailboxes(ws).contains { $0["id"]?.string == DemoSeed.billingMailbox }
         var order: [JSONValue] = [.string("favorites"), .string("inbox")]
         if billing { order.append(.string("mailbox:" + DemoSeed.billingMailbox)) }
-        order += [.string("mail"), .string("teams"), .string("views"), .string("workspace")]
+        order += [.string("mail"), .string("teams"), .string("views"), .string("pages"), .string("workspace"), .string("custom:followups")]
+        let followups: JSONValue = .object([
+            "id": .string("followups"), "title": .string("Follow-ups"), "collapsed": .bool(false), "icon": .string("📌"),
+            "items": .array([
+                .object(["kind": .string("ticket_folder"), "id": .string("pending")]),
+                .object(["kind": .string("page"), "id": .string("knowledge")]),
+            ]),
+        ])
         return [
-            "order": .array(order), "collapsed": .array([]), "hidden": .array([]), "pinned": .array([]),
-            "names": .object([:]), "icons": .object([:]), "sections": .array([]), "show_waiting_chats": .bool(false),
+            "order": .array(order), "collapsed": .array([]), "hidden": .array([]),
+            "pinned": .array([.object(["kind": .string("ticket_folder"), "id": .string("mine")])]),
+            "expanded_accounts": .array([]), "unified_inbox": .bool(true),
+            "names": .object([:]), "icons": .object([:]), "sections": .array([followups]), "row_order": .object([:]),
+            "show_waiting_chats": .bool(false),
         ]
     }
 
