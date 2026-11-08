@@ -19,6 +19,7 @@ struct MailAccountDetailView: View {
     @State private var failure: String?
     @State private var confirm: AccountConfirm?
     @State private var web: String?
+    @State private var handingOver = false
 
     private var item: SettingsMailAccount? { store.account(id) }
 
@@ -39,6 +40,14 @@ struct MailAccountDetailView: View {
         }
         .accountConfirm($confirm)
         .channelWebSheet($web) { reload() }
+        .sheet(isPresented: $handingOver) {
+            AddInboxSheet(account: item?.account) { id in
+                reload()
+                env.router.openMailbox(id)
+            }
+            .presentationDetents([.large])
+            .presentationCornerRadius(Theme.Radius.sheet)
+        }
         .refreshable { await load() }
         .onAppear {
             store.attach(env.session.api)
@@ -107,6 +116,14 @@ struct MailAccountDetailView: View {
         }
 
         MailAccountHistorySection(store: store, item: item)
+
+        if manage, env.canHandOver(account) {
+            AccountSection(title: "Ticket inbox", footer: "Only mail that arrives from now on becomes tickets. What is already there stays in Mail.") {
+                ChannelActionRow(title: "Use for tickets", subtitle: "New mail to \(account.email) becomes tickets your team answers, read with the connection it already has.", button: "Use for tickets") {
+                    handingOver = true
+                }
+            }
+        }
 
         AccountSection(title: "General") {
             VStack(alignment: .leading, spacing: 14) {

@@ -51,6 +51,21 @@ struct MailBoxesSheet: View {
                         }
                     }
                     VStack(spacing: 0) {
+                        if let managed, env.canHandOver(managed) {
+                            Button {
+                                handingOver = managed
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "tray.2").font(.system(size: 13, weight: .medium))
+                                    Text("Use for tickets").font(ODFont.sans(14, weight: .medium))
+                                }
+                                .foregroundStyle(Theme.fg2)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 40)
+                            }
+                            .buttonStyle(TapScaleStyle())
+                            .accessibilityHint("New mail to \(managed.email) becomes tickets")
+                        }
                         if let managed {
                             manageLink("Account settings", symbol: "slider.horizontal.3", account: managed.id)
                         }
@@ -66,7 +81,17 @@ struct MailBoxesSheet: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
         }
+        .sheet(item: $handingOver) { account in
+            AddInboxSheet(account: account) { id in
+                dismiss()
+                env.router.openMailbox(id)
+            }
+            .presentationDetents([.large])
+            .presentationCornerRadius(Theme.Radius.sheet)
+        }
     }
+
+    @State private var handingOver: MailAccount?
 
     private func manageLink(_ title: String, symbol: String, account id: String?) -> some View {
         Button {
