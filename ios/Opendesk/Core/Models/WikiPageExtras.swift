@@ -127,25 +127,6 @@ struct WikiRowCreate: Encodable, Sendable {
     }
 }
 
-/// Body of `POST /v1/wiki/pages/{id}/duplicate`: a row started from a database's template.
-struct WikiDuplicate: Encodable, Sendable {
-    var parentID: String?
-    var title: String?
-    var template: Bool?
-
-    enum CodingKeys: String, CodingKey {
-        case title, template
-        case parentID = "parent_id"
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encodeIfPresent(parentID, forKey: .parentID)
-        try c.encodeIfPresent(title, forKey: .title)
-        try c.encodeIfPresent(template, forKey: .template)
-    }
-}
-
 // MARK: - Canvas
 
 /// A canvas page's board (contracts/wiki.md "Canvas", JSON Canvas 1.0): cards in z order, later above.

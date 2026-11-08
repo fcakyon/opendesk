@@ -282,7 +282,7 @@ struct WikiRowSheet: View {
                     _ = try await store.update(row.id, WikiPagePatch(title: String(title.prefix(WikiText.maxTitle)), version: row.node.version), workspaceID: nil)
                 }
             } else if let template {
-                let copy = try await store.duplicate(template, WikiDuplicate(parentID: databaseID, title: title))
+                let copy = try await store.duplicate(template, WikiDuplicate(parentID: databaseID, title: title, template: false))
                 if !props.isEmpty { _ = try await store.setLook(copy.id, WikiLookPatch(props: props)) }
             } else {
                 _ = try await store.addRow(to: databaseID, title: String(title.prefix(WikiText.maxTitle)), props: props.filter { !$0.value.isNull })
