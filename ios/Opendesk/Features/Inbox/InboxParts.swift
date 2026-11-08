@@ -307,11 +307,12 @@ struct InboxActiveFilters: View {
         if filters.untagged {
             out.append(Chip(id: "l0", title: "No label", mark: AnyView(Image(systemName: "tag.slash").font(.system(size: 10)).foregroundStyle(Theme.fg3)), remove: update { $0.untagged = false }))
         }
-        if let id = filters.mailboxID {
+        // A ticket inbox is already one address.
+        if inbox.scope.mailboxID == nil, let id = filters.mailboxID {
             let title = inbox.mailboxes.first { $0.id == id }?.email ?? "Address"
             out.append(Chip(id: "m", title: title, mark: AnyView(Image(systemName: "at").font(.system(size: 10)).foregroundStyle(Theme.fg3)), remove: update { $0.mailboxID = nil }))
         }
-        for id in filters.mailboxesNot.sorted() {
+        for id in filters.mailboxesNot.sorted() where inbox.scope.mailboxID == nil {
             let title = inbox.mailboxes.first { $0.id == id }?.email ?? "an address"
             out.append(Chip(id: "m!." + id, title: "Not \(title)", mark: AnyView(Self.notMark), remove: update { $0.mailboxesNot.remove(id) }))
         }

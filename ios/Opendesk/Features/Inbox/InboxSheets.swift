@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// The app's menu: the Space and workspace switcher, search everywhere, then the picked Space's
-/// rows, or the workspace's own: folders with live counts, team inboxes, views and other areas.
+/// rows, or the workspace's own: folders with live counts, ticket inboxes, team inboxes, views
+/// and other areas.
 struct ScopeSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
@@ -69,10 +70,19 @@ struct ScopeSheet: View {
                 .presentationCornerRadius(Theme.Radius.sheet)
                 .interactiveDismissDisabled()
         }
+        .sheet(isPresented: $addingInbox) {
+            AddInboxSheet { id in
+                env.router.openMailbox(id)
+                dismiss()
+            }
+            .presentationDetents([.large])
+            .presentationCornerRadius(Theme.Radius.sheet)
+        }
     }
 
     @State private var switching = false
     @State private var editing: SpaceDraft?
+    @State private var addingInbox = false
 
     /// Folders with live counts, team inboxes and views: the ticket part, gone while Tickets is off.
     @ViewBuilder
@@ -83,6 +93,7 @@ struct ScopeSheet: View {
                 row(scope: .folder(folder), title: folder.title, symbol: folder.symbol, count: folder.count(in: env.directory.counts))
             }
         }
+        ticketInboxes
         if !myTeams.isEmpty {
             SectionLabel("Teams")
             Panel {
@@ -113,6 +124,59 @@ struct ScopeSheet: View {
                 }
             }
         }
+    }
+
+    /// Each ticket inbox the member shows as a section of its own, with its folders, then the
+    /// others as one row each (from two inboxes on) and, for admins, a way to add one.
+    @ViewBuilder
+    private var ticketInboxes: some View {
+        let mailboxes = env.directory.mailboxes
+        let sections = env.directory.inboxSections.compactMap { env.directory.mailbox($0) }
+        ForEach(sections) { mailbox in
+            SectionLabel(env.directory.inboxTitle(mailbox))
+            Panel {
+                ForEach(Array(Folder.allCases.enumerated()), id: \.element) { index, folder in
+                    if index > 0 { Hairline(inset: 46) }
+                    row(scope: .mailbox(mailbox.id, folder), title: folder.mailboxTitle, symbol: folder.symbol, count: folder.count(in: env.directory.counts, mailbox: mailbox.id))
+                }
+            }
+        }
+        let others = mailboxes.filter { !env.directory.isInboxSection($0.id) }
+        let listed = mailboxes.count > 1 ? others : []
+        if !listed.isEmpty || env.session.isAdmin {
+            SectionLabel("Ticket inboxes")
+            Panel {
+                ForEach(Array(listed.enumerated()), id: \.element.id) { index, mailbox in
+                    if index > 0 { Hairline(inset: 46) }
+                    mailboxRow(mailbox)
+                }
+                if env.session.isAdmin {
+                    if !listed.isEmpty { Hairline(inset: 46) }
+                    Button {
+                        Haptics.selection()
+                        addingInbox = true
+                    } label: {
+                        label(title: "Add a ticket inbox", count: nil, selected: false) { symbol("plus", selected: false) }
+                    }
+                    .buttonStyle(RowPressStyle())
+                    .accessibilityHint("Mail to a new address, or a Mail account, becomes tickets")
+                }
+            }
+        }
+    }
+
+    /// A ticket inbox opens on its Unassigned folder; the count is what waits there.
+    private func mailboxRow(_ mailbox: InboxMailbox) -> some View {
+        let selected = env.router.area == .tickets && env.inbox.scope.mailboxID == mailbox.id
+        let count = Folder.unassigned.count(in: env.directory.counts, mailbox: mailbox.id)
+        return Button {
+            pick(.mailbox(mailbox.id, .unassigned))
+        } label: {
+            label(title: env.directory.inboxTitle(mailbox), count: count, selected: selected) { symbol("tray.2", selected: selected) }
+        }
+        .buttonStyle(RowPressStyle())
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityValue(mailbox.email)
     }
 
     /// The teams the signed-in member is on, as the web's sidebar lists them.
@@ -345,7 +409,7 @@ struct FilterSheet: View {
                             teamChip(InboxFilters.noTeam, "No team")
                         }
                     }
-                    if inbox.mailboxes.count > 1 || inbox.filters.mailboxID != nil || !inbox.filters.mailboxesNot.isEmpty {
+                    if inbox.scope.mailboxID == nil, inbox.mailboxes.count > 1 || inbox.filters.mailboxID != nil || !inbox.filters.mailboxesNot.isEmpty {
                         opSection("Address", op: inbox.filters.mailboxOp, ops: [.is, .not], set: { env.inbox.filters.setMailboxOp($0) }) {
                             ForEach(inbox.mailboxes) { mailbox in
                                 let not = inbox.filters.mailboxOp == .not
