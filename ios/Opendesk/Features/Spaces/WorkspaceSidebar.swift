@@ -108,6 +108,7 @@ struct WorkspaceSidebar: View {
 
     @State private var menu = SidebarMenuModel()
     @State private var folded: Set<String> = []
+    @State private var addingInbox = false
 
     private var store: SidebarStore { .shared }
 
@@ -160,6 +161,14 @@ struct WorkspaceSidebar: View {
                 .presentationCornerRadius(Theme.Radius.sheet)
                 .interactiveDismissDisabled()
         }
+        .sheet(isPresented: $addingInbox) {
+            AddInboxSheet { id in
+                env.router.openMailbox(id)
+                onOpen()
+            }
+            .presentationDetents([.large])
+            .presentationCornerRadius(Theme.Radius.sheet)
+        }
     }
 
     // MARK: Sections
@@ -185,6 +194,43 @@ struct WorkspaceSidebar: View {
                             }
                         }
                         if rows.isEmpty, own != nil { emptyOwnRow(id) }
+                    }
+                }
+            }
+        }
+        if id == "inbox" { ticketInboxes(layout) }
+    }
+
+    /// The ticket inboxes not shown as sections, one row each (from two inboxes on), and for
+    /// admins a way to add one.
+    @ViewBuilder
+    private func ticketInboxes(_ layout: SidebarLayout) -> some View {
+        let rows = layout.listedInboxes
+        if env.products.tickets, !rows.isEmpty || env.session.isAdmin {
+            VStack(alignment: .leading, spacing: 8) {
+                SectionLabel("Ticket inboxes").padding(.leading, 4)
+                Panel {
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        if index > 0 { Hairline(inset: 46) }
+                        rowButton(row, section: "inbox")
+                    }
+                    if env.session.isAdmin {
+                        if !rows.isEmpty { Hairline(inset: 46) }
+                        Button {
+                            Haptics.selection()
+                            addingInbox = true
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "plus").font(.system(size: 15)).foregroundStyle(Theme.fg3).frame(width: 20)
+                                Text("Add a ticket inbox").font(ODFont.sans(15)).foregroundStyle(Theme.fg)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 14)
+                            .frame(height: 46)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(RowPressStyle())
+                        .accessibilityHint("Mail to a new address, or a Mail account, becomes tickets")
                     }
                 }
             }
@@ -429,6 +475,11 @@ struct SidebarRowMenu: View {
             Button {
                 SidebarStore.shared.change { $0.setPinned(pin.kind, pin.id, !pinned) }
             } label: { Label(pinned ? "Remove from Favorites" : "Add to Favorites", systemImage: pinned ? "star.slash" : "star") }
+        }
+        if let item = row.item, item.kind == .mailbox, !SidebarStore.shared.inboxSections.contains(item.itemID) {
+            Button {
+                Task { try? await SidebarStore.shared.setInboxSection(item.itemID, true) }
+            } label: { Label("Show as its own section", systemImage: "sidebar.left") }
         }
         if let item = row.item {
             Menu {

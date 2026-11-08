@@ -20,6 +20,12 @@ struct SidebarRow: Identifiable {
     var hidden = false
 
     var id: String { model.id }
+
+    func hidden(_ on: Bool) -> SidebarRow {
+        var row = self
+        row.hidden = on
+        return row
+    }
 }
 
 @MainActor
@@ -45,7 +51,7 @@ struct SidebarLayout {
         switch id {
         case "inbox", "teams", "views": return env.products.tickets
         case "mail": return collab
-        case "pages": return builder.pagesOn(workspace)
+        case "pages": return env.products.pages
         case "favorites", "workspace": return true
         default:
             if id.hasPrefix("custom:") { return prefs.section(String(id.dropFirst(7))) != nil }
@@ -83,7 +89,7 @@ struct SidebarLayout {
         default:
             if id.hasPrefix("custom:") { return "Untitled section" }
             if let mailbox = Self.mailboxID(id), let found = builder.mailboxes(workspace).first(where: { $0.id == mailbox }) {
-                return found.name.isEmpty ? found.email : found.name
+                return found.title
             }
             if let team = Self.teamID(id) {
                 return team == InboxScope.myTeams ? "My teams" : myTeams.first { $0.id == team }?.name ?? "A team"
@@ -209,7 +215,7 @@ struct SidebarLayout {
 
     private var pagesRows: [SidebarRow] {
         let pages = builder.pages(workspace)
-        var out = [plain("pages:workspace", "All pages", .symbol("doc.text"), .path("/pages"))]
+        var out = [plain("pages:workspace", "All pages", .symbol("doc.text"), .path("/pages"), selected: env.router.shownArea == .pages && env.router.inboxPath.isEmpty)]
         let teamspaces = builder.teams(workspace).filter { team in pages.contains { $0.teamID == team.id && $0.area == "pages" } }
         out += teamspaces.compactMap { builtIn(.wikiSpace, $0.id) }
         out += pages.filter { $0.area == "pages" && $0.parentID == nil && $0.teamID == nil }.compactMap { builtIn(.wikiPage, $0.id) }
@@ -220,7 +226,8 @@ struct SidebarLayout {
 
     private func mailboxRows(_ mailbox: String) -> [SidebarRow] {
         Folder.allCases.map { folder in
-            plain("mailbox:\(mailbox):\(folder.rawValue)", folder.title, .symbol(folder.symbol), .path("/inbox/\(folder.rawValue)?mailbox=\(mailbox)"))
+            plain("mailbox:\(mailbox):\(folder.rawValue)", folder.mailboxTitle, .symbol(folder.symbol), count: folder.count(in: counts, mailbox: mailbox),
+                  .path("/inbox/\(folder.rawValue)?mailbox=\(mailbox)"), selected: env.router.shownArea == .tickets && env.inbox.scope == .mailbox(mailbox, folder))
         }
     }
 
@@ -258,6 +265,19 @@ struct SidebarLayout {
             model.id = "custom:\(sectionID)/\(item.key)"
             return SidebarRow(key: item.key, model: model, usualTitle: usual.title, item: item, ownSection: sectionID)
         }
+    }
+
+    /// The ticket inboxes listed under Tickets, one row each: the ones not shown as sections of
+    /// their own, from two inboxes on.
+    var listedInboxes: [SidebarRow] {
+        let mailboxes = builder.mailboxes(workspace)
+        guard env.products.tickets, mailboxes.count > 1 else { return [] }
+        let sections = Set(allSections)
+        return mailboxes.filter { !sections.contains("mailbox:" + $0.id) }.compactMap { mailbox in
+            guard var row = builtIn(.mailbox, mailbox.id) else { return nil }
+            row.model.id = "inboxes/" + row.key
+            return row.hidden(prefs.isHidden(row.key))
+        }.filter { !$0.hidden }
     }
 
     // MARK: What the menu adds above Inbox

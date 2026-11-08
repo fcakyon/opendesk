@@ -150,7 +150,7 @@ private struct ShortcutKeys: ViewModifier {
         case "global.new", "go.mine", "go.team", "go.reports": return products.tickets
         case "go.mail": return products.mail && env.directory.collab.enabled
         case "global.ollie": return env.directory.ai.assistantOn
-        case "go.pages", "go.graph": return DeepLink.parse(path: "/pages") != nil
+        case "go.pages", "go.graph": return products.pages
         default: return true
         }
     }
@@ -211,7 +211,7 @@ private struct ShortcutKeys: ViewModifier {
             SpacesStore.shared.startMail(env: env)
             router.show(.mail, [])
         case "go.pages":
-            open("/pages")
+            router.show(.pages, [])
         case "go.graph":
             open("/pages/graph")
         case "go.wiki":

@@ -110,13 +110,15 @@ struct SpaceRowBuilder {
     func accounts(_ workspace: String) -> [MailAccount] { spaces.data[workspace]?.accounts ?? [] }
 
     func mailboxes(_ workspace: String) -> [InboxMailbox] {
-        if isOpen(workspace), !env.inbox.mailboxes.isEmpty { return env.inbox.mailboxes }
+        if isOpen(workspace), env.directory.loaded { return env.directory.mailboxes }
         return spaces.data[workspace]?.mailboxes ?? []
     }
 
     func pages(_ workspace: String) -> [SpacePage] { spaces.data[workspace]?.pages ?? [] }
 
-    func pagesOn(_ workspace: String) -> Bool { spaces.data[workspace]?.pagesOn ?? false }
+    func pagesOn(_ workspace: String) -> Bool {
+        isOpen(workspace) ? env.products.pages : spaces.data[workspace]?.pagesOn ?? false
+    }
 
     /// A team whose pages the person sees, as a teamspace.
     func teamspace(_ id: String, in workspace: String) -> Team? {
@@ -300,10 +302,12 @@ struct SpaceRowBuilder {
         case .wikiSpace:
             guard let team = teamspace(id, in: workspace) else { return nil }
             let inPages = pages(workspace).contains { $0.teamID == id && $0.area == "pages" }
-            return model(team.name, .team(id: team.id, name: team.name), nil, .path(inPages ? "/pages" : "/wiki"), false)
+            return model(team.name, .team(id: team.id, name: team.name), nil, .path((inPages ? "/pages?space=" : "/wiki?space=") + id), false)
         case .mailbox:
             guard let mailbox = mailboxes(workspace).first(where: { $0.id == id }) else { return nil }
-            return model(mailbox.name.isEmpty ? mailbox.email : mailbox.name, .symbol("tray.2"), nil, .path("/inbox/unassigned?mailbox=" + id), false)
+            let title = open ? SidebarStore.shared.inboxTitle(mailbox) : mailbox.title
+            return model(title, .symbol("tray.2"), Folder.unassigned.count(in: counts, mailbox: id), .path("/inbox/unassigned?mailbox=" + id),
+                         area == .tickets && env.inbox.scope.mailboxID == id)
         case .everywhere:
             guard workspace.isEmpty, let list = EverywhereList(rawValue: id) else { return nil }
             return SpaceRowModel(id: "everywhere:\(id)", title: list.title, mark: .symbol(list.symbol), count: EverywhereStore.shared.count(list),

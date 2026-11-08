@@ -90,6 +90,8 @@ struct InboxSwitcherBar: View {
     @Environment(AppEnvironment.self) private var env
     @State private var adding = false
     @State private var saving = false
+    @State private var renaming = false
+    @State private var renameText = ""
 
     /// Shown on a folder while the workspace has more than one inbox, and on any ticket inbox.
     static func shows(_ env: AppEnvironment) -> Bool {
@@ -107,6 +109,14 @@ struct InboxSwitcherBar: View {
                     Button { pick(nil) } label: { choice("All inboxes", selected: scope.mailboxID == nil) }
                     ForEach(env.directory.mailboxes) { mailbox in
                         Button { pick(mailbox.id) } label: { choice(mailbox.title, selected: mailbox.id == scope.mailboxID) }
+                    }
+                }
+                if let current, env.directory.isInboxSection(current.id) {
+                    Section {
+                        Button {
+                            renameText = env.directory.inboxTitle(current)
+                            renaming = true
+                        } label: { Label("Rename its section", systemImage: "pencil") }
                     }
                 }
                 if env.session.isAdmin {
@@ -155,6 +165,18 @@ struct InboxSwitcherBar: View {
             AddInboxSheet { id in env.router.openMailbox(id) }
                 .presentationDetents([.large])
                 .presentationCornerRadius(Theme.Radius.sheet)
+        }
+        .alert("Rename its section", isPresented: $renaming) {
+            TextField(current?.title ?? "Name", text: $renameText)
+            Button("Save") {
+                guard let current else { return }
+                let text = renameText
+                let usual = current.title
+                SidebarStore.shared.change { $0.setName("section:mailbox:" + current.id, SpaceRules.clean(text) == usual ? nil : text) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Only you see this name. Leave it empty for the inbox's own.")
         }
     }
 
