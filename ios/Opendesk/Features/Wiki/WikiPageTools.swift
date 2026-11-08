@@ -347,10 +347,10 @@ struct WikiShareSheet: UIViewControllerRepresentable {
 
 @MainActor
 enum WikiRandom {
-    /// A page of the tree picked at random, never a template, a row or the page at hand.
-    static func pick(besides id: String?) -> WikiNode? {
+    /// A page of the area's tree picked at random, never a template, a row or the page at hand.
+    static func pick(in area: WikiArea, besides id: String?) -> WikiNode? {
         let store = WikiStore.shared
         let rows = Set(store.nodes.filter(\.isDatabase).map(\.id))
-        return store.nodes.filter { !$0.template && $0.id != id && !rows.contains($0.parentID ?? "") }.randomElement()
+        return store.nodes(in: area).filter { !$0.template && $0.id != id && !rows.contains($0.parentID ?? "") }.randomElement()
     }
 }

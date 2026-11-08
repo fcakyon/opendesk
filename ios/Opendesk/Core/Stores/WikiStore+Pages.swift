@@ -68,11 +68,11 @@ extension WikiStore {
         return page.data
     }
 
-    /// Every page of the tree with its tags.
-    func tagged() async throws -> [WikiTaggedNode] {
+    /// Every page of one area's tree with its tags.
+    func tagged(in area: WikiArea) async throws -> [WikiTaggedNode] {
         guard let api else { throw APIError.signedOut }
-        let page: Page<WikiTaggedNode> = try await api.get("v1/wiki/pages")
-        return page.data.filter { !$0.node.template }
+        let page: Page<WikiTaggedNode> = try await api.get("v1/wiki/pages", query: [URLQueryItem(name: "area", value: area.rawValue)])
+        return page.data.filter { !$0.node.template && $0.node.area == area }
     }
 
     // MARK: Reads

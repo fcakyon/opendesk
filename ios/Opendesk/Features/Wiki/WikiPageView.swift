@@ -399,7 +399,7 @@ struct WikiPageScreen: View {
             if !saver.page.extras.tags.isEmpty {
                 WikiChipFlow(spacing: 4) {
                     ForEach(saver.page.extras.tags, id: \.self) { tag in
-                        Button("#\(tag)") { tools.tag = WikiTagTarget(tag: tag) }
+                        Button("#\(tag)") { tools.tag = WikiTagTarget(tag: tag, area: saver.page.area) }
                             .font(ODFont.sans(12, weight: .medium))
                             .foregroundStyle(Tone.blue.text)
                             .buttonStyle(.plain)
@@ -428,7 +428,8 @@ struct WikiPageScreen: View {
     @ViewBuilder
     private func reader(_ saver: WikiSaver) -> some View {
         if WikiBody.isBlank(saver.draft.body) {
-            if saver.page.isDatabase {
+            // A database's rows and a canvas's board are the page; their text is a description.
+            if saver.page.isDatabase || saver.page.isCanvas {
                 EmptyView()
             } else if canEdit, !saver.final {
                 Button { startEditing(focusBody: true) } label: {

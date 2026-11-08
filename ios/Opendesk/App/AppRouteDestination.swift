@@ -16,6 +16,8 @@ struct AppRouteDestination: View {
         case let .wikiTrash(area): WikiTrashView(area: area)
         case let .wikiTemplates(area): WikiTemplatesView(area: area)
         case let .wikiTeamspace(area, team): WikiTeamspaceView(area: area, teamID: team)
+        case let .wikiGraph(area): WikiGraphView(area: area)
+        case let .wikiTags(area): WikiTagsView(area: area)
         case .search: SearchView()
         }
     }

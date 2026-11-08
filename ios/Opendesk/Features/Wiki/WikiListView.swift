@@ -167,6 +167,15 @@ struct WikiListView: View {
                 env.router.pick(.wikiTemplates(area))
             }
         }
+        placeRow("Graph", symbol: "point.3.connected.trianglepath.dotted", picked: env.router.picked == .wikiGraph(area)) { env.router.pick(.wikiGraph(area)) }
+        placeRow("Tags", symbol: "number", picked: env.router.picked == .wikiTags(area)) { env.router.pick(.wikiTags(area)) }
+        placeRow("Random page", symbol: "shuffle", picked: false) {
+            if let node = WikiRandom.pick(in: area, besides: nil) {
+                env.router.pick(.wikiPage(node.id))
+            } else {
+                env.toasts.show("There are no pages to pick from yet.", kind: .info)
+            }
+        }
         placeRow("Trash", symbol: "trash", picked: env.router.picked == .wikiTrash(area)) { env.router.pick(.wikiTrash(area)) }
     }
 

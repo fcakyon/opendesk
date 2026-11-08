@@ -1,9 +1,10 @@
 import SwiftUI
 
-/// A tag whose pages a sheet lists.
+/// A tag whose pages a sheet lists ("" for every tag of the area).
 struct WikiTagTarget: Identifiable {
     let tag: String
-    var id: String { tag }
+    var area: WikiArea = .wiki
+    var id: String { "\(area.rawValue):\(tag)" }
 }
 
 /// Which of a page's tools is open: its settings, its panel, tags, publishing, Ollie writing,
@@ -44,7 +45,8 @@ struct WikiPageMoreMenu: View {
         Divider()
         Button { tools.settings = true } label: { Label("Page settings", systemImage: "paintbrush") }
         Button { tools.info = true } label: { Label("About this page", systemImage: "info.circle") }
-        Button { tools.tag = WikiTagTarget(tag: "") } label: { Label("Tags", systemImage: "number") }
+        Button { tools.tag = WikiTagTarget(tag: "", area: page.area) } label: { Label("Tags", systemImage: "number") }
+        Button { env.router.push(.wikiGraph(page.area)) } label: { Label("Graph", systemImage: "point.3.connected.trianglepath.dotted") }
         Button { openRandom() } label: { Label("Random page", systemImage: "shuffle") }
         if canEdit, env.directory.ai.enabled, !page.isDatabase, !page.isCanvas {
             Button { tools.write = true } label: { Label("Ask Ollie", systemImage: "sparkles") }
@@ -66,7 +68,7 @@ struct WikiPageMoreMenu: View {
     }
 
     private func openRandom() {
-        guard let node = WikiRandom.pick(besides: page.id) else {
+        guard let node = WikiRandom.pick(in: page.area, besides: page.id) else {
             env.toasts.show("There's no other page yet.", kind: .info)
             return
         }
@@ -109,7 +111,7 @@ struct WikiPageToolsSheets: ViewModifier {
                     }, onTag: { tag in
                         Task {
                             try? await Task.sleep(for: .milliseconds(450))
-                            tools.tag = WikiTagTarget(tag: tag)
+                            tools.tag = WikiTagTarget(tag: tag, area: saver.page.area)
                         }
                     })
                     .presentationDetents([.large])
@@ -117,7 +119,7 @@ struct WikiPageToolsSheets: ViewModifier {
                 }
             }
             .sheet(item: $tools.tag) { target in
-                WikiTagsSheet(tag: target.tag.isEmpty ? nil : target.tag) { id in env.router.push(.wikiPage(id)) }
+                WikiTagsSheet(area: target.area, tag: target.tag.isEmpty ? nil : target.tag) { id in env.router.push(.wikiPage(id)) }
                     .presentationDetents([.medium, .large])
                     .presentationCornerRadius(Theme.Radius.sheet)
             }

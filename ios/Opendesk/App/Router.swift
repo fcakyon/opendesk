@@ -29,6 +29,10 @@ enum AppRoute: Hashable {
     case wikiTemplates(WikiArea)
     /// One teamspace's pages in an area.
     case wikiTeamspace(WikiArea, String)
+    /// An area's graph of pages and links.
+    case wikiGraph(WikiArea)
+    /// An area's tags and their pages.
+    case wikiTags(WikiArea)
     case search
 
     static func ticket(_ ticket: Ticket) -> AppRoute { .ticket(TicketRoute(id: ticket.id, seed: ticket)) }
@@ -206,8 +210,8 @@ final class Router {
             case .trash: show(area.appArea, [.wikiTrash(area)])
             case .templates: show(area.appArea, [.wikiTemplates(area)])
             case let .teamspace(team): show(area.appArea, [.wikiTeamspace(area, team)])
-            // The graph and tags are the web's: the area's home is the nearest here.
-            case .graph, .tags: show(area.appArea, [])
+            case .graph: show(area.appArea, [.wikiGraph(area)])
+            case .tags: show(area.appArea, [.wikiTags(area)])
             }
         case .reports:
             show(.reports, [])
