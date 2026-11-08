@@ -780,6 +780,17 @@ final class WikiSaver {
 
     func isNewer(_ version: Int) -> Bool { version > self.version }
 
+    /// The page's look, aliases, lock, verification or values changed, which keeps its version:
+    /// taken as it is, and what was typed is left alone.
+    func takeLook(_ fresh: WikiPage) {
+        guard fresh.id == id else { return }
+        var next = page
+        next.extras = fresh.extras
+        next.locked = fresh.locked
+        next.verification = fresh.verification
+        page = next
+    }
+
     func cancel() {
         timer?.cancel()
     }

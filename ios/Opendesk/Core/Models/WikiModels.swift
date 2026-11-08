@@ -174,6 +174,8 @@ struct WikiPage: Codable, Hashable, Sendable, Identifiable {
     /// A database's properties; nil for a page.
     var database: WikiDatabase?
     var area: WikiArea = .wiki
+    /// Its look, aliases, tags, a row's values and a canvas (`WikiPageExtras`).
+    var extras = WikiPageExtras()
 
     enum CodingKeys: String, CodingKey {
         case id, title, icon, position, version, breadcrumbs, children, template, journal, kind, locked, verification, database, area
@@ -233,6 +235,7 @@ struct WikiPage: Codable, Hashable, Sendable, Identifiable {
         deletedBy = c.lenient(UserRef.self, forKey: .deletedBy)
         database = c.lenient(WikiDatabase.self, forKey: .database)
         area = c.lenient(WikiArea.self, forKey: .area) ?? .wiki
+        extras = (try? WikiPageExtras(from: decoder)) ?? WikiPageExtras()
     }
 
     func encode(to encoder: Encoder) throws {
@@ -262,6 +265,7 @@ struct WikiPage: Codable, Hashable, Sendable, Identifiable {
         try c.encodeIfPresent(deletedBy, forKey: .deletedBy)
         try c.encodeIfPresent(database, forKey: .database)
         try c.encode(area, forKey: .area)
+        try extras.encode(to: encoder)
     }
 
     /// The page as the tree holds it.
@@ -296,15 +300,28 @@ struct WikiVerification: Codable, Hashable, Sendable {
     }
 }
 
-/// A database's properties (contracts/wiki.md "Databases"); its views belong to the web app.
+/// A database's properties and views (contracts/wiki.md "Databases"). Filtering, sorting and
+/// grouping run in the app (`WikiDbQuery`).
 struct WikiDatabase: Codable, Hashable, Sendable {
     var properties: [WikiDbProperty]
+    var views: [WikiDbView]
 
-    enum CodingKeys: String, CodingKey { case properties }
+    enum CodingKeys: String, CodingKey { case properties, views }
+
+    init(properties: [WikiDbProperty], views: [WikiDbView] = []) {
+        self.properties = properties
+        self.views = views
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         properties = c.lenient([WikiDbProperty].self, forKey: .properties) ?? []
+        views = c.lenient([WikiDbView].self, forKey: .views) ?? []
+    }
+
+    func property(_ id: String?) -> WikiDbProperty? {
+        guard let id else { return nil }
+        return properties.first { $0.id == id }
     }
 }
 
@@ -316,8 +333,26 @@ struct WikiDbProperty: Codable, Hashable, Sendable, Identifiable {
     var options: [WikiDbOption]
     /// unique_id: letters before the number.
     var prefix: String?
+    /// number: how it reads (`number`, `comma`, `percent`, `usd`, `eur`, ...).
+    var numberFormat: String?
+    /// date: values have a time of day.
+    var dateTime: Bool?
+    /// relation: the related database.
+    var databaseID: String?
 
-    enum CodingKeys: String, CodingKey { case id, name, type, options, prefix }
+    enum CodingKeys: String, CodingKey {
+        case id, name, type, options, prefix
+        case numberFormat = "number_format"
+        case dateTime = "date_time"
+        case databaseID = "database_id"
+    }
+
+    init(id: String, name: String, type: String, options: [WikiDbOption] = []) {
+        self.id = id
+        self.name = name
+        self.type = type
+        self.options = options
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -326,12 +361,81 @@ struct WikiDbProperty: Codable, Hashable, Sendable, Identifiable {
         type = c.lenient(String.self, forKey: .type) ?? "text"
         options = c.lenient([WikiDbOption].self, forKey: .options) ?? []
         prefix = c.lenient(String.self, forKey: .prefix)
+        numberFormat = c.lenient(String.self, forKey: .numberFormat)
+        dateTime = c.lenient(Bool.self, forKey: .dateTime)
+        databaseID = c.lenient(String.self, forKey: .databaseID)
+    }
+
+    /// Whether a row keeps a value of it; the app computes the rest.
+    var stored: Bool {
+        !["title", "rollup", "formula", "created_time", "created_by", "edited_time", "edited_by", "unique_id"].contains(type)
+    }
+
+    func option(_ id: String?) -> WikiDbOption? {
+        guard let id else { return nil }
+        return options.first { $0.id == id }
     }
 }
 
 struct WikiDbOption: Codable, Hashable, Sendable, Identifiable {
     var id: String
     var name: String
+    /// A tone name (`gray`, `blue`, ...).
+    var color: String?
+
+    init(id: String, name: String, color: String? = nil) {
+        self.id = id
+        self.name = name
+        self.color = color
+    }
+
+    var tone: Tone { Tone(label: color) }
+}
+
+/// One saved way of showing a database's rows. Its settings belong to the app (web
+/// `DbViewSettings`): read here as they are kept, never written.
+struct WikiDbView: Codable, Hashable, Sendable, Identifiable {
+    var id: String
+    var name: String
+    /// `table`, `board`, `list`, `gallery`, `calendar`, `timeline`, `chart` or `form`.
+    var type: String
+    var settings: JSONValue?
+
+    enum CodingKeys: String, CodingKey { case id, name, type, settings }
+
+    init(id: String, name: String, type: String, settings: JSONValue? = nil) {
+        self.id = id
+        self.name = name
+        self.type = type
+        self.settings = settings
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = c.lenient(String.self, forKey: .name) ?? ""
+        type = c.lenient(String.self, forKey: .type) ?? "table"
+        settings = c.lenient(JSONValue.self, forKey: .settings)
+    }
+
+    var groupBy: String? { settings?["group_by"]?.string }
+    var dateProperty: String? { settings?["date_property"]?.string }
+    var hidden: [String] { settings?["hidden"]?.array?.compactMap(\.string) ?? [] }
+    var order: [String] { settings?["order"]?.array?.compactMap(\.string) ?? [] }
+    var hideEmptyGroups: Bool { settings?["hide_empty_groups"]?.bool ?? false }
+
+    var symbol: String {
+        switch type {
+        case "board": "rectangle.split.3x1"
+        case "list": "list.bullet"
+        case "gallery": "square.grid.2x2"
+        case "calendar": "calendar"
+        case "timeline": "chart.bar.doc.horizontal"
+        case "chart": "chart.pie"
+        case "form": "list.bullet.clipboard"
+        default: "tablecells"
+        }
+    }
 }
 
 /// A database's row as its views read it (`GET /v1/wiki/databases/{id}/rows`).
@@ -342,11 +446,14 @@ struct WikiDbRow: Decodable, Hashable, Sendable, Identifiable {
     var createdAt: Date
     var createdBy: UserRef?
     var updatedBy: UserRef?
+    /// How its text starts.
+    var excerpt: String
+    var cover: String
 
     var id: String { node.id }
 
     enum CodingKeys: String, CodingKey {
-        case props
+        case props, excerpt, cover
         case createdAt = "created_at"
         case createdBy = "created_by"
         case updatedBy = "updated_by"
@@ -359,11 +466,23 @@ struct WikiDbRow: Decodable, Hashable, Sendable, Identifiable {
         createdAt = c.lenient(Date.self, forKey: .createdAt) ?? node.updatedAt
         createdBy = c.lenient(UserRef.self, forKey: .createdBy)
         updatedBy = c.lenient(UserRef.self, forKey: .updatedBy)
+        excerpt = c.lenient(String.self, forKey: .excerpt) ?? ""
+        cover = c.lenient(String.self, forKey: .cover) ?? ""
     }
 }
 
 struct WikiDbRows: Decodable, Sendable {
     var data: [WikiDbRow]
+    /// The database's own templates, which a new row can start as a copy of.
+    var templates: [WikiNode]
+
+    enum CodingKeys: String, CodingKey { case data, templates }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        data = c.lenient([WikiDbRow].self, forKey: .data) ?? []
+        templates = c.lenient([WikiNode].self, forKey: .templates) ?? []
+    }
 }
 
 /// A page in the trash, with what went with it (contracts/wiki.md "Trash").

@@ -226,6 +226,29 @@ actor APIClient {
         return try await send(request)
     }
 
+    /// A file the API answers (an export): its bytes, and the name `Content-Disposition` gives it.
+    func download(_ path: String, query: [URLQueryItem] = []) async throws -> (data: Data, filename: String?) {
+        var request = APIRequest(method: "GET", path: path, query: query, body: nil, contentType: nil)
+        request.accept = "*/*"
+        request.timeout = 120
+        let (data, http) = try await perform(request, allowRefresh: true)
+        return (data, Self.filename(in: http.value(forHTTPHeaderField: "Content-Disposition")))
+    }
+
+    /// The file name of a `Content-Disposition` header: `filename*=UTF-8''…` first, then `filename="…"`.
+    static func filename(in header: String?) -> String? {
+        guard let header else { return nil }
+        for part in header.split(separator: ";").map({ $0.trimmingCharacters(in: .whitespaces) }) {
+            if part.lowercased().hasPrefix("filename*="), let quote = part.range(of: "''") {
+                return String(part[quote.upperBound...]).removingPercentEncoding
+            }
+        }
+        for part in header.split(separator: ";").map({ $0.trimmingCharacters(in: .whitespaces) }) where part.lowercased().hasPrefix("filename=") {
+            return String(part.dropFirst("filename=".count)).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+        }
+        return nil
+    }
+
     /// A streamed run (`text/event-stream`), one event at a time.
     func stream(_ path: String, body: some Encodable & Sendable) async throws -> AsyncThrowingStream<SSEEvent, Error> {
         var request = APIRequest(method: "POST", path: path, body: try APICoding.encoder.encode(body))
