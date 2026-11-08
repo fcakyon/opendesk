@@ -8,6 +8,7 @@ permissions:
 jobs:
   config:
     runs-on: [self-hosted, openship, linux]
+    container: node:24-bookworm
     env:
       POSTGRES_PASSWORD: validation-only
       AUTH_SECRET: validation-only
@@ -19,4 +20,9 @@ jobs:
       SMTP_PASSWORD: validation-only
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose -f compose.openship.yml config --quiet
+      - run: npx --yes --package=openship@0.9.11 openship --json config validate
+      - run: |
+          curl -fsSL https://github.com/docker/compose/releases/download/v5.7.0/docker-compose-linux-x86_64 -o /tmp/docker-compose
+          echo '7758048ad38e580f22559603312874fec8bb638d021a9e64182385fc17cc12a2  /tmp/docker-compose' | sha256sum --check
+          chmod +x /tmp/docker-compose
+          /tmp/docker-compose -f compose.openship.yml config --quiet

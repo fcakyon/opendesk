@@ -99,6 +99,14 @@ instance option (`MAILBOX_SYSTEM_SEND`), off on the cloud.
 
 ## Deploying
 
+The `fcakyon/opendesk` fork deploys `fatih/openship` through OpenShip on Netcup at
+`https://desk.akyonlabs.com`. `openship.json` selects `compose.openship.yml` because
+OpenShip 0.9.11 imports optional Compose profiles as services. The HTTP proxy routes
+`/socket` to realtime and preserves the edge's forwarded address list, so the app and
+gateway use one trusted proxy hop. OpenShip owns TLS and Cloudflare DNS.
+Keep the generated runtime secrets, especially `CREDENTIALS_KEY`, in OpenShip and the
+ignored `.env` alongside database backups. The branch CI gates automatic deployments.
+
 Merging to `main` deploys opendesk.sh on its own (`.github/workflows/deploy.yml`): Terraform plans and
 applies (a new task definition revision applies by itself; deleting or replacing anything else waits for
 a reviewer), the images build, migrations run, api, worker and gateway roll, and the Pages projects
