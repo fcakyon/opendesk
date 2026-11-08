@@ -95,9 +95,10 @@ struct WikiRowSheet: View {
     }
 
     private func field(label: String, help: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let inner = content()
+        return VStack(alignment: .leading, spacing: 6) {
             Text(label).font(ODFont.sans(12.5, weight: .medium)).foregroundStyle(Theme.fg3)
-            Panel(padding: 12) { content() }
+            Panel(padding: 12) { inner }
             if !help.isEmpty {
                 Text(help).font(ODFont.footnote).foregroundStyle(Theme.fg3).fixedSize(horizontal: false, vertical: true)
             }
