@@ -52,9 +52,14 @@ console.log(`Published ${name} and bot instructions for ${config.workspaceId}`)
 if (process.argv.includes('--test')) {
   const questions = JSON.parse(await readFile(resolve(root, 'support/questions.json'), 'utf8'))
   for (let start = 0; start < questions.length; start += 3) {
-    const results = await Promise.all(questions.slice(start, start + 3).map(async ({ id, question, expected }) => ({
-      id, question, expected,
-      answer: await api('/ai/agent/playground', 'POST', { settings: { bot_id: config.botId }, messages: [{ role: 'visitor', text: question }] })
+    const results = await Promise.all(questions.slice(start, start + 3).map(async ({ id, question, messages, expected }) => ({
+      id,
+      question: question ?? messages?.[messages.length - 1]?.text ?? '',
+      expected,
+      answer: await api('/ai/agent/playground', 'POST', {
+        settings: { bot_id: config.botId },
+        messages: Array.isArray(messages) && messages.length ? messages : [{ role: 'visitor', text: question }]
+      })
     })))
     for (const result of results) console.log(JSON.stringify(result))
   }
