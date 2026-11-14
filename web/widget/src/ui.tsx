@@ -439,7 +439,7 @@ function Thread({
             landed={m.id === landed}
           />
         ) : (
-          <Bubble m={m} me={me} grouped={grouped} onRetry={() => void c.retry(key, m.id)} />
+          <Bubble m={m} me={me} grouped={grouped} brand={{ name: titleOf(cfg), avatar_url: cfg?.avatar_url || null }} onRetry={() => void c.retry(key, m.id)} />
         )}
       </Fragment>,
     );
@@ -459,7 +459,7 @@ function Thread({
         <button class="icon-btn flip" aria-label={t("back")} onClick={() => c.home()}>
           <Back />
         </button>
-        <AvatarStack team={avatars.team} bot={avatars.bot} size={26} />
+        {avatars.bot || avatars.team.length > 0 ? <AvatarStack team={avatars.team} bot={avatars.bot} size={26} /> : <Logo cfg={cfg} />}
         <div class="head-main">
           <div class="title">{conv?.subject || (s.active ? t("conversation") : titleOf(cfg))}</div>
           <div class="title-sub">{handling ? subtitleOf(cfg) : conv?.subject || s.active ? titleOf(cfg) : subtitleOf(cfg)}</div>

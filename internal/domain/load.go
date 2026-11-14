@@ -400,6 +400,52 @@ func PublicMessage(m Message) Message {
 	return m
 }
 
+// HideWidgetAgentIdentity reports whether visitor-facing widget messages and chat
+// follow-up emails should withhold human agent names/avatars and present replies under
+// the widget brand (when show_team is false on the widget or its/the ticket's team is private).
+func HideWidgetAgentIdentity(ctx context.Context, q db.Querier, wid uuid.UUID, widgetID, teamID *uuid.UUID) (bool, error) {
+	if widgetID != nil {
+		var raw []byte
+		var wTeamID *uuid.UUID
+		err := q.QueryRow(ctx, `SELECT settings, team_id FROM widgets WHERE workspace_id = $1 AND id = $2`, wid, *widgetID).Scan(&raw, &wTeamID)
+		if err != nil && !db.IsNotFound(err) {
+			return false, err
+		}
+		if err == nil {
+			var st struct {
+				ShowTeam *bool `json:"show_team"`
+			}
+			if len(raw) > 0 && json.Unmarshal(raw, &st) == nil && st.ShowTeam != nil && !*st.ShowTeam {
+				return true, nil
+			}
+			if teamID == nil {
+				teamID = wTeamID
+			}
+		}
+	}
+	if teamID != nil {
+		var private bool
+		err := q.QueryRow(ctx, `SELECT private FROM teams WHERE workspace_id = $1 AND id = $2`, wid, *teamID).Scan(&private)
+		if err != nil && !db.IsNotFound(err) {
+			return false, err
+		}
+		if err == nil && private {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// PublicWidgetMessage is the widget-facing view of a message: PublicMessage, plus
+// withholding human agent names and avatars when hideAgent is true.
+func PublicWidgetMessage(m Message, hideAgent bool) Message {
+	m = PublicMessage(m)
+	if hideAgent && m.Author.Type != "contact" {
+		m.Author.User = nil
+	}
+	return m
+}
+
 // attachmentLink is a signed attachment link with the origin it was stored with, if any
 // (sub 1): inline images are stored with the address the instance had at the time.
 var attachmentLink = regexp.MustCompile(`(https?://[^\s"'<>/?#]+)?/v1/attachments/([0-9a-f-]{36})\?exp=\d+(&amp;|&)sig=[0-9a-f]+`)

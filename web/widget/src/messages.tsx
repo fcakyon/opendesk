@@ -81,8 +81,10 @@ function BotHead({ bot, role }: { bot: BotRef; role?: string }) {
 
 // ── Visitor and team ─────────────────────────────────────────────────────────
 
-export function Bubble({ m, me, grouped, onRetry }: { m: UiMessage; me: boolean; grouped: boolean; onRetry: () => void }) {
-  const who = m.author.user?.name ?? (m.author.type === "system" ? t("automated") : t("support"));
+export function Bubble({ m, me, grouped, brand, onRetry }: { m: UiMessage; me: boolean; grouped: boolean; brand?: TeamMember | null; onRetry: () => void }) {
+  const branded = !m.author.user && m.author.type !== "system";
+  const who = m.author.user?.name ?? (m.author.type === "system" ? t("automated") : brand?.name || t("support"));
+  const avatarUrl = m.author.user ? m.author.user.avatar_url || null : branded ? brand?.avatar_url || null : null;
   const hasBody = me ? !!m.body_text : !!(m.body_html || m.body_text);
   // A reply an API key wrote as a bot shows the bot, with the AI pill.
   const bot = me ? null : keyBot(m);
@@ -91,7 +93,7 @@ export function Bubble({ m, me, grouped, onRetry }: { m: UiMessage; me: boolean;
       {!me && !grouped && bot && <BotHead bot={bot} />}
       {!me && !grouped && !bot && (
         <div class="who">
-          <PersonAvatar p={{ name: who, avatar_url: m.author.user?.avatar_url || null }} />
+          <PersonAvatar p={{ name: who, avatar_url: avatarUrl }} one={branded && !!brand?.name} />
           <span class="who-name">{who}</span>
         </div>
       )}

@@ -335,11 +335,11 @@ func checkCanSend(ctx context.Context, tx pgx.Tx, wid uuid.UUID, mailbox *uuid.U
 func AddMessage(ctx context.Context, tx pgx.Tx, jc Jobs, nm NewMessage) (Message, error) {
 	var channel, status string
 	var firstResponded *time.Time
-	var contactID, ticketMailbox *uuid.UUID
+	var contactID, ticketMailbox, widgetID, teamID *uuid.UUID
 	var brandID uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT channel, status, first_responded_at, contact_id, brand_id, mailbox_id FROM tickets
+	if err := tx.QueryRow(ctx, `SELECT channel, status, first_responded_at, contact_id, brand_id, mailbox_id, widget_id, team_id FROM tickets
 		WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`, nm.WorkspaceID, nm.TicketID).
-		Scan(&channel, &status, &firstResponded, &contactID, &brandID, &ticketMailbox); err != nil {
+		Scan(&channel, &status, &firstResponded, &contactID, &brandID, &ticketMailbox, &widgetID, &teamID); err != nil {
 		return Message{}, fmt.Errorf("lock ticket: %w", err)
 	}
 	if nm.Imported {
@@ -479,9 +479,13 @@ func AddMessage(ctx context.Context, tx pgx.Tx, jc Jobs, nm NewMessage) (Message
 	ev := events.Event{WorkspaceID: nm.WorkspaceID, Type: "message.created", TicketID: &nm.TicketID,
 		Data: map[string]any{"ticket_id": nm.TicketID, "message": msg}}
 	if nm.Kind == "reply" && channel == ChannelChat && contactID != nil {
+		hideAgent, err := HideWidgetAgentIdentity(ctx, tx, nm.WorkspaceID, widgetID, teamID)
+		if err != nil {
+			return Message{}, err
+		}
 		ev.Visibility = events.VisibilityPublic
 		ev.Topics = []string{events.ContactTopic(nm.WorkspaceID, *contactID, brandID)}
-		ev.Data = map[string]any{"ticket_id": nm.TicketID, "message": PublicMessage(msg)}
+		ev.Data = map[string]any{"ticket_id": nm.TicketID, "message": PublicWidgetMessage(msg, hideAgent)}
 	}
 	if _, err := events.Publish(ctx, tx, ev); err != nil {
 		return Message{}, err
@@ -651,16 +655,20 @@ func PublishMessageUpdated(ctx context.Context, tx pgx.Tx, wid, messageID uuid.U
 	ev := MessageUpdatedEvent(wid, msg)
 	if msg.DeletedAt == nil && msg.Kind == "reply" {
 		var channel string
-		var contactID *uuid.UUID
+		var contactID, widgetID, teamID *uuid.UUID
 		var brandID uuid.UUID
-		if err := tx.QueryRow(ctx, `SELECT channel, contact_id, brand_id FROM tickets WHERE workspace_id = $1 AND id = $2`, wid, msg.TicketID).
-			Scan(&channel, &contactID, &brandID); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT channel, contact_id, brand_id, widget_id, team_id FROM tickets WHERE workspace_id = $1 AND id = $2`, wid, msg.TicketID).
+			Scan(&channel, &contactID, &brandID, &widgetID, &teamID); err != nil {
 			return err
 		}
 		if channel == ChannelChat && contactID != nil {
+			hideAgent, err := HideWidgetAgentIdentity(ctx, tx, wid, widgetID, teamID)
+			if err != nil {
+				return err
+			}
 			ev.Visibility = events.VisibilityPublic
 			ev.Topics = []string{events.ContactTopic(wid, *contactID, brandID)}
-			ev.Data = map[string]any{"ticket_id": msg.TicketID, "message": PublicMessage(msg)}
+			ev.Data = map[string]any{"ticket_id": msg.TicketID, "message": PublicWidgetMessage(msg, hideAgent)}
 		}
 	}
 	_, err = events.Publish(ctx, tx, ev)

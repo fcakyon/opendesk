@@ -1,7 +1,7 @@
 import { h, render, type ComponentChild } from "preact";
 import { describe, expect, it } from "vitest";
 import { OLLIE_LOOK } from "../../src/lib/botlook";
-import { AvatarStack, BotAvatar, BotGreeting } from "./messages";
+import { AvatarStack, BotAvatar, BotGreeting, Bubble } from "./messages";
 import type { BotRef } from "./types";
 
 const ollie: BotRef = { id: null, name: "Ollie", avatar_url: "https://cdn.test/ollie.png", look: OLLIE_LOOK };
@@ -42,5 +42,29 @@ describe("bot avatar", () => {
     expect(hello.querySelector(".who-name")?.textContent).toBe("Ollie");
     expect(hello.querySelector(".who-role")?.textContent).toBe("Support assistant");
     expect(hello.querySelector(".msg")?.textContent).toBe("Hi, I'm Ollie.");
+  });
+
+  it("falls back to the brand logo and name when agent identity is withheld", () => {
+    const el = mount(
+      h(Bubble, {
+        m: {
+          id: "m1",
+          ticket_id: "t1",
+          kind: "reply",
+          direction: "outbound",
+          author: { type: "user", user: null, contact: null },
+          body_html: "<p>Hi there</p>",
+          body_text: "Hi there",
+          attachments: [],
+          created_at: "2026-11-14T20:00:00Z",
+        },
+        me: false,
+        grouped: false,
+        brand: { name: "MuviSafe", avatar_url: "https://cdn.test/muvisafe.png" },
+        onRetry: () => {},
+      }),
+    );
+    expect(el.querySelector(".who-name")?.textContent).toBe("MuviSafe");
+    expect(el.querySelector(".who .av img")?.getAttribute("src")).toBe("https://cdn.test/muvisafe.png");
   });
 });

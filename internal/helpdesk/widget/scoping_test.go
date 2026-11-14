@@ -94,3 +94,34 @@ func TestWidgetSummary(t *testing.T) {
 		t.Fatalf("other workspace %v", out.Data)
 	}
 }
+
+// With show_team off (or a private team), visitor-facing messages withhold agent names and avatars.
+func TestWidgetWithholdsAgentIdentityWhenShowTeamOff(t *testing.T) {
+	e, ws := setup(t)
+	s := start(t, e, map[string]any{"key": ws.WidgetKey})
+	conv := e.Do("POST", "/v1/widget/conversations", visitor(s.VisitorToken), map[string]any{"body": "Hello"}).Want(t, 201).Map(t)
+	cid := conv["conversation"].(map[string]any)["id"].(string)
+	e.Do("POST", "/v1/tickets/"+cid+"/messages", ws.Agent.As(ws), map[string]any{"kind": "reply", "body_html": "<p>Hi from agent</p>"}).Want(t, 201)
+
+	e.SetWidgetSettings(ws, ws.WidgetID, map[string]any{"show_team": false})
+	out := e.Do("GET", "/v1/widget/conversations/"+cid+"/messages", visitor(s.VisitorToken), nil).Want(t, 200).Map(t)
+	msgs := out["data"].([]any)
+	reply := msgs[len(msgs)-1].(map[string]any)
+	author := reply["author"].(map[string]any)
+	if author["type"] != "user" || author["user"] != nil {
+		t.Fatalf("expected user identity withheld, got %+v", author)
+	}
+	resumed := start(t, e, map[string]any{"key": ws.WidgetKey, "visitor_token": s.VisitorToken})
+	if resumed.UnreadLatest == nil || resumed.UnreadLatest.Author.User != nil {
+		t.Fatalf("expected unread_latest user identity withheld, got %+v", resumed.UnreadLatest)
+	}
+
+	e.SetWidgetSettings(ws, ws.WidgetID, map[string]any{"show_team": true})
+	out = e.Do("GET", "/v1/widget/conversations/"+cid+"/messages", visitor(s.VisitorToken), nil).Want(t, 200).Map(t)
+	msgs = out["data"].([]any)
+	reply = msgs[len(msgs)-1].(map[string]any)
+	author = reply["author"].(map[string]any)
+	if author["user"] == nil {
+		t.Fatalf("expected user identity visible when show_team is true, got %+v", author)
+	}
+}

@@ -434,7 +434,7 @@
     "subtitleHint": "Leave empty to show how fast you usually reply.",
     "subtitlePlaceholder": "We usually reply in a few minutes",
     "showTeam": "Show team faces",
-    "showTeamHint": "Up to three teammates, first names only, available people first.",
+    "showTeamHint": "Show teammates in the widget (up to three first names). When off, human replies appear under the brand.",
     "home": "Home screen",
     "homeHint": "What visitors see before they start a conversation.",
     "suggestions": "Suggested questions",

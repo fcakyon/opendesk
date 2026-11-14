@@ -299,6 +299,18 @@ func (h *handler) registerConversations(api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
+			var ticketWidget, ticketTeam *uuid.UUID
+			if err := h.d.DB.Pool.QueryRow(ctx, `SELECT widget_id, team_id FROM tickets WHERE workspace_id = $1 AND id = $2`,
+				p.WorkspaceID, c.ID).Scan(&ticketWidget, &ticketTeam); err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if ticketWidget == nil {
+				ticketWidget = sessionWidget(p)
+			}
+			hideAgent, err := domain.HideWidgetAgentIdentity(ctx, h.d.DB.Pool, p.WorkspaceID, ticketWidget, ticketTeam)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
 			msgs, err := domain.ListMessages(ctx, h.d.DB.Pool, p.WorkspaceID, c.ID, true)
 			if err != nil {
 				return nil, httpx.Wrap(err)
@@ -309,7 +321,7 @@ func (h *handler) registerConversations(api huma.API) {
 				return nil, httpx.Wrap(err)
 			}
 			for i := range msgs {
-				msgs[i] = publicMessage(msgs[i])
+				msgs[i] = publicWidgetMessage(msgs[i], hideAgent)
 			}
 			return &struct{ Body messagesOut }{messagesOut{msgs}}, nil
 		})

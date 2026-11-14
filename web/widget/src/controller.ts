@@ -214,7 +214,7 @@ export class Controller {
   senderName(m: Message) {
     const s = this.s;
     const ai = isAiAnswer(m);
-    return m.author.user?.name ?? (ai ? readBotRef(m.author.bot)?.name || s.config?.bot?.name || t("ai") : keyBot(m)?.name || s.config?.workspace_name || t("support"));
+    return m.author.user?.name ?? (ai ? readBotRef(m.author.bot)?.name || s.config?.bot?.name || t("ai") : keyBot(m)?.name || s.config?.title || s.config?.brand?.name || s.config?.workspace_name || t("support"));
   }
 
   home() {

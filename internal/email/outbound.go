@@ -83,6 +83,7 @@ type ollieSender struct {
 type ticketInfo struct {
 	id             uuid.UUID
 	number         int64
+	channel        string
 	subject        string
 	mailboxID      *uuid.UUID
 	contactEmail   *string
@@ -90,6 +91,7 @@ type ticketInfo struct {
 	contactBlocked bool
 	brandID        uuid.UUID
 	teamID         *uuid.UUID
+	widgetID       *uuid.UUID
 	receivedAt     string
 	names          senderNames // team and brand; the caller fills agent and mailbox
 }
@@ -98,14 +100,14 @@ func loadTicketInfo(ctx context.Context, q db.Querier, wid, id uuid.UUID) (*tick
 	var t ticketInfo
 	var blocked *bool
 	var contactName *string
-	err := q.QueryRow(ctx, `SELECT t.id, t.number, t.subject, t.mailbox_id, c.email, c.blocked, c.name, t.brand_id, t.team_id,
+	err := q.QueryRow(ctx, `SELECT t.id, t.number, t.channel, t.subject, t.mailbox_id, c.email, c.blocked, c.name, t.brand_id, t.team_id, t.widget_id,
 		t.received_at, COALESCE(tm.name, ''), COALESCE(b.name, '')
 		FROM tickets t
 		LEFT JOIN contacts c ON c.id = t.contact_id AND c.workspace_id = t.workspace_id
 		LEFT JOIN teams tm ON tm.id = t.team_id AND tm.workspace_id = t.workspace_id
 		LEFT JOIN brands b ON b.id = t.brand_id AND b.workspace_id = t.workspace_id
 		WHERE t.workspace_id = $1 AND t.id = $2 AND t.deleted_at IS NULL`, wid, id).
-		Scan(&t.id, &t.number, &t.subject, &t.mailboxID, &t.contactEmail, &blocked, &contactName, &t.brandID, &t.teamID,
+		Scan(&t.id, &t.number, &t.channel, &t.subject, &t.mailboxID, &t.contactEmail, &blocked, &contactName, &t.brandID, &t.teamID, &t.widgetID,
 			&t.receivedAt, &t.names.Team, &t.names.Brand)
 	t.contactBlocked = blocked != nil && *blocked
 	if contactName != nil {
@@ -447,10 +449,17 @@ func (s *service) composeAndSend(ctx context.Context, wid, mid, ticketID uuid.UU
 	if to, err = replyDestination(ctx, s.d.DB.Pool, wid, ticketID, t.contactEmail, to); err != nil {
 		return "", nil, err
 	}
+	hideAgent := false
+	if t.channel == domain.ChannelChat {
+		hideAgent, err = domain.HideWidgetAgentIdentity(ctx, s.d.DB.Pool, wid, t.widgetID, t.teamID)
+		if err != nil {
+			return "", nil, err
+		}
+	}
 	alias := m.alias(t.receivedAt)
 	names := t.names
 	names.Mailbox = m.nameFor(alias)
-	if authorID != nil {
+	if authorID != nil && !hideAgent {
 		if u, err := domain.LoadUserRef(ctx, s.d.DB.Pool, *authorID); err == nil {
 			names.Agent = agentName(u.Name)
 		}
@@ -489,7 +498,11 @@ func (s *service) composeAndSend(ctx context.Context, wid, mid, ticketID uuid.UU
 			subject = replySubject(firstNonEmpty(subject, t.subject), t.number, inReplyTo != "")
 		}
 	}
-	ref := templates.Ref{WorkspaceID: wid, TicketID: &ticketID, AuthorUserID: authorID, MailboxID: &m.ID, MailboxEmail: firstNonEmpty(alias, m.Email)}
+	emailAuthorID := authorID
+	if hideAgent {
+		emailAuthorID = nil
+	}
+	ref := templates.Ref{WorkspaceID: wid, TicketID: &ticketID, AuthorUserID: emailAuthorID, MailboxID: &m.ID, MailboxEmail: firstNonEmpty(alias, m.Email)}
 	if authorID == nil && bot.ai {
 		ref.BotName = bot.name
 	}

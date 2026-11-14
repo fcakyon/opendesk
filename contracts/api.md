@@ -1018,7 +1018,7 @@ interface WidgetSettings {
   radius: "square" | "soft" | "round"   // corner style of the panel, bubbles and launcher, default "soft"
   title: string                         // header title, up to 40 chars; "" = the workspace name
   subtitle: string                      // under the title, up to 80 chars; "" = the translated reply-time line
-  show_team: boolean                    // up to 3 team avatars in the header, default true
+  show_team: boolean                    // up to 3 team avatars in the header and teammate names on replies, default true; when false, human replies appear under the brand
   suggestions: string[]                 // at most 4 prompts of 2..60 chars on the home screen; a tap starts a conversation with it
   sound: boolean                        // a soft sound for a new reply while the page is hidden, default false
   topics: { id: string /* kept when sent, else generated; 1..40 of A-Z a-z 0-9 _ - */; label: string /* 2..40 */; team_id: string | null /* a team of the workspace */ }[]  // at most 8

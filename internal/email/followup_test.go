@@ -248,3 +248,30 @@ func TestChatFollowUpFromAPIKey(t *testing.T) {
 		t.Fatalf("send jobs %d", n)
 	}
 }
+
+func TestChatFollowUpHidesAgentWhenShowTeamOff(t *testing.T) {
+	w := newWorld(t)
+	m := w.mailbox(InboundForwarding, OutboundSystem, func(m *mailboxRow, _ *credentials) {
+		m.FromNameFormat = "{agent_first} at {brand}"
+	})
+	_ = m
+	var sent [][]byte
+	w.s.rawSend = func(_ context.Context, _ string, _ []string, raw []byte) error { sent = append(sent, raw); return nil }
+	tid, widget := w.chat(customer(), "10 minutes")
+	mustExec(t, w.d, `UPDATE widgets SET settings = settings || '{"show_team": false}' WHERE id = $1`, widget)
+
+	mid := w.chatReply(tid, "We checked this for you", false)
+	if err := w.s.chatFollowUp(w.ctx, w.followUps(mid)[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.s.sendMessage(w.ctx, w.wid, mid, false); err != nil {
+		t.Fatal(err)
+	}
+	env, err := enmime.ReadEnvelope(bytes.NewReader(sent[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g := env.GetHeader("From"); g != `"Acme" <notifications@opendesk.test>` {
+		t.Fatalf("expected brand-only From, got %q", g)
+	}
+}

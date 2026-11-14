@@ -207,6 +207,7 @@ describe("replies that came while the visitor was away", () => {
     expect(s.unread).toBe(2);
     expect(s.teaser?.id).toBe("msg-away");
     expect(c.senderName(s.teaser!)).toBe("Maya");
+    expect(c.senderName({ ...s.teaser!, author: { type: "user", user: null, contact: null } })).toBe(s.config?.title || s.config?.brand?.name || s.config?.workspace_name);
 
     c.dismissTeaser();
     expect(c.store.get().teaser).toBeNull();

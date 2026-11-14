@@ -91,7 +91,12 @@ func (h *handler) allowWrite(p *auth.Principal, bucket string, limit int) error 
 // publicMessage is the visitor-facing form of a message (domain.PublicMessage): no
 // recipient lists, delivery internals, sender checks or agent email addresses.
 func publicMessage(m domain.Message) domain.Message {
-	m = domain.PublicMessage(m)
+	return publicWidgetMessage(m, false)
+}
+
+// publicWidgetMessage is publicMessage with human agent identity withheld when hideAgent is true.
+func publicWidgetMessage(m domain.Message, hideAgent bool) domain.Message {
+	m = domain.PublicWidgetMessage(m, hideAgent)
 	if m.Author.Type != "contact" {
 		m.FromEmail = ""
 	}
