@@ -1,6 +1,6 @@
-// Per-message AI: translate a customer message into the reader's language (the
-// app's), offered whenever the message isn't known to be in it already, and label
-// answers the widget bot wrote.
+// Per-message AI: translate a reply, the customer's or the team's own (the AI agent's
+// answer, a colleague's), into the reader's language (the app's), offered whenever the
+// message isn't known to be in it already, and label answers the widget bot wrote.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -44,9 +44,10 @@ export function useMessageTranslation(m: Message): MessageTranslation {
   const [showing, setShowing] = useState(false);
   const lang = messageLanguage(m, ticket);
   const ours = uiLanguage();
+  // Either side's reply: the team reads what the AI agent or a colleague wrote in the
+  // customer's language too. A note is left out, and so is a side conversation, stored as notes.
   // Without a detected language (no triage), offer it anyway: the reader knows best.
-  const eligible = ai.enabled && atLeast(role, "agent") && m.direction === "inbound" && m.kind === "reply" &&
-    (!isLanguage(lang) || isForeign(lang, ours));
+  const eligible = ai.enabled && atLeast(role, "agent") && m.kind === "reply" && (!isLanguage(lang) || isForeign(lang, ours));
 
   const res = useQuery({
     queryKey: qk.of("ai", "translate", m.id, ours),

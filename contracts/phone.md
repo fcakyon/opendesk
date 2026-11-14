@@ -329,7 +329,9 @@ Docs: [API specs](https://openapi.voys.dev) (`voipgrid/user`, `voipgrid/callerid
   (text) and `.../summaries` (`{summary}`) with the connection's token, never the body's
   text. `{call_id, recording_url}` sets `recording`: the URL is an API URL that needs the
   token, so it is not kept, and the entry has no player or page to open (`asset_url` stays
-  empty).
+  empty). Some accounts receive these three with a `status` (`transcript_created`,
+  `summary_created`, `recording_created`): an event whose status is not a call's is read
+  by its field, whatever its status.
 - Lines: `GET /api/v2/clients/{client_uuid}/callerid_numbers` with
   `Accept: application/json;version=2` (`{number, description}`), ten pages at most.
 - Rate limit: Voys answers 429 without a reset; the job snoozes a minute (or its `Retry-After`

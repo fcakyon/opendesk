@@ -28,7 +28,9 @@ import (
 // principal for the ticket with domain.LoadVisibleTicket.
 type MessageInput struct {
 	Kind          string            `json:"kind" enum:"reply,note"`
+	Direction     string            `json:"direction,omitempty" enum:"inbound,outbound" doc:"Default outbound. inbound (replies only) stores the message as the ticket's contact's own words, as if they had emailed it; nothing is sent"`
 	BodyHTML      string            `json:"body_html" maxLength:"500000"`
+	To            []string          `json:"to,omitempty" maxItems:"20" doc:"Email replies: who it goes to; left out: the customer's reply address (their address, or the Reply-To of their latest email at their own organisation)"`
 	Cc            []string          `json:"cc,omitempty" maxItems:"20"`
 	Bcc           []string          `json:"bcc,omitempty" maxItems:"20"`
 	AttachmentIDs []string          `json:"attachment_ids,omitempty" maxItems:"20"`
@@ -36,6 +38,7 @@ type MessageInput struct {
 	MailboxID     string            `json:"mailbox_id,omitempty" doc:"Replies: send from this address of the ticket's brand (the caller must be allowed to send from it); it becomes the ticket's reply address"`
 	FromNoteID    string            `json:"from_note_id,omitempty" doc:"Replies: an internal note of yours, without files, this reply is written from. The note stays as a marker pointing at the reply; only admins read what it said"`
 	FromAccount   *FromAccountInput `json:"from_account,omitempty" doc:"Email replies: send from one of your own Collab addresses instead of the ticket's reply address, which stays as it is"`
+	SavedReplyIDs []string          `json:"saved_reply_ids,omitempty" maxItems:"10" doc:"Saved replies used in this message: their actions apply to the ticket once it is added"`
 }
 
 // FromAccountInput is the Collab address a reply goes out from (contracts/collab.md
@@ -95,7 +98,7 @@ func registerMessages(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			id, err := resolveVisible(ctx, d.DB.Pool, p, in.ID)
+			id, err := domain.ResolveVisibleTicket(ctx, d.DB.Pool, p, in.ID)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -125,7 +128,7 @@ func registerMessages(d *deps.Deps, api huma.API) {
 			}
 			var msg domain.Message
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				id, err := resolveVisible(ctx, tx, p, in.ID)
+				id, err := domain.ResolveVisibleTicket(ctx, tx, p, in.ID)
 				if err != nil {
 					return err
 				}
@@ -151,7 +154,7 @@ func registerMessages(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			id, err := resolveVisible(ctx, d.DB.Pool, p, in.ID)
+			id, err := domain.ResolveVisibleTicket(ctx, d.DB.Pool, p, in.ID)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -204,7 +207,7 @@ func registerMessages(d *deps.Deps, api huma.API) {
 				FROM messages m JOIN tickets t ON t.id = m.ticket_id AND t.deleted_at IS NULL
 				WHERE m.workspace_id = $1 AND m.id = $2 AND (m.deleted_at IS NULL OR $3)`, p.WorkspaceID, id, p.Role.AtLeast(auth.RoleAdmin)).Scan(&out.Body.FullHTML, &tid)
 			if err == nil {
-				if _, err = resolveVisible(ctx, d.DB.Pool, p, tid.String()); err != nil {
+				if _, err = domain.ResolveVisibleTicket(ctx, d.DB.Pool, p, tid.String()); err != nil {
 					return nil, httpx.NotFound("Message")
 				}
 			}
@@ -222,6 +225,9 @@ func registerMessages(d *deps.Deps, api huma.API) {
 func PostMessage(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal, tid uuid.UUID, b MessageInput) (domain.Message, error) {
 	wid := p.WorkspaceID
 	actor := actorOf(p)
+	if b.Direction == "inbound" {
+		return postInbound(ctx, tx, d, p, tid, b)
+	}
 	var channel, subject string
 	var mailboxEmail, mailboxName, contactEmail *string
 	var mailboxID, team *uuid.UUID
@@ -360,7 +366,16 @@ func PostMessage(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal
 		if err != nil {
 			return domain.Message{}, err
 		}
-		nm.To, nm.Cc, nm.Bcc = []string{*contactEmail}, cc, bcc
+		to, err := cleanEmails(b.To)
+		if err != nil {
+			return domain.Message{}, err
+		}
+		if len(to) == 0 {
+			if to, err = domain.ReplyRecipients(ctx, tx, wid, tid, contactEmail, []string{*contactEmail}); err != nil {
+				return domain.Message{}, err
+			}
+		}
+		nm.To, nm.Cc, nm.Bcc = to, cc, bcc
 		nm.FromEmail, nm.FromName = str(mailboxEmail), str(mailboxName)
 		nm.MailboxID = mailboxID
 		if personal != nil {
@@ -369,8 +384,8 @@ func PostMessage(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal
 		}
 		nm.DeliveryStatus = "pending"
 		nm.BodyHTML, nm.BodyText = withSignOff(nm.BodyHTML, nm.BodyText, bot)
-	} else if len(b.Cc)+len(b.Bcc) > 0 {
-		return domain.Message{}, httpx.Validation("cc and bcc apply only to email replies")
+	} else if len(b.To)+len(b.Cc)+len(b.Bcc) > 0 {
+		return domain.Message{}, httpx.Validation("to, cc and bcc apply only to email replies")
 	}
 	asKeyBot(&nm, p, bot)
 	if actor.UserID != nil && nm.FromName == "" {
@@ -408,6 +423,9 @@ func PostMessage(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal
 		if err := notifyMentions(ctx, tx, wid, tid, msg, actor.UserID); err != nil {
 			return domain.Message{}, err
 		}
+	}
+	if err := applySavedReplyActions(ctx, tx, d, p, tid, b.SavedReplyIDs); err != nil {
+		return domain.Message{}, err
 	}
 	if b.Status != nil {
 		if _, err := applyPatch(ctx, tx, d, wid, tid, actor, Patch{Status: b.Status}, applyOpts{Enqueue: true, RequireFields: true}); err != nil {
@@ -560,4 +578,69 @@ func notifyNewMentions(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, msg d
 		}
 	}
 	return nil
+}
+
+// postInbound stores a message as the ticket's contact's own words, the way an email or a
+// chat message from them is stored: it is sent to no one, and the ticket's automations see a
+// customer message.
+func postInbound(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal, tid uuid.UUID, b MessageInput) (domain.Message, error) {
+	wid := p.WorkspaceID
+	if b.Kind != "reply" {
+		return domain.Message{}, httpx.Validation("an inbound message is a reply, not a note")
+	}
+	if strings.TrimSpace(b.MailboxID) != "" || strings.TrimSpace(b.FromNoteID) != "" || b.FromAccount != nil || len(b.To)+len(b.Cc)+len(b.Bcc) > 0 {
+		return domain.Message{}, httpx.Validation("an inbound message takes no mailbox_id, from_note_id, from_account, to, cc or bcc")
+	}
+	var subject, channel string
+	var contactID *uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT subject, channel, contact_id FROM tickets WHERE workspace_id = $1 AND id = $2`, wid, tid).Scan(&subject, &channel, &contactID); err != nil {
+		return domain.Message{}, err
+	}
+	if channel == domain.ChannelChat {
+		return domain.Message{}, httpx.Validation("a chat's visitor writes their own messages in the widget")
+	}
+	if contactID == nil {
+		return domain.Message{}, httpx.Validation("this ticket has no contact to speak for")
+	}
+	attIDs, err := hd.ParseAttachmentIDs(b.AttachmentIDs)
+	if err != nil {
+		return domain.Message{}, err
+	}
+	if err := hd.CheckAttachments(ctx, tx, wid, attIDs, hd.Uploader{User: p.ActorUserID(), APIKey: p.ActorAPIKeyID()}); err != nil {
+		return domain.Message{}, err
+	}
+	nm, err := inboundMessage(ctx, tx, p, tid, *contactID, subject, b.BodyHTML, attIDs)
+	if err != nil {
+		return domain.Message{}, err
+	}
+	msg, err := domain.AddMessage(ctx, tx, d.Jobs, nm)
+	if err != nil {
+		return domain.Message{}, err
+	}
+	if b.Status != nil {
+		if _, err := applyPatch(ctx, tx, d, wid, tid, actorOf(p), Patch{Status: b.Status}, applyOpts{Enqueue: true, RequireFields: true}); err != nil {
+			return domain.Message{}, err
+		}
+	}
+	return msg, nil
+}
+
+// inboundMessage is the message a contact's own words make: sanitized, never filled with
+// the template variables an agent's reply gets, and marked with the API key that recorded it.
+// The caller has checked the attachments.
+func inboundMessage(ctx context.Context, tx pgx.Tx, p *auth.Principal, tid, contactID uuid.UUID, subject, rawHTML string, attIDs []uuid.UUID) (domain.NewMessage, error) {
+	wid := p.WorkspaceID
+	bodyHTML := hd.SanitizeRich(rawHTML)
+	bodyText := hd.HTMLToText(bodyHTML)
+	if bodyText == "" && len(attIDs) == 0 && !strings.Contains(bodyHTML, "<img") {
+		return domain.NewMessage{}, httpx.Validation("the message is empty")
+	}
+	nm := domain.NewMessage{WorkspaceID: wid, TicketID: tid, Kind: "reply", Direction: "inbound", AuthorType: "contact",
+		AuthorContactID: &contactID, BodyHTML: bodyHTML, BodyText: bodyText, Subject: subject, AttachmentIDs: attIDs,
+		APIKeyID: p.ActorAPIKeyID(), RecordedBy: p.ActorUserID()}
+	var email, name *string
+	if err := tx.QueryRow(ctx, `SELECT email, name FROM contacts WHERE workspace_id = $1 AND id = $2`, wid, contactID).Scan(&email, &name); err == nil {
+		nm.FromEmail, nm.FromName = str(email), str(name)
+	}
+	return nm, nil
 }

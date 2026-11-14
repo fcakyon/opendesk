@@ -422,6 +422,17 @@ func autoresponse(pm *parsedMail, null bool) bool {
 	return null
 }
 
+// keepAutomatic reports whether a mailbox that keeps automatic mail takes in mail the noise
+// filter set aside for reason: generated or bulk mail, not an autoresponder's (auto-replied, a
+// loop marker, the null sender, or an out-of-office, which Exchange marks auto-generated), a
+// bounce or our own mail.
+func keepAutomatic(m *mailboxRow, reason string, pm *parsedMail, null bool) bool {
+	if !m.KeepAutomaticMail || reason != "auto_submitted" && reason != "precedence" {
+		return false
+	}
+	return !autoresponse(pm, null) && !looksAutomatic(pm)
+}
+
 // noReplySender reports an address that never reads a reply.
 func noReplySender(addr string) bool {
 	local, _, _ := strings.Cut(strings.ToLower(addr), "@")

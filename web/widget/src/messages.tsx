@@ -10,6 +10,7 @@ import type { Controller } from "./controller";
 import { hostOf, initials, safeHtml, size, splitSources } from "./html";
 import { clock, t } from "./i18n";
 import { Bolt, BotFace, Check, Clock, Cross, FileIc, LinkIc, Person, Spinner, ThumbDown, ThumbUp } from "./icons";
+import { shortLinks } from "./links";
 import type { LiveReply } from "./live";
 import { renderMarkdown } from "./markdown";
 import type { ActionUi } from "./store";
@@ -101,7 +102,7 @@ export function Bubble({ m, me, grouped, onRetry }: { m: UiMessage; me: boolean;
             {m.body_text}
           </div>
         ) : (
-          <div class="msg" dangerouslySetInnerHTML={{ __html: safeHtml(m.body_html) }} />
+          <div class="msg" dangerouslySetInnerHTML={{ __html: shortLinks(safeHtml(m.body_html)) }} />
         ))}
       {m.attachments.length > 0 && (
         <div class="files">
@@ -166,7 +167,11 @@ export function AiMessage({
   /** It just landed: the bot hops once. */
   landed?: boolean;
 }) {
-  const body = useMemo(() => (m.body_html ? splitSources(safeHtml(m.body_html)) : null), [m.body_html]);
+  const body = useMemo(() => {
+    if (!m.body_html) return null;
+    const b = splitSources(safeHtml(m.body_html));
+    return { ...b, html: shortLinks(b.html) };
+  }, [m.body_html]);
   const seen = useMemo(() => readBotRef(m.author.bot), [m.author.bot]);
   return (
     <div class={`row them gap ai${swapped ? " no-enter" : ""}`} data-bot-state={landed ? "happy" : undefined}>

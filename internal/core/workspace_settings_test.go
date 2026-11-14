@@ -28,9 +28,9 @@ func TestWorkspaceProductSettingsDefaultAndPatch(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"timezone":"UTC"}`), &old); err != nil {
 		t.Fatal(err)
 	}
-	tickets, mail := workspaceProductFlags(old)
-	if !tickets || !mail {
-		t.Fatalf("old workspace defaults: tickets=%v mail=%v", tickets, mail)
+	tickets, mail, pages := workspaceProductFlags(old)
+	if !tickets || !mail || !pages {
+		t.Fatalf("old workspace defaults: tickets=%v mail=%v pages=%v", tickets, mail, pages)
 	}
 	off := false
 	patch, err := validateSettings(&CoreWorkspaceSettings{TicketsEnabled: &off})
@@ -42,12 +42,16 @@ func TestWorkspaceProductSettingsDefaultAndPatch(t *testing.T) {
 		t.Fatalf("mail patch: %v, %v", patch, err)
 	}
 	var explicit map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(`{"tickets_enabled":false,"mail_enabled":true}`), &explicit); err != nil {
+	if err := json.Unmarshal([]byte(`{"tickets_enabled":false,"mail_enabled":true,"pages_enabled":false}`), &explicit); err != nil {
 		t.Fatal(err)
 	}
-	tickets, mail = workspaceProductFlags(explicit)
-	if tickets || !mail {
-		t.Fatalf("explicit settings: tickets=%v mail=%v", tickets, mail)
+	tickets, mail, pages = workspaceProductFlags(explicit)
+	if tickets || !mail || pages {
+		t.Fatalf("explicit settings: tickets=%v mail=%v pages=%v", tickets, mail, pages)
+	}
+	patch, err = validateSettings(&CoreWorkspaceSettings{PagesEnabled: &off})
+	if err != nil || patch["pages_enabled"] != false {
+		t.Fatalf("pages patch: %v, %v", patch, err)
 	}
 }
 
@@ -154,6 +158,26 @@ func TestSeveritySetting(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, ok := out["severity_enabled"]; ok {
+		t.Fatal("stored without being set")
+	}
+}
+
+// TestTicketNumberInSubjectSetting checks the subject tag can be turned off and on, and stays unset otherwise.
+func TestTicketNumberInSubjectSetting(t *testing.T) {
+	for _, v := range []bool{true, false} {
+		out, err := validateSettings(&CoreWorkspaceSettings{TicketNumberInSubject: &v})
+		if err != nil {
+			t.Fatalf("%v: %v", v, err)
+		}
+		if out["ticket_number_in_subject"] != v {
+			t.Fatalf("%v: stored %v", v, out["ticket_number_in_subject"])
+		}
+	}
+	out, err := validateSettings(&CoreWorkspaceSettings{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := out["ticket_number_in_subject"]; ok {
 		t.Fatal("stored without being set")
 	}
 }

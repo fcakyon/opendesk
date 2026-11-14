@@ -181,9 +181,10 @@ func (w *pushNotificationWorker) Work(ctx context.Context, job *river.Job[jobs.P
 	var readAt *time.Time
 	var number *int64
 	var subject *string
-	// A notification without a ticket may name its own subject (a Collab conversation's).
+	// A notification without a ticket may name its own subject (a Collab conversation's or
+	// a wiki page's title).
 	err := q.QueryRow(ctx, `SELECT n.type, n.data, n.read_at, t.id, t.number,
-			COALESCE(t.subject, CASE WHEN n.ticket_id IS NULL THEN n.data->>'subject' END)
+			COALESCE(t.subject, CASE WHEN n.ticket_id IS NULL THEN COALESCE(n.data->>'subject', n.data->>'page_title') END)
 		FROM notifications n JOIN members m ON m.workspace_id = n.workspace_id AND m.user_id = n.user_id
 		LEFT JOIN tickets t ON t.id = n.ticket_id AND t.workspace_id = n.workspace_id AND t.deleted_at IS NULL
 			AND `+domain.VisibleToUserSQL("t", 3)+`

@@ -6,11 +6,14 @@ import WebKit
 /// JavaScript off and a CSP that only lets images (https, data:) and the bundled
 /// Geist faces load. Article typography: headings, lists, quotes, code blocks
 /// in Geist Mono on a sunken panel. It sizes itself to the content; links open
-/// outside the app.
+/// outside the app, unless `onLink` takes them (answering true).
 struct KBArticleWebView: UIViewRepresentable {
     let html: String
     @Binding var height: CGFloat
     var fontSize: CGFloat = 16
+    /// More rules after the article's own (the wiki's blocks).
+    var extraCSS = ""
+    var onLink: ((URL) -> Bool)?
     @Environment(\.colorScheme) private var scheme
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -40,7 +43,7 @@ struct KBArticleWebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.parent = self
-        let document = KBArticleDocument.make(body: html, dark: scheme == .dark, fontSize: fontSize)
+        let document = KBArticleDocument.make(body: html, dark: scheme == .dark, fontSize: fontSize, extraCSS: extraCSS)
         guard document != context.coordinator.loaded else { return }
         context.coordinator.loaded = document
         webView.loadHTMLString(document, baseURL: nil)
@@ -63,6 +66,7 @@ struct KBArticleWebView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
             if action.navigationType == .other { return .allow }
+            if let url = action.request.url, let onLink = parent.onLink, onLink(url) { return .cancel }
             if let url = action.request.url, ["http", "https", "mailto", "tel"].contains(url.scheme?.lowercased() ?? "") {
                 await UIApplication.shared.open(url)
             }
@@ -90,7 +94,7 @@ enum KBArticleDocument {
         UIColor(color).resolvedColor(with: UITraitCollection(userInterfaceStyle: dark ? .dark : .light)).cssHex
     }
 
-    static func make(body: String, dark: Bool, fontSize: CGFloat) -> String {
+    static func make(body: String, dark: Bool, fontSize: CGFloat, extraCSS: String = "") -> String {
         let fg = css(Theme.fg, dark: dark)
         let fg2 = css(Theme.fg2, dark: dark)
         let fg3 = css(Theme.fg3, dark: dark)
@@ -133,6 +137,7 @@ enum KBArticleDocument {
         table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.92em; }
         th, td { border-bottom: 1px solid \(line); padding: 0.5em 0.4em; text-align: left; }
         th { color: \(fg); font-weight: 600; }
+        \(extraCSS)
         </style></head><body>\(body)</body></html>
         """
     }

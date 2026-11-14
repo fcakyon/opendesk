@@ -5,6 +5,7 @@ import { Fragment, type ComponentChildren, type VNode } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { aiHandling, isAiAnswer, latestAiAnswer, teamReplied } from "./ai";
 import { canAttach, fileProblem, readBot } from "./config";
+import { homeConversations, isFinished, sortConversations } from "./conversations";
 import { NEW, type Controller } from "./controller";
 import { canRecord, clock, useRecorder, VoicePlayer, type Recording } from "./voice";
 import { current, dayLabel, isRtl, relTime, t } from "./i18n";
@@ -257,6 +258,9 @@ function Home({ c }: { c: Controller }) {
   const s = useStore(c.store);
   const cfg = s.config;
   const convs = s.conversations;
+  // The home screen lists the conversations that matter now; "See older conversations" swaps in all of them.
+  const [allConvs, setAllConvs] = useState(false);
+  const home = homeConversations(convs ?? []);
   const team = cfg?.team ?? [];
   const bot = cfg?.ai_answers ? botOf(cfg) : null;
   const ready = !!s.session;
@@ -323,10 +327,10 @@ function Home({ c }: { c: Controller }) {
             )
           ) : convs.length > 0 ? (
             <div class="card">
-              <div class="card-h">{t("yourConversations")}</div>
-              {convs.slice(0, 6).map((v) => (
+              <div class="card-h">{t(allConvs ? "allConversations" : "yourConversations")}</div>
+              {(allConvs ? sortConversations(convs) : home.shown).map((v) => (
                 <button key={v.id} class="conv" onClick={() => void c.openConversation(v.id)}>
-                  <span class={`dot${v.status === "solved" || v.status === "closed" ? "" : " open"}`} aria-hidden="true" />
+                  <span class={`dot${isFinished(v) ? "" : " open"}`} aria-hidden="true" />
                   <span class="conv-main">
                     <span class="conv-top">
                       <span class={`conv-subject${v.unread ? " unread" : ""}`}>{v.subject || t("conversation")}</span>
@@ -336,6 +340,11 @@ function Home({ c }: { c: Controller }) {
                   </span>
                 </button>
               ))}
+              {(allConvs || home.hidden > 0) && (
+                <button type="button" class="link-row more" onClick={() => setAllConvs(!allConvs)}>
+                  {t(allConvs ? "backHome" : "olderConversations")}
+                </button>
+              )}
             </div>
           ) : null}
           {cfg?.help_center_url && (

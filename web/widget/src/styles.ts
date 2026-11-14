@@ -3,7 +3,8 @@
 // chrome behind white panels), soft semantic colour, and the product's one AI
 // hue (violet) for everything the agent does. A workspace sets the colour,
 // theme, corner style and position: the host carries them as CSS variables
-// (--brand, --brand-fg, --r-*, --ox, --oy, --oz; see config.ts hostVars).
+// (--brand, --brand-fg, --r-*, --ox, --oy, --oz; see config.ts hostVars, where a host page overrides
+// them with the documented --opendesk-* variables).
 // Motion: under 250ms, ease-out, off under prefers-reduced-motion. Bot faces
 // carry the shared look motion (BOT_LOOK_CSS): an idle blink in the header, a
 // bob while the bot writes, one hop when its reply lands.
@@ -195,6 +196,8 @@ img { display: block; }
 .link-row:hover { background: var(--bg-3); }
 .link-row svg { color: var(--fg-3); transition: transform .16s var(--ease); }
 .link-row:hover svg { transform: translate(1px, -1px); }
+/* "See older conversations" under the home screen's list, and "Back" under the full one. */
+.link-row.more { width: 100%; border-top: 1px solid var(--line); color: var(--fg-2); text-align: start; }
 
 /* Topics: one list of rows, on the home screen and before a new conversation's first message. */
 .topics { display: flex; flex-direction: column; }

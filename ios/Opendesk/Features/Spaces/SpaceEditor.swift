@@ -16,6 +16,7 @@ struct SpaceEditorSheet: View {
     @State private var problem: String?
     @State private var saving = false
     @State private var confirmDiscard: AccountConfirm?
+    @State private var iconFor: IconTarget?
     private let original: Space
 
     init(draft: SpaceDraft) {
@@ -34,6 +35,14 @@ struct SpaceEditorSheet: View {
         var section: String
         var item: String
         var id: String { section + "/" + item }
+    }
+
+    /// A section's emoji, or a row's when `item` is set.
+    private struct IconTarget: Identifiable {
+        var section: String
+        var item: String?
+        var title: String
+        var id: String { section + "/" + (item ?? "") }
     }
 
     var body: some View {
@@ -106,6 +115,11 @@ struct SpaceEditorSheet: View {
         .sheet(item: $renaming) { ref in
             renameSheet(ref)
                 .presentationDetents([.height(250)])
+                .presentationCornerRadius(Theme.Radius.sheet)
+        }
+        .sheet(item: $iconFor) { target in
+            SidebarIconSheet(title: target.title, current: icon(of: target)) { setIcon($0, for: target) }
+                .presentationDetents([.medium])
                 .presentationCornerRadius(Theme.Radius.sheet)
         }
         .accountConfirm($confirmDiscard)
@@ -211,11 +225,15 @@ struct SpaceEditorSheet: View {
             .deleteDisabled(true)
         } header: {
             HStack(spacing: 8) {
+                if let icon = section.icon { Text(icon).font(.system(size: 14)) }
                 TextField("Section title", text: titleBinding(section.id), prompt: Text(index == 0 ? "No title" : "Section title").foregroundStyle(Theme.fg4))
                     .font(ODFont.sans(13, weight: .semibold))
                     .foregroundStyle(Theme.fg2)
                     .textCase(nil)
                 Menu {
+                    Button {
+                        iconFor = IconTarget(section: section.id, item: nil, title: section.title.isEmpty ? "this section" : section.title)
+                    } label: { Label("Change icon", systemImage: "face.smiling") }
                     if index > 0 {
                         Button { moveSection(section.id, by: -1) } label: { Label("Move up", systemImage: "arrow.up") }
                     }
@@ -250,6 +268,9 @@ struct SpaceEditorSheet: View {
                     renaming = RowRef(section: section.id, item: item.id)
                 } label: { Label("Rename in this Space", systemImage: "pencil") }
                 Button {
+                    iconFor = IconTarget(section: section.id, item: item.id, title: described.title)
+                } label: { Label("Change icon", systemImage: "face.smiling") }
+                Button {
                     update(item.id) { $0.badge = $0.hidesNumber ? nil : "none" }
                 } label: {
                     Label(item.hidesNumber ? "Show its number" : "Hide its number", systemImage: item.hidesNumber ? "number" : "eye.slash")
@@ -282,6 +303,9 @@ struct SpaceEditorSheet: View {
         case .account: "Mail account"
         case .folder: "Mail folder"
         case .page: "Page"
+        case .wikiPage: "Page"
+        case .wikiSpace: "Teamspace"
+        case .mailbox: "Ticket inbox"
         case .everywhere: "Every workspace"
         default: "Row"
         }
@@ -326,6 +350,20 @@ struct SpaceEditorSheet: View {
                 change(&space.sections[s].items[i])
                 return
             }
+        }
+    }
+
+    private func icon(of target: IconTarget) -> String? {
+        guard let section = space.sections.first(where: { $0.id == target.section }) else { return nil }
+        guard let item = target.item else { return section.icon }
+        return section.items.first { $0.id == item }?.icon
+    }
+
+    private func setIcon(_ icon: String?, for target: IconTarget) {
+        if let item = target.item {
+            update(item) { $0.icon = icon }
+        } else if let index = space.sections.firstIndex(where: { $0.id == target.section }) {
+            space.sections[index].icon = icon
         }
     }
 
@@ -388,6 +426,8 @@ struct SpaceAddRowsSheet: View {
     let space: Space
     /// Offers only this workspace's rows (a starter Space), with no Everywhere tab.
     var only: String? = nil
+    /// Offers single rows, without whole sections (a section of the member's own sidebar).
+    var rowsOnly = false
     let onAdd: ([SpaceItem]) -> Void
 
     @State private var tab: String = ""
@@ -498,20 +538,23 @@ struct SpaceAddRowsSheet: View {
         let collab = builder.collab(w) == true
         func item(_ kind: SpaceItemKind, _ id: String) -> SpaceItem { SpaceItem(workspaceID: w, kind: kind, itemID: id) }
         var groups: [CatalogGroup] = []
-        let sections = ["inbox", "teams", "views", "mail", "workspace"].filter { id in
+        let sections = ["inbox", "teams", "views", "mail", "pages", "workspace"].filter { id in
             switch id {
             case "inbox", "teams", "views": tickets
             case "mail": collab
+            case "pages": builder.pagesOn(w)
             default: true
             }
         }
-        groups.append(CatalogGroup(title: "Whole sections, kept up to date", items: sections.map { item(.section, $0) }))
+        if !rowsOnly { groups.append(CatalogGroup(title: "Whole sections, kept up to date", items: sections.map { item(.section, $0) })) }
         if tickets {
             groups.append(CatalogGroup(title: "Inbox folders", items: Folder.allCases.map { item(.ticketFolder, $0.rawValue) }))
             let teams = builder.teams(w)
             if !teams.isEmpty { groups.append(CatalogGroup(title: "Teams", items: teams.map { item(.team, $0.id) })) }
             let views = builder.views(w)
             if !views.isEmpty { groups.append(CatalogGroup(title: "Views", items: views.map { item(.view, $0.id) })) }
+            let mailboxes = builder.mailboxes(w)
+            if !mailboxes.isEmpty { groups.append(CatalogGroup(title: "Ticket inboxes", items: mailboxes.map { item(.mailbox, $0.id) })) }
         }
         if collab {
             let data = store.data[w]
@@ -521,8 +564,15 @@ struct SpaceAddRowsSheet: View {
             let folders = (data?.allFolders ?? []).filter { $0.role == nil }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             if !folders.isEmpty { groups.append(CatalogGroup(title: "Mail folders and labels", items: folders.map { item(.folder, $0.id) })) }
         }
-        let pages = ["contacts", "knowledge", "wiki", "reports"].filter { $0 != "reports" || tickets }
-        groups.append(CatalogGroup(title: "Pages", items: pages.map { item(.page, $0) }))
+        let teamspaces = builder.teams(w).filter { builder.teamspace($0.id, in: w) != nil }
+        if !teamspaces.isEmpty { groups.append(CatalogGroup(title: "Teamspaces", items: teamspaces.map { item(.wikiSpace, $0.id) })) }
+        let pages = builder.pages(w)
+        let inPages = pages.filter { $0.area == "pages" }
+        if !inPages.isEmpty { groups.append(CatalogGroup(title: "In Pages", items: inPages.map { item(.wikiPage, $0.id) })) }
+        let inWiki = pages.filter { $0.area != "pages" }
+        if !inWiki.isEmpty { groups.append(CatalogGroup(title: "In the wiki", items: inWiki.map { item(.wikiPage, $0.id) })) }
+        let areas = ["contacts", "knowledge", "wiki", "reports"].filter { $0 != "reports" || tickets }
+        groups.append(CatalogGroup(title: "Workspace", items: areas.map { item(.page, $0) }))
         return groups
     }
 

@@ -59,6 +59,8 @@ type Assignment = {
   auto_away_minutes: number; // 0 = off, else 10..1440
   new_ticket_notify: "auto" | "everyone" | "leads" | "off"; // who hears about a new unassigned ticket, default auto
   followup_keeps_assignee: boolean; // a customer's follow-up of a closed ticket goes to that ticket's assignee, default false
+  chat_mode: AssignMode; // live chats' own rule, default none (chats follow the rules above)
+  chat_skill_id: string | null; // the skill a member must hold to be given a chat; null for anyone in the pool
 };
 
 type TriageSettings = {
@@ -141,7 +143,7 @@ curl -X PATCH https://api.opendesk.sh/v1/assignment \
         "rules": [{ "target_type": "team", "target_id": "TEAM_ID", "mode": "load_balanced" }] }'
 ```
 
-`rules` replaces the whole list. `new_ticket_notify` decides who gets the `new_ticket` notification: `auto` (everyone on small teams, the leads on bigger ones), `everyone`, `leads` or `off`. `followup_keeps_assignee: true` gives the new ticket an email opens when it answers a closed ticket to the closed ticket's assignee, while they are still an owner, admin or agent who is not suspended and, for a private team, on that team. The ticket's activity then has an `assigned` entry with `via: "previous_ticket"` and the closed ticket's `previous_ticket_id` and `previous_ticket_number`, both `null` when the closed ticket is in another, private team. See [Triage and assignment](/guides/triage-and-assignment/) for how a ticket's mode and assignee are chosen.
+`rules` replaces the whole list. `new_ticket_notify` decides who gets the `new_ticket` notification: `auto` (everyone on small teams, the leads on bigger ones), `everyone`, `leads` or `off`. `followup_keeps_assignee: true` gives the new ticket an email opens when it answers a closed ticket to the closed ticket's assignee, while they are still an owner, admin or agent who is not suspended and, for a private team, on that team. The ticket's activity then has an `assigned` entry with `via: "previous_ticket"` and the closed ticket's `previous_ticket_id` and `previous_ticket_number`, both `null` when the closed ticket is in another, private team. `chat_mode` gives live chats their own rule, among the members holding `chat_skill_id` (send `""` to clear it); with the answer bot on, a chat is assigned when the bot hands over. See [Triage and assignment](/guides/triage-and-assignment/) for how a ticket's mode and assignee are chosen.
 
 ## Configure triage
 

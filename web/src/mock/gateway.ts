@@ -3,6 +3,7 @@
 // Go relay and Elixir gateway would.
 
 import type { Envelope } from "@/lib/api/types";
+import type { PresenceStatus } from "@/lib/realtime/presence";
 import type { PushReply, RtChannel, RtSocket, SocketFactory } from "@/lib/realtime/transport";
 import { db, type WsData } from "./db";
 import { privateTeamOf } from "./teams";
@@ -14,7 +15,7 @@ export type Meta = {
   user_id: string;
   name: string;
   avatar: string;
-  state: "viewing" | "replying" | "idle";
+  state: PresenceStatus;
   online_at: string;
   phx_ref: string;
 };
@@ -22,8 +23,50 @@ export type Meta = {
 const channels = new Set<FakeChannel>();
 const EVENT_LOG_CAP = 500;
 
-/** Teammates "present" on tickets, keyed by ticket id. */
+/** Teammates "present" on tickets and wiki pages, keyed by room (`roomOf`). */
 export const teammatePresence = new Map<string, Meta[]>();
+
+/**
+ * The presence room of a topic: a ticket's id for `ticket:<wid>:<id>`, `wiki_page:<id>` for
+ * `wiki_page:<wid>:<id>` (the app's presence keys, `wikiPresenceKey`), else null.
+ */
+export function roomOf(topic: string): string | null {
+  const m = /^(ticket|wiki_page):[^:]+:([^:]+)$/.exec(topic);
+  if (!m) return null;
+  return m[1] === "ticket" ? m[2] : `wiki_page:${m[2]}`;
+}
+
+export const wikiRoom = (pageId: string) => `wiki_page:${pageId}`;
+
+const STATES: Record<"ticket" | "wiki_page", readonly PresenceStatus[]> = {
+  ticket: ["viewing", "replying", "idle"],
+  wiki_page: ["viewing", "editing", "idle"],
+};
+
+/** A state the topic's channel accepts, else viewing (as the gateway's default). */
+function stateFor(topic: string, v: unknown): PresenceStatus {
+  const kind = topic.startsWith("wiki_page:") ? "wiki_page" : "ticket";
+  return STATES[kind].find((x) => x === v) ?? "viewing";
+}
+
+/**
+ * Some wiki pages have a teammate on them when you open one (about two in three, the same
+ * pages every time), one of them editing: the presence of a page as the gateway would serve it.
+ */
+const seededRooms = new Set<string>();
+function seedWikiRoom(room: string) {
+  if (seededRooms.has(room)) return;
+  seededRooms.add(room);
+  const mates = db.users.filter((u) => u.id !== db.meId).slice(0, 4);
+  let h = 0;
+  for (const c of room) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  if (!mates.length || h % 3 === 0) return;
+  const mate = mates[h % mates.length];
+  const list = teammatePresence.get(room) ?? [];
+  if (list.some((m) => m.user_id === mate.id)) return;
+  const state: PresenceStatus = h % 2 ? "editing" : "viewing";
+  teammatePresence.set(room, [...list, { user_id: mate.id, name: mate.name, avatar: mate.avatar_url ?? "", state, online_at: new Date().toISOString(), phx_ref: `ref${nextRef()}` }]);
+}
 
 let refCounter = 1;
 const nextRef = () => refCounter++;
@@ -59,11 +102,17 @@ class FakeChannel implements RtChannel {
     return m ? m[1] : null;
   }
 
+  wikiPageId(): string | null {
+    const m = /^wiki_page:[^:]+:(.+)$/.exec(this.topic);
+    return m ? m[1] : null;
+  }
+
   join(): PushReply {
     this.joined = true;
     channels.add(this);
-    const tid = this.ticketId();
-    if (tid) {
+    const room = roomOf(this.topic);
+    if (room) {
+      if (this.wikiPageId()) seedWikiRoom(room);
       setTimeout(() => {
         if (!this.isWatch) {
           const u = db.users.find((x) => x.id === db.meId);
@@ -72,14 +121,14 @@ class FakeChannel implements RtChannel {
               user_id: u.id,
               name: u.name,
               avatar: u.avatar_url ?? "",
-              state: "viewing",
+              state: stateFor(this.topic, this.params.state),
               online_at: new Date().toISOString(),
               phx_ref: `ref${nextRef()}`,
             };
           }
         }
-        this.emit("presence_state", presenceStateFor(tid));
-        if (this.selfMeta) broadcastDiff(tid, { [this.selfMeta.user_id]: { metas: [this.selfMeta] } }, {}, this);
+        this.emit("presence_state", presenceStateFor(room));
+        if (this.selfMeta) broadcastDiff(room, { [this.selfMeta.user_id]: { metas: [this.selfMeta] } }, {}, this);
       }, 40);
     }
     return reply();
@@ -88,11 +137,11 @@ class FakeChannel implements RtChannel {
   leave(): PushReply {
     this.joined = false;
     channels.delete(this);
-    const tid = this.ticketId();
-    if (tid && this.selfMeta) {
+    const room = roomOf(this.topic);
+    if (room && this.selfMeta) {
       const m = this.selfMeta;
       this.selfMeta = null;
-      broadcastDiff(tid, {}, { [m.user_id]: { metas: [m] } }, this);
+      broadcastDiff(room, {}, { [m.user_id]: { metas: [m] } }, this);
     }
     return reply();
   }
@@ -108,13 +157,12 @@ class FakeChannel implements RtChannel {
   }
 
   push(event: string, payload: object): PushReply {
-    const tid = this.ticketId();
+    const room = roomOf(this.topic);
     const p = payload as Record<string, unknown>;
-    if (tid && event === "presence" && this.selfMeta) {
-      const state = p.state === "replying" || p.state === "idle" ? p.state : "viewing";
+    if (room && event === "presence" && this.selfMeta) {
       const old = this.selfMeta;
-      this.selfMeta = { ...old, state, phx_ref: `ref${nextRef()}` };
-      broadcastDiff(tid, { [old.user_id]: { metas: [this.selfMeta] } }, { [old.user_id]: { metas: [old] } }, null);
+      this.selfMeta = { ...old, state: stateFor(this.topic, p.state), phx_ref: `ref${nextRef()}` };
+      broadcastDiff(room, { [old.user_id]: { metas: [this.selfMeta] } }, { [old.user_id]: { metas: [old] } }, null);
     }
     // "typing" from the only real agent has nobody else to reach in mock mode.
     return reply();
@@ -192,25 +240,25 @@ export const socketFactory: SocketFactory = (url, params) => {
 
 type PState = Record<string, { metas: Meta[] }>;
 
-function presenceStateFor(tid: string): PState {
+export function presenceStateFor(room: string): PState {
   const out: PState = {};
-  for (const m of teammatePresence.get(tid) ?? []) out[m.user_id] = { metas: [m] };
+  for (const m of teammatePresence.get(room) ?? []) out[m.user_id] = { metas: [m] };
   for (const ch of channels) {
-    if (ch.ticketId() === tid && ch.selfMeta) out[ch.selfMeta.user_id] = { metas: [ch.selfMeta] };
+    if (roomOf(ch.topic) === room && ch.selfMeta) out[ch.selfMeta.user_id] = { metas: [ch.selfMeta] };
   }
   return out;
 }
 
-function broadcastDiff(tid: string, joins: PState, leaves: PState, except: FakeChannel | null) {
+function broadcastDiff(room: string, joins: PState, leaves: PState, except: FakeChannel | null) {
   for (const ch of channels) {
-    if (ch === except || ch.ticketId() !== tid) continue;
+    if (ch === except || roomOf(ch.topic) !== room) continue;
     ch.emit("presence_diff", { joins, leaves });
   }
 }
 
-/** Change a teammate's presence on a ticket and tell any joined channel. */
-export function setTeammatePresence(tid: string, meta: Omit<Meta, "phx_ref" | "online_at"> | null, userId?: string) {
-  const list = teammatePresence.get(tid) ?? [];
+/** Change a teammate's presence in a room (a ticket's id, or `wikiRoom(page id)`) and tell any joined channel. */
+export function setTeammatePresence(room: string, meta: Omit<Meta, "phx_ref" | "online_at"> | null, userId?: string) {
+  const list = teammatePresence.get(room) ?? [];
   const uid = meta?.user_id ?? userId;
   const old = list.find((m) => m.user_id === uid);
   const rest = list.filter((m) => m.user_id !== uid);
@@ -221,13 +269,23 @@ export function setTeammatePresence(tid: string, meta: Omit<Meta, "phx_ref" | "o
     rest.push(full);
     joins = { [full.user_id]: { metas: [full] } };
   }
-  teammatePresence.set(tid, rest);
-  broadcastDiff(tid, joins, leaves, null);
+  teammatePresence.set(room, rest);
+  broadcastDiff(room, joins, leaves, null);
 }
 
 /** Emit a non-event message on a ticket topic (typing, customer_typing). */
 export function emitOnTicket(tid: string, event: string, payload: unknown) {
   for (const ch of channels) if (ch.ticketId() === tid) ch.emit(event, payload);
+}
+
+/** The wiki pages someone has open (joined, not watching). */
+export function activeWikiPageIds(): string[] {
+  const ids: string[] = [];
+  for (const ch of channels) {
+    const id = ch.wikiPageId();
+    if (id && !ch.isWatch) ids.push(id);
+  }
+  return ids;
 }
 
 export function activeTicketIds(): string[] {

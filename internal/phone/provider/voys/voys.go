@@ -173,6 +173,19 @@ func (Adapter) DeleteWebhook(context.Context, *http.Client, map[string]string, s
 // checks (Descriptor.ManualWebhook).
 func (Adapter) Verify([]byte, string) error { return provider.ErrUnsupported }
 
+// callStage is the stage a call status reports, empty for a status that is not a call's.
+func callStage(status string) string {
+	switch status {
+	case "created", "ringing":
+		return provider.StageRinging
+	case "in-progress", "warm-transfer", "cold-transfer", "transfer":
+		return provider.StageAnswered
+	case "ended":
+		return provider.StageEnded
+	}
+	return ""
+}
+
 // party is a side of a call in a notification.
 type party struct {
 	Number     string   `json:"number"`
@@ -215,7 +228,11 @@ func (Adapter) Parse(body []byte) (provider.Event, error) {
 	if t, err := time.Parse(time.RFC3339Nano, n.Timestamp); err == nil {
 		ev.At = t.UTC()
 	}
-	if n.Status == "" {
+	stage := callStage(n.Status)
+	if stage == "" {
+		// After a call ended, Voys announces its recording, transcript and summary. The
+		// payload's field says which: some accounts receive them without a status, others
+		// with one (recording_created, transcript_created, summary_created).
 		switch {
 		case len(n.Transcription) > 0:
 			ev.Kind, ev.Type = provider.KindTranscript, "call_transcription"
@@ -231,17 +248,6 @@ func (Adapter) Parse(body []byte) (provider.Event, error) {
 			return provider.Event{}, provider.ErrIgnored
 		}
 		return ev, nil
-	}
-	stage := ""
-	switch n.Status {
-	case "created", "ringing":
-		stage = provider.StageRinging
-	case "in-progress", "warm-transfer", "cold-transfer", "transfer":
-		stage = provider.StageAnswered
-	case "ended":
-		stage = provider.StageEnded
-	default:
-		return provider.Event{}, provider.ErrIgnored
 	}
 	c := &provider.Call{Direction: n.Direction, Stage: stage}
 	if c.Direction != "outbound" {

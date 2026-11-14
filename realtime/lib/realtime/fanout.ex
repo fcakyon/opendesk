@@ -57,7 +57,7 @@ defmodule Realtime.Fanout do
   @live_prefix "od.live."
   @disconnect "od.control.disconnect"
   @live_types ~w(ai.reply.started ai.reply.delta ai.reply.tool ai.reply.ended)
-  @typing_types ~w(agent.typing customer.typing)
+  @typing_types ~w(agent.typing customer.typing customer.presence)
 
   @doc "NATS subjects the gateway subscribes to."
   def subjects, do: [@events_prefix <> ">", @live_prefix <> ">", @disconnect]
@@ -136,6 +136,8 @@ defmodule Realtime.Fanout do
   after checking the ticket, goes to one topic in the shape clients know: an agent's
   (`agent.typing`) to the contact topic as `"typing"` `{ticket_id, user}`, a visitor's
   (`customer.typing`) to the ticket topic as `"customer_typing"` `{ticket_id, contact_id}`.
+  A visitor back on the page (`customer.presence`) goes to the ticket topic as
+  `"customer_presence"` `{ticket_id, contact_id}`.
   A ticket topic's payload carries the event's `team_id` and a contact topic's its
   `brand_id`, for the channels to filter on and strip.
   """
@@ -174,6 +176,9 @@ defmodule Realtime.Fanout do
 
   defp live_routes("customer.typing", _data, tid, cid, ticket, _contact),
     do: {:ok, [scoped(ticket, "customer_typing", %{"ticket_id" => tid, "contact_id" => cid})]}
+
+  defp live_routes("customer.presence", _data, tid, cid, ticket, _contact),
+    do: {:ok, [scoped(ticket, "customer_presence", %{"ticket_id" => tid, "contact_id" => cid})]}
 
   defp live_routes(type, data, _tid, _cid, ticket, contact) do
     payload = %{"type" => type, "data" => data}

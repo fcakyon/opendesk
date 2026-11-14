@@ -1,81 +1,311 @@
 ---
 title: Wiki
-description: Write your team's runbooks, policies and how-tos in pages only members see.
+description: Write your team's runbooks, policies, notes and plans in pages of blocks that only members see, in shared, team and private spaces.
 ---
 
 import Steps from '../../../components/Steps.astro';
 import Step from '../../../components/Step.astro';
 import Callout from '../../../components/Callout.astro';
+import Fold from '../../../components/Fold.astro';
 
-The wiki holds your team's internal documentation: escalation steps, refund rules, on-call rotas, onboarding, how-tos. Pages nest under each other, so a handbook can hold its chapters and a chapter its details.
+The wiki is your team's own workspace: escalation steps, refund rules, on-call rotas, meeting notes, project plans, a daily journal. A page is made of blocks, from text and to-do lists to tables, files and whole databases. Pages nest under each other, link to each other and mention tickets, contacts and teammates.
 
-The wiki is for members only. Customers never see it: it is not part of the [help center](/guides/knowledge-base/), the chat widget, email answers or anything the AI agent tells a customer. For articles customers read, use the knowledge base.
+Your team's own docs, notes and project databases can also live in [Pages](/guides/pages/), the same engine with a tree of its own in the sidebar. The wiki stays your runbooks and policies.
 
-Open **Wiki** in the sidebar, or press <kbd>g</kbd> then <kbd>w</kbd>.
+The wiki is for members only. Customers never see it: it is not part of the [help center](/guides/knowledge-base/), the chat widget, email answers or anything the AI agent tells a customer. For articles customers read, use the knowledge base, or [publish a page to it](/guides/wiki-desk/#publish-a-page-to-the-help-center) as a draft.
+
+Your pages are in the app's own sidebar too, under **Pages**, beside your tickets and mail. Open **Wiki** under **Workspace** for the wiki's home, or press <kbd>g</kbd> then <kbd>w</kbd>.
+
+This guide covers pages and writing. The wiki has more guides of its own:
+
+- [Databases](/guides/wiki-databases/): tables, boards, calendars and timelines of pages, with properties, filters and formulas.
+- [Canvas](/guides/wiki-canvas/): cards of notes, pages, links and images on an endless board, connected by arrows.
+- [Links, tags and the graph](/guides/wiki-links/): backlinks, unlinked mentions, tags, the outline and the graph view.
+- [Comments and following](/guides/wiki-collaboration/): comments on text or on a page, reactions, mentions, reminders and who is on a page.
+- [Tickets, the help center and Ollie](/guides/wiki-desk/): tickets and contacts in pages, ticket lists, publishing articles, and Ollie writing with you.
+- [Import and export](/guides/wiki-import-export/): bring pages in from Notion, Obsidian, Confluence or Markdown files, and take them out as Markdown or HTML.
+
+<Callout type="note" title="Reading the keys">
+
+<kbd>mod</kbd> is <kbd>⌘</kbd> on macOS and <kbd>Ctrl</kbd> elsewhere.
+
+</Callout>
+
+## Pages in the main sidebar
+
+The app's sidebar has a **Pages** section with every page, database and canvas you can see:
+
+- The workspace's pages, nested. Hover a page's icon to fold its subpages, and drag pages to move them.
+- **A row for each team** you can see with pages, and its pages under it.
+- **Private**: pages only you see.
+- **Today's note**, **Templates** and **Trash**.
+
+Hover a page for its **+**, which adds a subpage, and its menu: **Add to favorites**, **Duplicate**, **Move to…**, **Copy link**, **Open beside**, **Add to Space**, **Hide from sidebar** and **Move to trash**. Pages you star show in **Favorites** at the top of the sidebar.
+
+**+** beside **Pages**, or **New page** in the menu beside **New ticket** at the top, opens a small window: pick where the page goes, then a **Page**, a **Database** or a **Canvas**, a template, or files to import. You can also drop files from your computer onto **Pages** to import them.
+
+To choose what shows, open **Customize sidebar** and expand **Pages**: hide the whole section, any part of it, a team's pages or a top-level page. **Hide from sidebar** in a page's menu does it at once. A [Space](/guides/workspaces/) can hold the whole **Pages** section, a team's pages or single pages.
+
+While **Pages** is in your sidebar, a page opens without the wiki's own page list beside it, so it has the whole width. Show it again with the button at the left of the page's header; your choice is kept in this browser.
+
+## The wiki's sidebar
+
+The wiki's own sidebar, beside the wiki's home and its pages, holds every page you can see, in sections:
+
+- **Search pages** and **+** at the top. **+** offers **New page**, **New database**, **New canvas** and **Import**.
+- **Favorites**: pages you starred. Star a page with the star in its header, or **Add to favorites** in its menu. Drag favorites to put them in order.
+- **A teamspace for each team** you can see: the team's own pages.
+- **Workspace**: pages every member sees.
+- **Private**: pages only you see.
+- **Recent**: the pages you opened lately.
+- At the bottom: **Today's note**, **Templates**, **Graph**, **Tags** and **Trash**.
+
+Click a section's name to fold it. Each section's **+** adds a page in it. A page shows a check beside its name while it is [verified](#verified-pages).
+
+### Customize the sidebar
+
+Open a section's **Section options** menu and choose **Customize sidebar**. Move sections up and down, hide the ones you don't use, and click **Done**; **Reset** brings back the usual order. **Hide section** in the same menu hides one at once. Only you see your sidebar, and this browser keeps it for each workspace.
+
+### Workspace, private and team pages
+
+Every top-level page lives in one of three places, and every page under it lives there too:
+
+| Section | Who sees its pages |
+| --- | --- |
+| **Workspace** | Every member of the workspace. |
+| **Private** | You alone. Nobody else sees them, admins and owners included, nor an API key. Ollie and the AI clients you connect read them as you. Deleting your account deletes them. |
+| A **teamspace** | The members of a [private team](/guides/teams-and-roles/#private-teams), for a private team; every member, for a public one. When a team is deleted, its pages move to **Workspace**. |
+
+To move a page to another place, drag it into that section, or use **Move to…** and pick **Top of** the place you want. Its subpages go with it. Only the member a private page belongs to can move it out of **Private**.
+
+A page you can't see doesn't exist for you anywhere: not in the sidebar, search, links, the graph, favorites, recent pages or notifications.
 
 ## Write a page
 
 <Steps>
 <Step title="Create it">
 
-Click **New page** (or **+** at the top of the page list). A new wiki starts with **Create the first page** and three starter pages: an escalation process, a refund policy and an onboarding checklist, outlines to fill in.
+Click **+** at the top of the sidebar and **New page**, or the **+** beside a section or a page to add one there. A new wiki starts with **Create the first page**, or **Import pages** to [bring them in](/guides/wiki-import-export/) from another tool.
 
 </Step>
-<Step title="Name it and pick an icon">
+<Step title="Name it and give it a look">
 
-Type the title at the top. Hover above it and click **Add icon** to give the page an emoji; it shows in the page list and the breadcrumbs.
+Type the title at the top. Hover above it to **Add icon** (an emoji, shown in the sidebar and the breadcrumbs) or **Add cover**. Press <kbd>enter</kbd> to start writing.
 
 </Step>
 <Step title="Write">
 
-Write the body with the same editor as help articles: headings, lists, quotes, code, links and images. There is no save button: the page saves a moment after you stop typing, and the header says **Saving** and then **Saved**. Leaving the page, or closing the tab, sends anything not saved yet. <kbd>Ctrl</kbd> <kbd>S</kbd> (<kbd>Cmd</kbd> <kbd>S</kbd> on a Mac) saves at once.
+Write, or press <kbd>/</kbd> for blocks, <kbd>[[</kbd> to link a page and <kbd>@</kbd> to mention someone. There is no save button: the page saves a moment after you stop typing, and the header says **Saving** and then **Saved**. Leaving the page, or closing the tab, sends anything not saved yet. <kbd>mod</kbd> <kbd>s</kbd> saves at once.
 
 </Step>
 </Steps>
 
+### Blocks
+
+Type <kbd>/</kbd> at the start of a line, or click **+** beside a line, for the block menu. Keep typing to narrow it ("/call" finds **Callout**), then press <kbd>enter</kbd>.
+
+| Group | Blocks |
+| --- | --- |
+| Basic blocks | **Text**, **Heading 1** to **Heading 3**, **Bulleted list**, **Numbered list**, **To-do list**, **Toggle list** (a line that opens to show what is inside), **Quote**, **Callout** (a tinted box with an icon), **Divider**, **Page** (a new subpage, shown where it sits in the text) and **Link to page** |
+| Media | **Image**, **Video**, **Audio**, **File**, **Web bookmark** (a link as a card with its title, description and picture) and **Embed** |
+| Databases | **Table**, **Board**, **List**, **Gallery**, **Calendar** and **Timeline** make a database inside the page; **Linked view of a database** shows one that exists. See [Databases](/guides/wiki-databases/) |
+| Help desk | **Ticket list** (a saved view's open tickets) and **Mention a ticket**. See [Tickets, the help center and Ollie](/guides/wiki-desk/) |
+| Advanced | **Table**, **2 columns**, **3 columns** and **4 columns** side by side, **Code** (highlighted, with a language and **Copy code**), **Block equation** (LaTeX) and **Table of contents** (the page's headings, kept current) |
+| Inline | **Mention a person**, **Date**, **Remind me**, **Inline equation** and **Emoji** |
+| Colours | Type a colour's name ("/red", "/blue background") to colour the line or its background |
+
+With AI on, the menu starts with **Ask Ollie to write**. See [Ollie in the wiki](/guides/wiki-desk/#write-with-ollie).
+
+### The block handle
+
+Hover over any block, including a list item or a block in a column, and a handle shows beside it:
+
+- **+** adds a block below and opens the block menu. <kbd>alt</kbd> click adds one above.
+- The grip (**Drag to move**) drags the block anywhere in the page. Click it for the block menu:
+  - **Turn into**: text, a heading, a list, a to-do list, a toggle, a quote, a callout or code.
+  - **Colour**: a text colour or a background, for text, headings, lists, quotes, toggles and callouts.
+  - **Duplicate** (<kbd>mod</kbd> <kbd>d</kbd>), **Copy link to block**, **Move up** and **Move down** (<kbd>mod</kbd> <kbd>shift</kbd> <kbd>↑</kbd> or <kbd>↓</kbd>), and **Delete**.
+
+A link to a block opens the page scrolled to that block.
+
+### Format text
+
+Select text and a toolbar appears over it:
+
+- **Ask Ollie** about the selected text (<kbd>mod</kbd> <kbd>j</kbd>).
+- **Turn into**, to change the block the text is in.
+- **Bold** (<kbd>mod</kbd> <kbd>b</kbd>), **Italic** (<kbd>mod</kbd> <kbd>i</kbd>), **Underline** (<kbd>mod</kbd> <kbd>u</kbd>), **Strikethrough** (<kbd>mod</kbd> <kbd>shift</kbd> <kbd>s</kbd>), **Inline code** (<kbd>mod</kbd> <kbd>e</kbd>) and **Equation**.
+- **Link**: paste an address, or type to search pages and link one.
+- **Colour**: a text colour or a background highlight, in nine soft tones. <kbd>mod</kbd> <kbd>shift</kbd> <kbd>h</kbd> highlights in yellow.
+- **Comment** (<kbd>mod</kbd> <kbd>alt</kbd> <kbd>m</kbd>), to [comment on the text](/guides/wiki-collaboration/#comment-on-text).
+
+If you prefer a toolbar that stays put, turn on **Formatting bar** in the page's **More actions** menu. This browser remembers it.
+
+### Mentions, links and emoji
+
+Type a character and a menu opens where you write:
+
+| Type | To insert |
+| --- | --- |
+| <kbd>@</kbd> | A teammate (they get a [notification](/guides/wiki-collaboration/#mentions-and-notifications)), a date (**Today**, **Tomorrow**, **Yesterday**, **Next week**), **Remind me**, a page, and after two letters a contact or a ticket |
+| <kbd>[[</kbd> | A link to a page. When no page has that title, **New page "…"** makes one under this page and links it |
+| <kbd>#</kbd> | A ticket, by number (`#1042`) or by words (`#refund`). A word typed after <kbd>#</kbd> without picking a ticket stays a [tag](/guides/wiki-links/#tags) |
+| <kbd>:</kbd> | An emoji, after two letters (`:rocket`) |
+
+Links to pages show the page's current title and icon, so renaming a page never breaks them. A date opens a picker to change it, add a time or turn on **Remind me** ([reminders](/guides/wiki-collaboration/#reminders)).
+
+### Markdown shortcuts and paste
+
+Type these at the start of a line, followed by a space:
+
+| Type | To get |
+| --- | --- |
+| `#`, `##`, `###` | Heading 1, 2 or 3 |
+| `-` or `*` | Bulleted list |
+| `1.` | Numbered list |
+| `[]` | To-do list |
+| `>` | Quote |
+| `>!` | Callout |
+| `---` | Divider |
+| ```` ``` ```` | Code |
+
+Inside a line, `**bold**`, `*italic*`, `` `code` ``, `~~strike~~` and `==highlight==` format as you type, `$$x^2$$` becomes an inline equation and `$$$x^2$$$` on a line of its own a block equation.
+
+Paste Markdown and it arrives as blocks: headings, lists, to-do lists, quotes, code and tables. Paste a link to a video, a design or a document from a service the wiki can embed on an empty line, and it becomes an embed. Paste or drop files and images: images go into the text, videos and audio as players and anything else as a file, up to 10 at a time.
+
+### Keys for blocks
+
+| Keys | Action |
+| --- | --- |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>0</kbd> | Text |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>1</kbd> to <kbd>3</kbd> | Heading 1 to 3 |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>4</kbd> | To-do list |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>5</kbd> | Bulleted list |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>6</kbd> | Numbered list |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>7</kbd> | Toggle list |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>8</kbd> | Code |
+| <kbd>mod</kbd> <kbd>enter</kbd> | Tick or untick the to-do under the cursor |
+| <kbd>mod</kbd> <kbd>d</kbd> | Duplicate the block |
+| <kbd>mod</kbd> <kbd>shift</kbd> <kbd>↑</kbd> or <kbd>↓</kbd> | Move the block up or down |
+
+Every wiki shortcut is also listed in [Keyboard shortcuts](/guides/keyboard-shortcuts/#in-the-wiki).
+
+<Fold>
+
+## Images, files and embeds
+
+- **Images**: drag an edge to resize one, align it left, centre or right, and add a **Caption**.
+- **Video**, **Audio** and **File**: upload one, and it plays or downloads from the page.
+- **Web bookmark**: paste a link to show it as a card. opendesk reads the page's title, description and picture once, when you add it.
+- **Embed**: paste a link to show it in the page. It works with YouTube, Vimeo, Loom, Figma, Google Docs, Sheets, Slides, Forms, Drive and Maps, Miro, CodePen, CodeSandbox, Spotify, Excalidraw, Airtable, Typeform and Calendly. A link nothing can play shows as a link.
+
+Images and files you add to a page belong to it: whoever can see the page can open them, in the trash too, and they go when the page is deleted for good. Embeds load in a sandboxed frame, and only from those services.
+
+</Fold>
+
+<Fold>
+
+## A page's look
+
+- **Icon**: click it to pick another emoji or **Remove** it.
+- **Cover**: **Add cover**, then pick one of the **Gallery** gradients, **Upload** an image (wide ones work best, 1500 pixels across or more) or paste a **Link** to one. Hover over it to **Change cover**, **Reposition** it (drag up or down to show another part) or **Remove** it.
+- **Style**, in the page's **More actions** menu: the font (**Default**, **Serif** or **Mono**), **Small text** and **Full width**.
+- **Lock page**, in the same menu, keeps it from being edited by accident: it opens read-only for everyone, with **Unlock** for people who may edit.
+
+The look is part of the page, so everyone sees the same. Changing it is not an edit: it doesn't start a new version in the history.
+
+</Fold>
+
 ## Organize pages
 
-- **Add a subpage** with the **+** beside a page in the list, from the page's **more actions** menu, or at the bottom of the page.
-- **Drag a page** in the list onto another to put it inside, or above or below one to reorder. Its subpages move with it. Pages nest up to 10 levels.
-- **Move to…** in a page's menu, in the list or in the page header, picks where it goes from a searchable list of pages, or **Top level**. The page goes last under the one you pick. On a phone or tablet this is how pages move.
-- **With the keyboard**: in the page list, the arrow keys move between pages, <kbd>Right</kbd> opens a page's subpages and <kbd>Left</kbd> closes them, and <kbd>Enter</kbd> opens a page. <kbd>Alt</kbd> with <kbd>Up</kbd> or <kbd>Down</kbd> moves the page among its neighbours, <kbd>Alt</kbd> <kbd>Right</kbd> puts it inside the page above, and <kbd>Alt</kbd> <kbd>Left</kbd> moves it out a level.
-- **Copy link** in the page header gives an address teammates can open.
+- **Add a subpage** with the **+** beside a page in the sidebar, from the page's menu, or under **Subpages** at the bottom of a page. Pages nest up to 10 levels.
+- **Drag a page** in the sidebar onto another to put it inside, or above or below one to reorder. Its subpages move with it. Drop it in another section to move it there.
+- **Move to…** in a page's menu, in the sidebar or the page header, picks where it goes from a searchable list: under a page, or at the **Top of** a section. The page goes last there. On a phone or tablet this is how pages move.
+- **With the keyboard**: in the sidebar, the arrow keys move between pages, <kbd>→</kbd> opens a page's subpages and <kbd>←</kbd> closes them, and <kbd>enter</kbd> opens a page. <kbd>alt</kbd> with <kbd>↑</kbd> or <kbd>↓</kbd> moves the page among its neighbours, <kbd>alt</kbd> <kbd>→</kbd> puts it inside the page above, and <kbd>alt</kbd> <kbd>←</kbd> moves it out a level.
+- **Duplicate** copies a page with its subpages, its text and its look, as "(copy)" beside it. Links between the copied pages point at the copies.
+- **Copy link** gives an address teammates can open.
+- **Add to Space** puts the page in one of your [Spaces](/guides/workspaces/), the sidebars you build yourself.
+- **Export** downloads the page as Markdown or HTML, with its subpages in a zip if you like; **Import here** brings pages in under it. See [Import and export](/guides/wiki-import-export/).
+
+## Templates
+
+Open **Templates** at the bottom of the sidebar.
+
+- **Starter templates**: escalation process, refund policy, onboarding checklist, meeting notes, incident review, how-to guide, project brief, decision record, customer call notes, FAQ and weekly team sync, in your language.
+- **Your team's templates**: pages your team keeps as templates. **New template** makes one; **Save as template** in any page's menu copies that page, with its subpages, into one.
+
+Click **Use** on a template to make a page from it. Opening a template shows **Use this template** at the top; edit it like any page. Templates stay out of the sidebar, search, links and the graph, and their dates remind nobody. A copy of a template starts with fresh reminders, owned by whoever made it.
+
+Databases keep templates of their own, for new rows. See [Databases](/guides/wiki-databases/#row-templates).
+
+## The trash
+
+**Move to trash** in a page's menu takes the page and its subpages out of the wiki. A message says so, with **Undo**.
+
+Open **Trash** at the bottom of the sidebar to see what is there: who moved each page and when, where it was, how many subpages went with it and when it goes for good. Search the trash, or open a page to read it.
+
+- **Restore** puts a page back with everything that went with it: under its parent when that is still in the wiki, otherwise at the top of its section.
+- Pages stay in the trash for 30 days, then they and their history are deleted for good.
+- **Delete for good** deletes one at once, with its subpages and their history. opendesk asks first and says how many subpages go with it.
+
+A page in the trash can be read but not changed, and it keeps its comments, files and history until it goes.
 
 ## Find a page
 
-Type in **Search pages** above the list: it matches titles and text, also partly typed words, and shows a passage around each match. The command menu (<kbd>Ctrl</kbd> <kbd>K</kbd>) finds wiki pages too, next to tickets, contacts and articles.
+- **Search pages** at the top of the sidebar matches titles and text, also partly typed words, and shows a passage around each match.
+- The command menu (<kbd>mod</kbd> <kbd>k</kbd>) finds wiki pages next to tickets, contacts and articles, and offers **New wiki page**.
+- The wiki's home lists the pages edited most recently and every top-level page. **Open a random page** brings back one you may have forgotten.
+- Ask [Ollie](/guides/ollie/): "What's our refund escalation process?" Ollie searches the wiki, reads the page and says which one the answer comes from. On a wiki page, ask it to "Summarize this page".
 
-You can also ask [Ollie](/guides/ollie/): "What's our refund escalation process?" Ollie searches the wiki, reads the page and says which one the answer comes from.
+Tags, backlinks and the graph find pages by how they connect: see [Links, tags and the graph](/guides/wiki-links/).
 
 ## Editing together
 
-Pages update live for everyone who has them open. If a teammate saves the page while you have changes that are not saved yet, opendesk keeps your text and asks: **Load their version** to take theirs, or **Keep mine** to save yours over it. Nothing is overwritten without that choice. When you can't edit a page (a viewer, or your role changed), or the page was deleted while you had changes not saved yet, the page says so and offers **Copy my text**, so nothing you typed is lost.
+Pages update live for everyone who has them open, and the header shows who else is on the page and who is editing it. See [Comments and following](/guides/wiki-collaboration/#who-is-on-a-page).
+
+If a teammate saves the page while you have changes that are not saved yet, opendesk keeps your text and asks: **Load their version** to take theirs, or **Keep mine** to save yours over it. Nothing is overwritten without that choice. When you can't edit a page (a viewer, or your role changed), or the page was deleted while you had changes not saved yet, the page says so and offers **Copy my text**, so nothing you typed is lost.
 
 ## History
 
 Click **History** in the page header to see earlier versions, who wrote them and when, and to read each one. One person's edits a few minutes apart are kept as one version; up to 100 versions are kept per page. **Restore this version** puts an older version back; the version it replaces stays in the history.
 
+## Verified pages
+
+Mark the pages your team can rely on. Under a page's title, click **Verify** and pick how long: **For 30 days**, **For 90 days**, **For 180 days**, **For 365 days**, or **Until someone changes it**, with no end date. The page then reads "Verified by Maya until 3 March", and a check shows beside it in the sidebar.
+
+When the time runs out it reads **Verification expired**, a sign to read it again. Click it to **Verify again** or **Remove verification**. Anyone who may edit the page can verify it, as themselves.
+
+## Your journal
+
+**Today's note** at the bottom of the sidebar opens your note for today, and makes it the first time. Daily notes live in your **Journal**, a private page at the top of **Private**: only you see them.
+
+On a daily note, the arrows go to the **Previous day** and **Next day**, the date opens a calendar to **Go to a day** (the days with a note are marked), and **Today's note** comes back to today. One note per day; a day without one is made when you open it. A note you move out of the journal becomes an ordinary page.
+
 ## Who can do what
 
-| Role | Read | Create, edit, move, restore | Delete |
+| Role | Read and comment | Create, edit, move, restore | Move to trash, delete for good |
 | --- | --- | --- | --- |
-| Viewer | Yes | No | No |
+| Viewer | Read only | No | No |
 | Agent | Yes | Yes | Pages they created, with only their own pages under them |
 | Admin, owner | Yes | Yes | Any page |
 
-Deleting a page deletes its subpages and their history for good, so when someone else created the page or any page under it, only an admin can delete it. opendesk asks first and says how many subpages go with it. Creating and deleting pages is recorded in the [audit log](/security/).
+Moving a page to the trash and deleting it for good follow the same rule: when someone else created the page or any page under it, only an admin can, and the menu says why. Anyone who may edit can restore a page from the trash. Private pages are their member's alone, whatever the role. Creating, moving to the trash, restoring and deleting pages is recorded in the [audit log](/security/).
 
 <Callout>
 
-- A workspace holds up to 5,000 pages, of up to 512 KB of text each.
+- A workspace holds up to 5,000 pages, the trash and templates included, of up to 512 KB of text each, with titles of up to 200 characters.
 - Page text is cleaned before it is stored, so only safe formatting is kept.
-- API keys and AI clients reach the wiki with the `wiki:read` and `wiki:write` scopes ([Wiki API](/api/resources/wiki/), [MCP server](/api/mcp/)).
+- API keys and AI clients reach the wiki with the `wiki:read` and `wiki:write` scopes ([Wiki API](/api/resources/wiki/), [MCP server](/api/mcp/)). An API key never sees private pages; an AI client connected as a member reads that member's own.
 
 </Callout>
 
 ## Related
 
-- [Knowledge base and help center](/guides/knowledge-base/)
-- [Ollie, the assistant](/guides/ollie/)
+- [Databases](/guides/wiki-databases/)
+- [Canvas pages](/guides/wiki-canvas/)
+- [Links, tags and the graph](/guides/wiki-links/)
+- [Comments and following](/guides/wiki-collaboration/)
+- [Tickets, the help center and Ollie](/guides/wiki-desk/)
+- [Import and export](/guides/wiki-import-export/)
 - [Keyboard shortcuts](/guides/keyboard-shortcuts/)
 - [Wiki API](/api/resources/wiki/)

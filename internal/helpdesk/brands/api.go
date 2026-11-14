@@ -29,6 +29,7 @@ type helpCenterIn struct {
 }
 
 type brandCreate struct {
+	PortalAuth *portalAuthIn `json:"portal_auth,omitempty"`
 	Name       string        `json:"name" maxLength:"200"`
 	Slug       *string       `json:"slug,omitempty" maxLength:"100" doc:"3..40 of a-z, 0-9 and -; derived from the name when absent"`
 	Color      *string       `json:"color,omitempty" maxLength:"7" doc:"#rrggbb, or empty for the workspace brand_color"`
@@ -37,6 +38,7 @@ type brandCreate struct {
 }
 
 type brandPatch struct {
+	PortalAuth *portalAuthIn `json:"portal_auth,omitempty"`
 	Name       *string       `json:"name,omitempty" maxLength:"200"`
 	Slug       *string       `json:"slug,omitempty" maxLength:"100"`
 	Color      *string       `json:"color,omitempty" maxLength:"7"`
@@ -54,7 +56,8 @@ func Register(d *deps.Deps, api huma.API, _ chi.Router) {
 		return Publish(ctx, tx, cfg, wid, id, "brand.updated")
 	}})
 	h := &handler{d: d}
-	h.register(api)
+	h.register(portalSettingsAPI{API: api})
+	h.registerPortalAuth(api)
 }
 
 type handler struct{ d *deps.Deps }
@@ -148,6 +151,10 @@ func (h *handler) register(api huma.API) {
 				}
 			}
 			var b Brand
+			portal, err := h.validatePortalAuth(ctx, body.PortalAuth)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
 			err = h.d.DB.Tx(ctx, func(tx pgx.Tx) error {
 				// Serializes brand writes of the workspace, so the limit holds under concurrency.
 				if _, err := tx.Exec(ctx, `SELECT 1 FROM workspaces WHERE id = $1 FOR UPDATE`, p.WorkspaceID); err != nil {
@@ -169,6 +176,11 @@ func (h *handler) register(api huma.API) {
 				if _, err := tx.Exec(ctx, `INSERT INTO brands (id, workspace_id, name, slug, color, locale, help_center_enabled, help_center_title, position)
 					VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, id, p.WorkspaceID, name, slug, color, locale, enabled, title, pos); err != nil {
 					return nameTaken(err)
+				}
+				if portal != nil {
+					if err := h.savePortalAuth(ctx, tx, p, id, portal); err != nil {
+						return err
+					}
 				}
 				if b, err = Load(ctx, tx, h.d.Cfg, p.WorkspaceID, id); err != nil {
 					return err
@@ -200,6 +212,10 @@ func (h *handler) register(api huma.API) {
 			}
 			body := in.Body
 			var b Brand
+			portal, err := h.validatePortalAuth(ctx, body.PortalAuth)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
 			err = h.d.DB.Tx(ctx, func(tx pgx.Tx) error {
 				var cur struct {
 					name, slug, color, locale, title string
@@ -297,6 +313,11 @@ func (h *handler) register(api huma.API) {
 						}
 					}
 					if err := audit.Log(ctx, tx, p, p.WorkspaceID, "brand.updated", "brand", &id, map[string]any{"changes": changed}); err != nil {
+						return err
+					}
+				}
+				if portal != nil {
+					if err := h.savePortalAuth(ctx, tx, p, id, portal); err != nil {
 						return err
 					}
 				}

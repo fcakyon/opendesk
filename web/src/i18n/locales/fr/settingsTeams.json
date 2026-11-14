@@ -670,5 +670,41 @@
     "precWorkspace": "Mode par défaut de l’espace de travail",
     "precWorkspaceHint": "Tous les autres cas, selon le choix ci-dessus.",
     "precElse": "sinon"
+  },
+  "portalAuth": {
+    "title": "Connexion au portail",
+    "hint": "Comment les clients se connectent au portail d’assistance de {{name}}.",
+    "mode": "Méthode de connexion",
+    "modeHint": "Les clients se connectent toujours avec leur propre adresse e-mail. Choisissez si c’est avec un mot de passe, votre fournisseur d’identité, ou l’un ou l’autre.",
+    "modes": {
+      "local": "Mot de passe",
+      "local_and_oidc": "Mot de passe ou fournisseur d’identité",
+      "oidc": "Fournisseur d’identité uniquement"
+    },
+    "issuer": "Émetteur (issuer)",
+    "issuerHint": "L’adresse HTTPS de l’émetteur de votre fournisseur. Nous lisons son document de découverte à l’enregistrement.",
+    "clientId": "ID client",
+    "secret": "Secret client",
+    "secretHint": "Stocké chiffré et jamais affiché de nouveau.",
+    "secretSaved": "Enregistré. Laissez vide pour le conserver.",
+    "callback": "URI de redirection",
+    "callbackHint": "Ajoutez-la comme URI de redirection autorisée chez votre fournisseur. Les scopes sont openid, email et profile.",
+    "copy": "Copier l’URI de redirection",
+    "create": "Créer les contacts à la première connexion",
+    "createOn": "Toute personne connectée par votre fournisseur obtient un contact.",
+    "createOff": "Seules les personnes déjà contacts peuvent se connecter.",
+    "save": "Enregistrer les réglages de connexion",
+    "saved": "Connexion au portail enregistrée",
+    "saveFailed": "Impossible d’enregistrer les réglages de connexion",
+    "invalid": "Nous n’avons pas pu lire ce fournisseur. Utilisez l’adresse HTTPS de son émetteur et l’ID client qu’il vous a donné.",
+    "secretRequired": "Saisissez le secret client de ce fournisseur.",
+    "relink": "Autoriser une nouvelle connexion",
+    "relinkHint": "Quand le compte d’un client chez le fournisseur change, sa prochaine connexion peut remplacer l’ancien lien. L’autorisation dure 15 minutes et ne sert qu’une fois.",
+    "relinkEmail": "Adresse e-mail du client",
+    "relinkAction": "Autoriser",
+    "relinkDone": "{{email}} peut se connecter avec un nouveau compte pendant 15 minutes.",
+    "relinkNone": "Aucun contact n’a cette adresse e-mail.",
+    "relinkReauth": "Reconnectez-vous pour faire cela.",
+    "relinkFailed": "Impossible d’autoriser la connexion"
   }
 }

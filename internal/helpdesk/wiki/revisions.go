@@ -13,7 +13,6 @@ import (
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/deps"
 	"github.com/useopendesk/opendesk/internal/domain"
-	"github.com/useopendesk/opendesk/internal/events"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/ids"
@@ -75,16 +74,14 @@ func scanRevision(row pgx.Row, body *string) (WikiRevision, error) {
 	return r, nil
 }
 
-// pageExists answers 404 for a page outside the workspace.
-func pageExists(ctx context.Context, q db.Querier, wid, id uuid.UUID) error {
-	var ok bool
-	if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM wiki_pages WHERE workspace_id = $1 AND id = $2)`, wid, id).Scan(&ok); err != nil {
+// pageExists answers 404 for a page the caller may not see (outside the workspace, someone
+// else's private page, a private team's).
+func pageExists(ctx context.Context, d *deps.Deps, p *auth.Principal, id uuid.UUID) error {
+	v, err := viewerFor(ctx, d, p)
+	if err != nil {
 		return err
 	}
-	if !ok {
-		return httpx.NotFound("Page")
-	}
-	return nil
+	return mustSee(ctx, d.DB.Pool, v, p.WorkspaceID, id)
 }
 
 func registerRevisions(d *deps.Deps, api huma.API) {
@@ -114,7 +111,7 @@ func registerRevisions(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, err
 			}
-			if err := pageExists(ctx, d.DB.Pool, p.WorkspaceID, id); err != nil {
+			if err := pageExists(ctx, d, p, id); err != nil {
 				return nil, httpx.Wrap(err)
 			}
 			rows, err := d.DB.Pool.Query(ctx, revisionSelect+` WHERE r.workspace_id = $1 AND r.page_id = $2 ORDER BY r.updated_at DESC, r.id DESC LIMIT $3`,
@@ -143,6 +140,9 @@ func registerRevisions(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, err
 			}
+			if err := pageExists(ctx, d, p, id); err != nil {
+				return nil, httpx.Wrap(err)
+			}
 			var body string
 			r, err := scanRevision(d.DB.Pool.QueryRow(ctx, `SELECT r.id, r.title, r.icon, r.created_at, r.updated_at, u.id, u.name, u.email, u.avatar_url, r.body_html
 				FROM wiki_page_revisions r LEFT JOIN users u ON u.id = r.author_id WHERE r.workspace_id = $1 AND r.page_id = $2 AND r.id = $3`,
@@ -169,15 +169,22 @@ func registerRevisions(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, err
 			}
+			if err := pageExists(ctx, d, p, id); err != nil {
+				return nil, httpx.Wrap(err)
+			}
 			var pg WikiPage
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				var one int
-				err := tx.QueryRow(ctx, `SELECT 1 FROM wiki_pages WHERE workspace_id = $1 AND id = $2 FOR UPDATE`, p.WorkspaceID, id).Scan(&one)
+				var deleted *time.Time
+				var prev string
+				err := tx.QueryRow(ctx, `SELECT deleted_at, body_html FROM wiki_pages WHERE workspace_id = $1 AND id = $2 FOR UPDATE`, p.WorkspaceID, id).Scan(&deleted, &prev)
 				if db.IsNotFound(err) {
 					return httpx.NotFound("Page")
 				}
 				if err != nil {
 					return err
+				}
+				if deleted != nil {
+					return inTrash()
 				}
 				var title, icon, body string
 				err = tx.QueryRow(ctx, `SELECT title, icon, body_html FROM wiki_page_revisions WHERE workspace_id = $1 AND page_id = $2 AND id = $3`,
@@ -195,11 +202,16 @@ func registerRevisions(d *deps.Deps, api huma.API) {
 				if err := recordRevision(ctx, tx, p, id, title, icon, body, false); err != nil {
 					return err
 				}
+				if err := indexBody(ctx, tx, p.WorkspaceID, id, body); err != nil {
+					return err
+				}
+				if err := bodySaved(ctx, tx, p, id, prev, body); err != nil {
+					return err
+				}
 				if pg, err = loadPage(ctx, tx, p.WorkspaceID, id); err != nil {
 					return err
 				}
-				_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "wiki_page.updated", Data: eventPage(pg)})
-				return err
+				return pageEvent(ctx, tx, p.WorkspaceID, pg, "wiki_page.updated", eventPage(pg))
 			})
 			if err != nil {
 				return nil, httpx.Wrap(err)

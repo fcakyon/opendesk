@@ -140,6 +140,10 @@ func (s *service) accountsOut(ctx context.Context, q db.Querier, p *auth.Princip
 			if m.SharedWith, err = loadAudience(ctx, q, p.WorkspaceID, &id, nil); err != nil {
 				return nil, err
 			}
+			// Invited people's addresses are for whoever manages the account, as invitations are.
+			if !m.CanManage {
+				m.SharedWith.Invited = nil
+			}
 		}
 		if a.Provider == ProviderIMAP && m.CanManage {
 			c := a.Config
@@ -242,11 +246,16 @@ func threadsOut(ctx context.Context, q db.Querier, list []*threadRow) ([]MailThr
 	if err != nil {
 		return nil, err
 	}
+	aiDrafts, err := threadAIDrafts(ctx, q, tids)
+	if err != nil {
+		return nil, err
+	}
 	for _, t := range list {
 		m := MailThread{ID: t.ID, AccountID: t.AccountID, Subject: t.Subject, Snippet: t.Snippet, Participants: t.Participants,
 			LastMessageAt: t.LastMessageAt, MessageCount: t.MessageCount, Unread: t.Unread, Starred: t.Starred,
 			HasAttachments: t.HasAttachments, NeedsAction: t.NeedsAction, SnoozedUntil: t.SnoozedUntil, FolderIDs: t.FolderIDs, Shared: slices.Contains(sharedList, t.ID),
-			Assignees: assignees[t.ID], CommentCount: comments[t.ID], Category: effectiveCategory(keys[t.AccountID], t.Category)}
+			Assignees: assignees[t.ID], CommentCount: comments[t.ID], Category: effectiveCategory(keys[t.AccountID], t.Category),
+			AIDraft: aiDrafts[t.ID]}
 		if m.Assignees == nil {
 			m.Assignees = []domain.UserRef{}
 		}
@@ -259,6 +268,32 @@ func threadsOut(ctx context.Context, q db.Querier, list []*threadRow) ([]MailThr
 		out = append(out, m)
 	}
 	return out, nil
+}
+
+// threadAIDrafts is each conversation's newest draft an AI client saved and no person has
+// taken over (saving clears ai_api_key_id, "AI drafts"), as aiDraftSQL selects them.
+func threadAIDrafts(ctx context.Context, q db.Querier, tids []uuid.UUID) (map[uuid.UUID]*ThreadAIDraft, error) {
+	rows, err := q.Query(ctx, `SELECT DISTINCT ON (m.thread_id) m.thread_id, m.id, COALESCE(m.ai_client, ''), m.snippet, m.to_addrs, d.id
+		FROM collab_messages m LEFT JOIN collab_ai_drafts d ON d.draft_message_id = m.id
+		WHERE m.thread_id = ANY($1) AND m.draft AND m.ai_api_key_id IS NOT NULL
+		ORDER BY m.thread_id, m.sent_at DESC, m.id DESC`, tids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[uuid.UUID]*ThreadAIDraft{}
+	for rows.Next() {
+		var tid uuid.UUID
+		d := &ThreadAIDraft{}
+		if err := rows.Scan(&tid, &d.DraftID, &d.DraftedBy, &d.Snippet, &d.To, &d.RecordID); err != nil {
+			return nil, err
+		}
+		if d.To == nil {
+			d.To = []Address{}
+		}
+		out[tid] = d
+	}
+	return out, rows.Err()
 }
 
 // accountCategoryKeys is the category keys the conversations' accounts are sorted with.

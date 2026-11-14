@@ -1,0 +1,1082 @@
+/*
+ * The wiki editor's blocks (components/wiki/editor). Built on .prose-od, the type the
+ * rest of the app writes in, and only the app's tokens: light and dark follow on their own.
+ * Tones map to the --tone-* palette; text tones use the readable --tone-<x>, backgrounds
+ * the soft tint.
+ */
+
+.wiki-editor {
+  --wiki-brown-solid: #9c6b3f;
+  --wiki-block-gap: 0.15em;
+}
+
+/* ─── Rhythm ──────────────────────────────────────────────────────────────── */
+
+.wiki-prose > * + * {
+  margin-top: var(--wiki-block-gap);
+}
+.wiki-prose p {
+  min-height: 1.7em;
+  padding: 1px 0;
+  border-radius: 4px;
+}
+.wiki-prose h1 {
+  font-size: 1.85em;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+  margin-top: 1.1em;
+  margin-bottom: 0.15em;
+}
+.wiki-prose h2 {
+  font-size: 1.45em;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  margin-top: 1em;
+  margin-bottom: 0.1em;
+}
+.wiki-prose h3 {
+  font-size: 1.18em;
+  line-height: 1.35;
+  margin-top: 0.85em;
+}
+.wiki-prose > :first-child {
+  margin-top: 0;
+}
+.wiki-prose ul,
+.wiki-prose ol {
+  padding-left: 1.55em;
+}
+.wiki-prose ul ul {
+  list-style: circle;
+}
+.wiki-prose ul ul ul {
+  list-style: square;
+}
+.wiki-prose ol ol {
+  list-style: lower-alpha;
+}
+.wiki-prose ol ol ol {
+  list-style: lower-roman;
+}
+.wiki-prose li > p {
+  min-height: 0;
+}
+.wiki-prose blockquote {
+  border-left: 3px solid var(--fg);
+  padding: 2px 0 2px 0.95em;
+  color: var(--fg);
+}
+.wiki-prose hr {
+  margin: 0.9em 0;
+}
+.wiki-prose a:not(.wiki-pagelink) {
+  color: inherit;
+}
+
+/* Empty lines show their hint only where the cursor is (Placeholder). */
+.wiki-prose .is-empty:not(.is-editor-empty)::before,
+.wiki-prose .is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--fg-4);
+}
+
+/* A block someone jumped to (a link with #block, the outline) flashes once. */
+.wiki-flash {
+  animation: wiki-flash 1.6s var(--ease-out-soft);
+}
+@keyframes wiki-flash {
+  0%,
+  30% {
+    background: var(--tone-yellow-soft);
+    box-shadow: 0 0 0 4px var(--tone-yellow-soft);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+
+/* A selected atom (image, file, embed) and a selected block. */
+.wiki-prose .ProseMirror-selectednode:not(figure, [data-node-view-wrapper], .node-database) {
+  outline: none;
+  background: var(--tone-blue-soft);
+  border-radius: 4px;
+}
+.wiki-prose ::selection {
+  background: color-mix(in oklab, var(--tone-blue-solid) 22%, transparent);
+}
+
+/* ─── To-do ──────────────────────────────────────────────────────────────── */
+
+.wiki-prose ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.1em;
+}
+.wiki-prose ul[data-type="taskList"] > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+.wiki-prose ul[data-type="taskList"] > li > label {
+  flex: none;
+  margin-top: 0.32em;
+  user-select: none;
+}
+.wiki-prose ul[data-type="taskList"] > li > label input {
+  appearance: none;
+  display: grid;
+  place-content: center;
+  width: 1.05em;
+  height: 1.05em;
+  margin: 0;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    background 120ms,
+    border-color 120ms;
+}
+.wiki-prose ul[data-type="taskList"] > li > label input:hover {
+  border-color: var(--fg-3);
+}
+.wiki-prose ul[data-type="taskList"] > li > label input:checked {
+  background: var(--tone-blue-solid);
+  border-color: var(--tone-blue-solid);
+}
+.wiki-prose ul[data-type="taskList"] > li > label input:checked::after {
+  content: "";
+  width: 0.55em;
+  height: 0.3em;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: translateY(-0.06em) rotate(-45deg);
+  animation: check-pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.wiki-prose ul[data-type="taskList"] > li > div {
+  flex: 1;
+  min-width: 0;
+}
+.wiki-prose ul[data-type="taskList"] > li[data-checked="true"] > div > p {
+  color: var(--fg-4);
+  text-decoration: line-through;
+  text-decoration-color: var(--fg-4);
+  transition: color 160ms;
+}
+
+/* ─── Toggles ────────────────────────────────────────────────────────────── */
+
+.wiki-prose .wiki-toggle {
+  display: flex;
+  gap: 0.2em;
+  align-items: flex-start;
+}
+.wiki-prose .wiki-toggle > button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.45em;
+  height: 1.45em;
+  margin-top: 0.14em;
+  border-radius: 4px;
+  color: var(--fg-3);
+  transition: background 120ms;
+}
+.wiki-prose .wiki-toggle > button:hover {
+  background: var(--hover);
+}
+.wiki-prose .wiki-toggle > button::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 0.36em solid currentColor;
+  border-top: 0.26em solid transparent;
+  border-bottom: 0.26em solid transparent;
+  transition: transform 160ms var(--ease-out-soft);
+}
+.wiki-prose .wiki-toggle.is-open > button::before {
+  transform: rotate(90deg);
+}
+.wiki-prose .wiki-toggle > div {
+  flex: 1;
+  min-width: 0;
+}
+.wiki-prose .wiki-toggle summary {
+  list-style: none;
+  font-weight: 500;
+}
+.wiki-prose .wiki-toggle summary::-webkit-details-marker {
+  display: none;
+}
+.wiki-prose .wiki-toggle [data-type="detailsContent"] {
+  margin-top: 0.15em;
+}
+.wiki-prose .wiki-toggle:not(.is-open) [data-type="detailsContent"] {
+  display: none;
+}
+.wiki-prose .wiki-toggle [data-type="detailsContent"] > p.is-empty::before {
+  content: attr(data-placeholder);
+}
+
+/* ─── Callouts ───────────────────────────────────────────────────────────── */
+
+.wiki-callout {
+  display: flex;
+  gap: 0.55em;
+  margin: 0.35em 0;
+  padding: 0.75em 0.9em 0.75em 0.7em;
+  border-radius: 8px;
+  background: var(--tone-gray-soft);
+}
+.wiki-callout-icon {
+  flex: none;
+  padding-top: 0.06em;
+}
+.wiki-callout-body {
+  flex: 1;
+  min-width: 0;
+}
+.wiki-callout-body > div > * + * {
+  margin-top: var(--wiki-block-gap);
+}
+
+/* ─── Columns ────────────────────────────────────────────────────────────── */
+
+.wiki-prose div[data-type="columns"] {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 1.6em;
+}
+.wiki-prose div[data-type="column"] {
+  min-width: 0;
+}
+.wiki-prose div[data-type="column"] > * + * {
+  margin-top: var(--wiki-block-gap);
+}
+.wiki-editor:has(.ProseMirror[contenteditable="true"]) .wiki-prose div[data-type="column"] {
+  border-radius: 6px;
+  outline: 1px dashed transparent;
+  outline-offset: 4px;
+  transition: outline-color 160ms;
+}
+.wiki-editor:has(.ProseMirror[contenteditable="true"]) div[data-type="columns"]:hover > div[data-type="column"] {
+  outline-color: var(--line);
+}
+@media (max-width: 640px) {
+  .wiki-prose div[data-type="columns"] {
+    grid-auto-flow: row;
+  }
+}
+
+/* ─── Tables ─────────────────────────────────────────────────────────────── */
+
+.wiki-prose .tableWrapper {
+  overflow-x: auto;
+  margin: 0.5em 0;
+  padding-bottom: 2px;
+}
+.wiki-prose table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  min-width: 100%;
+  font-size: 0.94em;
+}
+.wiki-prose th,
+.wiki-prose td {
+  position: relative;
+  border: 1px solid var(--line);
+  padding: 6px 9px;
+  vertical-align: top;
+  min-width: 80px;
+}
+.wiki-prose th {
+  background: var(--sunken);
+  font-weight: 600;
+  text-align: left;
+  color: var(--fg-2);
+}
+.wiki-prose th > p,
+.wiki-prose td > p {
+  min-height: 1.4em;
+}
+.wiki-prose .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--tone-blue-solid) 12%, transparent);
+  pointer-events: none;
+}
+.wiki-prose .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  background: var(--tone-blue-solid);
+  pointer-events: none;
+}
+.wiki-prose.resize-cursor,
+.resize-cursor .wiki-prose {
+  cursor: col-resize;
+}
+
+/* ─── Code ───────────────────────────────────────────────────────────────── */
+
+.wiki-code pre {
+  font-size: 12.5px;
+  line-height: 1.6;
+  padding: 14px 16px;
+  margin: 0.35em 0;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  tab-size: 2;
+}
+.wiki-code .hljs-comment,
+.wiki-code .hljs-quote {
+  color: var(--fg-4);
+  font-style: italic;
+}
+.wiki-code .hljs-keyword,
+.wiki-code .hljs-selector-tag,
+.wiki-code .hljs-literal,
+.wiki-code .hljs-doctag {
+  color: var(--tone-violet);
+}
+.wiki-code .hljs-string,
+.wiki-code .hljs-regexp,
+.wiki-code .hljs-addition,
+.wiki-code .hljs-attribute {
+  color: var(--tone-green);
+}
+.wiki-code .hljs-number,
+.wiki-code .hljs-symbol,
+.wiki-code .hljs-bullet,
+.wiki-code .hljs-variable,
+.wiki-code .hljs-template-variable {
+  color: var(--tone-orange);
+}
+.wiki-code .hljs-title,
+.wiki-code .hljs-section,
+.wiki-code .hljs-name,
+.wiki-code .hljs-selector-id,
+.wiki-code .hljs-selector-class {
+  color: var(--tone-blue);
+}
+.wiki-code .hljs-type,
+.wiki-code .hljs-built_in,
+.wiki-code .hljs-class .hljs-title,
+.wiki-code .hljs-meta {
+  color: var(--tone-teal);
+}
+.wiki-code .hljs-deletion {
+  color: var(--tone-red);
+}
+.wiki-code .hljs-attr,
+.wiki-code .hljs-property {
+  color: var(--tone-cyan);
+}
+.wiki-code .hljs-emphasis {
+  font-style: italic;
+}
+.wiki-code .hljs-strong {
+  font-weight: 600;
+}
+
+/* ─── Math ───────────────────────────────────────────────────────────────── */
+
+.wiki-prose [data-type="block-math"] {
+  margin: 0.5em 0;
+  padding: 0.8em;
+  border-radius: 8px;
+  text-align: center;
+  overflow-x: auto;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.wiki-prose [data-type="inline-math"] {
+  padding: 0 2px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.wiki-prose [data-type="block-math"]:hover,
+.wiki-prose [data-type="inline-math"]:hover {
+  background: var(--hover);
+}
+.wiki-prose .tiptap-mathematics-render--editable:empty::before,
+.wiki-prose [data-type="block-math"]:empty::before {
+  content: "E = mc²";
+  color: var(--fg-4);
+}
+
+/* ─── Images ─────────────────────────────────────────────────────────────── */
+
+.wiki-figure {
+  margin: 0.6em 0;
+  display: flex;
+  flex-direction: column;
+}
+.wiki-figure-center {
+  align-items: center;
+}
+.wiki-figure-left {
+  align-items: flex-start;
+}
+.wiki-figure-right {
+  align-items: flex-end;
+}
+.wiki-figure img {
+  border: 0 !important;
+}
+.wiki-figure figcaption {
+  margin-top: 6px;
+  width: 100%;
+  font-size: 0.85em;
+  color: var(--fg-3);
+  text-align: center;
+}
+.wiki-prose img[data-align="left"] {
+  margin-right: auto;
+}
+.wiki-prose img[data-align="right"] {
+  margin-left: auto;
+}
+
+/* ─── Inline: links to pages, dates, people, colours ─────────────────────── */
+
+.wiki-pagelink {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25em;
+  padding: 0 0.2em;
+  border-radius: 4px;
+  text-decoration: none !important;
+  font-weight: 500;
+  color: var(--fg);
+  transition: background 120ms;
+}
+.wiki-pagelink > span:last-child {
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+.wiki-pagelink:hover {
+  background: var(--hover);
+}
+.wiki-pagelink-icon {
+  align-self: center;
+  width: 1em !important;
+  height: 1em !important;
+  font-size: 0.95em !important;
+}
+.wiki-pagelink-gone {
+  color: var(--fg-4);
+}
+.wiki-pagelink-gone > span:last-child {
+  text-decoration-style: dashed;
+}
+.wiki-date {
+  display: inline;
+  padding: 0 0.15em;
+  border-radius: 4px;
+  color: var(--fg-2);
+  font-weight: 450;
+  transition: background 120ms;
+}
+.wiki-date > span {
+  color: var(--fg-4);
+  margin-right: 1px;
+}
+button.wiki-date:hover {
+  background: var(--hover);
+}
+.wiki-prose .mention {
+  color: var(--tone-blue);
+  background: var(--tone-blue-soft);
+}
+
+/* Tones, on inline text (span/mark) and on whole blocks. */
+.wiki-editor [data-color="gray"] { color: var(--tone-gray); }
+.wiki-editor [data-color="brown"] { color: color-mix(in oklab, var(--wiki-brown-solid) 82%, var(--fg)); }
+.wiki-editor [data-color="orange"] { color: var(--tone-orange); }
+.wiki-editor [data-color="yellow"] { color: var(--tone-amber); }
+.wiki-editor [data-color="green"] { color: var(--tone-green); }
+.wiki-editor [data-color="blue"] { color: var(--tone-blue); }
+.wiki-editor [data-color="purple"] { color: var(--tone-violet); }
+.wiki-editor [data-color="pink"] { color: var(--tone-pink); }
+.wiki-editor [data-color="red"] { color: var(--tone-red); }
+
+.wiki-editor [data-bg="gray"] { background: var(--tone-gray-soft); }
+.wiki-editor [data-bg="brown"] { background: color-mix(in oklab, var(--wiki-brown-solid) 12%, transparent); }
+.wiki-editor [data-bg="orange"] { background: var(--tone-orange-soft); }
+.wiki-editor [data-bg="yellow"] { background: color-mix(in oklab, var(--tone-yellow-solid) 18%, transparent); }
+.wiki-editor [data-bg="green"] { background: var(--tone-green-soft); }
+.wiki-editor [data-bg="blue"] { background: var(--tone-blue-soft); }
+.wiki-editor [data-bg="purple"] { background: var(--tone-violet-soft); }
+.wiki-editor [data-bg="pink"] { background: var(--tone-pink-soft); }
+.wiki-editor [data-bg="red"] { background: var(--tone-red-soft); }
+.wiki-editor mark {
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+  box-decoration-break: clone;
+}
+.wiki-callout[data-tone="gray"] { background: var(--tone-gray-soft); }
+.wiki-callout[data-tone="brown"] { background: color-mix(in oklab, var(--wiki-brown-solid) 10%, transparent); }
+.wiki-callout[data-tone="orange"] { background: var(--tone-orange-soft); }
+.wiki-callout[data-tone="yellow"] { background: color-mix(in oklab, var(--tone-yellow-solid) 14%, transparent); }
+.wiki-callout[data-tone="green"] { background: var(--tone-green-soft); }
+.wiki-callout[data-tone="blue"] { background: var(--tone-blue-soft); }
+.wiki-callout[data-tone="purple"] { background: var(--tone-violet-soft); }
+.wiki-callout[data-tone="pink"] { background: var(--tone-pink-soft); }
+.wiki-callout[data-tone="red"] { background: var(--tone-red-soft); }
+.wiki-prose :is(p, h1, h2, h3, li, blockquote)[data-bg] {
+  padding-left: 4px;
+  padding-right: 4px;
+  border-radius: 4px;
+}
+
+/* Swatches in the colour menus: an "A" in the tone, or on its tint. */
+.wiki-swatch-text,
+.wiki-swatch-bg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--fg-2);
+}
+.wiki-swatch-text {
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/* ─── The block handle ───────────────────────────────────────────────────── */
+
+.wiki-handle {
+  animation: fade-in 120ms ease-out;
+}
+.wiki-handle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 24px;
+  border-radius: 4px;
+  color: var(--fg-4);
+  transition:
+    background 100ms,
+    color 100ms;
+}
+.wiki-handle-btn:hover,
+.wiki-handle-btn[data-state="open"] {
+  background: var(--hover);
+  color: var(--fg-2);
+}
+.wiki-handle-btn svg {
+  width: 16px;
+  height: 16px;
+}
+@media (hover: none) {
+  .wiki-handle {
+    display: none;
+  }
+}
+
+/* ─── Page settings: font, size, width ───────────────────────────────────── */
+
+.wiki-font-serif .wiki-prose,
+.wiki-font-serif .wiki-title {
+  font-family: ui-serif, "Iowan Old Style", "Charter", Georgia, Cambria, "Times New Roman", serif;
+}
+.wiki-font-mono .wiki-prose,
+.wiki-font-mono .wiki-title {
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+}
+.wiki-small .wiki-prose.prose-lg {
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+/* ─── Covers ─────────────────────────────────────────────────────────────── */
+
+.wiki-cover-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-2);
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+  box-shadow: 0 0 0 1px var(--line), var(--shadow-xs);
+  backdrop-filter: blur(8px);
+  transition: background 120ms, color 120ms;
+}
+.wiki-cover-btn:hover {
+  background: var(--surface);
+  color: var(--fg);
+}
+.wiki-cover-btn svg {
+  width: 13px;
+  height: 13px;
+}
+/* The painted covers are light: in the dark theme they sit back. */
+.dark .wiki-cover-gradient,
+.dark .wiki-cover-swatch {
+  filter: brightness(0.5) saturate(1.15);
+}
+.wiki-cover::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 1px;
+  background: var(--line-soft);
+}
+
+/* #tags in the text: the tone of tags everywhere in the wiki. */
+.wiki-tag {
+  color: var(--tone-violet);
+  background: var(--tone-violet-soft);
+  border-radius: 4px;
+  padding: 0 2px;
+  cursor: text;
+}
+.ProseMirror[contenteditable="false"] .wiki-tag {
+  cursor: pointer;
+}
+.ProseMirror[contenteditable="false"] .wiki-tag:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Inline comments (comment.ts): open threads' text with a soft amber underline, the thread
+   in hand (or under the pointer) on an amber wash. Resolved threads draw nothing. */
+.wiki-prose .wiki-comment {
+  border-bottom: 2px solid color-mix(in oklab, var(--tone-amber-solid) 45%, transparent);
+  background: color-mix(in oklab, var(--tone-amber-solid) 9%, transparent);
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+.wiki-prose .wiki-comment.is-active {
+  border-bottom-color: var(--tone-amber-solid);
+  background: color-mix(in oklab, var(--tone-amber-solid) 24%, transparent);
+}
+.wiki-prose .wiki-comment.is-pending {
+  cursor: text;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wiki-prose .wiki-comment {
+    transition: none;
+  }
+}
+
+/* A date with a reminder: a small bell after it. */
+.wiki-date .wiki-date-bell {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-left: 0.25em;
+  vertical-align: -0.05em;
+  color: var(--tone-amber);
+}
+.wiki-date.has-reminder {
+  color: var(--fg);
+}
+
+/* Tickets and contacts mentioned in the text (desk.tsx): a status dot, the number and the subject. */
+.wiki-desk-wrap {
+  display: inline;
+}
+.wiki-ticket,
+.wiki-contact {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3em;
+  max-width: 100%;
+  padding: 0 0.25em;
+  border-radius: 4px;
+  color: var(--fg);
+  font-weight: 500;
+  text-decoration: none !important;
+  vertical-align: baseline;
+  transition: background 120ms;
+}
+a.wiki-ticket:hover,
+a.wiki-contact:hover {
+  background: var(--hover);
+}
+.wiki-ticket-dot {
+  align-self: center;
+  width: 0.5em;
+  height: 0.5em;
+  flex-shrink: 0;
+  border-radius: 999px;
+}
+.wiki-ticket-num {
+  color: var(--fg-3);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.86em;
+  font-weight: 450;
+}
+.wiki-ticket-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 28em;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+.wiki-ticket.is-loading {
+  color: var(--fg-4);
+}
+.wiki-ticket.is-hidden {
+  align-items: center;
+  color: var(--fg-4);
+  font-weight: 450;
+  font-style: italic;
+}
+.wiki-ticket-lock {
+  width: 0.8em;
+  height: 0.8em;
+}
+.wiki-contact-avatar {
+  align-self: center;
+}
+.wiki-contact > span:last-child {
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+/* The text Ollie works on, while its popover is open (ollie.tsx). */
+.wiki-ollie-target {
+  background: var(--tone-violet-soft);
+  border-radius: 2px;
+}
+.wiki-ollie-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: var(--tone-violet-solid);
+  animation: wiki-ollie-blink 1s steps(2, start) infinite;
+}
+@keyframes wiki-ollie-blink {
+  to {
+    visibility: hidden;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wiki-ollie-caret {
+    animation: none;
+  }
+}
+.wiki-ollie-result > * + * {
+  margin-top: 0.5em;
+}
+.wiki-ollie-result ul,
+.wiki-ollie-result ol {
+  padding-left: 1.25em;
+}
+.wiki-ollie-result ul {
+  list-style: disc;
+}
+.wiki-ollie-result ol {
+  list-style: decimal;
+}
+
+/* The ticket list block draws its own rows, not the page's list style. */
+.wiki-prose .wiki-tickets ul,
+.wiki-prose .wiki-tickets li {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wiki-prose .wiki-tickets li::before,
+.wiki-prose .wiki-tickets li::marker {
+  content: none;
+}
+.wiki-prose .wiki-tickets a {
+  text-decoration: none;
+}
+
+/* ─── Toggle headings ────────────────────────────────────────────────────── */
+
+.wiki-prose .wiki-toggle[data-heading] > div > summary {
+  font-weight: 600;
+  color: var(--fg);
+}
+.wiki-prose .wiki-toggle[data-heading="1"] {
+  margin-top: 1.1em;
+}
+.wiki-prose .wiki-toggle[data-heading="1"] > div > summary {
+  font-size: 1.85em;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+.wiki-prose .wiki-toggle[data-heading="2"] {
+  margin-top: 1em;
+}
+.wiki-prose .wiki-toggle[data-heading="2"] > div > summary {
+  font-size: 1.45em;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+.wiki-prose .wiki-toggle[data-heading="3"] {
+  margin-top: 0.85em;
+}
+.wiki-prose .wiki-toggle[data-heading="3"] > div > summary {
+  font-size: 1.18em;
+  line-height: 1.35;
+}
+/* The arrow sits on the heading's first line, whatever its size. */
+.wiki-prose .wiki-toggle[data-heading="1"] > button {
+  margin-top: 0.62em;
+}
+.wiki-prose .wiki-toggle[data-heading="2"] > button {
+  margin-top: 0.42em;
+}
+.wiki-prose .wiki-toggle[data-heading="3"] > button {
+  margin-top: 0.26em;
+}
+.wiki-prose > .wiki-toggle[data-heading]:first-child {
+  margin-top: 0;
+}
+
+/* ─── Synced blocks ──────────────────────────────────────────────────────── */
+
+.wiki-synced .wiki-synced-body {
+  font-size: 0.94em;
+}
+.wiki-synced .wiki-synced-body > :first-child {
+  margin-top: 0;
+}
+/* A synced block's own blocks need no handle room and no "/" hint. */
+.wiki-synced .wiki-synced-body p.is-empty::before {
+  content: none;
+}
+
+/* ─── Mermaid ────────────────────────────────────────────────────────────── */
+
+.wiki-mermaid {
+  overflow-x: auto;
+  padding: 0.75em 0.5em;
+  border-radius: 8px;
+  background: var(--surface);
+  animation: wiki-fade-in 160ms var(--ease-out-soft);
+}
+.wiki-code pre:not(.hidden) + .wiki-mermaid {
+  margin-top: 0.35em;
+  border: 1px dashed var(--line);
+}
+.wiki-mermaid-svg {
+  width: 100%;
+  text-align: center;
+}
+.wiki-mermaid-svg svg {
+  display: inline-block;
+  height: auto;
+}
+@keyframes wiki-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wiki-mermaid {
+    animation: none;
+  }
+}
+
+/* ─── Footnotes ──────────────────────────────────────────────────────────── */
+
+.wiki-prose .wiki-fnref-wrap {
+  display: inline;
+}
+.wiki-prose .wiki-fnref {
+  display: inline-block;
+  min-width: 1.15em;
+  padding: 0 0.2em;
+  margin: 0 0.05em;
+  border-radius: 4px;
+  font-size: 0.72em;
+  font-weight: 600;
+  line-height: 1.3;
+  vertical-align: super;
+  color: var(--tone-blue);
+  font-variant-numeric: tabular-nums;
+  transition: background 120ms;
+}
+.wiki-prose .wiki-fnref:hover,
+.wiki-prose .ProseMirror-selectednode > .wiki-fnref {
+  background: var(--tone-blue-soft);
+}
+.wiki-prose .wiki-footnotes {
+  margin-top: 2.5em;
+  padding-top: 0.75em;
+  border-top: 1px solid var(--line-soft);
+  font-size: 0.9em;
+  color: var(--fg-2);
+  counter-reset: wiki-footnote;
+}
+.wiki-prose .wiki-footnotes-head {
+  margin-bottom: 0.35em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-4);
+  user-select: none;
+}
+.wiki-prose .wiki-footnote {
+  display: flex;
+  gap: 0.4em;
+  align-items: baseline;
+  counter-increment: wiki-footnote;
+  border-radius: 4px;
+}
+.wiki-prose .wiki-footnote-marker {
+  flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.15em;
+  min-width: 2.4em;
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+.wiki-prose .wiki-footnote-marker::before {
+  content: counter(wiki-footnote) ".";
+  font-weight: 500;
+}
+.wiki-prose .wiki-footnote-back {
+  padding: 0 0.2em;
+  border-radius: 4px;
+  font-size: 0.85em;
+  color: var(--fg-4);
+  transition:
+    color 120ms,
+    background 120ms;
+}
+.wiki-prose .wiki-footnote-back:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+.wiki-prose .wiki-footnote-text {
+  flex: 1;
+  min-width: 0;
+}
+.wiki-prose .wiki-footnote-text > p {
+  min-height: 1.5em;
+}
+.wiki-prose .wiki-footnote-text > p.is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--fg-4);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* ─── Paper (print.ts) ───────────────────────────────────────────────────── */
+
+@media screen {
+  #wiki-print {
+    display: none;
+  }
+}
+@media print {
+  @page {
+    margin: 16mm 15mm;
+  }
+  html.wiki-printing,
+  html.wiki-printing body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  html.wiki-printing body > :not(#wiki-print) {
+    display: none !important;
+  }
+  #wiki-print {
+    display: block;
+    color: var(--fg);
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  #wiki-print *,
+  #wiki-print *::before,
+  #wiki-print *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  /* Everything the screen scrolls or clips flows onto paper. */
+  #wiki-print,
+  #wiki-print * {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  #wiki-print article {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  #wiki-print .wiki-print-title {
+    margin: 0.2em 0 0.6em;
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.03em;
+  }
+  #wiki-print .opacity-0 {
+    display: none !important;
+  }
+  #wiki-print a {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--line-strong);
+  }
+  #wiki-print h1,
+  #wiki-print h2,
+  #wiki-print h3,
+  #wiki-print summary {
+    break-after: avoid;
+  }
+  #wiki-print pre,
+  #wiki-print blockquote,
+  #wiki-print figure,
+  #wiki-print img,
+  #wiki-print table,
+  #wiki-print .wiki-callout,
+  #wiki-print .wiki-mermaid,
+  #wiki-print .wiki-synced {
+    break-inside: avoid;
+  }
+  #wiki-print.break-h1 .wiki-prose > h1:not(:first-child),
+  #wiki-print.break-h1 .wiki-prose > .wiki-toggle[data-heading="1"]:not(:first-child) {
+    break-before: page;
+  }
+  #wiki-print .wiki-toggle > button {
+    visibility: hidden;
+  }
+  #wiki-print .wiki-toggle [data-type="detailsContent"] {
+    display: block !important;
+  }
+  #wiki-print .wiki-pagelink,
+  #wiki-print .wiki-fnref {
+    background: none !important;
+  }
+}

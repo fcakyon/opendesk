@@ -31,10 +31,11 @@ type page[T any] struct {
 }
 
 type company struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Domain       string `json:"domain"`
-	ContactCount int    `json:"contact_count"`
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Domain       string  `json:"domain"`
+	ExternalID   *string `json:"external_id"`
+	ContactCount int     `json:"contact_count"`
 }
 
 func TestContactCRUD(t *testing.T) {
@@ -235,6 +236,17 @@ func TestCompanies(t *testing.T) {
 	e.Do("PATCH", "/v1/companies/"+co.ID, a, map[string]any{"name": "Initech LLC", "notes": "big"}).Want(t, 200).JSON(t, &co)
 	if co.Name != "Initech LLC" || co.Domain != "initech.com" {
 		t.Fatalf("patched %+v", co)
+	}
+
+	// External id: set, unique per workspace, cleared with null.
+	e.Do("PATCH", "/v1/companies/"+co.ID, a, map[string]any{"external_id": " acct-1 "}).Want(t, 200).JSON(t, &co)
+	if co.ExternalID == nil || *co.ExternalID != "acct-1" || co.Name != "Initech LLC" {
+		t.Fatalf("external id %+v", co)
+	}
+	e.Do("POST", "/v1/companies", a, map[string]any{"name": "Copy", "external_id": "acct-1"}).Want(t, 409)
+	e.Do("PATCH", "/v1/companies/"+co.ID, a, map[string]any{"external_id": nil}).Want(t, 200).JSON(t, &co)
+	if co.ExternalID != nil {
+		t.Fatalf("external id kept %+v", co)
 	}
 	var c contact
 	e.Do("POST", "/v1/contacts", a, map[string]any{"email": "p@initech.com", "company_id": co.ID}).Want(t, 201).JSON(t, &c)

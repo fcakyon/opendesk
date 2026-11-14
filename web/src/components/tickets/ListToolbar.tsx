@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { sidebarDragProps, type SidebarDragItem } from "@/lib/collab/sidebarDrag";
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, Columns2, Filter, Lock, Mail, Rows3, Search, Users, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -61,11 +62,20 @@ export function ListToolbar({
   onLayout,
   below,
   inTeam,
+  inboxBelow,
+  titleAction,
+  dragItem,
 }: {
+  /** What the title is as a sidebar row: dragged into the sidebar, it is added there. */
+  dragItem?: SidebarDragItem;
+  /** Beside the title and count (Add to sidebar). */
+  titleAction?: ReactNode;
   /** A row under the title (a team inbox's tabs). */
   below?: ReactNode;
   /** A team inbox: the team filter is the page itself. */
   inTeam?: boolean;
+  /** The ticket inbox is chosen under the title (components/tickets/inboxes/InboxSwitcher): no filter chip for it. */
+  inboxBelow?: boolean;
   title: string;
   icon: ReactNode;
   count?: number | null;
@@ -174,7 +184,7 @@ export function ListToolbar({
     severities.length +
     (search.channel ? 1 : 0) +
     (search.tag ? 1 : 0) +
-    (search.mailbox ? 1 : 0) +
+    (search.mailbox && !inboxBelow ? 1 : 0) +
     (search.to ? 1 : 0) +
     teamSel.length +
     (brandSel ? 1 : 0) +
@@ -216,14 +226,17 @@ export function ListToolbar({
           </motion.div>
         ) : (
           <div className="ml-1 flex min-w-0 flex-1 items-baseline gap-2">
-            <h1 className="truncate text-[14px] font-semibold tracking-[-0.01em]">{title}</h1>
+            <h1 className="truncate text-[14px] font-semibold tracking-[-0.01em]" {...(dragItem ? sidebarDragProps(dragItem) : {})}>
+              {title}
+            </h1>
             {count !== null && count !== undefined && (
               <AnimatedNumber value={count} flash className="mono text-[11.5px] text-fg-4" />
             )}
+            {titleAction && <span className="flex self-center">{titleAction}</span>}
           </div>
         )}
         {!searchOpen && (
-          <Tooltip content={t("toolbar.search")} shortcut="/">
+          <Tooltip content={t("toolbar.search")} shortcut="tickets.search">
             <Button variant="ghost" size="sm" square data-inbox-search aria-label={t("toolbar.search")} icon={<Search className="size-3.5" />} onClick={() => setSearchOpen(true)} />
           </Tooltip>
         )}
@@ -511,7 +524,7 @@ export function ListToolbar({
                     </Chip>
                   );
                 })}
-                {search.mailbox && (
+                {search.mailbox && !inboxBelow && (
                   <Chip key="mailbox" label={t("filter.remove")} onRemove={() => onSearch({ ...search, mailbox: undefined })}>
                     <Mail />
                     <span className="mono text-[11.5px]">{activeMailbox?.email ?? t("filter.address")}</span>

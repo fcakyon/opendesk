@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { SettingsPage } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Field, SearchInput, TextInput } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { EmptyState } from "@/components/ui/empty";
 import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
 import { Kbd } from "@/components/ui/kbd";
@@ -24,9 +25,28 @@ import { cn } from "@/lib/cn";
 import { tone } from "@/lib/tones";
 import { sameJSON } from "@/lib/sameJSON";
 
-type Draft = { title: string; shortcut: string; body_html: string; team_id: string | null };
-const empty: Draft = { title: "", shortcut: "", body_html: "", team_id: null };
-const toDraft = (r: SavedReply): Draft => ({ title: r.title, shortcut: r.shortcut, body_html: r.body_html, team_id: r.team_id ?? null });
+// The reply's actions are edited as text here (labels comma-separated).
+type Draft = { title: string; shortcut: string; body_html: string; team_id: string | null; addTags: string; removeTags: string; actTeam: string | null; actAssignee: string | null };
+const empty: Draft = { title: "", shortcut: "", body_html: "", team_id: null, addTags: "", removeTags: "", actTeam: null, actAssignee: null };
+const toDraft = (r: SavedReply): Draft => ({
+  title: r.title,
+  shortcut: r.shortcut,
+  body_html: r.body_html,
+  team_id: r.team_id ?? null,
+  addTags: (r.actions?.add_tags ?? []).join(", "),
+  removeTags: (r.actions?.remove_tags ?? []).join(", "),
+  actTeam: r.actions?.team_id ?? null,
+  actAssignee: r.actions?.assignee_id ?? null,
+});
+const splitTags = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
+const toBody = (d: Draft) => ({
+  title: d.title,
+  shortcut: d.shortcut,
+  body_html: d.body_html,
+  team_id: d.team_id,
+  actions: { add_tags: splitTags(d.addTags), remove_tags: splitTags(d.removeTags), team_id: d.actTeam, assignee_id: d.actAssignee },
+});
+const NOBODY = "__none";
 const NEW = "__new";
 
 function cleanShortcut(s: string) {
@@ -61,6 +81,7 @@ export default function SavedReplies() {
   const base: Draft = current ? toDraft(current) : empty;
   const dirty = selected !== null && !sameJSON(draft, base);
   const { teams } = useTeams();
+  const { data: members } = useQuery(q.members());
   const { t: tt } = useTranslation("settingsTeams");
   const teamById = new Map(teams.map((x) => [x.id, x]));
 
@@ -90,7 +111,7 @@ export default function SavedReplies() {
   };
 
   const save = useMutation({
-    mutationFn: (d: Draft) => (selected && selected !== NEW ? api.savedReplies.update(selected, d) : api.savedReplies.create(d)),
+    mutationFn: (d: Draft) => (selected && selected !== NEW ? api.savedReplies.update(selected, toBody(d)) : api.savedReplies.create(toBody(d))),
     onSuccess: (r) => {
       upsertInList(qc, qk.savedReplies, r);
       setSelected(r.id);
@@ -304,6 +325,34 @@ export default function SavedReplies() {
                   />
                   <span className="text-[11.5px] leading-4 text-fg-4">{t("savedReplies.variablesHint")}</span>
                 </div>
+                <fieldset className="mx-5 mb-5 grid grid-cols-1 gap-3 rounded-lg border border-line p-3 sm:grid-cols-2" disabled={!canEdit}>
+                  <legend className="px-1 text-[12.5px] font-medium">{t("savedReplies.actionsTitle")}</legend>
+                  <p className="text-[11.5px] leading-4 text-fg-4 sm:col-span-2">{t("savedReplies.actionsHint")}</p>
+                  <Field label={t("savedReplies.addTags")} optional>
+                    {(f) => <TextInput {...f} value={draft.addTags} placeholder={t("savedReplies.tagsPlaceholder")} onChange={(e) => setDraft((d) => ({ ...d, addTags: e.target.value }))} />}
+                  </Field>
+                  <Field label={t("savedReplies.removeTags")} optional>
+                    {(f) => <TextInput {...f} value={draft.removeTags} placeholder={t("savedReplies.tagsPlaceholder")} onChange={(e) => setDraft((d) => ({ ...d, removeTags: e.target.value }))} />}
+                  </Field>
+                  <Field label={t("savedReplies.setTeam")} optional>
+                    {() => <TeamPick className="w-full" size="md" value={draft.actTeam} noneLabel={t("savedReplies.noChange")} disabled={!canEdit} onChange={(actTeam) => setDraft((d) => ({ ...d, actTeam }))} />}
+                  </Field>
+                  <Field label={t("savedReplies.setAssignee")} optional>
+                    {() => (
+                      <Select
+                        className="w-full"
+                        aria-label={t("savedReplies.setAssignee")}
+                        disabled={!canEdit}
+                        value={draft.actAssignee ?? NOBODY}
+                        onChange={(v) => setDraft((d) => ({ ...d, actAssignee: v === NOBODY ? null : v }))}
+                        options={[
+                          { value: NOBODY, label: t("savedReplies.noChange") },
+                          ...(members ?? []).filter((m) => m.role !== "viewer").map((m) => ({ value: m.user.id, label: m.user.name })),
+                        ]}
+                      />
+                    )}
+                  </Field>
+                </fieldset>
                 {canEdit && (
                   <div className="flex items-center gap-2 border-t border-line bg-sunken px-5 py-3">
                     {selected !== NEW && current && (

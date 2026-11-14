@@ -161,6 +161,9 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
                         <Detail label={t("field.domain")} mono>
                           {c.domain || none}
                         </Detail>
+                        <Detail label={t("field.externalId")} mono>
+                          {c.external_id || none}
+                        </Detail>
                         {fieldsOf(c, definedKeys).map(([k, v]) => (
                           <Detail key={k} label={fieldLabel(k)} mono>
                             {fieldText(v)}
@@ -246,18 +249,19 @@ function EditCompany({ c, onDirty, onDeleted, onDone }: { c: Company; onDirty: (
   const confirm = useConfirm();
   const [name, setName] = useState(c.name);
   const [domain, setDomain] = useState(c.domain);
+  const [externalId, setExternalId] = useState(c.external_id ?? "");
   const [notes, setNotes] = useState(c.notes);
   const [error, setError] = useState<string | null>(null);
-  const dirty = name !== c.name || domain !== c.domain || notes !== c.notes;
+  const dirty = name !== c.name || domain !== c.domain || externalId !== (c.external_id ?? "") || notes !== c.notes;
   useEffect(() => onDirty(dirty), [dirty, onDirty]);
   useEffect(() => () => onDirty(false), [onDirty]);
 
   const save = useMutation({
-    mutationFn: () => api.companies.update(c.id, { name: name.trim(), domain: domain.trim().toLowerCase(), notes }),
+    mutationFn: () => api.companies.update(c.id, { name: name.trim(), domain: domain.trim().toLowerCase(), external_id: externalId.trim() || null, notes }),
     onMutate: async () => {
       await qc.cancelQueries({ queryKey: qk.company(c.id) });
       const snap = snapshot(qc, [qk.company(c.id), qk.companyLists]);
-      patchCompany(qc, { ...c, name: name.trim(), domain: domain.trim().toLowerCase(), notes });
+      patchCompany(qc, { ...c, name: name.trim(), domain: domain.trim().toLowerCase(), external_id: externalId.trim() || null, notes });
       return { snap };
     },
     onError: (e, _v, ctx) => {
@@ -294,6 +298,7 @@ function EditCompany({ c, onDirty, onDeleted, onDone }: { c: Company; onDirty: (
     >
       <Field label={t("field.name")}>{(p) => <TextInput {...p} autoFocus value={name} onChange={(e) => setName(e.target.value)} />}</Field>
       <Field label={t("field.domain")}>{(p) => <TextInput {...p} className="mono" value={domain} onChange={(e) => setDomain(e.target.value)} />}</Field>
+      <Field label={t("field.externalId")} hint={t("field.companyExternalIdHint")}>{(p) => <TextInput {...p} className="mono" value={externalId} onChange={(e) => setExternalId(e.target.value)} />}</Field>
       <Field label={t("field.notes")}>{(p) => <Textarea {...p} rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} />}</Field>
       {error && (
         <p role="alert" className="text-xs text-danger-fg">

@@ -31,6 +31,13 @@ describe("markdown preview", () => {
     expect(out).toContain('<a href="https://example.com/g" target="_blank" rel="noopener noreferrer nofollow">the guide</a>');
   });
 
+  it("labels an address written out shortly, as the posted reply shows it", () => {
+    const out = html("Start here: https://www.example.com/help/returns/start-a-return-for-an-order?order=1042.");
+    expect(out).toBe(
+      '<p>Start here: <a href="https://www.example.com/help/returns/start-a-return-for-an-order?order=1042" target="_blank" rel="noopener noreferrer nofollow">example.com/help/returns/…</a>.</p>',
+    );
+  });
+
   it("never turns text into markup or unsafe links", () => {
     const out = html('<img src=x onerror=alert(1)> [x](javascript:alert(1)) <script>bad()</script>');
     expect(out).not.toContain("<img");

@@ -1,0 +1,39 @@
+/*
+ * A wiki database's option colours (components/wiki/database): pills in the soft tint with
+ * the readable tone as text, dots in the solid tone. Same palette as the editor's tones.
+ */
+
+:root {
+  --db-brown: #9c6b3f;
+}
+
+.db-tone-gray { background: var(--tone-gray-soft); color: var(--tone-gray); }
+.db-tone-brown { background: color-mix(in oklab, var(--db-brown) 14%, transparent); color: color-mix(in oklab, var(--db-brown) 82%, var(--fg)); }
+.db-tone-orange { background: var(--tone-orange-soft); color: var(--tone-orange); }
+.db-tone-yellow { background: color-mix(in oklab, var(--tone-yellow-solid) 20%, transparent); color: var(--tone-amber); }
+.db-tone-green { background: var(--tone-green-soft); color: var(--tone-green); }
+.db-tone-blue { background: var(--tone-blue-soft); color: var(--tone-blue); }
+.db-tone-purple { background: var(--tone-violet-soft); color: var(--tone-violet); }
+.db-tone-pink { background: var(--tone-pink-soft); color: var(--tone-pink); }
+.db-tone-red { background: var(--tone-red-soft); color: var(--tone-red); }
+
+.db-dot-gray { background: var(--tone-gray-solid); }
+.db-dot-brown { background: var(--db-brown); }
+.db-dot-orange { background: var(--tone-orange-solid); }
+.db-dot-yellow { background: var(--tone-yellow-solid); }
+.db-dot-green { background: var(--tone-green-solid); }
+.db-dot-blue { background: var(--tone-blue-solid); }
+.db-dot-purple { background: var(--tone-violet-solid); }
+.db-dot-pink { background: var(--tone-pink-solid); }
+.db-dot-red { background: var(--tone-red-solid); }
+
+/* A board column, a timeline bar and a chart series take the same tone. */
+.db-bar-gray { --db-bar: var(--tone-gray); }
+.db-bar-brown { --db-bar: var(--db-brown); }
+.db-bar-orange { --db-bar: var(--tone-orange); }
+.db-bar-yellow { --db-bar: var(--tone-amber); }
+.db-bar-green { --db-bar: var(--tone-green); }
+.db-bar-blue { --db-bar: var(--tone-blue); }
+.db-bar-purple { --db-bar: var(--tone-violet); }
+.db-bar-pink { --db-bar: var(--tone-pink); }
+.db-bar-red { --db-bar: var(--tone-red); }

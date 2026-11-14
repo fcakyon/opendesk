@@ -1,9 +1,10 @@
 // One socket per signed-in tab. Joins workspace:<wid> and user:<uid> for events,
-// and ticket:<wid>:<id> for presence and typing on the open ticket (and, quietly,
-// the tickets visible in the list). For someone in several workspaces (contracts/api.md
-// "Several workspaces") the token covers the person's other workspaces too: the socket joins
-// each one's workspace and private team channels, tracks seq per workspace, and
-// applies every event to its own workspace's cache.
+// ticket:<wid>:<id> for presence and typing on the open ticket (and, quietly,
+// the tickets visible in the list), and wiki_page:<wid>:<id> for who is on the open
+// wiki page. For someone in several workspaces (contracts/api.md "Several workspaces")
+// the token covers the person's other workspaces too: the socket joins each one's
+// workspace and private team channels, tracks seq per workspace, and applies every
+// event to its own workspace's cache.
 
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import { getWorkspaceId, inWorkspace } from "../api/client";
@@ -13,10 +14,11 @@ import { keyBody, keyWorkspace, qk } from "../queries";
 import { config } from "../config";
 import { setLiveCheck } from "../session";
 import { applyEnvelope } from "./apply";
-import { syncDiff, syncState, type PresenceDiff, type PresenceState } from "./presence";
+import { syncDiff, syncState, type PresenceDiff, type PresenceState, type WikiPresenceStatus } from "./presence";
 import { SeqSync } from "./seq";
-import { applyLive, clearLive, clearPresence, noteCustomerTyping, noteTyping, setPresence, useRealtime } from "./store";
+import { applyLive, clearLive, clearPresence, noteCustomerTyping, noteTyping, setPresence, useRealtime, wikiPresenceKey } from "./store";
 import { createSocket, type RtChannel, type RtSocket } from "./transport";
+import { applyVisitorPresence } from "../visitorPresence";
 
 /** Query roots that realtime events keep current (see apply.ts). */
 const LIVE_ROOTS = new Set(["tickets", "contacts", "companies", "notifications", "members", "kb"]);
@@ -37,6 +39,11 @@ export type ManagerOptions = {
 type TicketMode = "active" | "watch";
 /** team is the private team the channel was joined with (null: none). */
 type TicketEntry = { ch: RtChannel; mode: TicketMode; state: PresenceState; team: string | null; wid: string; id: string };
+
+/** The wiki page this person has open: its teamspace's team (any, private or not) and what they are doing. */
+type WikiWant = { id: string; teamId: string | null; state: WikiPresenceStatus };
+/** team is the private team the channel was joined with (null: none). */
+type WikiEntry = { ch: RtChannel; wid: string; id: string; team: string | null; state: PresenceState };
 
 /** One followed workspace: its channel, seq and private team channels. */
 type Followed = { wid: string; sync: SeqSync; ch: RtChannel | null; joined: boolean; teamChannels: Map<string, RtChannel> };
@@ -96,6 +103,8 @@ export class RealtimeManager {
   private watched = new Set<string>();
   /** Watch lists by who asked (the inbox list, waiting chats), merged into `watched`. */
   private watchSources = new Map<string, string[]>();
+  private wikiWant: WikiWant | null = null;
+  private wikiPage: WikiEntry | null = null;
   private lastTyping = 0;
   private everOpened = false;
   private unsubscribeCache: (() => void) | null = null;
@@ -115,7 +124,9 @@ export class RealtimeManager {
     this.active = null;
     this.watched = new Set();
     this.watchSources.clear();
+    this.wikiWant = null;
     this.reconcileTickets();
+    this.reconcileWiki();
   }
 
   /** Whether events keep this workspace's cache current right now. */
@@ -158,6 +169,7 @@ export class RealtimeManager {
     this.covered = covered;
     this.reconcileWorkspaces();
     this.reconcileTickets();
+    this.reconcileWiki();
     return r;
   }
 
@@ -210,6 +222,7 @@ export class RealtimeManager {
 
     this.reconcileWorkspaces();
     this.reconcileTickets();
+    this.reconcileWiki();
     // A ticket's team arrives with its data (or changes): rejoin its channel with it.
     this.unsubscribeCache = this.opts.qc.getQueryCache().subscribe((e) => {
       const wid = keyWorkspace(e.query.queryKey);
@@ -351,6 +364,8 @@ export class RealtimeManager {
       clearLive(e.id);
     }
     this.tickets.clear();
+    this.wikiWant = null;
+    this.reconcileWiki();
     for (const f of this.followed.values()) {
       f.ch?.leave();
       for (const ch of f.teamChannels.values()) ch.leave();
@@ -459,10 +474,72 @@ export class RealtimeManager {
         const ticket = inWorkspace(wid, () => this.opts.qc.getQueryData<Ticket>(qk.ticket(id)));
         if (contactId && ticket?.contact?.id === contactId) noteCustomerTyping(id);
       });
+      // The chat's visitor came back to the page: their presence reloads.
+      ch.on("customer_presence", (p) => {
+        const contactId = (p as { contact_id?: string }).contact_id;
+        const ticket = inWorkspace(wid, () => this.opts.qc.getQueryData<Ticket>(qk.ticket(id)));
+        if (contactId && ticket?.contact?.id === contactId) inWorkspace(wid, () => applyVisitorPresence(this.opts.qc, id));
+      });
     }
     ch.join().receive("ok", () => {
       if (mode === "active") ch.push("presence", { state: "viewing" });
     });
+  }
+
+  /**
+   * The wiki page open in the focus workspace, or null. Pass only a page of the workspace or a
+   * teamspace, never a private page (contracts/realtime.md): its `teamId` is the teamspace's
+   * team, and the channel is joined with it when it is one of the token's private teams.
+   */
+  setActiveWikiPage(id: string | null, opts: { teamId?: string | null; state?: WikiPresenceStatus } = {}) {
+    const prev = id && this.wikiWant?.id === id ? this.wikiWant : null;
+    const state = prev ? prev.state : (opts.state ?? "viewing");
+    this.wikiWant = id ? { id, teamId: opts.teamId ?? null, state } : null;
+    this.reconcileWiki();
+    if (prev && opts.state) this.setWikiPresenceState(opts.state);
+  }
+
+  /** viewing | editing | idle on the open wiki page. */
+  setWikiPresenceState(state: WikiPresenceStatus) {
+    const want = this.wikiWant;
+    if (!want || want.state === state) return;
+    want.state = state;
+    const e = this.wikiPage;
+    if (e && e.id === want.id) e.ch.push("presence", { state });
+  }
+
+  private reconcileWiki() {
+    const wid = this.focus;
+    const want = this.socket && this.covered.has(wid) ? this.wikiWant : null;
+    const team = want?.teamId && this.teamsOf(wid).includes(want.teamId) ? want.teamId : null;
+    const cur = this.wikiPage;
+    if (cur && (!want || cur.id !== want.id || cur.wid !== wid || cur.team !== team)) {
+      cur.ch.leave();
+      clearPresence(wikiPresenceKey(cur.id));
+      this.wikiPage = null;
+    }
+    if (want && !this.wikiPage) this.joinWikiPage(wid, want.id, team);
+  }
+
+  private joinWikiPage(wid: string, id: string, team: string | null) {
+    if (!this.socket) return;
+    const key = wikiPresenceKey(id);
+    // Read at every (re)join, so a rejoin after a dropped connection says what this person does now.
+    const params = () => ({ state: this.wikiWant?.id === id ? this.wikiWant.state : "viewing", ...(team ? { team_id: team } : {}) });
+    const ch = this.socket.channel(`wiki_page:${wid}:${id}`, params);
+    const entry: WikiEntry = { ch, wid, id, team, state: {} };
+    this.wikiPage = entry;
+    ch.on("presence_state", (p) => {
+      if (this.wikiPage !== entry) return;
+      entry.state = syncState(entry.state, p as PresenceState);
+      setPresence(key, entry.state);
+    });
+    ch.on("presence_diff", (p) => {
+      if (this.wikiPage !== entry) return;
+      entry.state = syncDiff(entry.state, p as PresenceDiff);
+      setPresence(key, entry.state);
+    });
+    ch.join();
   }
 }
 

@@ -14,6 +14,8 @@ final class DirectoryStore {
     /// Custom field definitions for tickets, contacts and companies, archived ones included.
     private(set) var fields: [CustomField] = []
     private(set) var counts: TicketCounts?
+    /// The workspace's ticket inboxes (its helpdesk mailboxes, the reply addresses of tickets), by name.
+    private(set) var mailboxes: [InboxMailbox] = []
     private(set) var ai: AIConfig = .off
     /// Collab mail for this workspace; the Mail area shows only when it is on.
     private(set) var collab: CollabAvailability = .off
@@ -36,6 +38,7 @@ final class DirectoryStore {
         savedReplies = []
         fields = []
         counts = nil
+        mailboxes = []
         ai = .off
         collab = .off
         loaded = false
@@ -55,6 +58,7 @@ final class DirectoryStore {
         async let ai: AIConfig? = try? api.get("v1/ai/config")
         async let collab: CollabAvailability? = try? api.get("v1/collab")
         async let counts: TicketCounts? = try? api.get("v1/tickets/counts")
+        async let mailboxes: Page<InboxMailbox>? = try? api.get("v1/mailboxes")
 
         if let all = await members { self.members = all }
         if let page = await teams { self.teams = page.data.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending } }
@@ -65,7 +69,39 @@ final class DirectoryStore {
         if let config = await ai { self.ai = config }
         if let status = await collab { self.collab = status }
         if let value = await counts { self.counts = value }
+        if let page = await mailboxes { self.mailboxes = Self.byName(page.data) }
         loaded = true
+    }
+
+    func refreshMailboxes() async {
+        guard let api, let page: Page<InboxMailbox> = try? await api.get("v1/mailboxes") else { return }
+        mailboxes = Self.byName(page.data)
+    }
+
+    private static func byName(_ list: [InboxMailbox]) -> [InboxMailbox] {
+        list.sorted { ($0.name.isEmpty ? $0.email : $0.name).localizedCaseInsensitiveCompare($1.name.isEmpty ? $1.email : $1.name) == .orderedAscending }
+    }
+
+    func mailbox(_ id: String?) -> InboxMailbox? {
+        guard let id else { return nil }
+        return mailboxes.first { $0.id == id }
+    }
+
+    // MARK: Ticket inboxes as sections
+
+    /// The ticket inboxes the member shows as sections of their own, in their order
+    /// (`SidebarPrefs.order` entries `mailbox:<id>`, contracts/collab.md "Inboxes as sections").
+    var inboxSections: [String] { SidebarStore.shared.inboxSections }
+
+    func isInboxSection(_ id: String) -> Bool { inboxSections.contains(id) }
+
+    /// What a ticket inbox is called in the sidebar: the member's name for its section, else
+    /// the mailbox's name, else its address.
+    func inboxTitle(_ mailbox: InboxMailbox) -> String { SidebarStore.shared.inboxTitle(mailbox) }
+
+    /// Shows a ticket inbox as a section of its own, or puts it back into Tickets.
+    func setInboxSection(_ id: String, _ on: Bool) async throws {
+        try await SidebarStore.shared.setInboxSection(id, on)
     }
 
     func refreshCounts() async {
@@ -143,6 +179,11 @@ final class DirectoryStore {
         let type = envelope.type
         if type.hasPrefix("ticket.") {
             scheduleCounts()
+            return
+        }
+        // A mailbox event carries the members' view: read the list again.
+        if type.hasPrefix("mailbox.") {
+            Task { await refreshMailboxes() }
             return
         }
         switch type {

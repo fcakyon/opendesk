@@ -103,8 +103,10 @@ export default defineConfig({
           label: 'Guides',
           items: [
             { label: 'Inbox and tickets', slug: 'guides/inbox-and-tickets' },
+            { label: 'Mail and shared inboxes', slug: 'guides/mail' },
             { label: 'Inbox categories', slug: 'guides/inbox-categories' },
             { label: 'Import your history', slug: 'guides/importing' },
+            { label: 'Your sidebar', slug: 'guides/sidebar' },
             { label: 'Several workspaces', slug: 'guides/workspaces' },
             {
               label: 'Mailboxes',
@@ -137,7 +139,19 @@ export default defineConfig({
             { label: 'Routing', slug: 'guides/routing' },
             { label: 'Knowledge base and help center', slug: 'guides/knowledge-base' },
             { label: 'Changelog', slug: 'guides/changelog' },
-            { label: 'Wiki', slug: 'guides/wiki' },
+            { label: 'Pages', slug: 'guides/pages' },
+            {
+              label: 'Wiki',
+              items: [
+                { label: 'Pages and writing', slug: 'guides/wiki' },
+                { label: 'Databases', slug: 'guides/wiki-databases' },
+                { label: 'Canvas', slug: 'guides/wiki-canvas' },
+                { label: 'Links, tags and the graph', slug: 'guides/wiki-links' },
+                { label: 'Comments and following', slug: 'guides/wiki-collaboration' },
+                { label: 'Tickets, help center and Ollie', slug: 'guides/wiki-desk' },
+                { label: 'Import and export', slug: 'guides/wiki-import-export' },
+              ],
+            },
             { label: 'Help center addresses', slug: 'guides/help-center-addresses' },
             { label: 'Labels and custom fields', slug: 'guides/labels-and-custom-fields' },
             { label: 'Automations', slug: 'guides/automations' },

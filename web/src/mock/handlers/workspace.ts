@@ -100,8 +100,8 @@ export function registerWorkspace() {
     if (isRecord(ctx.body.settings)) {
       const wasGravatar = !!ctx.ws.workspace.settings.gravatar;
       const next = { ...ctx.ws.workspace.settings, ...(ctx.body.settings as WorkspaceSettings) };
-      if (next.tickets_enabled === false && next.mail_enabled === false)
-        throw invalid("At least one product must stay enabled.");
+      if (next.tickets_enabled === false && next.mail_enabled === false && next.pages_enabled === false)
+        throw new HttpError(422, "at_least_one_product_required", "At least one available product must stay enabled.");
       ctx.ws.workspace.settings = next;
       ctx.ws.workspace.mail_available = next.mail_enabled !== false;
       // Turning Gravatar pictures off removes them (contracts/api.md "Profile pictures and logos").

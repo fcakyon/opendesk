@@ -11,7 +11,10 @@ import (
 // Register adds the contact and company routes.
 func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	registerContacts(d, api)
+	registerEmails(d, api)
+	registerMerge(d, api)
 	registerCompanies(d, api)
+	registerBulk(d, api)
 	registerAvatars(d, api)
 	InstallImageHooks()
 }

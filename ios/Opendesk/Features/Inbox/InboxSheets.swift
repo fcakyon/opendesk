@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The app's menu: the Space and workspace switcher, search everywhere, then the picked Space's
-/// rows, or the workspace's own: folders with live counts, team inboxes, views and other areas.
+/// rows, or the workspace's own sidebar as the member arranged it (`WorkspaceSidebar`).
 struct ScopeSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
@@ -34,16 +34,7 @@ struct ScopeSheet: View {
                     if let space = SpacesStore.shared.picked {
                         SpaceSidebar(space: space, onOpen: { dismiss() }, onEdit: { editing = SpaceDraft(space: space, isNew: false) })
                     } else {
-                        if env.products.tickets {
-                            ticketScopes
-                        }
-                        SectionLabel("Workspace")
-                        Panel {
-                            ForEach(Array(areas.enumerated()), id: \.element) { index, area in
-                                if index > 0 { Hairline(inset: 46) }
-                                areaRow(area)
-                            }
-                        }
+                        WorkspaceSidebar(onOpen: { dismiss() })
                     }
                 }
                 .padding(20)
@@ -55,7 +46,6 @@ struct ScopeSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
-            .onAppear { folded = ViewSections.folded(key: foldedKey) }
         }
         .followsOverview()
         .sheet(isPresented: $switching) {
@@ -73,204 +63,6 @@ struct ScopeSheet: View {
 
     @State private var switching = false
     @State private var editing: SpaceDraft?
-
-    /// Folders with live counts, team inboxes and views: the ticket part, gone while Tickets is off.
-    @ViewBuilder
-    private var ticketScopes: some View {
-        Panel {
-            ForEach(Array(Folder.allCases.enumerated()), id: \.element) { index, folder in
-                if index > 0 { Hairline(inset: 46) }
-                row(scope: .folder(folder), title: folder.title, symbol: folder.symbol, count: folder.count(in: env.directory.counts))
-            }
-        }
-        if !myTeams.isEmpty {
-            SectionLabel("Teams")
-            Panel {
-                teamRow(id: InboxScope.myTeams, title: "My teams", count: env.directory.counts?.myTeams)
-                ForEach(myTeams) { team in
-                    Hairline(inset: 46)
-                    teamRow(id: team.id, title: team.name, count: env.directory.counts?.teams[team.id])
-                }
-            }
-        }
-        if !env.directory.views.isEmpty {
-            SectionLabel("Views")
-            Panel {
-                ForEach(Array(ViewSections.group(env.directory.views).enumerated()), id: \.element.id) { index, entry in
-                    if index > 0 { Hairline(inset: 46) }
-                    switch entry {
-                    case let .view(view):
-                        viewRow(view)
-                    case let .section(key, name, views):
-                        sectionRow(key: key, name: name, views: views)
-                        if !folded.contains(key) {
-                            ForEach(views) { view in
-                                Hairline(inset: 46)
-                                viewRow(view, nested: true)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// The teams the signed-in member is on, as the web's sidebar lists them.
-    private var myTeams: [Team] {
-        guard let me = env.session.user?.id else { return [] }
-        return env.directory.teams.filter { $0.memberIDs?.contains(me) == true }
-    }
-
-    /// The view sections folded here, per server, workspace and member.
-    @State private var folded: Set<String> = []
-
-    private var foldedKey: String {
-        "inbox.viewSections.folded." + env.session.api.instance.storageKey + "." + (env.session.workspace?.id ?? "") + "." + (env.session.user?.id ?? "")
-    }
-
-    private func viewRow(_ view: SavedView, nested: Bool = false) -> some View {
-        let scope = InboxScope.view(view.id)
-        let selected = env.router.area == .tickets && env.inbox.scope == scope
-        return Button {
-            pick(scope)
-        } label: {
-            label(title: view.displayName, count: env.directory.counts?.views[view.id], selected: selected) {
-                ViewIconMark(icon: view.icon, size: 15, tint: selected ? Theme.fg : Theme.fg3)
-            }
-            .padding(.leading, nested ? 14 : 0)
-        }
-        .buttonStyle(RowPressStyle())
-        .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
-    /// A section's heading: folds its views away; folded, it carries their count.
-    private func sectionRow(key: String, name: String, views: [SavedView]) -> some View {
-        let isFolded = folded.contains(key)
-        let total = views.reduce(0) { $0 + (env.directory.counts?.views[$1.id] ?? 0) }
-        return Button {
-            Haptics.selection()
-            withAnimation(Motion.snappy) {
-                if isFolded { folded.remove(key) } else { folded.insert(key) }
-            }
-            ViewSections.setFolded(folded, key: foldedKey)
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.fg3)
-                    .rotationEffect(.degrees(isFolded ? 0 : 90))
-                    .frame(width: 20)
-                Text(name)
-                    .font(ODFont.sans(13.5, weight: .semibold))
-                    .foregroundStyle(Theme.fg2)
-                    .lineLimit(1)
-                Spacer()
-                if isFolded, total > 0 {
-                    Text("\(total)")
-                        .font(ODFont.mono(12.5))
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.fg3)
-                }
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 40)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(RowPressStyle())
-        .accessibilityLabel(name)
-        .accessibilityValue(isFolded ? "Folded, \(Format.plural(views.count, "view"))" : "Open")
-        .accessibilityHint(isFolded ? "Shows its views" : "Hides its views")
-    }
-
-    private var areas: [AppArea] {
-        // With Tickets off the home is Mail, so it is listed with the rest.
-        let products = env.products
-        return AppArea.allCases.filter { area in
-            guard products.allows(area), area != .tickets, area != .everywhere else { return false }
-            return area != .mail || env.directory.collab.enabled
-        }
-    }
-
-    private func areaRow(_ area: AppArea) -> some View {
-        let selected = env.router.area == area
-        return Button {
-            Haptics.selection()
-            env.router.show(area, [])
-            dismiss()
-        } label: {
-            label(title: area.title, count: nil, selected: selected) { symbol(area.symbol, selected: selected) }
-        }
-        .buttonStyle(RowPressStyle())
-        .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
-    private func row(scope: InboxScope, title: String, symbol: String, count: Int?) -> some View {
-        let selected = env.router.area == .tickets && env.inbox.scope == scope
-        return Button {
-            pick(scope)
-        } label: {
-            label(title: title, count: count, selected: selected) { self.symbol(symbol, selected: selected) }
-        }
-        .buttonStyle(RowPressStyle())
-        .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
-    /// A team inbox opens on its Unassigned tab; the count is what waits there.
-    private func teamRow(id: String, title: String, count: TicketCounts.TeamCount?) -> some View {
-        let selected = env.router.area == .tickets && env.inbox.scope.teamID == id
-        return Button {
-            pick(.team(id, .unassigned))
-        } label: {
-            label(title: title, count: count?.unassigned, selected: selected) {
-                if id == InboxScope.myTeams {
-                    symbol("person.3", selected: selected)
-                } else {
-                    InboxTeamDot(id: id, name: title, size: 9)
-                }
-            }
-        }
-        .buttonStyle(RowPressStyle())
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityHint(count.map { "\($0.unassigned) unassigned, \($0.open) open" } ?? "")
-    }
-
-    private func pick(_ scope: InboxScope) {
-        Haptics.selection()
-        env.inbox.setScope(scope)
-        env.router.show(.tickets, [])
-        dismiss()
-    }
-
-    private func symbol(_ name: String, selected: Bool) -> some View {
-        Image(systemName: name)
-            .font(.system(size: 15))
-            .foregroundStyle(selected ? Theme.fg : Theme.fg3)
-    }
-
-    private func label<Mark: View>(title: String, count: Int?, selected: Bool, @ViewBuilder mark: () -> Mark) -> some View {
-        HStack(spacing: 12) {
-            mark().frame(width: 20)
-            Text(title)
-                .font(ODFont.sans(15, weight: selected ? .semibold : .regular))
-                .foregroundStyle(Theme.fg)
-                .lineLimit(1)
-            Spacer()
-            if let count, count > 0 {
-                Text("\(count)")
-                    .font(ODFont.mono(12.5))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.fg3)
-                    .contentTransition(.numericText())
-            }
-            if selected {
-                Image(systemName: "checkmark").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.fg)
-            }
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 46)
-        .background(selected ? Theme.hover : .clear)
-        .contentShape(Rectangle())
-    }
 }
 
 /// The socket's state, as a small dot (green live, amber reconnecting).
@@ -345,7 +137,7 @@ struct FilterSheet: View {
                             teamChip(InboxFilters.noTeam, "No team")
                         }
                     }
-                    if inbox.mailboxes.count > 1 || inbox.filters.mailboxID != nil || !inbox.filters.mailboxesNot.isEmpty {
+                    if inbox.scope.mailboxID == nil, inbox.mailboxes.count > 1 || inbox.filters.mailboxID != nil || !inbox.filters.mailboxesNot.isEmpty {
                         opSection("Address", op: inbox.filters.mailboxOp, ops: [.is, .not], set: { env.inbox.filters.setMailboxOp($0) }) {
                             ForEach(inbox.mailboxes) { mailbox in
                                 let not = inbox.filters.mailboxOp == .not

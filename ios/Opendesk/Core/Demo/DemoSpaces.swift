@@ -11,6 +11,8 @@ final class DemoSpacesState: @unchecked Sendable {
         var spaces: [Space]
         var saved = true
         var starters: [String: Space]
+        /// The person's own keyboard shortcuts (`/v1/me/shortcuts`).
+        var shortcuts: [String: JSONValue] = [:]
     }
 
     private let lock = NSLock()
@@ -91,6 +93,17 @@ extension DemoBackend {
         }
         if call.match("GET", "me/overview") != nil {
             return .some(encode(JSONValue.object(["workspaces": .array(world.workspaces.map(overview))])))
+        }
+        if call.match("GET", "me/shortcuts") != nil {
+            return .some(encode(JSONValue.object(["bindings": .object(state.with { $0.shortcuts })])))
+        }
+        if call.match("PUT", "me/shortcuts") != nil {
+            let bindings = call.body["bindings"]?.object ?? [:]
+            for (id, value) in bindings where value.string.map({ ShortcutBinding.steps($0) == nil }) ?? !value.isNull {
+                throw Failure(status: 422, code: "validation_failed", detail: "\(id) needs keys the app can read.")
+            }
+            state.with { $0.shortcuts = bindings }
+            return .some(encode(JSONValue.object(["bindings": .object(bindings)])))
         }
         if call.match("GET", "me/workspace-prefs") != nil {
             return .some(encode(JSONValue.object(["order": .array([]), "hidden": .array([]), "updated_at": .null])))

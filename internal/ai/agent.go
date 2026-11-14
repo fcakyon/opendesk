@@ -30,6 +30,14 @@ const (
 	agentMaxTokens    = 1500
 )
 
+// handoffLine is what a chat handoff says to the visitor first.
+const handoffLine = "write the visitor one short line saying a person from the team will reply here, asking in it for anything " +
+	"the team will need that the conversation does not give yet (such as an order number, details or photos)"
+
+// handoffLineAsk answers, once, a chat handoff called before anything was written: the
+// visitor would otherwise see the handoff alone, with no word on what happens next.
+const handoffLineAsk = "Not handed off yet: first " + handoffLine + ". Then call handoff_to_human again."
+
 const agentSystem = `You are the support agent in a company's website chat. You talk to a visitor in real time. Your messages are shown to the visitor as you write them, labelled with your name as an automatic assistant, and the visitor can ask for a person on the team at any time.
 
 ## How you answer
@@ -74,6 +82,9 @@ type agentInput struct {
 	extra string
 	// needsHuman asks the model to hand off (Jev judged a person is needed).
 	needsHuman bool
+	// handOver asks the model for its handoff line only: the conversation is handed off after
+	// this reply whatever the model does (the visitor asked for a person, or the reply limit).
+	handOver bool
 	// playground runs only read-only tools; any other tool comes back as the action.
 	playground bool
 	// email answers a customer email (email_agent.go): the email prompt, read-only
@@ -169,12 +180,18 @@ func (s *Service) runAgent(ctx context.Context, in agentInput, ev agentEvents) (
 		ask = emailAsk
 	}
 	if in.needsHuman {
-		ask = "The visitor needs a person on the team: write one short line saying a person will reply here, then call handoff_to_human."
+		ask = "The visitor needs a person on the team: " + handoffLine + ", then call handoff_to_human."
+	}
+	if in.handOver {
+		ask = "The conversation now goes to a person on the team: " + handoffLine + ", then call handoff_to_human."
 	}
 	user = append(user, ask)
 	turns := []ChatTurn{{Role: "user", Text: strings.Join(user, "\n\n")}}
 
 	var text strings.Builder
+	// lineAsked: a chat handoff came before any text and was sent back once for its line.
+	// The handoff then goes through on the next call, or when the loop ends without one.
+	lineAsked := false
 	for turn := 0; turn < agentMaxTurns; turn++ {
 		c := s.newCall(in.wid, nil, in.ticketID, in.feature)
 		if in.model != "" {
@@ -200,7 +217,7 @@ func (s *Service) runAgent(ctx context.Context, in agentInput, ev agentEvents) (
 			}
 		})
 		if err != nil {
-			if turn > 0 && text.Len() > 0 && skippable(err) {
+			if turn > 0 && (text.Len() > 0 || lineAsked) && skippable(err) {
 				break
 			}
 			return res, err
@@ -227,6 +244,9 @@ func (s *Service) runAgent(ctx context.Context, in agentInput, ev agentEvents) (
 				continue
 			}
 			switch {
+			case sp.builtin == "handoff_to_human" && text.Len() == 0 && !lineAsked && in.email == nil:
+				lineAsked = true
+				results = append(results, ToolResult{CallID: call.ID, Content: handoffLineAsk, IsError: true})
 			case sp.builtin == "handoff_to_human":
 				res.Handoff, stop = true, true
 				results = append(results, ToolResult{CallID: call.ID, Content: "Handed off."})
@@ -290,6 +310,9 @@ func (s *Service) runAgent(ctx context.Context, in agentInput, ev agentEvents) (
 			break
 		}
 		turns = append(turns, ChatTurn{Role: "user", Results: results})
+	}
+	if lineAsked && res.Action == nil {
+		res.Handoff = true
 	}
 	res.Text = TidyReply(strings.TrimSpace(text.String()))
 	return res, nil

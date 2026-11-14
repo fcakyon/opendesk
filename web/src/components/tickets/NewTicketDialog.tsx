@@ -86,7 +86,7 @@ export default function NewTicketDialog() {
             {tr("common.cancel")}
           </Button>
           <Button variant="primary" loading={s.create.isPending} onClick={() => s.submit()}>
-            {draft.kind === "reply" ? tr("newTicket.createSend") : tr("newTicket.create")}
+            {draft.kind === "reply" && !s.log ? tr("newTicket.createSend") : tr("newTicket.create")}
           </Button>
         </>
       }
@@ -104,7 +104,7 @@ export default function NewTicketDialog() {
           <RichEditor
             value={draft.body}
             onChange={(body) => set({ body })}
-            placeholder={draft.kind === "note" ? tr("newTicket.bodyNote") : s.chat ? tr("newTicket.bodyChat") : tr("newTicket.bodyReply")}
+            placeholder={draft.kind === "note" ? tr("newTicket.bodyNote") : s.chat ? tr("newTicket.bodyChat") : s.log ? tr("newTicket.bodyLog") : tr("newTicket.bodyReply")}
             contentClassName="min-h-[160px]"
             onSubmit={() => s.submit()}
           />

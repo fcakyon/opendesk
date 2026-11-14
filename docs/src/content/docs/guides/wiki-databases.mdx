@@ -1,0 +1,188 @@
+---
+title: Wiki databases
+description: Keep pages as rows of a database with properties, and see them as a table, board, list, gallery, calendar, timeline or chart, filtered, sorted, grouped and calculated.
+---
+
+import Steps from '../../../components/Steps.astro';
+import Step from '../../../components/Step.astro';
+import Callout from '../../../components/Callout.astro';
+import Fold from '../../../components/Fold.astro';
+
+A database is a wiki page whose subpages are its **rows**. Each row is a page of its own, with a title, text, history and comments, plus **properties**: a status, a date, an owner, tags, a ticket, numbers, links to rows of another database. A database shows its rows in **views**: a table, a board, a list, a gallery, a calendar, a timeline or a chart, each with its own filters, sorts and grouping.
+
+Use one for a project tracker, an on-call rota, a list of known issues, a release calendar or a team's reading list. Everything else about pages is in the [wiki guide](/guides/wiki/).
+
+## Create a database
+
+There are three ways:
+
+- **A database of its own**: click **+** at the top of the wiki's sidebar and choose **New database**. It starts as a table with **Name**, **Status** (**Not started**, **In progress**, **Done**) and **Tags**.
+- **A database inside a page**: in a page, type <kbd>/</kbd> and pick **Table**, **Board**, **List**, **Gallery**, **Calendar** or **Timeline**. The database is made under the page and shows in its text, with that layout. A calendar or a timeline also gets a **Date** property.
+- **A view of a database you have**: type <kbd>/</kbd>, pick **Linked view of a database**, then **Pick a database to show**. The same rows show in this page too, and a change in one place shows in both.
+
+A database's page has its name, **Add a description** for a line about it, and its views. Inside another page, **Open as a page** opens the database on its own.
+
+## Add rows
+
+<Steps>
+<Step title="Add one">
+
+Click **New**, or **+** at the end of a table, a list, a board column or a calendar day. Type a name and press <kbd>enter</kbd>. In a view with a filter, the new row starts with values that pass it, so it stays in sight.
+
+</Step>
+<Step title="Fill in its properties">
+
+Click a cell to change its value. A checkbox ticks in place; everything else opens a small editor. In a select, multi-select or status, type a name that doesn't exist yet and choose **Create** to add it as an option.
+
+</Step>
+<Step title="Open it">
+
+Click a row's title (or **Open** beside it in a table) and it opens beside the database, with its properties above its text. **Open as a page** opens it on its own. Under the properties, empty ones fold away behind a line such as "3 empty properties".
+
+</Step>
+</Steps>
+
+Rows don't show in the wiki's sidebar: the database's views show them. Search, links, mentions, comments and history work on a row as on any page.
+
+To remove rows, tick them in a table, then click **Delete**: they move to the [trash](/guides/wiki/#the-trash), and come back with **Restore**. Duplicating a database copies its rows.
+
+## Properties
+
+Add a property with **+** at the end of a table's header, or from a row's properties. Click a property's name for its menu: rename it, change its **Type**, set what that type needs, **Sort ascending** or **Sort descending**, **Filter**, **Hide in this view**, **Insert left** or **Insert right**, **Duplicate property** and **Delete property**. Deleting one takes its value from every row.
+
+| Type | Holds |
+| --- | --- |
+| **Title** | The row's name: the first property of every database |
+| **Text** | Any text |
+| **Number** | A number, shown in a **Number format**: plain, with commas, a percent, or a currency (US dollar, euro, pound, yen, Swiss franc, Canadian and Australian dollar, rupee, real, forint, złoty) |
+| **Select** | One option. Each option has a name and a colour |
+| **Multi-select** | Several options |
+| **Status** | One option, in a **Status group**: **To do**, **In progress** or **Complete**. A status shows how far along the work is |
+| **Date** | A day, or a range with an **End date**. **Include the time** adds the time of day |
+| **Person** | Members of the workspace |
+| **Checkbox** | Ticked or not |
+| **URL**, **Email**, **Phone** | A web address (http or https), an email address, a phone number |
+| **Files and media** | Files you upload or link |
+| **Relation** | Rows of another database (the **Related database**) |
+| **Rollup** | A calculation over a property of the related rows. See [Relations and rollups](#relations-and-rollups) |
+| **Formula** | A value worked out from the row's other properties. See [Formulas](#formulas) |
+| **Created time**, **Created by**, **Last edited time**, **Last edited by** | Filled in for you |
+| **ID** | A number given to each row, with optional **Letters** before it (`TASK-12`). Rows that were there when you added it are numbered oldest first, and every new row takes the next number |
+| **Ticket** | Tickets of the workspace. **Search tickets by number or subject** to add one |
+
+A person, a relation or a ticket names only what the reader may see: a ticket on a private team's queue shows only to that team.
+
+## Views
+
+Each view is a tab above the rows. **+** beside the tabs adds a view with a layout of your choice. A tab's menu can **Rename** it, change its **Layout**, **Duplicate view** or **Delete view**.
+
+A view's filters, sorts, grouping, shown properties and layout settings are saved with it and shared with everyone who opens the database, so a team agrees on what "Open bugs" shows. Viewers read; agents and up change them.
+
+| Layout | What it shows |
+| --- | --- |
+| **Table** | A row per page and a column per property. Drag a column's edge to resize it and its header to move it. Drag rows into order, when the view has no sort |
+| **Board** | A column for each value of a property, such as a status. Drag a card to another column to change that value. A column folds into a thin strip, and still takes cards dropped on it. Choose the columns' property in **Group** |
+| **List** | A line per page with its icon and title, and the properties on the right |
+| **Gallery** | A card per page, with its cover or the start of its text above the title |
+| **Calendar** | A month, each row on the day its date property names, and ranges as bars across the days. Drag a row to another day, or press <kbd>alt</kbd> and an arrow key to move the focused one a day or a week. **+** on a day adds a row on it. Rows without a date wait in **No date**, and drag onto the calendar from there |
+| **Timeline** | A row per page and its dates as a bar across time, marked with a line for today. Drag a bar to move it and its ends to change the start or the end. Click the empty track of a row without dates to give it some |
+| **Chart** | The rows counted, or a number summed or averaged, by one property: as **Bars**, **Columns**, a **Donut** or a **Line** |
+
+### Layout settings
+
+The layout button beside the view's tools holds what a layout needs:
+
+- **Calendar** and **Timeline**: the **Date property** they place rows by (a date, a created or edited time, or a formula that gives a date), and for a timeline an **End date property** and the **Zoom**: **Days**, **Weeks**, **Months** or **Quarters**.
+- **Board** and **Gallery**: the **Card preview** (**None**, **Page cover** or **Page content**), the **Card size** (**Small**, **Medium** or **Large**) and **Fit the image**.
+- **Chart**: the **Chart** kind, what to **Group by**, and the **Value**: a **Count** of rows, or the **Sum** or **Average** of a number property.
+
+### Filters
+
+Click **Filter**, then **Add a filter**: pick a property, a **Condition** and a **Value**. The conditions follow the property: **is**, **is not**, **contains**, **starts with**, **is empty** for text; **=**, **>**, **≤** and the like for numbers; **is in group** for a status; **is before**, **is after** or **is within** a relative range (**Today**, **This week**, **The past month**, **The next week**, **This year** and more) for dates.
+
+Rules join with **and** or **or** (**How the filters join**). **Add a filter group** puts rules in a group of their own with its own join, and groups can hold groups, two levels deep: "Status is Open **and** (Priority is High **or** Owner is me)". Active filters show as chips under the tools.
+
+### Sorts, grouping and search
+
+- **Sort**: **Add a sort**, pick a property and **Ascending** or **Descending**. Add more to break ties. Without a sort, rows keep the order you drag them into.
+- **Group**: **Group by** a select, multi-select, status, person, checkbox, date, text, number, created by or last edited by. Tables, lists and galleries then show a section per value; a board's columns are its groups. **Hide empty groups** leaves out groups with no rows.
+- **Properties**: which properties the view shows, and their order. Drag to reorder; **Hide all** and **Show all** change them at once.
+- **Search** finds rows by their title and values, in this view only, without changing it for anyone else.
+
+### Calculations
+
+Under each column of a table, click **Calculate** for a figure over the rows the view shows:
+
+| For | Calculations |
+| --- | --- |
+| Any property | **Count all**, **Count values**, **Count unique**, **Count empty**, **Count not empty**, **Percent empty**, **Percent not empty** |
+| Numbers | **Sum**, **Average**, **Median**, **Min**, **Max**, **Range** |
+| Dates | **Earliest**, **Latest**, **Range** |
+| Checkboxes | **Checked**, **Unchecked**, **Percent checked** |
+
+When the view groups rows, each group gets its own figures.
+
+## Row templates
+
+A database keeps templates for its rows: a bug report with its headings, a meeting with its agenda. Click the arrow beside **New**, then **New template** to make one, or **Edit** to change one. Choose a template from the same menu and the new row starts as a copy of it, text, subpages and values included.
+
+## Relations and rollups
+
+A **Relation** links a row to rows of another database: a task to its project, a bug to the customers who reported it. Choose the **Related database** in the property's menu, then pick rows in a cell. Only rows of that database you can see are offered.
+
+A **Rollup** sums up the related rows. Add a relation first, then a rollup: pick the **Relation**, a **Property** of the related rows and how to **Calculate** it: **Show original** to list the values, or any of the [calculations](#calculations) above, such as the **Sum** of their hours or the **Percent checked** of their checkboxes.
+
+## Formulas
+
+A **Formula** works out a value from the row's other properties, for every row. Write it in the property's menu. `prop("Name")` reads a property by its name:
+
+```
+if(prop("Due") < today() and prop("Status") != "Done", "Late", "On time")
+```
+
+```
+dateBetween(prop("Due"), today(), "days")
+```
+
+```
+concat(prop("Owner"), ": ", prop("Name").upper())
+```
+
+- Operators: `+` (also joins text), `-`, `*`, `/`, `%`, `^`, `==`, `!=`, `>`, `<`, `>=`, `<=`, `and` (`&&`), `or` (`||`), `not` (`!`), and `a ? b : c`.
+- Text in double or single quotes, numbers, `true` and `false`.
+- A function can also be called on a value, as in `prop("Name").lower()` or `prop("Tags").length()`.
+- `let(x, value, result)` and `lets(a, 1, b, 2, result)` name values to use in the result.
+- Date units: `years`, `quarters`, `months`, `weeks`, `days`, `hours` and `minutes`.
+
+| Kind | Functions |
+| --- | --- |
+| Logic | `if`, `ifs`, `and`, `or`, `empty`, `let`, `lets` |
+| Text | `concat`, `join`, `contains`, `replace`, `replaceAll`, `test` (a pattern), `lower`, `upper`, `trim`, `slice`, `length`, `format`, `toNumber` |
+| Numbers | `round`, `floor`, `ceil`, `abs`, `sqrt`, `sign`, `ln`, `exp`, `min`, `max`, `sum`, `mod`, `pow`, `pi`, `e` |
+| Dates | `now`, `today`, `dateAdd`, `dateSubtract`, `dateBetween`, `dateRange`, `parseDate`, `formatDate`, `year`, `month`, `day`, `date`, `week`, `hour`, `minute`, `timestamp`, `fromTimestamp`, `start`, `end`, `dateStart`, `dateEnd` |
+| Properties | `prop` |
+
+A formula with a mistake shows what is wrong and where. A formula may read other formulas, but never itself.
+
+<Callout>
+
+- A database holds up to 100 properties and 50 views, and a select, multi-select or status up to 200 options.
+- Filters, sorts, groups, formulas, rollups and calculations are worked out in the app, on the rows you can see.
+- Rows count toward the wiki's 5,000 pages.
+
+</Callout>
+
+<Fold>
+
+## Databases on the iPhone
+
+The [iPhone app](/guides/iphone-app/#the-wiki) lists a database's rows and opens each as a page. Views, property values and the layouts above are on the web and the desktop app.
+
+</Fold>
+
+## Related
+
+- [Wiki](/guides/wiki/)
+- [Links, tags and the graph](/guides/wiki-links/)
+- [Tickets, the help center and Ollie](/guides/wiki-desk/)
+- [Wiki API](/api/resources/wiki/#databases)

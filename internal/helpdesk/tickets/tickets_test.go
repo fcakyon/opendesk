@@ -183,12 +183,24 @@ func TestEmailTicketQueuesSend(t *testing.T) {
 	var reply domain.Message
 	e.Do("POST", "/v1/tickets/"+tk.ID.String()+"/messages", ws.Agent.As(ws), map[string]any{"kind": "reply", "body_html": "<p>Following up</p>",
 		"bcc": []string{"audit@example.com"}}).Want(t, 201).JSON(t, &reply)
-	if reply.DeliveryStatus != "pending" || reply.Bcc[0] != "audit@example.com" || reply.Subject != "Re: Help needed" {
+	if reply.DeliveryStatus != "pending" || reply.Bcc[0] != "audit@example.com" || reply.Subject != "Re: Help needed" ||
+		len(reply.To) != 1 || reply.To[0] != "buyer@example.com" {
 		t.Fatalf("reply %+v", reply)
 	}
 	if n := len(e.Jobs(jobs.SendMessageArgs{}.Kind(), ws.ID)); n != 1 {
 		t.Fatalf("want one send job, got %d", n)
 	}
+	// The agent picks who a reply goes to; the ticket's contact stays.
+	e.Do("POST", "/v1/tickets/"+tk.ID.String()+"/messages", ws.Agent.As(ws), map[string]any{"kind": "reply", "body_html": "<p>For you</p>",
+		"to": []string{"Owner@Example.com", "deputy@example.com"}}).Want(t, 201).JSON(t, &reply)
+	if len(reply.To) != 2 || reply.To[0] != "owner@example.com" || reply.To[1] != "deputy@example.com" {
+		t.Fatalf("chosen to %+v", reply.To)
+	}
+	if c := getTicket(t, e, ws, tk.ID).Contact; c == nil || c.Email == nil || *c.Email != "buyer@example.com" {
+		t.Fatalf("contact changed: %+v", c)
+	}
+	e.Do("POST", "/v1/tickets/"+tk.ID.String()+"/messages", ws.Agent.As(ws), map[string]any{"kind": "reply", "body_html": "x", "to": []string{"not an address"}}).Want(t, 422)
+	e.Do("POST", "/v1/tickets/"+tk.ID.String()+"/messages", ws.Agent.As(ws), map[string]any{"kind": "note", "body_html": "x", "to": []string{"a@example.com"}}).Want(t, 422)
 }
 
 func TestPatch(t *testing.T) {
@@ -346,6 +358,9 @@ func TestPatchContact(t *testing.T) {
 			t.Errorf("%v: status %d %s", body, res.Status, res.Body)
 		}
 	}
+	noEmailID := ids.New()
+	e.Exec(`INSERT INTO contacts (id, workspace_id, name) VALUES ($1, $2, $3)`, noEmailID, ws.ID, "No email")
+	e.Do("PATCH", "/v1/tickets/"+tk.ID.String(), ws.Agent.As(ws), map[string]any{"contact_id": noEmailID.String()}).Want(t, 422)
 	got = getTicket(t, e, ws, tk.ID)
 	if got.Contact == nil || got.Contact.ID != adminContactID {
 		t.Fatalf("invalid or unauthorized patch changed contact: %+v", got.Contact)

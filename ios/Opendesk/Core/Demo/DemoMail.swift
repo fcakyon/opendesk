@@ -698,11 +698,6 @@ extension DemoBackend {
             return nil
         }
         if call.match("GET", "collab/counts") != nil { return encode(ws.mail.counts()) }
-        if call.match("GET", "collab/sidebar") != nil { return encode(ws.mail.prefs) }
-        if call.match("PUT", "collab/sidebar") != nil {
-            if let value = try? call.body.decode(MailSidebarPrefs.self) { ws.mail.prefs = value }
-            return encode(ws.mail.prefs)
-        }
 
         // Conversations.
         if call.match("GET", "collab/threads") != nil {

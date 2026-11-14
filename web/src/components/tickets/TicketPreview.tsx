@@ -43,7 +43,7 @@ export function TicketPreview({ ticket: t, onOpen, onReply }: { ticket: Ticket; 
           {t.subject || tr("row.noSubject")}
         </h2>
         {onReply && (
-          <Tooltip content={tr("preview.reply")} shortcut="r">
+          <Tooltip content={tr("preview.reply")} shortcut="tickets.reply">
             <Button size="sm" variant="ghost" icon={<MessageSquare className="size-3.5" />} onClick={onReply}>
               {tr("preview.replyShort")}
             </Button>

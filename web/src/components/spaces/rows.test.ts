@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { MailAccount, Team, TicketCounts, View, WorkspaceOverview } from "@/lib/api/types";
+import type { MailAccount, Mailbox, Team, TicketCounts, View, WorkspaceOverview } from "@/lib/api/types";
 import { defaultSidebarPrefs } from "@/lib/collab/sidebarPrefs";
 import type { WorkspaceData } from "@/lib/spaces/hooks";
 import { buildEverywhereRow, buildRow, rowHref, rowNavigate, rowNumber, type RowContext, type RowLabels } from "./rows";
@@ -11,6 +11,7 @@ const labels: RowLabels = {
   myTeams: "My teams",
   page: (p) => `page ${p}`,
   section: (id) => `section ${id}`,
+  untitled: "Untitled",
   everywhere: (l) => `everywhere ${l}`,
 };
 
@@ -31,9 +32,11 @@ function data(p: Partial<WorkspaceData> = {}): WorkspaceData {
     teams: [team("t1"), team("secret", { private: true })],
     myTeams: new Set(["t1"]),
     views: [{ id: "v1", name: "Hot", shared: true, filters: {}, position: 0 } as View],
+    mailboxes: [{ id: "m1", name: "Support", email: "support@lumen.test" } as Mailbox],
     accounts: [{ id: "a1", name: "Work", email: "[EMAIL]", color: "blue", unread: 2 } as MailAccount],
     mailCounts: { boxes: { inbox: 6, unread: 6, shared: 1, assigned: 0, drafts: 0, needs_action: 0 }, assigned: {}, accounts: { a1: 5 }, folders: {} },
     folders: {},
+    wiki: [{ id: "w1", parent_id: null, title: "Runbook", icon: "📘", position: 0, version: 1, updated_at: "", created_by_id: null, tags: [] }],
     ...p,
   };
 }
@@ -56,6 +59,36 @@ describe("Space rows", () => {
     expect(rowHref({ kind: "page", page: "knowledge" }, "w1")).toBe("/kb?ws=w1");
     expect(rowHref({ kind: "page", page: "contacts" })).toBe("/contacts");
     expect(rowHref({ kind: "page", page: "wiki" }, "w1")).toBe("/wiki?ws=w1");
+    expect(rowHref({ kind: "wiki", pageId: "p1" }, "w1")).toBe("/wiki/p1?ws=w1");
+  });
+
+  it("names a wiki page by its live title and skips one out of sight", () => {
+    const d = data();
+    expect(buildRow({ kind: "wiki_page", id: "w1" }, d, { labels })).toMatchObject({ key: "wiki_page:w1", label: "Runbook", link: { kind: "wiki", pageId: "w1" } });
+    expect(buildRow({ kind: "wiki_page", id: "gone" }, d, { labels })).toBeNull();
+    expect(buildRow({ kind: "wiki_page", id: "w1" }, data({ wiki: undefined }), { labels })).toBeNull();
+  });
+
+  it("opens a ticket inbox at its Unassigned folder, numbered from its own counts", () => {
+    const withCounts = { ...counts, mailboxes: { m1: { unassigned: 3, mine: 1, open: 2, pending: 0 } } } as TicketCounts;
+    const model = buildRow({ kind: "mailbox", id: "m1" }, data({ counts: withCounts }), { labels });
+    expect(model).toMatchObject({ key: "mailbox:m1", label: "Support", link: { kind: "inbox", folder: "unassigned", mailbox: "m1" } });
+    expect(rowNumber(model!, defaultSidebarPrefs()).n).toBe(3);
+    // An inbox without open tickets is left out of the counts: zero, not unknown.
+    expect(rowNumber(buildRow({ kind: "mailbox", id: "m1" }, data({ counts: { ...counts, mailboxes: {} } }), { labels })!, defaultSidebarPrefs()).n).toBe(0);
+    expect(buildRow({ kind: "mailbox", id: "gone" }, data(), { labels })).toBeNull();
+    expect(rowHref({ kind: "inbox", folder: "open", mailbox: "m1" }, "w1")).toBe("/inbox/open?mailbox=m1&ws=w1");
+    expect(rowHref({ kind: "team", teamId: "t1", tab: "pending" })).toBe("/teams/t1?tab=pending");
+  });
+
+  it("shows a teamspace while its team is in sight and has pages", () => {
+    const page = { id: "p2", parent_id: null, title: "Billing runbook", icon: "", position: 0, version: 1, updated_at: "", created_by_id: null, tags: [], team_id: "t1" };
+    const d = data({ wiki: [page] });
+    expect(buildRow({ kind: "wiki_space", id: "t1" }, d, { labels })).toMatchObject({ key: "wiki_space:t1", label: "Team t1" });
+    // A teamspace without pages, a team out of sight, and a team that is gone show nothing.
+    expect(buildRow({ kind: "wiki_space", id: "t1" }, data(), { labels })).toBeNull();
+    expect(buildRow({ kind: "wiki_space", id: "secret" }, data({ wiki: [{ ...page, team_id: "secret" }], myTeams: new Set() }), { labels })).toBeNull();
+    expect(buildRow({ kind: "wiki_space", id: "gone" }, d, { labels })).toBeNull();
   });
 
   it("names and numbers each kind from the workspace's data", () => {

@@ -80,7 +80,20 @@ type Audience struct {
 	Everyone bool        `json:"everyone"`
 	TeamIDs  []uuid.UUID `json:"team_ids"`
 	UserIDs  []uuid.UUID `json:"user_ids"`
+	// Invited is, on an account, people invited to the workspace who get it when they
+	// accept (GH#447): pending invitations by id; the email is filled in on the way out.
+	Invited []Invitee `json:"invited,omitempty"`
 }
+
+// Invitee is a pending invitation an account is shared with. Email is filled in on the
+// way out and ignored on the way in.
+type Invitee struct {
+	ID    uuid.UUID `json:"id"`
+	Email string    `json:"email,omitempty"`
+}
+
+// maxInvited bounds the pending invitations one account is shared with.
+const maxInvited = 50
 
 // Empty reports an audience of nobody.
 func (a Audience) Empty() bool { return !a.Everyone && len(a.TeamIDs) == 0 && len(a.UserIDs) == 0 }
@@ -248,6 +261,23 @@ type MailThread struct {
 	// Category is its category key (contracts/collab.md "Categories"); null when the
 	// account's inbox is not split.
 	Category *string `json:"category"`
+	// AIDraft is the draft an AI client saved last and no person has taken over, sent or
+	// discarded, so a list can show it and act on it in place (GH#430); null otherwise.
+	AIDraft *ThreadAIDraft `json:"ai_draft"`
+}
+
+// ThreadAIDraft is a conversation's waiting AI draft, as a list row shows it.
+type ThreadAIDraft struct {
+	// DraftID is the id the /v1/collab/drafts routes take.
+	DraftID uuid.UUID `json:"draft_id"`
+	// DraftedBy is the AI client's name ("AI draft by <name>").
+	DraftedBy string `json:"drafted_by"`
+	// Snippet is the draft's first lines.
+	Snippet string `json:"snippet"`
+	// To is who it goes to.
+	To []Address `json:"to"`
+	// RecordID is its AI draft record, which feedback on it names; null when none was kept.
+	RecordID *uuid.UUID `json:"record_id"`
 }
 
 type MailMessage struct {
@@ -334,6 +364,15 @@ type MailThreadDetail struct {
 	// Ticket is the ticket the conversation answered or was answered from, when the caller
 	// sees it ("Answering tickets").
 	Ticket *ThreadTicket `json:"ticket"`
+	// UnusedAIDrafts are the conversation's AI drafts that were discarded, replaced or
+	// abandoned and are gone, so feedback on them stays reachable ("AI draft outcomes").
+	UnusedAIDrafts []UnusedAIDraft `json:"unused_ai_drafts"`
+}
+
+// UnusedAIDraft is an AI draft a person did not use, with when that was known.
+type UnusedAIDraft struct {
+	AIDraftRef
+	OutcomeAt time.Time `json:"outcome_at"`
 }
 
 // ThreadTicket names a conversation's ticket.
@@ -373,7 +412,7 @@ type SidebarPin struct {
 }
 
 type SidebarPrefs struct {
-	Order            []string     `json:"order" maxItems:"20"`
+	Order            []string     `json:"order" maxItems:"80"`
 	Hidden           []string     `json:"hidden" maxItems:"500"`
 	Pinned           []SidebarPin `json:"pinned" maxItems:"30"`
 	ExpandedAccounts []string     `json:"expanded_accounts" maxItems:"200"`
@@ -388,4 +427,41 @@ type SidebarPrefs struct {
 	// AutoPins are the pins the sidebar added once by itself ("box:inbox": All inboxes, when
 	// the member first sees two accounts), so one unpinned is not added again.
 	AutoPins []string `json:"auto_pins" required:"false" maxItems:"20" doc:"Left out: the saved value stays"`
+	// Sections are the member's own sections, placed in Order as "custom:<id>": rows of
+	// anything the workspace offers, like a Space's (contracts/spaces.md), all of this workspace.
+	Sections []SidebarSection `json:"sections" required:"false" maxItems:"20" doc:"Left out: the saved value stays"`
+	// RowOrder is the member's order of the rows inside built-in sections, by section id
+	// ("inbox", "mail", "teams", "workspace"): row keys as in Hidden ("ticket_folder:mine",
+	// "team:<id>", "account:<id>", "page:knowledge"). Rows it does not name follow in their usual order.
+	RowOrder map[string][]string `json:"row_order" required:"false" doc:"Left out: the saved value stays"`
+	// Names are the member's own labels for sections and rows, by key: "section:<id>" for a
+	// built-in section, a row key as in Hidden for a row. Nobody else sees them, and the team,
+	// view or page keeps its own name.
+	Names map[string]string `json:"names" required:"false" doc:"Left out: the saved value stays"`
+	// Icons are the member's own emoji for sections and rows, keyed like Names.
+	Icons map[string]string `json:"icons" required:"false" doc:"Left out: the saved value stays"`
+	// ShowWaitingChats shows the red row on top of the ticket inbox while visitors wait in live
+	// chat with nobody on it. Off until the member turns it on; the ticket lists keep their own notice.
+	ShowWaitingChats *bool `json:"show_waiting_chats" required:"false" doc:"Default false. Left out: the saved value stays"`
+}
+
+// SidebarSection is one of the member's own sidebar sections.
+type SidebarSection struct {
+	ID        string `json:"id" maxLength:"40"`
+	Title     string `json:"title" maxLength:"200"`
+	Collapsed bool   `json:"collapsed"`
+	// Icon is one emoji beside the title, or "".
+	Icon  string        `json:"icon,omitempty" maxLength:"64"`
+	Items []SidebarItem `json:"items" maxItems:"60"`
+}
+
+// SidebarItem is one row of a member's own section: a Space row without its workspace,
+// which is the sidebar's.
+type SidebarItem struct {
+	Kind  string `json:"kind" enum:"ticket_folder,team,view,box,account,folder,page,wiki_page,wiki_space,mailbox"`
+	ID    string `json:"id" maxLength:"100"`
+	Name  string `json:"name,omitempty" maxLength:"300"`
+	Badge string `json:"badge,omitempty" enum:"unread,total,count,awaiting,urgent,overdue,open,none"`
+	// Icon is one emoji in place of the row's own icon, or "".
+	Icon string `json:"icon,omitempty" maxLength:"64"`
 }

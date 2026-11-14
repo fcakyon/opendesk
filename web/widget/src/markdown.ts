@@ -5,6 +5,7 @@
 // inject markup.
 
 import { h, type ComponentChildren, type VNode } from "preact";
+import { shortLabel } from "./links";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Node = VNode<any>;
@@ -59,7 +60,7 @@ export function inline(text: string): ComponentChildren[] {
     else if (m[8]) {
       if (m[9]) out.push(m[9]);
       out.push(h("em", { key: k++ }, inline(m[10])));
-    } else if (m[11]) out.push(link(m[11], m[11], k++));
+    } else if (m[11]) out.push(link(m[11], shortLabel(m[11]), k++));
     last = m.index + m[0].length;
   }
   if (last < text.length) out.push(text.slice(last));

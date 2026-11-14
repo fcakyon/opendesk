@@ -30,6 +30,8 @@ regexes = [
   '''mgn_live_\.\.\.''',
   # A column of the agent work report sorted by its field name (web/src/components/reports/AgentWork.tsx).
   '''handle_p50_minutes''',
+  # Keyboard shortcuts written as key combos (web/src/lib/shortcuts.ts: keys: "mod+shift+arrowup").
+  '''^(mod|ctrl|alt|shift)(\+(mod|ctrl|alt|shift))*\+[a-z0-9]+$''',
 ]
 paths = [
   '''internal/auth/passwords/breached\.txt''',

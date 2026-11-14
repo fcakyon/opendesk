@@ -12,9 +12,12 @@ async function call(method: string, path: string, body?: unknown) {
 describe("workspace products", () => {
   installMock();
 
-  it("refuses to turn both products off", async () => {
-    const r = await call("PATCH", "/v1/workspace", { settings: { tickets_enabled: false, mail_enabled: false } });
+  it("refuses to turn every product off, and keeps a workspace on Pages alone", async () => {
+    const r = await call("PATCH", "/v1/workspace", { settings: { tickets_enabled: false, mail_enabled: false, pages_enabled: false } });
     expect(r.status).toBe(422);
+    expect(r.body.code).toBe("at_least_one_product_required");
+    expect((await call("PATCH", "/v1/workspace", { settings: { tickets_enabled: false, mail_enabled: false } })).status).toBe(200);
+    await call("PATCH", "/v1/workspace", { settings: { tickets_enabled: true, mail_enabled: true } });
   });
 
   it("turns Mail off with the Mail switch", async () => {

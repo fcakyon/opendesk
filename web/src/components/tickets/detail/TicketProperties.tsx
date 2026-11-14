@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, ChevronDown, Clock, CornerDownRight, Hash, Import as ImportIcon, Inbox, Lock, Mail, Pencil, Route, Star, Users } from "lucide-react";
+import { ArrowUpRight, ChevronDown, Clock, CornerDownRight, Hash, Import as ImportIcon, Inbox, Lock, Mail, Pencil, Route, Star, UserRound, Users } from "lucide-react";
 import { forwardRef, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { Priority, Severity, Team, Ticket, TicketStatus } from "@/lib/api/types";
@@ -7,12 +7,13 @@ import { q, qk } from "@/lib/queries";
 import { fullDate, minutes, relLong, shortDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { tone } from "@/lib/tones";
-import { useRole, atLeast } from "@/lib/session";
+import { useRole, atLeast, useSession } from "@/lib/session";
 import { Picker, type PickerItem } from "@/components/ui/picker";
 import { Avatar } from "@/components/ui/avatar";
 import { TagChip } from "@/components/ui/badge";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
 import { Dialog } from "@/components/ui/dialog";
 import { TextInput } from "@/components/ui/input";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -25,6 +26,7 @@ import { LabelPicker } from "./LabelPicker";
 import { SetByOllie, useAISet, useOllieNote } from "../ollie";
 import { FieldsSection } from "./FieldsSection";
 import { TicketLinks } from "./TicketLinks";
+import { TicketWiki } from "./TicketWiki";
 import { TicketPanels } from "./TicketPanels";
 import { SideConversations } from "./SideConversations";
 import { importedFrom } from "@/components/imports/sources";
@@ -258,6 +260,32 @@ export function useAssigneeItems(team: Team | undefined): PickerItem[] {
   ];
 }
 
+/** The value of the assignee picker's "Assign to me" row. */
+const ASSIGN_ME = "__me";
+
+/**
+ * "Assign to me" on top of a ticket's assignee picker, with the i shortcut that does the same,
+ * unless the ticket is already the member's or the list doesn't offer them (a private team's
+ * ticket they are not on). Typing a name leaves it out, so Enter picks that member.
+ */
+function withAssignMe(items: PickerItem[], me: string | undefined, assigneeId: string | undefined, label: string): PickerItem[] {
+  if (!me || assigneeId === me || !items.some((i) => i.value === me)) return items;
+  return [
+    {
+      value: ASSIGN_ME,
+      label,
+      icon: (
+        <span className="flex size-4 items-center justify-center">
+          <UserRound className="text-fg-3" />
+        </span>
+      ),
+      hint: <Kbd>i</Kbd>,
+      strict: true,
+    },
+    ...items,
+  ];
+}
+
 export function useSeverityItems(): PickerItem[] {
   const { t: tr } = useTranslation("inbox");
   return [
@@ -332,8 +360,9 @@ function PropertyControls({ t, picker, onPicker, bar }: { t: Ticket; picker: Pro
   const mailbox = mailboxes?.find((m) => m.id === t.mailbox_id);
   const brand = ctx.brand(t.brand_id);
   const addresses = replyAddresses(ctx, t);
+  const me = useSession((s) => s.user?.id);
   // The ticket's team first; a private team's tickets go to its members only.
-  const assigneeItems = useAssigneeItems(team);
+  const assigneeItems = withAssignMe(useAssigneeItems(team), me, t.assignee?.id, tr("commands.assignMe"));
   const openFor = (k: Exclude<PropPicker, null>) => ({ open: picker === k, onOpenChange: (o: boolean) => onPicker(o ? k : null) });
   // The same trigger content, as a labelled row in the column or a named button in the bar.
   const trigger = (label: string, shortcut: string | undefined, opts: { placeholder?: boolean }, children: ReactNode) =>
@@ -433,7 +462,7 @@ function PropertyControls({ t, picker, onPicker, bar }: { t: Ticket; picker: Pro
           value={t.assignee?.id ?? "__none"}
           placeholder={tr("props.assignTo")}
           items={assigneeItems}
-          onSelect={(v) => patch({ assignee_id: v === "__none" ? null : v })}
+          onSelect={(v) => patch({ assignee_id: v === "__none" ? null : v === ASSIGN_ME ? me! : v })}
           trigger={trigger(
             tr("props.assignee"),
             "a",
@@ -706,6 +735,8 @@ export function TicketProperties({
       <OlliePanel t={t} />
 
       <TicketLinks ticketId={t.id} canEdit={canEdit} />
+
+      <TicketWiki ticketId={t.id} />
 
       <SideConversations ticketId={t.id} canEdit={canEdit} onStart={onSideConversation} />
 

@@ -49,6 +49,7 @@ type Mailbox = {
   last_synced_at: string | null;
   created_at: string;
   trusted_form_senders: string[];
+  keep_automatic_mail: boolean;
 };
 ```
 
@@ -108,6 +109,17 @@ curl -X PATCH https://api.opendesk.sh/v1/mailboxes/0192f0c4-... \
 ```
 
 The list replaces the stored one. A domain of a public email provider (such as `@gmail.com`) is refused; list the form's exact address instead.
+
+## Automatic mail
+
+Mail marked automatic (`Auto-Submitted`, `Precedence: bulk`) is ignored by default, so that two automatic systems never answer each other. Some help desks mark every email they send that way, a person's answer too. Turn on `keep_automatic_mail` and the mailbox takes that mail in like any other, with no auto-reply, automation reply or Ollie answer to it. Out-of-office replies, bounces and mail loops stay ignored.
+
+```sh
+curl -X PATCH https://api.opendesk.sh/v1/mailboxes/0192f0c4-... \
+  -H "Authorization: Bearer od_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "keep_automatic_mail": true }'
+```
 
 ## Create a mailbox
 

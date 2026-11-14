@@ -15,6 +15,7 @@ import type {
   Notification,
   Page,
   Procedure,
+  ReplyDraft,
   SuggestedReply,
   Team,
   Thread,
@@ -30,7 +31,7 @@ import { updateWorkspace, useSession } from "../session";
 import { cachedTicket, forgetTicket, patchTicketEverywhere, removeTicketEverywhere, teamsOf } from "../ticketCache";
 import { markHidden, unmarkHidden } from "./store";
 import { applyCollabEvent } from "../collab/cache";
-import { applyWikiEvent } from "../wiki/events";
+import { applyWikiCommentEvent, applyWikiEvent } from "../wiki/events";
 
 // Events that can tick off a setup checklist step (contracts/api.md "Onboarding").
 const onboardingResources = new Set(["mailbox", "member", "tag", "kb_article", "workspace"]);
@@ -244,6 +245,8 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
     case "ticket.updated": {
       const t = d.ticket as Ticket;
       if (!t) return;
+      // A restore (changes: deleted_at) takes the ticket out of the trash.
+      if ((d.changes as string[] | undefined)?.includes("deleted_at")) void qc.invalidateQueries({ queryKey: qk.of("tickets", "deleted") });
       unmarkHidden(t.id);
       patchTicketEverywhere(qc, t, ctx.me);
       refreshCounts(qc);
@@ -254,6 +257,7 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
       const id = d.ticket_id as string;
       removeTicketEverywhere(qc, id);
       qc.removeQueries({ queryKey: qk.ticket(id) });
+      void qc.invalidateQueries({ queryKey: qk.of("tickets", "deleted") });
       refreshCounts(qc);
       return;
     }
@@ -289,6 +293,13 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
         if (s.status === "pending") return s;
         return old && old.id !== s.id ? old : null;
       });
+      return;
+    }
+    case "reply_draft.updated": {
+      // My own reply draft changed elsewhere: a scheduled reply went out, was kept or moved.
+      const tid = d.ticket_id as string | undefined;
+      if (!tid) return;
+      qc.setQueryData<ReplyDraft | null>(qk.replyDraft(tid), (d.draft as ReplyDraft | null) ?? null);
       return;
     }
     case "ticket_draft.updated": {
@@ -473,6 +484,11 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
 
   if (resource === "wiki_page") {
     applyWikiEvent(qc, verb, d);
+    return;
+  }
+
+  if (resource === "wiki_comment") {
+    applyWikiCommentEvent(qc, d);
     return;
   }
 

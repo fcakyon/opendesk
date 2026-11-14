@@ -48,7 +48,15 @@
       "slash": "Type / and a shortcut in the composer",
       "team": "Replies are shared with your whole team"
     },
-    "variablesHint": "Variables are filled in for each ticket when the reply is inserted."
+    "variablesHint": "Variables are filled in for each ticket when the reply is inserted.",
+    "actionsTitle": "Actions when sent",
+    "actionsHint": "Applied to the ticket when a message using this reply is sent. Nothing happens if the draft is discarded.",
+    "addTags": "Add labels",
+    "removeTags": "Remove labels",
+    "tagsPlaceholder": "label-a, label-b",
+    "setTeam": "Move to team",
+    "setAssignee": "Assign to",
+    "noChange": "Don't change"
   },
   "views": {
     "reorderAria": "Reorder {{name}}. Hold Alt and press the arrow keys to move it.",
@@ -74,6 +82,9 @@
     },
     "updateFailed": "Couldn't update the view",
     "reorderFailed": "Couldn't reorder views",
+    "moveTo": "Move to section",
+    "movedTo": "{{name}} moved to the {{section}} section",
+    "movedOut": "{{name}} moved out of its section",
     "deleteFailed": "Couldn't delete the view",
     "editTitle": "Edit view",
     "nameLabel": "Name",
@@ -87,6 +98,19 @@
     "inSection": "In section {{name}}",
     "reorderSectionAria": "Reorder the {{name}} section. Hold Alt and press the arrow keys to move it with its views.",
     "sectionChars": "Section names can't contain < or >.",
+    "sectionEdit": {
+      "title": "Edit section",
+      "aria": "Edit the {{name}} section",
+      "description_one": "A new name renames the section on its view listed here, and its icon goes with it.",
+      "description_other": "A new name renames the section on its {{count}} views listed here, and its icon goes with it.",
+      "save": "Save section",
+      "saved": "Section saved",
+      "needName": "Give the section a name."
+    },
+    "sectionIcon": {
+      "hint": "Shown beside the section's name in the sidebar, for everyone with a view in it.",
+      "namePlaceholder": "Section name"
+    },
     "needName": "Give the view a name.",
     "icon": {
       "label": "Icon",
@@ -575,6 +599,22 @@
       "label": "Give follow-ups to the closed ticket’s assignee",
       "on": "The follow-up goes to whoever had the closed ticket, if they can still take tickets and, when it goes to a private team, are on that team",
       "off": "Follow-ups arrive unassigned, like any new ticket"
+    },
+    "chat": {
+      "title": "Live chats",
+      "hint": "Give each new chat to one teammate at once, so the visitor gets a person while still on the page. Emails keep the rules above.",
+      "mode": "Assign chats",
+      "modes": {
+        "none": "Chats follow the rules above, like emails",
+        "round_robin": "Each new chat goes to the next teammate who takes chats, in turn",
+        "load_balanced": "Each new chat goes to the teammate who takes chats with the fewest open tickets"
+      },
+      "skill": "Who takes chats",
+      "anyone": "Everyone in the team",
+      "skillOn": "Only teammates with the {{name}} skill, online and not away. With the answer bot on, a chat is given when the bot hands over",
+      "skillOff": "Every teammate of the chat’s team who is online and not away. Pick a skill to keep chats to those who take them",
+      "noSkills": "Every teammate of the chat’s team who is online. Add a skill under Routing skills to keep chats to those who take them",
+      "awayTip": "Teammates count as online until they change it themselves: turn on “Mark idle teammates away” below, so nobody gets a chat after leaving and chats outside working hours wait in the inbox."
     },
     "awayTitle": "Away",
     "awayHint": "Teammates who step away stop getting new tickets until they are back.",

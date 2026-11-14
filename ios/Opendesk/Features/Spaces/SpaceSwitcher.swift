@@ -291,7 +291,19 @@ struct SpaceSwitcherSheet: View {
     private func sidebarCopy(_ membership: Membership) -> Space {
         let builder = SpaceRowBuilder(env: env)
         let collab = builder.collab(membership.id) ?? membership.workspace.mailOn
-        let ids = ["favorites", "inbox", "mail", "teams", "views", "workspace"].filter { collab || ($0 != "mail" && $0 != "favorites") }
+        var ids = SidebarPrefs.builtIn
+        if membership.id == env.session.workspace?.id {
+            // The open workspace's sections in the member's order, without the hidden ones.
+            let prefs = SidebarStore.shared.prefs
+            ids = prefs.resolvedOrder { _ in false }.filter { SidebarPrefs.builtIn.contains($0) && !prefs.isHidden("section:" + $0) }
+        }
+        ids = ids.filter { id in
+            switch id {
+            case "mail": collab
+            case "pages": builder.pagesOn(membership.id)
+            default: true
+            }
+        }
         return Space(
             name: SpaceRules.uniqueName(membership.workspace.name, in: store.spaces),
             color: SpaceRules.nextColor(store.spaces),

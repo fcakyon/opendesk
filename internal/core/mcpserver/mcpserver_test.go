@@ -232,7 +232,7 @@ func TestOrigin(t *testing.T) {
 		t.Fatalf("allowed origin: %v", err)
 	}
 	defer s.Close()
-	if n := toolNames(t, s); len(n) != 2 {
+	if n := toolNames(t, s); len(n) != 3 {
 		t.Fatalf("tools: %v", n)
 	}
 }
@@ -240,7 +240,7 @@ func TestOrigin(t *testing.T) {
 func TestToolsFollowScopes(t *testing.T) {
 	e := newEnv(t)
 	got := toolNames(t, e.session(e.APIKey(e.WS, auth.ScopeTicketsRead)))
-	if !slices.Equal(got, []string{"get_ticket", "search_tickets"}) {
+	if !slices.Equal(got, []string{"get_ticket", "list_custom_fields", "search_tickets"}) {
 		t.Fatalf("tickets:read tools: %v", got)
 	}
 	got = toolNames(t, e.session(e.APIKey(e.WS, auth.ScopeKBRead, auth.ScopeContactsRead)))
@@ -265,7 +265,7 @@ func TestToolsFollowScopes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"search_tickets", "get_ticket", "reply_to_ticket", "draft_reply", "add_note", "update_ticket", "create_ticket",
+	want := []string{"search_tickets", "get_ticket", "list_custom_fields", "reply_to_ticket", "draft_reply", "add_note", "update_ticket", "create_ticket",
 		"search_contacts", "get_contact", "search_knowledge", "create_kb_draft",
 		"search_wiki", "get_wiki_page", "create_wiki_page", "update_wiki_page", "get_report",
 		"list_collab_conversations", "get_collab_conversation", "draft_collab_reply", "claim_collab_conversation", "release_collab_conversation",
@@ -565,6 +565,11 @@ func TestWikiTools(t *testing.T) {
 	if len(got.Subpages) != 1 || got.Subpages[0].ID != child.ID {
 		t.Fatalf("get_wiki_page: %+v", got)
 	}
+	// The text is Markdown, as update_wiki_page takes it.
+	call(t, s, "get_wiki_page", map[string]any{"page": child.ID}, &got)
+	if got.Text != "Refunds over **100 euros** go to the team lead." {
+		t.Fatalf("get_wiki_page text: %q", got.Text)
+	}
 	call(t, s, "update_wiki_page", map[string]any{"page": child.ID, "body": "Refunds over 50 euros go to the lead.", "version": 1}, &got)
 	if got.Version != 2 {
 		t.Fatalf("update_wiki_page: %+v", got)
@@ -595,5 +600,110 @@ func TestWikiTools(t *testing.T) {
 	os := e.session(e.APIKey(other, auth.ScopeWikiRead))
 	if res := call(t, os, "get_wiki_page", map[string]any{"page": child.ID}, nil); !res.IsError {
 		t.Fatalf("other workspace read the page: %s", text(res))
+	}
+}
+
+func TestCustomFieldTools(t *testing.T) {
+	e := newEnv(t)
+	tk := e.ticket("Order missing", "My order never arrived.")
+	e.Exec(`INSERT INTO custom_fields (workspace_id, entity, key, name, type, options, required_on_solve, position) VALUES
+		($1, 'ticket', 'customer', 'Customer', 'text', '[]', false, 0),
+		($1, 'ticket', 'plan', 'Plan', 'select', '[{"id":"pro","label":"Pro","color":"blue"},{"id":"free","label":"Free","color":"gray"}]', true, 1),
+		($1, 'contact', 'tier', 'Tier', 'text', '[]', false, 0)`, e.WS.ID)
+	e.Exec(`INSERT INTO custom_fields (workspace_id, entity, key, name, type, options, position, archived)
+		VALUES ($1, 'ticket', 'old', 'Old', 'text', '[]', 2, true)`, e.WS.ID)
+
+	// tickets:read lists the definitions, archived ones only when asked.
+	ro := e.session(e.APIKey(e.WS, auth.ScopeTicketsRead))
+	var defs struct {
+		Fields []struct {
+			Key             string `json:"key"`
+			Type            string `json:"type"`
+			RequiredOnSolve bool   `json:"required_on_solve"`
+			Options         []struct {
+				ID string `json:"id"`
+			} `json:"options"`
+		} `json:"fields"`
+		Count int `json:"count"`
+	}
+	keys := func() []string {
+		var k []string
+		for _, f := range defs.Fields {
+			k = append(k, f.Key)
+		}
+		return k
+	}
+	call(t, ro, "list_custom_fields", map[string]any{"entity": "ticket"}, &defs)
+	if !slices.Equal(keys(), []string{"customer", "plan"}) || defs.Count != 2 {
+		t.Fatalf("ticket fields: %+v", defs)
+	}
+	if p := defs.Fields[1]; p.Type != "select" || !p.RequiredOnSolve || len(p.Options) != 2 || p.Options[0].ID != "pro" {
+		t.Fatalf("plan: %+v", p)
+	}
+	call(t, ro, "list_custom_fields", map[string]any{"entity": "ticket", "include_archived": true}, &defs)
+	if !slices.Equal(keys(), []string{"customer", "plan", "old"}) {
+		t.Fatalf("with archived: %v", keys())
+	}
+	call(t, ro, "list_custom_fields", nil, &defs)
+	if !slices.Equal(keys(), []string{"customer", "plan", "tier"}) {
+		t.Fatalf("all entities: %v", keys())
+	}
+	if res := call(t, ro, "list_custom_fields", map[string]any{"entity": "order"}, nil); !res.IsError {
+		t.Fatal("unknown entity accepted")
+	}
+
+	rw := e.session(e.APIKey(e.WS, auth.ScopeTicketsRead, auth.ScopeTicketsWrite))
+	type written struct {
+		ID     string         `json:"id"`
+		Fields map[string]any `json:"fields"`
+	}
+	stored := func(id string) map[string]any {
+		var raw []byte
+		e.Scalar(`SELECT fields FROM tickets WHERE id = $1 AND workspace_id = $2`, &raw, id, e.WS.ID)
+		var m map[string]any
+		if err := json.Unmarshal(raw, &m); err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+
+	// Created with values, which the result carries.
+	var created written
+	call(t, rw, "create_ticket", map[string]any{"email": "ana@example.com", "subject": "Upgrade",
+		"fields": map[string]any{"customer": "Acme", "plan": "pro"}}, &created)
+	if created.Fields["customer"] != "Acme" || created.Fields["plan"] != "pro" {
+		t.Fatalf("create_ticket fields: %+v", created)
+	}
+	if f := stored(created.ID); f["customer"] != "Acme" || f["plan"] != "pro" {
+		t.Fatalf("stored on create: %v", f)
+	}
+
+	// Fields alone are a change; they merge, and null clears one.
+	var upd written
+	call(t, rw, "update_ticket", map[string]any{"ticket": tk.ID.String(), "fields": map[string]any{"customer": "Globex"}}, &upd)
+	call(t, rw, "update_ticket", map[string]any{"ticket": tk.ID.String(), "fields": map[string]any{"plan": "free"}}, &upd)
+	if f := stored(tk.ID.String()); f["customer"] != "Globex" || f["plan"] != "free" || upd.Fields["customer"] != "Globex" {
+		t.Fatalf("after merge: %v, result %+v", f, upd)
+	}
+	call(t, rw, "update_ticket", map[string]any{"ticket": tk.ID.String(), "fields": map[string]any{"customer": nil}}, &upd)
+	if f := stored(tk.ID.String()); f["customer"] != nil || f["plan"] != "free" {
+		t.Fatalf("after clear: %v", f)
+	}
+
+	// The API validates: a value that is not an option, or an unknown key, is refused with its answer.
+	res := call(t, rw, "update_ticket", map[string]any{"ticket": tk.ID.String(), "fields": map[string]any{"plan": "gold"}}, nil)
+	if !res.IsError || !strings.Contains(text(res), "Plan") {
+		t.Fatalf("bad option: %s", text(res))
+	}
+	if res := call(t, rw, "create_ticket", map[string]any{"email": "bo@example.com", "subject": "X", "fields": map[string]any{"nope": "1"}}, nil); !res.IsError {
+		t.Fatalf("unknown key: %s", text(res))
+	}
+	if f := stored(tk.ID.String()); f["plan"] != "free" {
+		t.Fatalf("refused change stored: %v", f)
+	}
+	// Empty fields are no change.
+	res = call(t, rw, "update_ticket", map[string]any{"ticket": tk.ID.String(), "fields": map[string]any{}}, nil)
+	if !res.IsError || !strings.Contains(text(res), "nothing to change") {
+		t.Fatalf("empty fields: %s", text(res))
 	}
 }

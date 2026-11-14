@@ -353,7 +353,8 @@ func (s *service) sendGmail(ctx context.Context, m *mailboxRow, raw []byte, thre
 		ThreadID string `json:"threadId"`
 	}
 	// A send grant cannot read the sent message back; replies then thread through our
-	// own Message-ID, the reply address tag and the [#n] subject.
+	// own Message-ID, References and, on an email with no References, the [#n] subject
+	// (subjectTagNeeded).
 	if json.Unmarshal(body, &sent) != nil || sent.ID == "" || m.sendOnly() {
 		return "", nil, nil
 	}
@@ -394,8 +395,9 @@ func (s *service) gmailStampedID(ctx context.Context, m *mailboxRow, id string) 
 }
 
 // sendGraph sends through Microsoft Graph POST /me/sendMail with a MIME body. Exchange
-// files it in Sent Items and stamps its own Message-ID; replies still thread through
-// References and the [#n] subject tag.
+// files it in Sent Items and stamps its own Message-ID, which it does not return; replies
+// thread through References, and an email with none keeps the [#n] subject tag
+// (subjectTagNeeded).
 func (s *service) sendGraph(ctx context.Context, m *mailboxRow, raw []byte) error {
 	encoded := base64.StdEncoding.EncodeToString(raw)
 	if len(encoded) > graphMaxRequest {

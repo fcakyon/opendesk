@@ -294,6 +294,8 @@ function WidgetEditor({ widget, brand, back }: { widget: Widget; brand: Brand | 
   user_hash: "<hmac from your server>",
   email: "ada@example.com",
   name: "Ada Lovelace",
+  company: { id: "acct-9" },
+  fields: { widget_plan: "pro" },
 });`;
 
   const text = (k: TextKey, placeholder: string, opts: { area?: boolean; className?: string } = {}) => {

@@ -500,6 +500,45 @@ extension DemoBackend {
         return nil
     }
 
+    /// `POST /v1/collab/accounts/{id}/use-for-tickets`: a mailbox that reads the account's inbox
+    /// from now on, with its connection; the account leaves Mail unless kept. The member who
+    /// connected it alone may: anyone else's is not found.
+    private func channelUseForTickets(_ index: Int, _ call: Call, in ws: inout DemoWorkspace) throws -> JSONValue {
+        let account = ws.mail.accounts[index]
+        guard account.owner?.id == me.id else { throw notFound("account") }
+        let email = account.email.lowercased()
+        if ws.settings.channels.mailboxes.contains(where: { $0["email"]?.string == email }) {
+            throw Failure(status: 409, code: "email_taken", detail: "That address already belongs to a mailbox.")
+        }
+        let name = channelName(call)
+        let local = email.split(separator: "@").first.map { String($0).capitalized } ?? "Inbox"
+        let own = account.name.isEmpty || account.name.contains("@") ? local : account.name
+        let imap = account.provider == .imap
+        var config: DemoChannelObject = ["sync_start": .string("new")]
+        if !imap {
+            config["oauth_grant"] = .string("api")
+            config["oauth_client"] = .string("collab")
+        }
+        let box = DemoChannelSettings.mailboxForCreate(
+            id: made(), name: name.isEmpty ? own : name, email: email, display: "",
+            team: call.string("team_id"), brand: call.string("brand_id") ?? ws.settings.channels.brands.first { $0["is_default"]?.bool == true }?["id"]?.string,
+            inbound: account.provider.rawValue, outbound: imap ? "smtp" : account.provider.rawValue, config: config, created: DemoSeed.stamp(now())
+        )
+        ws.settings.channels.mailboxes.append(box)
+        let id = box["id"]?.string ?? ""
+        publish("mailbox.created", ["mailbox": .object(["id": .string(id)])], in: &ws)
+        let keep = call.body["keep_account"]?.bool ?? false
+        if !keep {
+            ws.mail.accounts.remove(at: index)
+            ws.mail.folders.removeAll { $0.accountID == account.id }
+            ws.mail.threads.removeAll { $0.accountID == account.id }
+            ws.settings.channels.accountExtras[account.id] = nil
+            ws.settings.channels.senderRules[account.id] = nil
+            publish("collab.changed", ["account_id": .string(account.id), "thread_ids": .array([]), "folders": .bool(true)], in: &ws)
+        }
+        return .object(["mailbox_id": .string(id), "account_removed": .bool(!keep)])
+    }
+
     private func channelCreateMailbox(_ call: Call, in ws: inout DemoWorkspace) throws -> DemoChannelObject {
         let email = channelName(call, "email").lowercased()
         guard email.contains("@"), email.contains(".") else {
@@ -1213,6 +1252,10 @@ extension DemoBackend {
         if call.match("GET", "collab/accounts/*/category-rules") != nil {
             let rules = ws.settings.channels.senderRules[id] ?? []
             return .some(encode(JSONValue.object(["rules": .array(rules.map(JSONValue.object))])))
+        }
+        if call.match("POST", "collab/accounts/*/use-for-tickets") != nil {
+            try channelAdmin(ws)
+            return .some(encode(try channelUseForTickets(index, call, in: &ws)))
         }
         // Only the account's settings are this group's; folders, sync and the rest stay the Mail area's.
         let own = call.path.count == 3 ? ["PATCH", "DELETE"].contains(call.method) : ["categories", "category-rules", "history", "signature", "display-name"].contains(call.path[3])

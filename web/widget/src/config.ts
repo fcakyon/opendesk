@@ -160,7 +160,13 @@ export const RADII: Record<WidgetRadius, { panel: number; bubble: number; launch
 export const DEFAULT_Z_INDEX = 2147483000;
 const MAX_Z_INDEX = 2147483647;
 
-/** CSS custom properties on the widget host for a resolved config. */
+/**
+ * CSS custom properties on the widget host for a resolved config. Each of the offsets, the
+ * stacking order and the colour reads the host page's own variable first, so a site restyles
+ * the widget without !important or media-query tricks (documented in the docs'
+ * "Customize the widget"): --opendesk-offset-x, --opendesk-offset-y, --opendesk-z-index,
+ * --opendesk-brand and --opendesk-brand-text.
+ */
 export function hostVars(c: WidgetConfig): Record<string, string> {
   const r = RADII[c.radius ?? "soft"];
   const vars: Record<string, string> = {
@@ -171,22 +177,24 @@ export function hostVars(c: WidgetConfig): Record<string, string> {
     "--r-card": `${r.card}px`,
     "--r-bar": `${r.bar}px`,
     "--r-av": r.av,
-    "--ox": `${c.offset_x ?? 20}px`,
-    "--oy": `${c.offset_y ?? 20}px`,
-    "--oz": String(c.z_index || DEFAULT_Z_INDEX),
+    "--ox": `var(--opendesk-offset-x, ${c.offset_x ?? 20}px)`,
+    "--oy": `var(--opendesk-offset-y, ${c.offset_y ?? 20}px)`,
+    "--oz": `var(--opendesk-z-index, ${c.z_index || DEFAULT_Z_INDEX})`,
   };
   if (isHex(c.brand_color)) {
     const hex = c.brand_color.startsWith("#") ? c.brand_color : `#${c.brand_color}`;
-    vars["--brand"] = hex;
-    vars["--brand-fg"] = contrastText(hex);
+    vars["--brand"] = `var(--opendesk-brand, ${hex})`;
+    vars["--brand-fg"] = `var(--opendesk-brand-text, ${contrastText(hex)})`;
+  } else {
+    vars["--brand"] = "var(--opendesk-brand)";
+    vars["--brand-fg"] = "var(--opendesk-brand-text)";
   }
   return vars;
 }
 
-/** Write `hostVars` onto an element, clearing the brand colour when the config has none. */
+/** Write `hostVars` onto an element. */
 export function applyHostVars(el: HTMLElement, c: WidgetConfig) {
   const vars = hostVars(c);
-  for (const k of ["--brand", "--brand-fg"]) if (!(k in vars)) el.style.removeProperty(k);
   for (const [k, v] of Object.entries(vars)) el.style.setProperty(k, v);
 }
 

@@ -36,6 +36,14 @@ describe("groupViews", () => {
     expect(entries[1]).toMatchObject({ kind: "view", view: { name: "z" } });
   });
 
+  it("gives a section the icon its views carry, none without one", () => {
+    const star = { kind: "emoji" as const, value: "⭐", color: null };
+    const entries = groupViews([view("a", 0, "After sales"), { ...view("b", 1, "after sales"), section_icon: star }, view("c", 2, "Other")]);
+    expect(entries[0]).toMatchObject({ kind: "section", name: "After sales", icon: star });
+    expect(entries[1]).toMatchObject({ kind: "section", name: "Other", icon: null });
+    expect(findSection(entries.flatMap((e) => (e.kind === "section" ? e.views : [])), "after sales")?.icon).toEqual(star);
+  });
+
   it("keeps the order views came in when positions tie", () => {
     expect(names(orderViews([view("b", 0, "S"), view("a", 0), view("c", 0, "S")]))).toEqual(["b", "c", "a"]);
   });

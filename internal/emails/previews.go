@@ -31,6 +31,7 @@ func Previews(s Site, now time.Time) []Preview {
 	}
 	t1095, t1102, t1110, t1121 := uuid.MustParse("0192f0c4-0000-7000-8000-000000001095"), uuid.MustParse("0192f0c4-0000-7000-8000-000000001102"),
 		uuid.MustParse("0192f0c4-0000-7000-8000-000000001110"), uuid.MustParse("0192f0c4-0000-7000-8000-000000001121")
+	wikiPage, wikiThread := uuid.MustParse("0192f0c4-0000-7000-8000-00000000d0c5"), uuid.MustParse("0192f0c4-0000-7000-8000-00000000c0aa")
 	maya := map[string]any{"name": "Maya Chen"}
 	dana := map[string]any{"name": "Dana Lee"}
 	ago := func(m int) time.Time { return now.Add(-time.Duration(m) * time.Minute) }
@@ -86,6 +87,8 @@ func Previews(s Site, now time.Time) []Preview {
 		{Name: "notify-mentioned", Title: "Notification: mentioned", Mail: Notifications(s, batch("instant", []Note{mentioned}, 0))},
 		{Name: "notify-customer-replied", Title: "Notification: customer replied", Mail: Notifications(s, batch("instant", []Note{replied}, 0))},
 		{Name: "notify-sla-breached", Title: "Notification: SLA breached", Mail: Notifications(s, batch("instant", []Note{sla}, 0))},
+		{Name: "notify-scheduled-reply-failed", Title: "Notification: scheduled reply not sent", Mail: Notifications(s, batch("instant", []Note{
+			ticket("scheduled_reply_failed", t1110, 1110, "Refund for a double charge", map[string]any{"reason": "cannot_send_from"}, ago(2))}, 0))},
 		{Name: "notify-ai-handoff", Title: "Notification: handoff to a person", Mail: Notifications(s, batch("instant", []Note{handoff}, 0))},
 		{Name: "notify-team-joined", Title: "Notification: team joined", Mail: Notifications(s, batch("instant", []Note{plain("team_joined", map[string]any{
 			"team": map[string]any{"id": team.String(), "name": "Billing", "private": true}, "user": map[string]any{"name": "Alex Kim"}})}, 0))},
@@ -100,6 +103,15 @@ func Previews(s Site, now time.Time) []Preview {
 		{Name: "notify-import-needs-credentials", Title: "Notification: import needs new credentials", Mail: Notifications(s, batch("instant", []Note{plain("import_finished", map[string]any{
 			"import_id": "0192f0c4-0000-7000-8000-00000000c0de", "source": "helpscout", "source_name": "Help Scout", "account": "Acme", "status": "needs_credentials",
 			"tickets": 61, "updated": 0, "articles": 0, "failed": 0, "error": "Help Scout refused the credentials. Enter new ones to go on where it stopped."})}, 0))},
+		{Name: "notify-wiki-mention", Title: "Notification: mentioned on a wiki page", Mail: Notifications(s, batch("instant", []Note{plain("wiki_mention", map[string]any{
+			"page_id": wikiPage.String(), "page_title": "Refund policy", "actor": maya, "thread_id": wikiThread.String(), "comment_id": wikiThread.String(),
+			"preview": "@Alex does the 30-day window still hold for annual plans?"})}, 0))},
+		{Name: "notify-wiki-comment", Title: "Notification: wiki comment", Mail: Notifications(s, batch("instant", []Note{plain("wiki_comment", map[string]any{
+			"page_id": wikiPage.String(), "page_title": "Refund policy", "actor": dana, "thread_id": wikiThread.String(), "comment_id": wikiThread.String(),
+			"preview": "Updated the table with the new regional rules."})}, 0))},
+		{Name: "notify-wiki-reminder", Title: "Notification: wiki reminder", Mail: Notifications(s, batch("instant", []Note{plain("wiki_reminder", map[string]any{
+			"page_id": wikiPage.String(), "page_title": "Refund policy", "reminder_id": wikiThread.String(), "remind_at": now.Format(time.RFC3339),
+			"label": "Review the policy before the quarter ends"})}, 0))},
 		{Name: "notify-batch", Title: "Several notifications at once", Mail: Notifications(s, batch("instant", []Note{replied, assigned, mentioned, sla}, 0))},
 		{Name: "notify-after-cooldown", Title: "Five that waited out a cooldown", Mail: Notifications(s, batch("instant", cooldown, 0))},
 		{Name: "notify-bulk-assigned", Title: "Several tickets assigned at once", Mail: Notifications(s, batch("instant", bulk, 0))},

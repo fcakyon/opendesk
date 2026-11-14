@@ -33,9 +33,11 @@ func TestRegisterAll(t *testing.T) {
 		"/v1/messages/{id}/original":       {"get"},
 		"/v1/contacts":                     {"get", "post"},
 		"/v1/contacts/{id}":                {"get", "patch", "delete"},
+		"/v1/contacts/bulk":                {"post"},
 		"/v1/contacts/{id}/tickets":        {"get"},
 		"/v1/companies":                    {"get", "post"},
 		"/v1/companies/{id}":               {"get", "patch", "delete"},
+		"/v1/companies/bulk":               {"post"},
 		"/v1/tags":                         {"get", "post"},
 		"/v1/tags/{id}":                    {"patch", "delete"},
 		"/v1/saved-replies":                {"get", "post"},
@@ -103,9 +105,9 @@ func TestRegisterAll(t *testing.T) {
 
 	w := river.NewWorkers()
 	helpdesk.RegisterWorkers(e.D, w)
-	// Customer session cleanup, help-domain checks and import sweeps run everywhere;
-	// the Cloudflare reconcile runs only with Cloudflare for SaaS.
-	if n := len(helpdesk.Periodic(e.D)); n != 8 {
+	// Customer session cleanup, help-domain checks, import sweeps, the wiki's trash purge
+	// and its reminders run everywhere; the Cloudflare reconcile runs only with Cloudflare for SaaS.
+	if n := len(helpdesk.Periodic(e.D)); n != 10 {
 		t.Fatalf("periodic jobs %d", n)
 	}
 }

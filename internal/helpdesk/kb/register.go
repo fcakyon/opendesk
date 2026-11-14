@@ -14,6 +14,7 @@ import (
 func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	registerCollections(d, api)
 	registerArticles(d, api)
+	registerFromWiki(d, api)
 	registerChangelog(d, api)
 	registerPublic(d, api)
 }

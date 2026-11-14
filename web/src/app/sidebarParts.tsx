@@ -5,11 +5,16 @@
 import { useTranslation } from "react-i18next";
 import { motion, useReducedMotion } from "motion/react";
 import { ChevronDown } from "lucide-react";
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AnimatedNumber } from "@/components/motion";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
 import { tone, toneFor } from "@/lib/tones";
+import { useSidebarPrefs } from "@/lib/collab/hooks";
+import { iconOf, nameOf, SECTION_IDS } from "@/lib/collab/sidebarPrefs";
+import { sidebarEdit, useSidebarEdit, type RowAction } from "@/lib/collab/sidebarEdit";
+import type { SidebarSectionId } from "@/lib/api/types";
+import type { EditSource } from "@/lib/collab/sidebarEditModel";
 
 // The two row shapes share one element so the icon never moves while the label
 // fades and the column narrows.
@@ -51,6 +56,53 @@ export const withPill = (content: ReactNode) =>
     );
   };
 
+// ─── The row that opened the page ───────────────────────────────────────────
+//
+// The same thing can be a row in several places of the sidebar: a view under Views and in
+// Favorites, a page in the Pages tree and in a section of the member's own. The row clicked
+// lights up alone, like a tab; opened from anywhere else, every row of it lights up. A row
+// names what it opens (`target`: "view:<id>", "wiki_page:<id>") and where it sits (`place`:
+// "views", "favorites", "section:<id>", "tree").
+
+export type Opener = { target: string; place: string };
+
+let opener: Opener | null = null;
+const openerListeners = new Set<() => void>();
+
+/** Records the row clicked: the next render lights it, and only it, for that target. */
+export function markOpener(target: string, place: string) {
+  opener = { target, place };
+  openerListeners.forEach((l) => l());
+}
+
+export function useOpener(): Opener | null {
+  return useSyncExternalStore(
+    (l) => {
+      openerListeners.add(l);
+      return () => openerListeners.delete(l);
+    },
+    () => opener,
+  );
+}
+
+/** Whether a row gives way: another row of the same target was the one clicked. */
+export function givesWay(who: Opener | null, target: string, place: string): boolean {
+  return !!who && who.target === target && who.place !== place;
+}
+
+/**
+ * The parts of a sidebar Link that lights up by its route like a tab: marks itself on click,
+ * and while it gives way to the row clicked it neither bolds nor draws the pill.
+ */
+export function litLink(who: Opener | null, target: string, place: string, content: ReactNode) {
+  const away = givesWay(who, target, place);
+  return {
+    onClick: () => markOpener(target, place),
+    activeProps: (away ? {} : { className: rowActive, "data-status": "active" }) as Record<string, string>,
+    children: away ? content : withPill(content),
+  };
+}
+
 export function NavTip({ rail, label, children }: { rail: boolean; label: string; children: React.ReactElement }) {
   if (!rail) return children;
   return (
@@ -87,19 +139,42 @@ export function Section({
   first,
   folded: foldedProp,
   onFold,
+  icon,
+  edit: editProp,
+  menuTop,
+  dragKey: dragKeyProp,
   children,
 }: {
   id: string;
   label: string;
+  /** The emoji the person gave the section, before its title. */
+  icon?: string;
   rail: boolean;
   action?: ReactNode;
   first?: boolean;
   /** Folded, when the caller keeps it (a Space's own sections save it in the Space). */
   folded?: boolean;
   onFold?: (folded: boolean) => void;
+  /** Renaming it where it is and its ⋯ menu; a built-in section gets its own from SectionEditCtx. */
+  edit?: SectionEdit;
+  /** A built-in section's own actions, first in its one ⋯ menu (Pages: new page, import). */
+  menuTop?: ReactNode;
+  /** Its key among the sections it drags with; a built-in section's is its id. */
+  dragKey?: string;
   children: ReactNode;
 }) {
   const mark = useContext(SectionMarkCtx);
+  // A built-in section shows the member's own name and emoji for it (contracts/collab.md "Names and icons").
+  const prefs = useSidebarPrefs();
+  const builtin = (SECTION_IDS as readonly string[]).includes(id);
+  const title = builtin ? nameOf(prefs, `section:${id}`, label) : label;
+  const emoji = icon ?? (builtin ? iconOf(prefs, `section:${id}`) : undefined);
+  const editFor = useContext(SectionEditCtx);
+  const edit = editProp ?? (builtin ? editFor?.(id as SidebarSectionId, label, menuTop) : undefined);
+  const drag = useContext(SidebarDragCtx);
+  const dragKey = dragKeyProp ?? (builtin && drag?.scope === "sidebar" ? id : undefined);
+  const dragProps = drag && dragKey && !rail ? drag.section(dragKey, title) : undefined;
+  const renaming = useSidebarEdit((s) => !!edit && s.renaming === edit.key);
   const key = `od-nav-fold-${id}`;
   const [foldedHere, setFolded] = useState(() => {
     try {
@@ -119,30 +194,126 @@ export function Section({
     }
   };
   return (
-    <div className={cn(!first && "mt-5")}>
+    <div className={cn(!first && "mt-5")} data-edit-section={dragProps ? dragKey : undefined}>
       {!rail && (
-        <div className="group/section mx-2.5 mb-0.5 flex h-6 items-center px-2">
-          <button
-            type="button"
-            aria-expanded={!folded}
-            onClick={toggle}
-            className="label-caps flex min-w-0 flex-1 items-center gap-1 text-left outline-none transition-colors hover:text-fg-2 focus-visible:text-fg"
-          >
-            <span className="truncate">{label}</span>
-            {mark && <span className="ml-0.5 flex shrink-0 normal-case tracking-normal">{mark}</span>}
-            <ChevronDown
-              aria-hidden
-              className={cn(
-                "size-3 shrink-0 transition-[transform,opacity] duration-200",
-                folded ? "-rotate-90 opacity-100" : "opacity-0 group-hover/section:opacity-100",
-              )}
-            />
-          </button>
-          {action}
+        <div data-edit-head="" className="group/section mx-2.5 mb-0.5 flex h-6 items-center px-2">
+          {renaming && edit ? (
+            <InlineRename initial={title} placeholder={edit.placeholder} label={edit.renameLabel} caps onDone={(v) => {
+              sidebarEdit.done();
+              if (v !== null) edit.onName(v);
+            }} />
+          ) : (
+            <button
+              type="button"
+              aria-expanded={!folded}
+              onClick={toggle}
+              onDoubleClick={edit ? () => sidebarEdit.rename(edit.key) : undefined}
+              data-sidebar-row={edit?.key}
+              data-renamable={edit ? "true" : undefined}
+              {...dragProps}
+              className="label-caps flex min-w-0 flex-1 items-center gap-1 text-left outline-none transition-colors hover:text-fg-2 focus-visible:text-fg"
+            >
+              {emoji && <span aria-hidden className="text-[11px] normal-case leading-none tracking-normal">{emoji}</span>}
+              <span className="truncate">{title}</span>
+              {mark && <span className="ml-0.5 flex shrink-0 normal-case tracking-normal">{mark}</span>}
+              <ChevronDown
+                aria-hidden
+                className={cn(
+                  "size-3 shrink-0 transition-[transform,opacity] duration-200",
+                  folded ? "-rotate-90 opacity-100" : "opacity-0 group-hover/section:opacity-100",
+                )}
+              />
+            </button>
+          )}
+          {!renaming && (action || edit?.menu) && (
+            <span className="flex shrink-0 items-center gap-0.5">
+              {action}
+              {edit?.menu}
+            </span>
+          )}
         </div>
       )}
       {(!folded || rail) && <div className="flex flex-col gap-px">{children}</div>}
     </div>
+  );
+}
+
+// ─── Arranging the sidebar where it is ──────────────────────────────────────
+
+/** A section's name of the member's own and its ⋯ menu (components/collab/SectionMenu.tsx). */
+export type SectionEdit = {
+  /** Its id while renamed or picking an icon (`data-sidebar-row`), "section:<key>". */
+  key: string;
+  placeholder: string;
+  renameLabel: string;
+  /** Saves the new name; an empty one brings back its own. */
+  onName: (name: string) => void;
+  menu: ReactNode;
+};
+
+/** The ⋯ menu and renaming of the built-in sections, given by the sidebar that draws them. */
+export const SectionEditCtx = createContext<((id: SidebarSectionId, label: string, top?: ReactNode) => SectionEdit | undefined) | null>(null);
+
+type DragProps = Record<string, unknown>;
+
+/**
+ * Dragging rows and sections outside edit mode (components/collab/SidebarDrag.tsx): the props
+ * that make a row or a section's title drag, in the sidebar's own sections or a Space's.
+ */
+export const SidebarDragCtx = createContext<{
+  scope: "sidebar" | "space";
+  row: (source: EditSource, label: string) => DragProps;
+  section: (key: string, label: string) => DragProps;
+  /** Moves a row or section one place up (-1) or down (1); `dry` only says whether it can. */
+  step: (source: EditSource, dir: -1 | 1, dry?: boolean) => boolean;
+  /** A key's action on a row (moving, pinning, hiding, removing); true when it acted. */
+  act: (source: EditSource, action: RowAction, label: string) => boolean;
+} | null>(null);
+
+/**
+ * How long a menu takes to close and give the focus back to what opened it: a field or picker
+ * opened from the menu on a row keeps the focus through it.
+ */
+export const MENU_SETTLE_MS = 1000;
+
+/** A name typed where it was: Enter or leaving it saves, Escape keeps the old one. */
+export function InlineRename({ initial, placeholder, label, caps, onDone }: { initial: string; placeholder: string; label: string; caps?: boolean; onDone: (name: string | null) => void }) {
+  const done = useRef(false);
+  // Opened from a menu, the menu's closing takes the focus back for a moment: the field keeps it.
+  const [born] = useState(() => Date.now());
+  const finish = (v: string | null) => {
+    if (done.current) return;
+    done.current = true;
+    onDone(v === null ? null : v.trim());
+  };
+  return (
+    <input
+      autoFocus
+      defaultValue={initial}
+      placeholder={placeholder}
+      aria-label={label}
+      maxLength={64}
+      onFocus={(e) => e.currentTarget.select()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          finish(e.currentTarget.value);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          finish(null);
+        }
+      }}
+      onBlur={(e) => {
+        const el = e.currentTarget;
+        if (Date.now() - born < MENU_SETTLE_MS) return void setTimeout(() => el.focus(), 0);
+        finish(el.value);
+      }}
+      className={cn(
+        "h-6 min-w-0 flex-1 rounded border border-line bg-surface px-1 text-[12.5px] text-fg outline-none placeholder:text-fg-4 focus:shadow-[0_0_0_2px_var(--focus)]",
+        caps && "label-caps text-fg",
+      )}
+    />
   );
 }
 

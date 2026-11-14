@@ -133,6 +133,11 @@ export function applyCollabEvent(qc: QueryClient, type: string, data: Record<str
     schedule(qc, wid, p);
     return true;
   }
+  if (type === "collab.sidebar") {
+    // The member saved their sidebar in another tab or on another device.
+    void qc.invalidateQueries({ queryKey: qk.mailSidebar });
+    return true;
+  }
   if (type === "collab.accounts") {
     const id = typeof data.account_id === "string" ? data.account_id : null;
     void qc.invalidateQueries({ queryKey: qk.mailAccounts });
@@ -141,6 +146,8 @@ export function applyCollabEvent(qc: QueryClient, type: string, data: Record<str
     void qc.invalidateQueries({ queryKey: qk.of("collab", "thread"), predicate: (query) => !id || (query.state.data as MailThreadDetail | undefined)?.account.id === id });
     // Its categories may have changed with the workspace's or a team's.
     void qc.invalidateQueries({ queryKey: qk.mailCategories });
+    // Connecting or sharing an account ticks off a setup step when Tickets is off.
+    void qc.invalidateQueries({ queryKey: qk.onboarding });
     const p = pendingFor(wid);
     p.folders.add(id);
     schedule(qc, wid, p);

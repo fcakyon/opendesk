@@ -157,6 +157,7 @@
     "connection": "Verbindung",
     "testConnection": "Verbindung testen",
     "lastSyncFailed": "Letzte Synchronisierung fehlgeschlagen",
+    "foldersSkipped": "Einige Ordner wurden nicht gelesen",
     "lastSynced": "Zuletzt synchronisiert",
     "never": "Nie",
     "forwardingInstant": "Weitergeleitete E-Mails kommen an, sobald sie gesendet werden.",
@@ -398,6 +399,11 @@
     "empty": "Keine Kontaktformulare. Gib eine Adresse oder @domain ein.",
     "publicDomain": "{{domain}} ist ein öffentlicher E-Mail-Anbieter. Gib stattdessen die genaue Adresse des Formulars ein.",
     "ownAddress": "Das ist die eigene Adresse dieses Postfachs."
+  },
+  "automatic": {
+    "title": "Automatische E-Mails",
+    "hint": "Manche Helpdesks markieren jede E-Mail, die sie senden, als automatisch, auch eine, die eine Person geschrieben hat. Solche E-Mails werden ignoriert, außer dieses Postfach behält sie. Behaltene E-Mails werden wie gewohnt zu Tickets, und nichts Automatisches antwortet darauf: keine automatische Antwort, keine Antwort einer Automatisierung, keine Antwort von Ollie. Abwesenheitsnotizen bleiben ignoriert.",
+    "toggle": "Automatische E-Mails behalten"
   },
   "connect": {
     "detecting": "{{domain}} wird nachgeschlagen",
@@ -1007,5 +1013,31 @@
       "step4": "Hake die Ereignisse für Zusammenfassungen und Transkripte an (sie brauchen Voys Intelligence) und klicke auf Opslaan.",
       "step5": "Mache einen Testanruf: Die Verbindung zeigt Empfängt Anrufe, sobald er ankommt."
     }
+  },
+  "folders": {
+    "title": "Ordner",
+    "description": "opendesk holt E-Mails aus diesen Ordnern Ihres IMAP-Servers. Wählen Sie die Ordner, in die die Regeln Ihres Servers Support-E-Mails ablegen, etwa E-Mails an einen Alias. Eine Nachricht in mehreren davon wird eine Ticketnachricht.",
+    "inbox": "Posteingang",
+    "choose": "Ordner wählen",
+    "done": "Fertig",
+    "failed": "Die Ordner konnten nicht geladen werden",
+    "retry": "Erneut versuchen",
+    "hint": "Wählen Sie bis zu {{max}} Ordner. Änderungen gelten nach dem Speichern.",
+    "full": "Ein Postfach liest höchstens {{max}} Ordner. Entfernen Sie einen, um einen anderen zu wählen.",
+    "saveFirst": "Speichern Sie zuerst die Servereinstellungen und wählen Sie dann die Ordner.",
+    "special": {
+      "sent": "Gesendet",
+      "drafts": "Entwürfe",
+      "trash": "Papierkorb",
+      "junk": "Spam",
+      "all": "Alle Nachrichten"
+    }
+  },
+  "sentCopy": {
+    "title": "Gesendete E-Mails auf dem Server behalten",
+    "hint": "Speichert eine Kopie jeder E-Mail, die dieses Postfach sendet, in einem Ordner auf Ihrem IMAP-Server, wie Ihr E-Mail-Programm, damit Ihr Postfach die ganze Unterhaltung enthält.",
+    "folder": "Ordner für gesendete E-Mails",
+    "choose": "Ordner wählen",
+    "loading": "Ordner werden geladen…"
   }
 }

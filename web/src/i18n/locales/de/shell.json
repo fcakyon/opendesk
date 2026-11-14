@@ -32,7 +32,11 @@
     "teamCounts": "{{unassigned}} nicht zugewiesen, {{open}} offen",
     "manageTeams": "Teams verwalten",
     "switchTeam": "Team wechseln",
-    "teamHint": "Team"
+    "teamHint": "Team",
+    "pages": "Seiten",
+    "newTeam": "Neues Team",
+    "newView": "Neue Ansicht",
+    "editView": "Ansicht bearbeiten"
   },
   "workspaces": {
     "title": "Workspaces",
@@ -63,14 +67,23 @@
     "logoutAll": "Von allen Konten abmelden"
   },
   "breadcrumb": "Brotkrumennavigation",
+  "crumbs": { "more_one": "{{count}} weitere Seite im Pfad", "more_other": "{{count}} weitere Seiten im Pfad" },
   "search": {
     "open": "Suche und Befehle",
     "label": "Suche"
   },
   "newTicket": "Neues Ticket",
+  "compose": "Neue E-Mail",
+  "chatPopup": {
+    "title": "Neuer Chat",
+    "open": "Öffnen",
+    "close": "Schließen"
+  },
   "notifications": {
     "allow": {
       "title": "Erfahre von neuen Tickets und Antworten.",
+      "titleMail": "Erfahre von neuen E-Mails und Antworten.",
+      "titleBoth": "Erfahre von neuen Tickets, E-Mails und Antworten.",
       "hint": "Erlaube Benachrichtigungen, damit sie dich erreichen, während opendesk im Hintergrund läuft.",
       "allow": "Benachrichtigungen erlauben",
       "later": "Nicht jetzt"
@@ -99,6 +112,7 @@
       "threadReplied": "{{who}} hat in deiner Nebenunterhaltung geantwortet",
       "threadRepliedAnon": "Jemand hat in deiner Nebenunterhaltung geantwortet",
       "sla": "SLA überschritten",
+      "scheduledReplyFailed": "Deine geplante Antwort wurde nicht gesendet",
       "handoff": "{{who}} möchte mit einer Person sprechen",
       "handoffAnon": "Ein Kunde möchte mit einer Person sprechen",
       "other": "Benachrichtigung",
@@ -125,7 +139,15 @@
       "importAnd": "{{a}} und {{b}}",
       "importSource": "Verlaufs",
       "supportChannel": "Support-Kanal",
-      "supportChannelUnhealthy": "{{name}} erfordert Aufmerksamkeit"
+      "supportChannelUnhealthy": "{{name}} erfordert Aufmerksamkeit",
+      "wikiMention": "{{who}} hat dich auf einer Wiki-Seite erwähnt",
+      "wikiMentionAnon": "Du wurdest auf einer Wiki-Seite erwähnt",
+      "wikiMentionComment": "{{who}} hat dich in einem Wiki-Kommentar erwähnt",
+      "wikiMentionCommentAnon": "Du wurdest in einem Wiki-Kommentar erwähnt",
+      "wikiComment": "{{who}} hat eine Wiki-Seite kommentiert",
+      "wikiCommentAnon": "Neuer Kommentar auf einer Wiki-Seite",
+      "wikiReminder": "Erinnerung: {{label}}",
+      "wikiReminderAnon": "Deine Wiki-Erinnerung ist fällig"
     },
     "hold": {
       "paused": "Pausiert bis {{when}}: nichts erreicht deine E-Mail, dein Telefon oder deinen Desktop",
@@ -139,7 +161,8 @@
     "goMine": "Zu meinen Tickets",
     "goReports": "Zu den Berichten",
     "goWiki": "Zum Wiki",
-    "switchWorkspace": "Workspace 1 bis 9 öffnen"
+    "switchWorkspace": "Workspace 1 bis 9 öffnen",
+    "editSidebar": "Seitenleiste bearbeiten"
   },
   "route": {
     "loading": "Wird geladen",
@@ -202,5 +225,11 @@
     "popupBlocked": "Dein Browser hat das {{name}}-Fenster blockiert. Erlaube Pop-ups über die Adressleiste, um dort fortzufahren.",
     "popupThisTab": "In diesem Tab fortfahren",
     "changePassword": "Dein Passwort steht auf einer Liste geleakter Passwörter oder ist kürzer, als wir jetzt verlangen. Wähle ein neues."
-  }
+  },
+  "wikiPresence": {
+    "editing": "{{name}} bearbeitet gerade"
+  },
+  "newMore": "Mehr erstellen",
+  "newPage": "Neue Seite",
+  "importPages": "Seiten importieren"
 }

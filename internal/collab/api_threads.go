@@ -36,7 +36,14 @@ const (
 	BoxAssigned    = "assigned"
 	BoxNeedsAction = "needs_action"
 	BoxSnoozed     = "snoozed"
+	// BoxAIReview is "Ready for review": conversations in an inbox whose draft an AI client
+	// saved and no person has saved, sent or discarded since (contracts/collab.md "AI drafts").
+	BoxAIReview = "ai_review"
 )
+
+// aiDraftSQL is the predicate of a conversation (alias t) holding a draft an AI client saved
+// last: a person who saves it takes it over and clears ai_api_key_id.
+const aiDraftSQL = `EXISTS (SELECT 1 FROM collab_messages xm WHERE xm.thread_id = t.id AND xm.draft AND xm.ai_api_key_id IS NOT NULL)`
 
 // handlingSQL is the predicate of a conversation (alias t) whose account tracks handling.
 const handlingSQL = `EXISTS (SELECT 1 FROM collab_accounts ha WHERE ha.id = t.account_id AND ha.visibility = 'shared' AND ha.handling_enabled)`
@@ -82,6 +89,8 @@ func boxSQL(box, u string) string {
 		return `t.needs_action AND ` + handlingSQL + ` AND t.folder_ids && ` + inboxSQL
 	case BoxSnoozed:
 		return `t.snoozed_until IS NOT NULL AND ` + handlingSQL + ` AND t.folder_ids && ` + inboxSQL
+	case BoxAIReview:
+		return aiDraftSQL + ` AND t.folder_ids && ` + inboxSQL
 	}
 	return `t.folder_ids && ` + inboxSQL
 }
@@ -97,11 +106,11 @@ func categorySQL(k string, primary bool) string {
 
 // visibleAccountsSQL is the accounts the caller (SQL parameter u) sees in the workspace ($1).
 func visibleAccountsSQL(u string) string {
-	return `(SELECT a.id FROM collab_accounts a WHERE a.workspace_id = $1 AND ` + accountVisibleSQL("a", u) + `)`
+	return `(SELECT a.id FROM collab_accounts a WHERE a.workspace_id = $1 AND ` + AccountVisibleSQL("a", u) + `)`
 }
 
 type listThreadsInput struct {
-	Box       string `query:"box" enum:"inbox,unread,starred,sent,drafts,archive,trash,spam,all,shared,assigned,needs_action,snoozed" default:"inbox"`
+	Box       string `query:"box" enum:"inbox,unread,starred,sent,drafts,archive,trash,spam,all,shared,assigned,needs_action,snoozed,ai_review" default:"inbox"`
 	AccountID string `query:"account_id" doc:"Only this account's conversations"`
 	FolderID  string `query:"folder_id" doc:"Only this folder's conversations; replaces box"`
 	Q         string `query:"q" maxLength:"200" doc:"Matches each message's subject, sender and text, and the conversation's subject and participants"`
@@ -130,6 +139,10 @@ type CollabCounts struct {
 	// Categories counts, for each account whose inbox is split, the unread conversations of
 	// its inbox by category key (contracts/collab.md "Categories").
 	Categories map[uuid.UUID]map[string]int `json:"categories"`
+	// AIReview: boxes.ai_review by account; an account without any is left out.
+	AIReview map[uuid.UUID]int `json:"ai_review"`
+	// Spam: boxes.spam by account; an account without any is left out.
+	Spam map[uuid.UUID]int `json:"spam"`
 }
 
 // CollabBoxCounts are unread conversations; assigned and shared: open ones (in an inbox).
@@ -141,6 +154,8 @@ type CollabBoxCounts struct {
 	Drafts      int `json:"drafts"`
 	NeedsAction int `json:"needs_action"`
 	Snoozed     int `json:"snoozed"`
+	AIReview    int `json:"ai_review" doc:"Conversations in an inbox with an AI draft waiting for a person (Ready for review)"`
+	Spam        int `json:"spam" doc:"Unread conversations in spam, which never reach Needs action or the AI queue"`
 }
 
 type threadIDInput struct {
@@ -395,6 +410,12 @@ func (s *service) registerThreadRoutes(api huma.API) {
 							return err
 						}
 					}
+					if b.Action == ActionNeedsAction {
+						// Back in Needs action with the draft still waiting: no longer abandoned.
+						if err := reopenAbandoned(ctx, tx, list); err != nil {
+							return err
+						}
+					}
 					return s.publishChanged(ctx, tx, p.WorkspaceID, &a.ID, list, true)
 				})
 				if err != nil {
@@ -635,8 +656,12 @@ func (s *service) threadDetail(ctx context.Context, q db.Querier, p *auth.Princi
 	if err != nil {
 		return out, err
 	}
+	unused, err := unusedAIDrafts(ctx, q, p.WorkspaceID, t.ID)
+	if err != nil {
+		return out, err
+	}
 	return MailThreadDetail{Thread: threads[0], Messages: messages, Comments: comments, Shares: shares, CanAct: canAct(p),
-		Account: account, Ticket: ticket}, nil
+		Account: account, Ticket: ticket, UnusedAIDrafts: unused}, nil
 }
 
 // threadTicket is the conversation's ticket when p sees it, else nil.
@@ -669,9 +694,34 @@ func (s *service) detailResponse(ctx context.Context, p *auth.Principal, id uuid
 // counts are the sidebar's numbers for the caller.
 func (s *service) counts(ctx context.Context, q db.Querier, p *auth.Principal) (CollabCounts, error) {
 	out := CollabCounts{Accounts: map[uuid.UUID]int{}, Folders: map[uuid.UUID]int{}, Assigned: map[uuid.UUID]int{}, Addresses: map[uuid.UUID]map[string]int{},
-		Categories: map[uuid.UUID]map[string]int{}}
+		Categories: map[uuid.UUID]map[string]int{}, AIReview: map[uuid.UUID]int{}, Spam: map[uuid.UUID]int{}}
 	inAccounts := `t.workspace_id = $1 AND t.account_id IN ` + visibleAccountsSQL("$2")
-	err := q.QueryRow(ctx, `SELECT
+	// Ready for review, by account; boxes.ai_review is their sum.
+	rows, err := q.Query(ctx, `SELECT t.account_id, count(*) FROM collab_threads t WHERE `+inAccounts+` AND `+boxSQL(BoxAIReview, "$2")+`
+		GROUP BY t.account_id`, p.WorkspaceID, p.UserID)
+	if err != nil {
+		return out, err
+	}
+	if out.AIReview, err = collectCounts(rows); err != nil {
+		return out, err
+	}
+	for _, n := range out.AIReview {
+		out.Boxes.AIReview += n
+	}
+	// Unread in spam, by account; boxes.spam is their sum. Spam never reaches Needs action or
+	// the AI queue, so a handling account shows it beside them (contracts/collab.md "Spam beside Needs action").
+	rows, err = q.Query(ctx, `SELECT t.account_id, count(*) FROM collab_threads t WHERE `+inAccounts+` AND t.unread AND `+boxSQL(BoxSpam, "$2")+`
+		GROUP BY t.account_id`, p.WorkspaceID, p.UserID)
+	if err != nil {
+		return out, err
+	}
+	if out.Spam, err = collectCounts(rows); err != nil {
+		return out, err
+	}
+	for _, n := range out.Spam {
+		out.Boxes.Spam += n
+	}
+	err = q.QueryRow(ctx, `SELECT
 		(SELECT count(*) FROM collab_threads t WHERE `+inAccounts+` AND t.unread AND t.folder_ids && `+inboxSQL+`),
 		(SELECT count(*) FROM collab_threads t WHERE `+inAccounts+` AND `+boxSQL(BoxUnread, "$2")+`),
 		(SELECT count(*) FROM collab_threads t WHERE `+inAccounts+` AND `+boxSQL(BoxDrafts, "$2")+`),
@@ -685,7 +735,7 @@ func (s *service) counts(ctx context.Context, q db.Querier, p *auth.Principal) (
 	if err != nil {
 		return out, err
 	}
-	rows, err := q.Query(ctx, `SELECT t.account_id, count(*) FROM collab_threads t WHERE `+inAccounts+` AND t.unread
+	rows, err = q.Query(ctx, `SELECT t.account_id, count(*) FROM collab_threads t WHERE `+inAccounts+` AND t.unread
 		AND t.folder_ids && `+inboxSQL+` GROUP BY t.account_id`, p.WorkspaceID, p.UserID)
 	if err != nil {
 		return out, err

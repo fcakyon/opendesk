@@ -15,6 +15,7 @@ import (
 
 	"github.com/useopendesk/opendesk/internal/ai"
 	"github.com/useopendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/domain"
 )
 
 // Limits on what a tool returns, so an answer fits a model's context.
@@ -52,6 +53,7 @@ func ticketTools() []*tool {
 		"team":          str(`Move to a team by id or name (a name needs the settings:read scope), or "none" to remove the team.`),
 		"add_labels":    arr("Label names to add.", strN("", 1, 50), 50),
 		"remove_labels": arr("Label names to remove.", strN("", 1, 50), 50),
+		"fields":        fieldsArg("Custom field values to change, by key; the others keep theirs. null clears a field."),
 	}
 	return []*tool{
 		{
@@ -68,6 +70,17 @@ func ticketTools() []*tool {
 				"(kind note) in order. Long threads keep the latest 50 messages.",
 			Schema: obj(map[string]any{"ticket": str(ticketArg)}, "ticket"),
 			Run:    getTicket,
+		},
+		{
+			Name: "list_custom_fields", Title: "List custom fields", Scopes: []string{auth.ScopeTicketsRead}, ReadOnly: true, Idempotent: true,
+			Description: "List the workspace's custom fields: each one's key, name, type, options and whether a ticket must have it set before it can be solved " +
+				"(required_on_solve). Use the keys and option ids for the fields argument of create_ticket and update_ticket; pass entity ticket for ticket fields. " +
+				"Archived fields are left out unless include_archived is true.",
+			Schema: obj(map[string]any{
+				"entity":           enum("Only the fields of this record type (default all).", domain.FieldEntities...),
+				"include_archived": map[string]any{"type": "boolean", "description": "Also list archived fields, which keep their values but are no longer offered."},
+			}),
+			Run: listCustomFields,
 		},
 		{
 			Name: "reply_to_ticket", Title: "Reply to a ticket", Scopes: []string{auth.ScopeTicketsWrite}, OpenWorld: true,
@@ -103,15 +116,16 @@ func ticketTools() []*tool {
 		},
 		{
 			Name: "update_ticket", Title: "Update a ticket", Scopes: []string{auth.ScopeTicketsWrite}, Destructive: true, Idempotent: true,
-			Description: "Change a ticket's status, priority, severity, assignee, team or labels. Only the fields you pass change. Returns the updated ticket.",
-			Schema:      obj(changeProps, "ticket"),
-			Run:         updateTicket,
+			Description: "Change a ticket's status, priority, severity, assignee, team, labels or custom fields. Only the arguments you pass change. " +
+				"Custom fields go in fields, by the keys list_custom_fields returns; null clears one. Returns the updated ticket.",
+			Schema: obj(changeProps, "ticket"),
+			Run:    updateTicket,
 		},
 		{
 			Name: "create_ticket", Title: "Create a ticket", Scopes: []string{auth.ScopeTicketsWrite}, OpenWorld: true,
 			Description: "Create a ticket for a contact by email (the contact is created when new). The body is the first message: " +
 				"a reply (default) or an internal note. With mailbox_id the ticket is an email ticket and a reply is emailed to the contact; " +
-				"without it the ticket is recorded on the api channel and nothing is sent.",
+				"without it the ticket is recorded on the api channel and nothing is sent. Set custom fields with fields, by the keys list_custom_fields returns.",
 			Schema: obj(map[string]any{
 				"email":      strN("The contact's email address.", 3, 254),
 				"name":       strN("The contact's name, used when the contact is new.", 1, 200),
@@ -125,6 +139,7 @@ func ticketTools() []*tool {
 				"assignee":   str("Assign to a teammate by user id or email (an email needs the settings:read scope)."),
 				"team":       str("A team id, or a team name (a name needs the settings:read scope)."),
 				"labels":     arr("Label names.", strN("", 1, 50), 50),
+				"fields":     fieldsArg("Custom field values, by key."),
 			}, "email", "subject"),
 			Run: createTicket,
 		},
@@ -601,14 +616,15 @@ func cleanLabels(in []string) ([]string, error) {
 
 func updateTicket(ctx context.Context, c *caller, raw json.RawMessage) (any, error) {
 	a, err := decode[struct {
-		Ticket       string   `json:"ticket"`
-		Status       string   `json:"status"`
-		Priority     string   `json:"priority"`
-		Severity     string   `json:"severity"`
-		Assignee     string   `json:"assignee"`
-		Team         string   `json:"team"`
-		AddLabels    []string `json:"add_labels"`
-		RemoveLabels []string `json:"remove_labels"`
+		Ticket       string         `json:"ticket"`
+		Status       string         `json:"status"`
+		Priority     string         `json:"priority"`
+		Severity     string         `json:"severity"`
+		Assignee     string         `json:"assignee"`
+		Team         string         `json:"team"`
+		AddLabels    []string       `json:"add_labels"`
+		RemoveLabels []string       `json:"remove_labels"`
+		Fields       map[string]any `json:"fields"`
 	}](raw)
 	if err != nil {
 		return nil, err
@@ -668,32 +684,34 @@ func updateTicket(ctx context.Context, c *caller, raw json.RawMessage) (any, err
 	if len(remove) > 0 {
 		body["remove_tags"] = remove
 	}
+	if len(a.Fields) > 0 {
+		body["fields"] = a.Fields
+	}
 	if len(body) == 0 {
-		return nil, invalid("nothing to change: pass status, priority, severity, assignee, team, add_labels or remove_labels")
+		return nil, invalid("nothing to change: pass status, priority, severity, assignee, team, add_labels, remove_labels or fields")
 	}
 	var t apiTicket
 	if err := c.do(ctx, http.MethodPatch, "/v1/tickets/"+ref, nil, body, &t); err != nil {
 		return nil, err
 	}
-	o := compactTicket(t, false)
-	c.name(ctx, &o)
-	return o, nil
+	return c.written(ctx, t), nil
 }
 
 func createTicket(ctx context.Context, c *caller, raw json.RawMessage) (any, error) {
 	a, err := decode[struct {
-		Email     string   `json:"email"`
-		Name      string   `json:"name"`
-		Subject   string   `json:"subject"`
-		Body      string   `json:"body"`
-		Kind      string   `json:"kind"`
-		MailboxID string   `json:"mailbox_id"`
-		Status    string   `json:"status"`
-		Priority  string   `json:"priority"`
-		Severity  string   `json:"severity"`
-		Assignee  string   `json:"assignee"`
-		Team      string   `json:"team"`
-		Labels    []string `json:"labels"`
+		Email     string         `json:"email"`
+		Name      string         `json:"name"`
+		Subject   string         `json:"subject"`
+		Body      string         `json:"body"`
+		Kind      string         `json:"kind"`
+		MailboxID string         `json:"mailbox_id"`
+		Status    string         `json:"status"`
+		Priority  string         `json:"priority"`
+		Severity  string         `json:"severity"`
+		Assignee  string         `json:"assignee"`
+		Team      string         `json:"team"`
+		Labels    []string       `json:"labels"`
+		Fields    map[string]any `json:"fields"`
 	}](raw)
 	if err != nil {
 		return nil, err
@@ -768,13 +786,89 @@ func createTicket(ctx context.Context, c *caller, raw json.RawMessage) (any, err
 	if len(labels) > 0 {
 		body["tags"] = labels
 	}
+	if len(a.Fields) > 0 {
+		body["fields"] = a.Fields
+	}
 	var t apiTicket
 	if err := c.do(ctx, http.MethodPost, "/v1/tickets", nil, body, &t); err != nil {
 		return nil, err
 	}
+	return c.written(ctx, t), nil
+}
+
+// written is a created or updated ticket as a write tool returns it: its key fields and
+// its custom field values, so the caller sees what was stored.
+func (c *caller) written(ctx context.Context, t apiTicket) outTicket {
 	o := compactTicket(t, false)
+	if len(t.Fields) > 0 {
+		o.Fields = t.Fields
+	}
 	c.name(ctx, &o)
-	return o, nil
+	return o
+}
+
+// fieldsArg is the schema of a custom field values argument: values by key, as the API
+// takes them (contracts/api.md "Labels and custom fields").
+func fieldsArg(desc string) map[string]any {
+	return map[string]any{"type": "object", "maxProperties": domain.MaxFieldsPerEntity, "additionalProperties": true, "description": desc +
+		" Keys come from list_custom_fields (entity ticket). Values by type: text, long_text, url and email a string; number a number; " +
+		"checkbox true or false; date YYYY-MM-DD; select one option id; multi_select a list of option ids; user a teammate's user id."}
+}
+
+type outFieldOption struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+type outField struct {
+	Key             string           `json:"key"`
+	Name            string           `json:"name"`
+	Entity          string           `json:"entity"`
+	Type            string           `json:"type"`
+	Options         []outFieldOption `json:"options,omitempty"`
+	RequiredOnSolve bool             `json:"required_on_solve"`
+	Description     string           `json:"description,omitempty"`
+	Archived        bool             `json:"archived,omitempty"`
+}
+
+type fieldList struct {
+	Fields []outField `json:"fields"`
+	Count  int        `json:"count"`
+}
+
+func listCustomFields(ctx context.Context, c *caller, raw json.RawMessage) (any, error) {
+	a, err := decode[struct {
+		Entity          string `json:"entity"`
+		IncludeArchived bool   `json:"include_archived"`
+	}](raw)
+	if err != nil {
+		return nil, err
+	}
+	if err := oneOf(a.Entity, "entity", domain.FieldEntities...); err != nil {
+		return nil, err
+	}
+	q := url.Values{"archived": {"false"}}
+	if a.IncludeArchived {
+		q.Set("archived", "any")
+	}
+	if a.Entity != "" {
+		q.Set("entity", a.Entity)
+	}
+	var pg page[domain.CustomField]
+	if err := c.get(ctx, "/v1/custom-fields", q, &pg); err != nil {
+		return nil, err
+	}
+	out := fieldList{Fields: []outField{}}
+	for _, f := range pg.Data {
+		o := outField{Key: f.Key, Name: f.Name, Entity: f.Entity, Type: f.Type, RequiredOnSolve: f.RequiredOnSolve,
+			Description: f.Description, Archived: f.Archived}
+		for _, op := range f.Options {
+			o.Options = append(o.Options, outFieldOption{ID: op.ID, Label: op.Label})
+		}
+		out.Fields = append(out.Fields, o)
+	}
+	out.Count = len(out.Fields)
+	return out, nil
 }
 
 func nullable(id string) any {

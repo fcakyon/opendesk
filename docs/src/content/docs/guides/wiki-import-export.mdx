@@ -1,0 +1,172 @@
+---
+title: Import and export the wiki
+description: Bring pages in from Notion, Obsidian, Confluence, Google Docs or Markdown files, and take pages, subpages or the whole wiki out as Markdown or HTML.
+---
+
+import Steps from '../../../components/Steps.astro';
+import Step from '../../../components/Step.astro';
+import Callout from '../../../components/Callout.astro';
+import Fold from '../../../components/Fold.astro';
+
+Move your notes into the wiki without copying them page by page, and take them out again whenever you like. An import brings in a whole Notion workspace or Obsidian vault at once: its pages in their tree, the links between them, their images and files, and Notion's databases with their rows. An export writes pages as Markdown that Obsidian opens as a vault, or as HTML pages any browser reads.
+
+Import and export are on every plan. Everything else about pages is in the [wiki guide](/guides/wiki/).
+
+## What you can import
+
+| From | Upload | What comes in |
+| --- | --- | --- |
+| **Notion** | The export's zip, as Notion gives it | The page tree, links between the pages, callouts, toggles and page icons. From a Markdown & CSV export, each database becomes a [wiki database](/guides/wiki-databases/) with its rows |
+| **Obsidian** | The vault folder as a zip | A page per note and per folder, `[[links]]` and `![[embeds]]`, callouts, highlights, math, task lists, front matter (`title`, `tags`), `#tags`, and canvases as [canvas pages](/guides/wiki-canvas/) |
+| **Confluence, Google Docs** or any HTML | The exported HTML files, or a zip of them | A page per HTML file, titled by the file's title or first heading. Confluence's info, note and warning panels become callouts |
+| **Single files** | Markdown (`.md`, `.markdown`), text (`.txt`), HTML (`.html`, `.htm`), CSV (`.csv`) or Obsidian canvas (`.canvas`) files, several at once | A page per file. A CSV becomes a database |
+
+Images and files the pages use come in with them, and become the pages' own files. Files no page uses are left out.
+
+### Export from Notion first
+
+<Steps>
+<Step title="Open the export">
+
+In Notion, open **Settings**, then **Export** (or **Export** in a page's menu for one page and what is under it).
+
+</Step>
+<Step title="Pick the format">
+
+Choose **Markdown & CSV** or **HTML**. Both bring in the pages; pick **Markdown & CSV** when the workspace has databases, since their CSV files are what become wiki databases. Turn on **Include subpages**.
+
+</Step>
+<Step title="Upload the zip">
+
+Notion emails or downloads a zip. Upload it as it is: there is no need to unzip it.
+
+</Step>
+</Steps>
+
+Notion's long ids leave the titles, so "Refund policy 1a2b3c…" comes in as "Refund policy". Links to `notion.so` pages that are part of the export point to their new wiki pages.
+
+A Notion database's columns become properties, typed by their values: checkbox, number, date (and date ranges), URL, email, select, multi-select and status. People and relations come in as text. Each row keeps its own page, text and subpages.
+
+### Export from Obsidian first
+
+Zip the vault's folder and upload the zip. The `.obsidian/` folder may stay in: its settings are not imported.
+
+- A folder becomes a page, with the notes in it as its subpages. A note with the folder's name (`Guides/Guides.md`, or `Guides.md` beside `Guides/`) is that folder's page.
+- `[[note#heading]]` links to the heading in the new page.
+- Comments (`%%…%%`) are left out.
+- A `.canvas` file becomes a canvas page, with its cards and connections. Cards that show notes of the vault show their new pages.
+- Obsidian bases (`.base` files) are not imported.
+
+## Import pages
+
+Only agents and admins import; viewers don't see it. Open the import from any of these:
+
+- **+** at the top of the wiki's sidebar, then **Import**.
+- The **More** (**…**) menu on the wiki's home, then **Import**.
+- **Import pages** on the home of an empty wiki.
+- A page's **…** menu, then **Import here**: the pages land under that page.
+
+<Steps>
+<Step title="Add the files">
+
+The **Import pages** dialog opens. Drag files onto it, or browse for them: one zip, or several `.md`, `.markdown`, `.txt`, `.html`, `.htm`, `.csv` or `.canvas` files, up to 100 MB in all.
+
+</Step>
+<Step title="Choose where they go">
+
+In **Where**, pick the top of **Workspace**, **Private** or a teamspace, or a page to put them under. A database can't hold imported pages.
+
+</Step>
+<Step title="Import">
+
+Click **Import**. The upload shows its progress, then the pages are made. When it is done, the dialog says **Imported 12 pages**, lists what was left out or changed, grouped by reason, and **Open** goes to the first page.
+
+</Step>
+</Steps>
+
+An import is all or nothing: every page comes in, or, when it is refused, none does. Each page starts its history with the import, you follow every page you imported, and mentions in the imported text notify nobody.
+
+Pages land in the place you picked and take its visibility: imported into **Private**, they are yours alone. A tree deeper than the wiki's 10 levels is lifted: pages below the last level go beside their parent at that level, and the result lists them.
+
+### What the result lists
+
+The result groups what was left out or changed under these headings (the API's `reason` code in brackets):
+
+| Heading | Means |
+| --- | --- |
+| **Moved up a level** (`moved_up`) | Pages deeper than the wiki's 10 levels, placed beside their parent at the last level |
+| **Made without their text** (`body_too_large`) | Pages whose text is over 512 KB. The page comes in without its text; split it into smaller pages and paste it in |
+| **Columns left out** (`columns_dropped`) | A table's columns past a database's 100 properties |
+| **Canvases trimmed** (`canvas_trimmed`) | A canvas's cards past 2,000 or connections past 4,000, left out |
+| **Canvases simplified** (`canvas_simplified`) | A canvas with some cards kept simpler, listed once per canvas: a card for a heading or block of a note shows the whole note; an http link, a file or note that isn't in the upload, or a file that wasn't taken (a program, too large) becomes a text card; a group's background picture and node types JSON Canvas doesn't define are left out |
+| **Past the import allowance** (`files_limit`) | Files past your plan's limit on imported files. The pages that used them come in without them |
+| **Too large** (`too_large`) | Files over 25 MB, or page sources over 4 MB |
+| **Couldn't be read** (`unreadable`) | Files whose text or table could not be read, or a table the wiki can't keep as a database (its rows still come in as pages) |
+| **Not imported** (`unsupported`) | A kind of file the wiki doesn't import, such as an Obsidian base (`.base`) |
+| **Archives inside the upload** (`nested_archive`) | A zip inside the upload isn't opened. Upload it on its own |
+| **Programs and scripts** (`executable`) | Programs and scripts are never imported |
+| **Not used by any page** (`unused`) | Files no page links to or embeds, so there was nothing to keep them in |
+
+### When an import is refused
+
+Nothing is stored, and the dialog says why:
+
+- **The wiki is full**: the pages don't fit in the workspace's 5,000 pages, trash included. The message says how many the import makes and how many fit.
+- **Too deep**: the page you picked is already at the 10th level.
+- **Into a database**: pick a page or the top of a section instead.
+- **Too large**: the upload is over 100 MB, or over 200 MB once unpacked. Export in smaller parts.
+- **Too many files**: more than 10,000 files or 5,000 pages.
+- **Not a file the wiki imports**, or **the archive could not be read**: export again and upload the new file.
+- **Links, absolute paths or paths that leave the archive**, or **an archive that expands far beyond its size**: only ordinary exports of plain files and folders are imported.
+- **Nothing to import**: the upload holds no pages.
+
+A workspace runs up to 20 imports an hour.
+
+## Export pages
+
+Any member exports, viewers too, and an export holds only what that member can read.
+
+- **One page**: in a page's **…** menu, choose **Export**, then **Markdown** or **HTML**. You get one file, named after the page (a canvas page in Markdown is a `.canvas` file).
+- **A page and its subpages**: in the same **Export** menu, turn on **Include subpages** (shown when the page has some), then pick the format. You get a zip of the page and every subpage you can see.
+- **The whole wiki**: on the wiki's home, open the **…** menu, choose **Export the wiki**, then **Markdown** or **HTML**. You get `Wiki 2026-11-07.zip` with every page you can see: the workspace's, your teamspaces' and your private pages. Pages in the trash and templates are left out.
+
+### What the files hold
+
+**Markdown** is a vault Obsidian opens as it is:
+
+- A `.md` file per page, starting with front matter: its title, icon, dates, tags, and a database row's values.
+- A page's subpages in a folder of the same name beside it.
+- Links between pages as `[[links]]`.
+- A database as a table of its rows in its page, with a `.csv` of the rows beside it.
+- A canvas page as a `.canvas` file ([JSON Canvas](https://jsoncanvas.org)), which Obsidian opens as a canvas: text cards in Markdown, page cards as cards of the exported pages (a text card when that page isn't in the export), files and images from the web as links, and groups, colors and connections as they are.
+
+**HTML** is a standalone page per file that opens in any browser, with links between pages as relative links. A canvas page shows its cards where they sit on the board, with groups behind them and connections as lines between them.
+
+### Files and images
+
+A zip carries the files and images its pages use, in an `attachments/` folder, up to 1 GB. Files past that, and files you can't open yourself, link to the app instead. A single-file export links to the app for its files, and for pages it links to.
+
+Links to the app open only for people who can see that page or file. An export never holds a link that opens a file without signing in.
+
+<Callout>
+
+- Up to 30 zips an hour per person or API key. Single files don't count toward it.
+- An export reads up to 200 MB of page text. Export a part of the wiki at a time beyond that.
+- A zip is recorded in the [audit log](/security/), with how many pages it held.
+
+</Callout>
+
+<Fold>
+
+## Import and export with the API
+
+`POST /v1/wiki/import` takes the same upload as a multipart form, and `GET /v1/wiki/pages/{id}/export` and `GET /v1/wiki/export` answer the same files. An API key imports with `wiki:write` and exports with `wiki:read`. See the [Wiki API](/api/resources/wiki/#import-and-export).
+
+</Fold>
+
+## Related
+
+- [Wiki](/guides/wiki/)
+- [Wiki databases](/guides/wiki-databases/)
+- [Canvas pages](/guides/wiki-canvas/)
+- [Wiki API](/api/resources/wiki/#import-and-export)

@@ -5,15 +5,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ChevronDown, Layers, Users } from "lucide-react";
-import { forwardRef, useMemo, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { Layers, Users } from "lucide-react";
+import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
+import { FilterButton } from "@/components/ui/button";
 import { Picker, type PickerItem } from "@/components/ui/picker";
 import { BrandMark } from "@/components/settings2/teams";
 import { TeamChip, TeamDot, sortTeams } from "@/components/tickets/teams";
 import type { Brand, ReportsGroup, ReportsOverview, Team } from "@/lib/api/types";
-import { cn } from "@/lib/cn";
 import { minutes } from "@/lib/format";
 import { q } from "@/lib/queries";
 import { useSession } from "@/lib/session";
@@ -54,17 +53,6 @@ export function useReportScope() {
 export type ReportScope = ReturnType<typeof useReportScope>;
 
 const noTeamMark = <span aria-hidden className="size-2 shrink-0 rounded-full border border-dashed border-line-strong" />;
-
-const FilterButton = forwardRef<HTMLButtonElement, { icon: ReactNode; label: ReactNode; active: boolean } & ButtonHTMLAttributes<HTMLButtonElement>>(function FilterButton(
-  { icon, label, active, ...rest },
-  ref,
-) {
-  return (
-    <Button ref={ref} {...rest} icon={icon} iconRight={<ChevronDown className="size-3 text-fg-4" />} className={cn("max-w-[200px]", active && "border-fg-3")}>
-      <span className="min-w-0 truncate">{label}</span>
-    </Button>
-  );
-});
 
 /** "All teams", "No team" or one team the caller may see. */
 export function TeamFilter({ scope, value, onChange }: { scope: ReportScope; value: string | undefined; onChange: (v: string | undefined) => void }) {

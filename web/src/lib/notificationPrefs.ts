@@ -23,11 +23,16 @@ export const NOTIFICATION_DEFAULTS: Record<NotificationType, { group: Notificati
   customer_replied: { group: "tickets", defaults: on },
   thread_replied: { group: "tickets", defaults: on },
   sla_breached: { group: "tickets", defaults: on },
+  scheduled_reply_failed: { group: "tickets", defaults: on },
   ai_handoff: { group: "tickets", defaults: on },
   team_joined: { group: "team", defaults: { email: false, push: false, desktop: true } },
   // Collab mail (contracts/collab.md "Notifications"): everywhere by default, like the ticket ones.
   collab_assigned: { group: "mail", defaults: on },
   collab_mention: { group: "mail", defaults: on },
+  // The wiki (contracts/wiki.md): comments on followed pages reach the phone and desktop, not email.
+  wiki_mention: { group: "wiki", defaults: on },
+  wiki_comment: { group: "wiki", defaults: { email: false, push: true, desktop: true } },
+  wiki_reminder: { group: "wiki", defaults: on },
   ai_cap_reached: { group: "ai_billing", defaults: { email: true, push: false, desktop: true } },
   ai_key_failed: { group: "ai_billing", defaults: { email: true, push: false, desktop: true } },
   ai_balance_low: { group: "ai_billing", defaults: { email: true, push: false, desktop: true } },
@@ -45,10 +50,14 @@ export const NOTIFICATION_ORDER: NotificationType[] = [
   "customer_replied",
   "thread_replied",
   "sla_breached",
+  "scheduled_reply_failed",
   "ai_handoff",
   "team_joined",
   "collab_assigned",
   "collab_mention",
+  "wiki_mention",
+  "wiki_comment",
+  "wiki_reminder",
   "ai_cap_reached",
   "ai_key_failed",
   "ai_balance_low",
@@ -61,6 +70,9 @@ export const NOTIFICATION_ORDER: NotificationType[] = [
 /** Types that may be emailed sooner than the cooldown. */
 export const URGENT_TYPES: ReadonlySet<NotificationType> = new Set<NotificationType>([
   "mentioned",
+  "collab_mention",
+  "wiki_mention",
+  "wiki_reminder",
   "sla_breached",
   "ai_handoff",
   "ai_balance_out",
@@ -117,7 +129,7 @@ export function pacingCopy(p: NotificationPacing | undefined, delayFallback?: nu
   };
 }
 
-export const NOTIFICATION_GROUPS: NotificationGroup[] = ["tickets", "team", "mail", "ai_billing", "workspace"];
+export const NOTIFICATION_GROUPS: NotificationGroup[] = ["tickets", "team", "mail", "wiki", "ai_billing", "workspace"];
 
 /** Groups only owners and admins receive. */
 export const ADMIN_GROUPS: ReadonlySet<NotificationGroup> = new Set<NotificationGroup>(["ai_billing", "workspace"]);

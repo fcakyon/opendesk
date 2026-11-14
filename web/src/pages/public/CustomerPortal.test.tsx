@@ -113,6 +113,51 @@ it("offers a reset link instead of opening tickets after a weak-password login",
   container.remove();
 });
 
+async function mountLogin(authMode: "local" | "oidc" | "local_and_oidc", search = "") {
+  history.replaceState(null, "", `/portal/acme${search}`);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => root.render(<QueryClientProvider client={queryClient}><AuthForm slug="acme" authMode={authMode} mode="login" resetToken="" onLogin={() => {}} /></QueryClientProvider>));
+  return { container, done: async () => { await act(async () => root.unmount()); container.remove(); history.replaceState(null, "", "/"); } };
+}
+
+it("offers the identity provider beside the password when the brand takes either", async () => {
+  const { container, done } = await mountLogin("local_and_oidc");
+  expect(container.textContent).toContain("Continue with single sign-on");
+  expect(container.textContent).toContain("or");
+  expect(container.querySelector('input[type="password"]')).not.toBeNull();
+  await done();
+});
+
+it("shows only the password form when the brand has no identity provider", async () => {
+  const { container, done } = await mountLogin("local");
+  expect(container.textContent).not.toContain("single sign-on");
+  expect(container.querySelector('input[type="password"]')).not.toBeNull();
+  await done();
+});
+
+it("tells a customer why the provider sign-in came back, without a password form, and drops the code from the address", async () => {
+  const { container, done } = await mountLogin("oidc", "?sso_error=unknown_customer&lang=fr");
+  expect(container.textContent).toContain("We couldn't find a customer with that email address");
+  expect(container.textContent).toContain("Continue with single sign-on");
+  expect(container.querySelector('input[type="password"]')).toBeNull();
+  expect(container.textContent).not.toContain("unknown_customer");
+  expect(location.search).toBe("?lang=fr");
+  await done();
+  const unknown = await mountLogin("oidc", "?sso_error=made_up_by_a_link");
+  expect(unknown.container.textContent).toContain("We couldn't sign you in");
+  await unknown.done();
+});
+
+it("stays on the portal after sign out instead of going straight back to the provider", async () => {
+  const { container, done } = await mountLogin("oidc", "?signed_out=1");
+  expect(container.querySelector('[role="status"]')).toBeNull();
+  expect(container.textContent).toContain("Continue with single sign-on");
+  expect(location.search).toBe("");
+  await done();
+});
+
 
 it("shows list loading, empty, error and ticket rows", async () => {
   const container = document.createElement("div"); document.body.append(container);
@@ -123,6 +168,8 @@ it("shows list loading, empty, error and ticket rows", async () => {
   expect(container.textContent).toContain("Loading");
   await act(async () => { resolve({ data: [], next_cursor: null }); await Promise.resolve(); });
   await vi.waitFor(() => expect(container.textContent).toContain("You have no requests"));
+  // Starting a request is offered even before there is one.
+  expect(container.textContent).toContain("New request");
   expect(container.querySelector('a[href="https://help.example"]')).not.toBeNull();
   await act(async () => root.unmount()); clearCustomer();
   list.mockRejectedValueOnce(new Error("unavailable"));
@@ -141,8 +188,8 @@ it("shows list loading, empty, error and ticket rows", async () => {
 
 it("loads a transcript and submits a reply with the keyboard", async () => {
   vi.spyOn(customerPortal, "ticket").mockResolvedValue({ id: "1", number: 42, subject: "Delivery", status: "open", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" });
-  vi.spyOn(customerPortal, "messages").mockResolvedValue({ data: [{ id: "m", direction: "outbound", body_text: "We are checking.", created_at: "2026-01-01T00:00:00Z" }], next_cursor: null });
-  const reply = vi.spyOn(customerPortal, "reply").mockResolvedValue({ id: "n", direction: "inbound", body_text: "Thanks", created_at: "2026-01-01T00:00:00Z" });
+  vi.spyOn(customerPortal, "messages").mockResolvedValue({ data: [{ id: "m", direction: "outbound", body_text: "We are checking.", created_at: "2026-01-01T00:00:00Z", attachments: [] }], next_cursor: null });
+  const reply = vi.spyOn(customerPortal, "reply").mockResolvedValue({ id: "n", direction: "inbound", body_text: "Thanks", created_at: "2026-01-01T00:00:00Z", attachments: [] });
   const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
   await act(async () => root.render(<QueryClientProvider client={queryClient}><Ticket slug="detail" id="1" /></QueryClientProvider>));
   await vi.waitFor(() => expect(container.textContent).toContain("We are checking."));
@@ -152,6 +199,23 @@ it("loads a transcript and submits a reply with the keyboard", async () => {
   const button = container.querySelector('button[type="submit"]')! as HTMLButtonElement;
   await act(async () => { button.focus(); button.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); button.click(); });
   await vi.waitFor(() => expect(reply).toHaveBeenCalledWith("detail", "1", "Thanks"));
+  await act(async () => root.unmount()); container.remove();
+});
+
+it("shows the files of a message: a picture small, anything else as a link, opening in a new tab", async () => {
+  vi.spyOn(customerPortal, "ticket").mockResolvedValue({ id: "1", number: 42, subject: "Delivery", status: "open", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" });
+  vi.spyOn(customerPortal, "messages").mockResolvedValue({ data: [{ id: "m", direction: "inbound", body_text: "See attached", created_at: "2026-01-01T00:00:00Z", attachments: [
+    { id: "a", filename: "screenshot.png", content_type: "image/png", size_bytes: 2048, url: "https://api.example/v1/attachments/a?exp=1&sig=x" },
+    { id: "b", filename: "invoice.pdf", content_type: "application/pdf", size_bytes: 4096, url: "https://api.example/v1/attachments/b?exp=1&sig=y" },
+  ] }], next_cursor: null });
+  const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
+  await act(async () => root.render(<QueryClientProvider client={queryClient}><Ticket slug="files" id="1" /></QueryClientProvider>));
+  await vi.waitFor(() => expect(container.textContent).toContain("screenshot.png"));
+  const links = [...container.querySelectorAll<HTMLAnchorElement>('ul[aria-label="Attachments"] a')];
+  expect(links.map((a) => a.getAttribute("href"))).toEqual(["https://api.example/v1/attachments/a?exp=1&sig=x", "https://api.example/v1/attachments/b?exp=1&sig=y"]);
+  expect(links.every((a) => a.target === "_blank" && a.rel.includes("noopener"))).toBe(true);
+  expect(links[0].querySelector("img")).not.toBeNull();
+  expect(links[1].querySelector("img")).toBeNull();
   await act(async () => root.unmount()); container.remove();
 });
 
@@ -209,9 +273,9 @@ it("treats a revoked session as signed out but preserves state on network failur
 
 it("keeps a new reply visible on an older message page", async () => {
   vi.spyOn(customerPortal, "ticket").mockResolvedValue({ id: "1", number: 42, subject: "Delivery", status: "open", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" });
-  const newer = { id: "new", direction: "inbound" as const, body_text: "Latest reply", created_at: "2026-01-02T00:00:00Z" };
+  const newer = { id: "new", direction: "inbound" as const, body_text: "Latest reply", created_at: "2026-01-02T00:00:00Z", attachments: [] };
   let sent = false;
-  vi.spyOn(customerPortal, "messages").mockImplementation(async (_slug, _id, cursor) => cursor ? { data: [{ id: "old", direction: "outbound", body_text: "Older message", created_at: "2026-01-01T00:00:00Z" }], next_cursor: null } : { data: sent ? [newer] : [], next_cursor: "older" });
+  vi.spyOn(customerPortal, "messages").mockImplementation(async (_slug, _id, cursor) => cursor ? { data: [{ id: "old", direction: "outbound", body_text: "Older message", created_at: "2026-01-01T00:00:00Z", attachments: [] }], next_cursor: null } : { data: sent ? [newer] : [], next_cursor: "older" });
   vi.spyOn(customerPortal, "reply").mockImplementation(async () => { sent = true; return newer; });
   const container = document.createElement("div"); document.body.append(container); const root = createRoot(container);
   await act(async () => root.render(<QueryClientProvider client={queryClient}><Ticket slug="pagination" id="1" /></QueryClientProvider>));

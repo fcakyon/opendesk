@@ -202,7 +202,7 @@ export default function Login() {
                       id={id}
                       inputSize="lg"
                       type="email"
-                      autoComplete={passkeysOn ? "username webauthn" : "email"}
+                      autoComplete={passkeysOn ? "username webauthn" : "username"}
                       autoFocus
                       placeholder="you@company.com"
                       invalid={!!errors.email}

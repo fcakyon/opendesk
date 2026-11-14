@@ -113,6 +113,36 @@
       "on_hold": "In de wacht",
       "solved": "Opgelost",
       "closed": "Gesloten"
-    }
+    },
+    "sso": "Doorgaan met single sign-on",
+    "or": "of",
+    "sso_error": {
+      "email_unverified": "Je provider heeft je e-mailadres niet bevestigd, dus we kunnen je er niet mee aanmelden.",
+      "unknown_customer": "We hebben geen klant met dat e-mailadres gevonden. Neem contact op met het team dat je toegang gaf.",
+      "blocked": "Dit account kan niet inloggen. Neem contact op met het team voor hulp.",
+      "relink_required": "Je account bij de provider is gewijzigd. Vraag het team een nieuwe aanmelding toe te staan en probeer het opnieuw.",
+      "identity_revoked": "Deze aanmelding is verwijderd. Neem contact op met het team voor hulp.",
+      "access_denied": "De aanmelding is geannuleerd.",
+      "provider_unavailable": "We konden de aanmeldprovider niet bereiken. Probeer het opnieuw.",
+      "rate_limited": "Te veel pogingen. Wacht even en probeer het opnieuw.",
+      "generic": "We konden je niet aanmelden. Probeer het opnieuw."
+    },
+    "new_request": "Nieuw verzoek",
+    "new": {
+      "title": "Nieuw verzoek",
+      "subject": "Onderwerp",
+      "message": "Waarmee kunnen we helpen?",
+      "send": "Verzoek versturen",
+      "limit": "Je hebt meerdere verzoeken kort na elkaar verstuurd. Wacht even en probeer het opnieuw.",
+      "busy": "Er komen nu veel verzoeken binnen. Wacht even en probeer het opnieuw.",
+      "attach": "Bestanden kiezen",
+      "drop": "Sleep bestanden hierheen of plak een schermafbeelding.",
+      "remove": "{{name}} verwijderen",
+      "too_big": "{{name}} is groter dan 10 MB.",
+      "max_files": "Je kunt maximaal 5 bestanden bijvoegen.",
+      "upload_failed": "{{name}} kon niet worden geüpload.",
+      "uploading": "Uploaden…"
+    },
+    "attachments": "Bijlagen"
   }
 }

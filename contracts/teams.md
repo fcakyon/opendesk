@@ -317,9 +317,17 @@ the session's `last_seen_at` (at most once a minute), and fetching a conversatio
 a reply arrives) refresh it at once. A visitor who only listens on the socket for longer than that
 counts as away.
 
+Agents see the same signal on the chat: `GET /v1/tickets/{id}/visitor-presence` (contracts/api.md) says
+whether the visitor is on the page and whether a reply would be emailed while they are away, and agents
+on the ticket get `"customer_presence"` when the visitor comes back (contracts/realtime.md "Live events").
+The app shows it above the conversation ("On the page now", "Left 5 min ago" and "Your reply will also
+be sent to them by email"), and the composer's delivery line reads "In the chat" or "In the chat · by
+email if they don't read it" instead of the contact's address.
+
 The email goes out like an email reply: from the ticket's reply address, else the brand's address whose
 default team is the ticket's team, else the brand's oldest active address that is not another private
-team's (none: no email), with the address's
+team's (none: no email, and the ticket gets a `follow_up_skipped{message_id, reason: "no_mailbox"}`
+activity by "system"), with the address's
 `from_name_format` and the team's or address's signature. The message's `delivery_status` becomes
 `pending`, then `sent` or `failed`, and it records its `mailbox_id`, From address and name; a chat with
 no reply address takes that one. Follow-ups thread with each other (`In-Reply-To`, `References`, the
@@ -461,7 +469,7 @@ zone holds that no domain does. Every status change publishes `brand.updated`.
 | path | |
 | --- | --- |
 | `/` | title, search, topics (collections) and popular articles |
-| `/c/<collection slug>` · `/a/<article slug>` | a topic, an article (with the rest of its topic) |
+| `/c/<collection slug>` · `/c/<collection slug>/<article slug>` · `/a/<article slug>` | a topic; an article in it (with the rest of its topic); an article in no topic |
 | `/search?q=` | up to 20 published articles |
 | `/changelog` · `/changelog/<entry slug>` · `/changelog/feed.xml` | the brand's and shared published changelog entries, newest first, 10 a page (`?page=`, `?category=`); one entry; an Atom feed of the latest 30. The header links the changelog, and the home page shows the latest three, once there is one |
 | `/sitemap.xml` · `/robots.txt` | every published article, topic and changelog entry of the brand |
@@ -473,6 +481,11 @@ zone holds that no domain does. Every status change publishes `brand.updated`.
   written.
 - Pages carry a canonical URL on the help center's `url`, Open Graph and JSON-LD (`WebSite` with a
   search action, `BreadcrumbList`, `Article`, `BlogPosting` for a changelog entry), and `Cache-Control: public, max-age=60`.
+- An article lives where its topic is (`KbArticle.path`, contracts/api.md "Knowledge base"). An address that is no
+  longer one answers `301` to where the article or topic is now, keeping `?lang=`: an article's address before its
+  slug or topic changed, a topic's before its slug changed (and its articles' under it), an article's in a topic
+  that was deleted, and `/a/<slug>` for an article that was in a topic when articles moved under their topic (the
+  address it had before, recorded then). Anything else is a `404` page. The sitemap and canonical URLs use `path`.
 - `<slug>.<HELP_DOMAIN>` and `/help/<slug>/*` on the instance's own hosts answer `301` to the help center's `url` when that
   is elsewhere (`/help/<slug>/c/x` → `/c/x`). A brand whose help center is off, or an unknown host or
   path, is a `404` page.

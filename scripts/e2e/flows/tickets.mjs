@@ -121,7 +121,7 @@ export async function run(t) {
     await owner.getByRole("button", { name: "New reply" }).first().click();
     await owner.getByLabel("Title").fill("Reset steps");
     await owner.getByLabel(/Shortcut/).fill("reset");
-    await owner.getByRole("textbox").filter({ hasText: "" }).last().click();
+    await owner.getByRole("textbox", { name: "Reply text", exact: true }).click();
     await owner.keyboard.type("Open the sign-in page and choose Forgot password.");
     await owner.getByRole("button", { name: "Save", exact: true }).click();
     await until(async () => (await api("GET", "/v1/saved-replies", { token: tok(), workspace: t.workspaceId })).json?.data?.some((x) => x.title === "Reset steps"), "saved reply stored");

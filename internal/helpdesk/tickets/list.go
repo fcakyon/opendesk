@@ -85,11 +85,10 @@ func (b *sqlBuilder) sql() string {
 	return " WHERE " + strings.Join(b.where, " AND ")
 }
 
-var numberRef = regexp.MustCompile(`^#?(\d{1,18})$`)
-
 // applyFilters adds the filter clauses for f. me is the caller's user id (nil for API keys).
 func applyFilters(b *sqlBuilder, wid uuid.UUID, me *uuid.UUID, f listQuery) error {
-	b.add("t.workspace_id = " + b.arg(wid))
+	ws := b.arg(wid)
+	b.add("t.workspace_id = " + ws)
 	b.add("t.deleted_at IS NULL")
 	if len(f.Hidden) > 0 {
 		if me != nil {
@@ -230,29 +229,42 @@ func applyFilters(b *sqlBuilder, wid uuid.UUID, me *uuid.UUID, f listQuery) erro
 		b.add(hd.FieldClause(def, ff, "t.fields", b.arg, me))
 	}
 	if q := strings.TrimSpace(f.Q); q != "" {
-		var parts []string
-		if m := numberRef.FindStringSubmatch(q); m != nil {
-			n, _ := strconv.ParseInt(m[1], 10, 64)
-			parts = append(parts, "t.number = "+b.arg(n))
-		}
-		alias := strings.TrimLeft(q, "# ")
-		if ticketAliasPattern.MatchString(alias) && strings.ContainsAny(alias, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") {
-			parts = append(parts, "lower(t.alias) = lower("+b.arg(alias)+")")
-		}
-		tsq := "websearch_to_tsquery('simple', " + b.arg(q) + ")"
-		// The customer's name, email and phone (contacts.search) match too.
-		contact := `EXISTS (SELECT 1 FROM contacts fc WHERE fc.workspace_id = t.workspace_id AND fc.id = t.contact_id AND (fc.search @@ ` + tsq
-		parts = append(parts, "t.search @@ "+tsq, "t.fields_search @@ "+tsq,
-			`EXISTS (SELECT 1 FROM messages fm WHERE fm.workspace_id = t.workspace_id AND fm.ticket_id = t.id AND fm.deleted_at IS NULL AND fm.search @@ `+tsq+`)`)
-		if pq := prefixQuery(q); pq != "" {
-			ptsq := "to_tsquery('simple', " + b.arg(pq) + ")"
-			parts = append(parts, "t.search @@ "+ptsq, "t.fields_search @@ "+ptsq)
-			contact += " OR fc.search @@ " + ptsq
-		}
-		parts = append(parts, contact+"))")
-		b.add("(" + strings.Join(parts, " OR ") + ")")
+		b.add(searchClause(b, ws, q))
 	}
 	return nil
+}
+
+// searchClause is the q filter, ws the workspace's parameter: the ticket's number or alias,
+// its subject and fields (full words, and word prefixes), its messages, and its customer's
+// name, email and phone (contacts.search).
+//
+// Each source is its own lookup of ticket ids, joined by UNION, so Postgres reads the search
+// indexes (GIN on tickets.search, tickets.fields_search, messages.search and contacts.search,
+// the number and alias keys) instead of every ticket of the workspace: one OR over the
+// ticket's columns and correlated EXISTS on its messages and contact could use none of them.
+func searchClause(b *sqlBuilder, ws, q string) string {
+	var ids []string
+	if m := domain.TicketNumberRef.FindStringSubmatch(q); m != nil {
+		n, _ := strconv.ParseInt(m[1], 10, 64)
+		ids = append(ids, "SELECT nt.id FROM tickets nt WHERE nt.workspace_id = "+ws+" AND nt.number = "+b.arg(n))
+	}
+	alias := strings.TrimLeft(q, "# ")
+	if domain.TicketAliasPattern.MatchString(alias) && strings.ContainsAny(alias, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") {
+		ids = append(ids, "SELECT at.id FROM tickets at WHERE at.workspace_id = "+ws+" AND lower(at.alias) = lower("+b.arg(alias)+")")
+	}
+	tsq := "websearch_to_tsquery('simple', " + b.arg(q) + ")"
+	own := "st.search @@ " + tsq + " OR st.fields_search @@ " + tsq
+	contact := "fc.search @@ " + tsq
+	if pq := prefixQuery(q); pq != "" {
+		ptsq := "to_tsquery('simple', " + b.arg(pq) + ")"
+		own += " OR st.search @@ " + ptsq + " OR st.fields_search @@ " + ptsq
+		contact += " OR fc.search @@ " + ptsq
+	}
+	ids = append(ids,
+		"SELECT st.id FROM tickets st WHERE st.workspace_id = "+ws+" AND ("+own+")",
+		"SELECT fm.ticket_id FROM messages fm WHERE fm.workspace_id = "+ws+" AND fm.deleted_at IS NULL AND fm.search @@ "+tsq,
+		"SELECT ct.id FROM contacts fc JOIN tickets ct ON ct.workspace_id = fc.workspace_id AND ct.contact_id = fc.id WHERE fc.workspace_id = "+ws+" AND ("+contact+")")
+	return "t.id IN (" + strings.Join(ids, " UNION ") + ")"
 }
 
 // refList parses a comma-separated list of ids, at most 50.
@@ -574,64 +586,6 @@ func mergeFilters(view, req hd.TicketFilters) hd.TicketFilters {
 	return out
 }
 
-// resolveTicket finds a ticket by uuid, alias, "#123" or "123" in the workspace.
-func resolveTicket(ctx context.Context, q db.Querier, wid uuid.UUID, ref string) (uuid.UUID, error) {
-	ref = strings.TrimSpace(ref)
-	if id, err := uuid.Parse(ref); err == nil {
-		var exists bool
-		if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM tickets WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL)`,
-			wid, id).Scan(&exists); err != nil {
-			return uuid.Nil, err
-		}
-		if !exists {
-			return uuid.Nil, httpx.NotFound("Ticket")
-		}
-		return id, nil
-	}
-	m := numberRef.FindStringSubmatch(ref)
-	if m != nil {
-		n, _ := strconv.ParseInt(m[1], 10, 64)
-		var id uuid.UUID
-		err := q.QueryRow(ctx, `SELECT id FROM tickets WHERE workspace_id = $1 AND number = $2 AND deleted_at IS NULL`, wid, n).Scan(&id)
-		if db.IsNotFound(err) {
-			return uuid.Nil, httpx.NotFound("Ticket")
-		}
-		return id, err
-	}
-	alias := strings.TrimLeft(ref, "# ")
-	if !ticketAliasPattern.MatchString(alias) || !strings.ContainsAny(alias, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") {
-		return uuid.Nil, httpx.NotFound("Ticket")
-	}
-	var id uuid.UUID
-	err := q.QueryRow(ctx, `SELECT id FROM tickets WHERE workspace_id = $1 AND lower(alias) = lower($2) AND deleted_at IS NULL`, wid, alias).Scan(&id)
-	if db.IsNotFound(err) {
-		return uuid.Nil, httpx.NotFound("Ticket")
-	}
-	return id, err
-}
-
-// resolveVisible is resolveTicket for a caller: a ticket of a private team the caller may
-// not see is not found, like a missing one.
-func resolveVisible(ctx context.Context, q db.Querier, p *auth.Principal, ref string) (uuid.UUID, error) {
-	id, err := resolveTicket(ctx, q, p.WorkspaceID, ref)
-	if err != nil {
-		return id, err
-	}
-	var team, assignee *uuid.UUID
-	if err := q.QueryRow(ctx, `SELECT team_id, assignee_id FROM tickets WHERE workspace_id = $1 AND id = $2`,
-		p.WorkspaceID, id).Scan(&team, &assignee); err != nil {
-		return id, err
-	}
-	ok, err := domain.CanSee(ctx, q, p, team, assignee)
-	if err != nil {
-		return id, err
-	}
-	if !ok {
-		return uuid.Nil, httpx.NotFound("Ticket")
-	}
-	return id, nil
-}
-
 // Counts is the sidebar badge set.
 type TicketCounts struct {
 	Unassigned int            `json:"unassigned"`
@@ -645,9 +599,20 @@ type TicketCounts struct {
 	// Teams counts every team the caller can see; MyTeams the tickets of the caller's teams.
 	Teams   map[string]TeamCount `json:"teams" doc:"Every team the caller can see"`
 	MyTeams TeamCount            `json:"my_teams" doc:"Tickets of the caller's teams"`
+	// Mailboxes counts the folders of each reply address with tickets the caller can see, keyed by
+	// mailbox id: a ticket inbox shown as a section of its own in the sidebar.
+	Mailboxes map[string]MailboxCount `json:"mailboxes" doc:"Per reply address, its inbox folders' counts"`
 	// Stats breaks each sidebar row's tickets down, keyed by row id: ticket_folder:<unassigned|mine|open|pending>,
-	// team:<id>, team:mine and view:<id>, over the same tickets as the row's count.
+	// team:<id>, team:mine, view:<id> and mailbox:<id>:<unassigned|mine|open|pending>, over the same tickets as the row's count.
 	Stats map[string]TicketStats `json:"stats" doc:"Per sidebar row: awaiting a reply, urgent and overdue tickets"`
+}
+
+// MailboxCount counts a reply address's inbox folders, as TicketCounts counts the whole inbox's.
+type MailboxCount struct {
+	Unassigned int `json:"unassigned"`
+	Mine       int `json:"mine"`
+	Open       int `json:"open"`
+	Pending    int `json:"pending" doc:"Pending and on hold, as the Pending folder lists them"`
 }
 
 // TeamCount counts a team's open and pending tickets (spam excluded).
@@ -678,7 +643,7 @@ func statCols(a, cond string) string {
 func (s *TicketStats) dest() []any { return []any{&s.Awaiting, &s.Urgent, &s.Overdue} }
 
 func ticketCounts(ctx context.Context, q db.Querier, p *auth.Principal) (TicketCounts, error) {
-	c := TicketCounts{Views: map[string]int{}, Teams: map[string]TeamCount{}, Stats: map[string]TicketStats{}}
+	c := TicketCounts{Views: map[string]int{}, Teams: map[string]TeamCount{}, Mailboxes: map[string]MailboxCount{}, Stats: map[string]TicketStats{}}
 	const (
 		unassigned = `NOT spam AND status IN ('open','pending','on_hold') AND assignee_id IS NULL`
 		mine       = `NOT spam AND status IN ('open','pending','on_hold') AND assignee_id = $2`
@@ -753,6 +718,42 @@ func ticketCounts(ctx context.Context, q db.Querier, p *auth.Principal) (TicketC
 		}
 		c.Teams[id.String()] = tc
 		c.Stats["team:"+id.String()] = st
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return c, err
+	}
+	// Each reply address's folders, read once through the status index like the inbox's own.
+	rows, err = q.Query(ctx, `SELECT mailbox_id,
+		count(*) FILTER (WHERE `+unassigned+`),
+		count(*) FILTER (WHERE `+mine+`),
+		count(*) FILTER (WHERE `+open+`),
+		count(*) FILTER (WHERE `+pending+`),
+		`+statCols("", unassigned)+`,
+		`+statCols("", mine)+`,
+		`+statCols("", open)+`,
+		`+statCols("", pending)+`
+		FROM tickets WHERE workspace_id = $1 AND deleted_at IS NULL AND status IN ('open','pending','on_hold') AND mailbox_id IS NOT NULL
+			AND `+domain.VisibleSQLUser("tickets", 3, 2)+` GROUP BY mailbox_id`, p.WorkspaceID, p.ActorUserID(), hidden)
+	if err != nil {
+		return c, err
+	}
+	for rows.Next() {
+		var id uuid.UUID
+		var mc MailboxCount
+		var st [4]TicketStats
+		dest := []any{&id, &mc.Unassigned, &mc.Mine, &mc.Open, &mc.Pending}
+		for i := range st {
+			dest = append(dest, st[i].dest()...)
+		}
+		if err := rows.Scan(dest...); err != nil {
+			rows.Close()
+			return c, err
+		}
+		c.Mailboxes[id.String()] = mc
+		for i, f := range []string{"unassigned", "mine", "open", "pending"} {
+			c.Stats["mailbox:"+id.String()+":"+f] = st[i]
+		}
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {

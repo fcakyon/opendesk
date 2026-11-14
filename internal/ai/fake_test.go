@@ -90,6 +90,8 @@ func feature(system string) string {
 		return "ask"
 	case strings.Contains(system, "You edit support replies"):
 		return "rewrite"
+	case strings.Contains(system, "write their internal wiki"):
+		return "wiki_write"
 	case strings.Contains(system, "You translate"):
 		return "translate"
 	case strings.Contains(system, "company's website chat"):
@@ -109,16 +111,17 @@ func feature(system string) string {
 }
 
 var defaultReplies = map[string]string{
-	"triage":    `{"tags":["billing"],"suggested_tags":[],"priority":"high","sentiment":"frustrated","language":"en","category":"billing","summary":"Customer was charged twice."}`,
-	"summary":   `{"summary":"Customer was double charged and wants a refund.","key_points":["Order 1234","Charged twice on Oct 3"],"sentiment":"negative"}`,
-	"draft":     "Hi Jane,\n\nSorry about the double charge. You can see refunds in [Refund policy](http://app.test/help/x/articles/refunds).\n\n- Step one\n- Step two\n\nBest,\nAnna",
-	"ask":       "The customer was charged **twice** (message 1).",
-	"rewrite":   "<p>Hello, thanks for waiting.</p>",
-	"translate": `{"translation":"Hallo Welt","source_language":"en"}`,
-	"kb":        `{"title":"Get a refund","body_html":"<h2>Steps</h2><ol><li>Open billing</li></ol><script>x</script>","excerpt":"How refunds work."}`,
-	"widget":    "You can reset your password from the sign-in page [1].",
-	"procedure": "Nothing to do for this ticket.",
-	"email":     "Hi Jane,\n\nYou can reset your password from the sign-in page [1].\n\nBest regards,\nOllie\nAcme",
+	"triage":     `{"tags":["billing"],"suggested_tags":[],"priority":"high","sentiment":"frustrated","language":"en","category":"billing","summary":"Customer was charged twice."}`,
+	"summary":    `{"summary":"Customer was double charged and wants a refund.","key_points":["Order 1234","Charged twice on Oct 3"],"sentiment":"negative"}`,
+	"draft":      "Hi Jane,\n\nSorry about the double charge. You can see refunds in [Refund policy](http://app.test/help/x/articles/refunds).\n\n- Step one\n- Step two\n\nBest,\nAnna",
+	"ask":        "The customer was charged **twice** (message 1).",
+	"rewrite":    "<p>Hello, thanks for waiting.</p>",
+	"wiki_write": "<p>Refunds go back to the card within five days.</p>",
+	"translate":  `{"translation":"Hallo Welt","source_language":"en"}`,
+	"kb":         `{"title":"Get a refund","body_html":"<h2>Steps</h2><ol><li>Open billing</li></ol><script>x</script>","excerpt":"How refunds work."}`,
+	"widget":     "You can reset your password from the sign-in page [1].",
+	"procedure":  "Nothing to do for this ticket.",
+	"email":      "Hi Jane,\n\nYou can reset your password from the sign-in page [1].\n\nBest regards,\nOllie\nAcme",
 }
 
 func (f *fakeLLM) serve(w http.ResponseWriter, r *http.Request) {

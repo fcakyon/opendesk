@@ -236,6 +236,7 @@
     "kb_draft": "Brouillons d’articles",
     "assistant": "Assistant",
     "procedure": "Procédures exécutées par les automatisations",
+    "wiki_write": "Écriture dans le wiki",
     "other": "Autre"
   },
   "dialog": {

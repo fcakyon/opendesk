@@ -39,18 +39,21 @@ type SavedReply struct {
 	Shortcut string    `json:"shortcut"`
 	BodyHTML string    `json:"body_html"`
 	// TeamID offers the reply only on that team's tickets; nil offers it everywhere.
-	TeamID    *uuid.UUID `json:"team_id" doc:"Offered only on this team's tickets; null for everyone"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	TeamID *uuid.UUID `json:"team_id" doc:"Offered only on this team's tickets; null for everyone"`
+	// Actions apply to the ticket when a message using the reply is sent (saved_reply_ids).
+	Actions   hd.SavedReplyActions `json:"actions"`
+	CreatedAt time.Time            `json:"created_at"`
+	UpdatedAt time.Time            `json:"updated_at"`
 }
 
-const savedReplySelect = `SELECT id, title, shortcut, body_html, team_id, created_at, updated_at FROM saved_replies`
+const savedReplySelect = `SELECT id, title, shortcut, body_html, team_id, actions, created_at, updated_at FROM saved_replies`
 
 type savedReplyWriteBody struct {
-	Title    *string          `json:"title,omitempty" maxLength:"200"`
-	Shortcut *string          `json:"shortcut,omitempty" maxLength:"64"`
-	BodyHTML *string          `json:"body_html,omitempty" maxLength:"100000"`
-	TeamID   Nullable[string] `json:"team_id,omitempty" doc:"A team the caller is on (admins: any team), or null for everyone"`
+	Title    *string               `json:"title,omitempty" maxLength:"200"`
+	Shortcut *string               `json:"shortcut,omitempty" maxLength:"64"`
+	BodyHTML *string               `json:"body_html,omitempty" maxLength:"100000"`
+	TeamID   Nullable[string]      `json:"team_id,omitempty" doc:"A team the caller is on (admins: any team), or null for everyone"`
+	Actions  *hd.SavedReplyActions `json:"actions,omitempty" doc:"Replaces the reply's actions; {} clears them"`
 }
 
 // applyTeam sets the reply's team. Admins (and API keys with settings:write) pick any team
@@ -142,6 +145,9 @@ func (b *savedReplyWriteBody) apply(r *SavedReply) error {
 	if b.BodyHTML != nil {
 		r.BodyHTML = hd.SanitizeRichTemplate(*b.BodyHTML)
 	}
+	if b.Actions != nil {
+		r.Actions = *b.Actions
+	}
 	if strings.TrimSpace(r.BodyHTML) == "" {
 		return httpx.Validation("body_html is required")
 	}
@@ -158,6 +164,9 @@ func saveSavedReply(ctx context.Context, tx pgx.Tx, wid uuid.UUID, r *SavedReply
 			return err
 		}
 	}
+	if err := r.Actions.Clean(ctx, tx, wid); err != nil {
+		return err
+	}
 	if err := lockKind(ctx, tx, wid, "saved_reply"); err != nil {
 		return err
 	}
@@ -173,12 +182,12 @@ func saveSavedReply(ctx context.Context, tx pgx.Tx, wid uuid.UUID, r *SavedReply
 	}
 	var err error
 	if create {
-		err = tx.QueryRow(ctx, `INSERT INTO saved_replies (id, workspace_id, title, shortcut, body_html, created_by, team_id)
-			VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING created_at, updated_at`, r.ID, wid, r.Title, r.Shortcut, r.BodyHTML, createdBy, r.TeamID).
+		err = tx.QueryRow(ctx, `INSERT INTO saved_replies (id, workspace_id, title, shortcut, body_html, created_by, team_id, actions)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING created_at, updated_at`, r.ID, wid, r.Title, r.Shortcut, r.BodyHTML, createdBy, r.TeamID, r.Actions).
 			Scan(&r.CreatedAt, &r.UpdatedAt)
 	} else {
-		err = tx.QueryRow(ctx, `UPDATE saved_replies SET title = $3, shortcut = $4, body_html = $5, team_id = $6, updated_at = now()
-			WHERE workspace_id = $1 AND id = $2 RETURNING created_at, updated_at`, wid, r.ID, r.Title, r.Shortcut, r.BodyHTML, r.TeamID).
+		err = tx.QueryRow(ctx, `UPDATE saved_replies SET title = $3, shortcut = $4, body_html = $5, team_id = $6, actions = $7, updated_at = now()
+			WHERE workspace_id = $1 AND id = $2 RETURNING created_at, updated_at`, wid, r.ID, r.Title, r.Shortcut, r.BodyHTML, r.TeamID, r.Actions).
 			Scan(&r.CreatedAt, &r.UpdatedAt)
 	}
 	if err != nil {
@@ -206,7 +215,7 @@ type titleCursor struct {
 func registerSavedReplies(d *deps.Deps, api huma.API) {
 	scan := func(r pgx.Row) (SavedReply, error) {
 		var s SavedReply
-		err := r.Scan(&s.ID, &s.Title, &s.Shortcut, &s.BodyHTML, &s.TeamID, &s.CreatedAt, &s.UpdatedAt)
+		err := r.Scan(&s.ID, &s.Title, &s.Shortcut, &s.BodyHTML, &s.TeamID, &s.Actions, &s.CreatedAt, &s.UpdatedAt)
 		return s, err
 	}
 

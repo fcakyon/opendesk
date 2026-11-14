@@ -57,7 +57,7 @@ func Logger(log *slog.Logger) func(http.Handler) http.Handler {
 				if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
 					return
 				}
-				log.Info("http", "method", r.Method, "path", LogPath(r.URL.Path), "status", sw.status,
+				log.Info("http", "method", oneLine(r.Method), "path", LogPath(r.URL.Path), "status", sw.status,
 					"ms", time.Since(start).Milliseconds(), "request_id", RequestIDFrom(r.Context()))
 			}()
 			next.ServeHTTP(sw, r)
@@ -65,11 +65,17 @@ func Logger(log *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-// LogPath is a request path as logs may keep it: a survey link of an earlier version
-// carried its token in the path (/csat/<token>), and a phone webhook an admin adds by hand
-// carries its secret after the connection (/v1/phone/hooks/<provider>/<id>/<secret>),
+// oneLine keeps a value from the request on one log line.
+func oneLine(v string) string {
+	return strings.NewReplacer("\n", "", "\r", "").Replace(v)
+}
+
+// LogPath is a request path as logs may keep it, on one line: a survey link of an earlier
+// version carried its token in the path (/csat/<token>), and a phone webhook an admin adds
+// by hand carries its secret after the connection (/v1/phone/hooks/<provider>/<id>/<secret>),
 // which are left out.
 func LogPath(p string) string {
+	p = oneLine(p)
 	if strings.HasPrefix(p, "/csat/") {
 		return "/csat/…"
 	}
@@ -169,7 +175,7 @@ func CORS(origins []string, adminOrigins ...string) func(http.Handler) http.Hand
 				case public:
 					h.Set("Access-Control-Allow-Origin", "*")
 				}
-				h.Set("Access-Control-Expose-Headers", "X-Request-Id, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, Idempotent-Replayed, Mcp-Session-Id, WWW-Authenticate, OD-Ticket-Hidden")
+				h.Set("Access-Control-Expose-Headers", "X-Request-Id, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, Idempotent-Replayed, Mcp-Session-Id, WWW-Authenticate, OD-Ticket-Hidden, Content-Disposition")
 			}
 			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
 				h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")

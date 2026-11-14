@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useRouterState, type NavigateOptions } from "@tanstack/react-router";
 import { Command } from "cmdk";
 import { Dialog as D } from "radix-ui";
@@ -37,13 +37,15 @@ import { StatusIcon } from "@/components/tickets/bits";
 import { Requester } from "@/components/tickets/requester";
 import { folders } from "@/lib/folders";
 import { relShort } from "@/lib/format";
-import { q, qk } from "@/lib/queries";
+import { q } from "@/lib/queries";
+import { quickAdd } from "@/app/quickAdd";
+import { inArea, pageTo } from "@/lib/wiki/area";
 import { atLeast, useRole, useSession } from "@/lib/session";
-import { api } from "@/lib/api/endpoints";
-import { toast } from "@/components/ui/toast";
 import { useTheme } from "@/lib/theme";
 import { desktop } from "@/lib/desktop";
 import { NEW_TICKET_PATH, shell, usePageCommands, useShell } from "./shellStore";
+import { ShortcutKeys } from "@/components/ui/shortcut-keys";
+import { ShortcutCommands } from "./ShortcutCommands";
 import { useAccountActions, useSwitcherEntries } from "./useAccounts";
 import { useTranslation } from "react-i18next";
 import { AiIcon } from "@/components/ai/bits";
@@ -132,18 +134,10 @@ export function CommandPalette() {
     }
   }, [open]);
 
-  const qc = useQueryClient();
   const { t: tWiki } = useTranslation("wiki");
-  const newWikiPage = async () => {
-    try {
-      const p = await api.wiki.create({});
-      qc.setQueryData(qk.wikiPage(p.id), p);
-      void qc.invalidateQueries({ queryKey: qk.wikiTree });
-      void navigate({ to: "/wiki/$pageId", params: { pageId: p.id } });
-    } catch (e) {
-      toast.error(e);
-    }
-  };
+  // The new page popup: in the wiki while the wiki is open, else in Pages (contracts/pages.md).
+  const inWiki = useRouterState({ select: (st) => st.location.pathname.startsWith("/wiki") });
+  const newPage = () => quickAdd.page(undefined, inWiki ? "wiki" : undefined);
 
   const go = (fn: () => void) => {
     shell.palette(false);
@@ -156,8 +150,11 @@ export function CommandPalette() {
 
   // The server leaves tickets out while Tickets is off; a result cached before that is not shown either.
   const results = search.data && !ticketsOn ? { ...search.data, tickets: [] } : search.data;
-  const wikiPages = results?.wiki_pages ?? [];
-  const hasResults = !!results && (results.tickets.length + results.contacts.length + results.articles.length + wikiPages.length > 0);
+  const hits = results?.wiki_pages ?? [];
+  // Pages' pages and the wiki's are two groups (contracts/pages.md).
+  const pagesHits = hits.filter(inArea("pages"));
+  const wikiPages = hits.filter(inArea("wiki"));
+  const hasResults = !!results && (results.tickets.length + results.contacts.length + results.articles.length + hits.length > 0);
   const role = useRole();
 
   return (
@@ -295,6 +292,23 @@ export function CommandPalette() {
                 </Command.Group>
               )}
 
+              {hasResults && pagesHits.length > 0 && (
+                <Command.Group heading={tNav("command.pages")} forceMount className={groupCls}>
+                  {pagesHits.map((p) => (
+                    <Item
+                      forceMount
+                      key={p.id}
+                      value={`page ${p.title} ${p.id}`}
+                      icon={p.icon ? <span className="flex size-4 shrink-0 items-center justify-center text-[13px] leading-none">{p.icon}</span> : <NotebookText />}
+                      hint={p.path.length ? p.path.map((x) => x.title || tWiki("untitled")).join(" / ") : undefined}
+                      {...link(pageTo(p))}
+                    >
+                      {p.title || tWiki("untitled")}
+                    </Item>
+                  ))}
+                </Command.Group>
+              )}
+
               {hasResults && wikiPages.length > 0 && (
                 <Command.Group heading={tNav("command.wikiPages")} forceMount className={groupCls}>
                   {wikiPages.map((p) => (
@@ -304,7 +318,7 @@ export function CommandPalette() {
                       value={`wiki page ${p.title} ${p.id}`}
                       icon={p.icon ? <span className="flex size-4 shrink-0 items-center justify-center text-[13px] leading-none">{p.icon}</span> : <NotebookText />}
                       hint={p.path.length ? p.path.map((x) => x.title || tWiki("untitled")).join(" / ") : undefined}
-                      {...link({ to: "/wiki/$pageId", params: { pageId: p.id } })}
+                      {...link(pageTo(p))}
                     >
                       {p.title || tWiki("untitled")}
                     </Item>
@@ -400,7 +414,7 @@ export function CommandPalette() {
                 <Item value="go changelog product updates release notes" keywords={[tNav("titles.changelog")]} icon={<Newspaper />} {...link({ to: "/kb/changelog" })}>
                   {tNav("titles.changelog")}
                 </Item>
-                <Item value="go wiki internal docs runbooks policies" keywords={[tNav("titles.wiki")]} icon={<NotebookText />} hint={<Kbd>g w</Kbd>} {...link({ to: "/wiki" })}>
+                <Item value="go wiki internal docs runbooks policies" keywords={[tNav("titles.wiki")]} icon={<NotebookText />} hint={<ShortcutKeys id="go.wiki" />} {...link({ to: "/wiki" })}>
                   {tNav("titles.wiki")}
                 </Item>
                 {ticketsOn && <Item value="go reports analytics" keywords={[tNav("titles.reports")]} icon={<BarChart3 />} {...link({ to: "/reports" })}>
@@ -433,6 +447,7 @@ export function CommandPalette() {
                     ["/settings/api-keys", "titles.apiKeys"],
                     ["/settings/webhooks", "titles.webhooks"],
                     ["/settings/audit-log", "titles.auditLog"],
+                    ["/settings/trash", "titles.trash"],
                     ["/settings/import", "command.importHistory"],
                   ] as const
                 ).filter(([to]) => ticketsOn || !TICKET_SETTINGS.has(to)).map(([to, labelKey]) => (
@@ -444,7 +459,7 @@ export function CommandPalette() {
 
               <Command.Group heading={tNav("command.actions")} className={groupCls}>
                 {ticketsOn && !onNewTicket && (
-                  <Item value="new ticket compose create" keywords={[tNav("command.newTicket")]} icon={<SquarePen />} hint={<Kbd>c</Kbd>} onSelect={() => go(() => shell.newTicket())}>
+                  <Item value="new ticket compose create" keywords={[tNav("command.newTicket")]} icon={<SquarePen />} hint={<ShortcutKeys id="global.new" />} onSelect={() => go(() => shell.newTicket())}>
                     {tNav("command.newTicket")}
                   </Item>
                 )}
@@ -459,8 +474,8 @@ export function CommandPalette() {
                   </Item>
                 )}
                 {atLeast(role, "agent") && (
-                  <Item value="new wiki page doc create write" keywords={[tNav("command.newWikiPage")]} icon={<FilePlus2 />} onSelect={() => go(() => void newWikiPage())}>
-                    {tNav("command.newWikiPage")}
+                  <Item value="new page doc database canvas create write wiki" keywords={[tNav("command.newPage")]} icon={<FilePlus2 />} onSelect={() => go(newPage)}>
+                    {tNav("command.newPage")}
                   </Item>
                 )}
                 {collab.enabled && !!mailAccounts?.length && (
@@ -471,7 +486,7 @@ export function CommandPalette() {
                 <Item value="toggle theme dark light mode" keywords={[tNav(dark ? "command.switchLight" : "command.switchDark")]} icon={dark ? <Sun /> : <Moon />} onSelect={() => go(() => setTheme(dark ? "light" : "dark"))}>
                   {tNav(dark ? "command.switchLight" : "command.switchDark")}
                 </Item>
-                <Item value="keyboard shortcuts help" keywords={[tNav("command.shortcuts")]} icon={<Keyboard />} hint={<Kbd>?</Kbd>} onSelect={() => go(() => shell.shortcuts())}>
+                <Item value="keyboard shortcuts help" keywords={[tNav("command.shortcuts")]} icon={<Keyboard />} hint={<ShortcutKeys id="global.help" />} onSelect={() => go(() => shell.shortcuts())}>
                   {tNav("command.shortcuts")}
                 </Item>
                 {desktop && (
@@ -511,6 +526,7 @@ export function CommandPalette() {
                   {tShell("accounts.paletteAdd")}
                 </Item>
               </Command.Group>
+              <ShortcutCommands item={Item} groupCls={groupCls} go={go} />
               {ai.enabled && (
                 <Command.Group heading={t("palette.ask")} className={groupCls}>
                   <Item value="ask ai semantic search meaning" keywords={[t("palette.ask_hint")]} icon={<AiIcon />} hint={<Kbd>tab</Kbd>} onSelect={() => setAiMode(true)}>

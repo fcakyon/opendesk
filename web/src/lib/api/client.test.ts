@@ -3,6 +3,8 @@ import {
   __resetClientForTests,
   ApiError,
   configureClient,
+  dispositionName,
+  download,
   http,
   onAccountSession,
   onPlanLimit,
@@ -219,5 +221,79 @@ describe("parseFrame", () => {
   it("joins multi-line data and defaults the event name", () => {
     expect(parseFrame("data: a\ndata: b")).toEqual({ event: "message", data: "a\nb" });
     expect(parseFrame(": comment")).toBeNull();
+  });
+});
+
+describe("uploads and downloads", () => {
+  it("reports an upload's progress over XMLHttpRequest, with the same headers fetch would send", async () => {
+    const sent: { method: string; url: string; headers: Record<string, string>; body: unknown; credentials: boolean } [] = [];
+    class FakeXHR {
+      upload: { onprogress: ((e: { lengthComputable: boolean; loaded: number; total: number }) => void) | null } = { onprogress: null };
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      onabort: (() => void) | null = null;
+      withCredentials = false;
+      responseType = "";
+      status = 0;
+      statusText = "";
+      response: unknown = null;
+      private req = { method: "", url: "", headers: {} as Record<string, string> };
+      open(method: string, url: string) {
+        this.req = { method, url, headers: {} };
+      }
+      setRequestHeader(k: string, v: string) {
+        this.req.headers[k] = v;
+      }
+      getAllResponseHeaders() {
+        return "content-type: application/json\r\nx-request-id: r1\r\n";
+      }
+      abort() {}
+      send(body: unknown) {
+        sent.push({ ...this.req, body, credentials: this.withCredentials });
+        this.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 100 });
+        this.upload.onprogress?.({ lengthComputable: true, loaded: 100, total: 100 });
+        this.status = 201;
+        this.response = JSON.stringify({ pages: 2 });
+        setTimeout(() => this.onload?.(), 0);
+      }
+    }
+    vi.stubGlobal("XMLHttpRequest", FakeXHR);
+    try {
+      configureClient({ baseUrl: "https://api.test" });
+      setAccessToken("tok_a");
+      setWorkspaceId("w1");
+      const fd = new FormData();
+      const seen: number[] = [];
+      const out = await http.post<{ pages: number }>("/v1/wiki/import", fd, { onUploadProgress: (p) => seen.push(p) });
+      expect(out).toEqual({ pages: 2 });
+      expect(seen).toEqual([0.5, 1, 1]);
+      expect(sent[0]).toMatchObject({ method: "POST", url: "https://api.test/v1/wiki/import", body: fd, credentials: true });
+      expect(sent[0].headers).toMatchObject({ Authorization: "Bearer tok_a", "OD-Workspace": "w1" });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("downloads with the token and reads the file's name", async () => {
+    const calls: RequestInit[] = [];
+    setTransport(async (_u, init) => {
+      calls.push(init);
+      return new Response("# Hi", { status: 200, headers: { "content-type": "text/markdown", "content-disposition": 'attachment; filename="Refunds.md"' } });
+    });
+    setAccessToken("tok_a");
+    const d = await download("/v1/wiki/pages/p1/export", { query: { format: "markdown" } });
+    expect(await d.blob.text()).toBe("# Hi");
+    expect(d.filename).toBe("Refunds.md");
+    expect((calls[0].headers as Record<string, string>).Authorization).toBe("Bearer tok_a");
+  });
+
+  it("reads Content-Disposition's file name, RFC 5987's first", () => {
+    expect(dispositionName('attachment; filename="Wiki 2026-11-07.zip"')).toBe("Wiki 2026-11-07.zip");
+    expect(dispositionName("attachment; filename*=utf-8''Caf%C3%A9.md")).toBe("Café.md");
+    expect(dispositionName("attachment; filename=\"fallback.md\"; filename*=UTF-8''%C3%A9t%C3%A9.md")).toBe("été.md");
+    expect(dispositionName('attachment; filename="say \\"hi\\".md"')).toBe('say "hi".md');
+    expect(dispositionName("attachment; filename=plain.md")).toBe("plain.md");
+    expect(dispositionName("attachment")).toBeNull();
+    expect(dispositionName(null)).toBeNull();
   });
 });

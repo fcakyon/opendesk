@@ -650,5 +650,41 @@
     "precWorkspace": "Workspace default",
     "precWorkspaceHint": "Everything else, as chosen above.",
     "precElse": "else"
+  },
+  "portalAuth": {
+    "title": "Portal sign-in",
+    "hint": "How customers sign in to {{name}}'s support portal.",
+    "mode": "Sign-in method",
+    "modeHint": "Customers always sign in with their own email address. Choose whether that is a password, your identity provider, or either.",
+    "modes": {
+      "local": "Password",
+      "local_and_oidc": "Password or identity provider",
+      "oidc": "Identity provider only"
+    },
+    "issuer": "Issuer",
+    "issuerHint": "Your provider's HTTPS issuer address. We read its discovery document when you save.",
+    "clientId": "Client ID",
+    "secret": "Client secret",
+    "secretHint": "Stored encrypted and never shown again.",
+    "secretSaved": "Saved. Leave empty to keep it.",
+    "callback": "Redirect URI",
+    "callbackHint": "Add this as an allowed redirect URI at your provider. The scopes are openid, email and profile.",
+    "copy": "Copy redirect URI",
+    "create": "Create contacts on first sign-in",
+    "createOn": "Anyone your provider signs in gets a contact.",
+    "createOff": "Only people who are already contacts can sign in.",
+    "save": "Save sign-in settings",
+    "saved": "Portal sign-in saved",
+    "saveFailed": "Couldn't save the sign-in settings",
+    "invalid": "We couldn't read that provider. Use its HTTPS issuer address and the client ID it gave you.",
+    "secretRequired": "Enter the client secret for this provider.",
+    "relink": "Allow a new sign-in",
+    "relinkHint": "When a customer's account at the provider changes, allow their next sign-in to replace the old link. It lasts 15 minutes and works once.",
+    "relinkEmail": "Customer's email address",
+    "relinkAction": "Allow",
+    "relinkDone": "{{email}} can sign in with a new account for the next 15 minutes.",
+    "relinkNone": "No contact has that email address.",
+    "relinkReauth": "Sign in again to do this.",
+    "relinkFailed": "Couldn't allow the sign-in"
   }
 }

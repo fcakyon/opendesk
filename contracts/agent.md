@@ -28,7 +28,8 @@ an "AI" tint; activities, triage, drafts and the assistant are always Ollie's.
   a visitor's. It runs as a job (`ai.widget_answer`, scheduled 1.5 s after the message so a
   burst of quick messages gets one reply about all of them), never in the request. A job whose
   message is no longer the latest visitor message does nothing.
-- After `settings.ai.widget_max_replies` replies in one conversation it hands off.
+- After `settings.ai.widget_max_replies` replies in one conversation it hands off, with one last reply:
+  its handoff line ("Handoff" below).
 - It stays silent and the conversation waits for the team, as without the agent, when: AI is off,
   the AI balance is used up (`ai_balance_empty`), the workspace's monthly agent cap is reached
   (`widget_monthly_cap_usd`), or the provider fails after retries.
@@ -63,7 +64,7 @@ Built-in tools:
 | tool | does |
 | --- | --- |
 | `search_knowledge` `{query}` | more passages from KB articles and knowledge sources (top 6) |
-| `handoff_to_human` `{reason}` | ends the agent's part: the reply text so far is posted (a short note that a person will follow up), then the conversation is handed off |
+| `handoff_to_human` `{reason}` | ends the agent's part: the reply text so far is posted (a short note that a person will follow up), then the conversation is handed off. In a chat, a call before any text in the reply is answered once with an error result asking for that line first (a person will reply here, and what the team will need that the conversation does not give yet, such as an order number, details or photos); the next call hands off, and so does the reply ending without one |
 | `use_procedure` `{id}` | the instructions of a procedure listed for this conversation (any other id is an error result); offered only when at least one is listed |
 
 The system prompt tells the agent to follow a procedure's instructions as it follows `<agent_guidance>`:
@@ -94,9 +95,14 @@ and are never replayed.
 
 ## Handoff
 
-- A visitor asking for a person ("talk to a human", and the same in a few languages) hands off
-  without a model call; the agent calling `handoff_to_human`, or Jev's `needs_human` at 0.8 or above,
-  hands off with a short reply.
+- A chat handoff always comes with a short reply first, the handoff line: a person from the team will
+  reply here, asking for what the team will need that the conversation does not give yet.
+- A visitor asking for a person ("talk to a human", and the same in a few languages, matched without a
+  model call) and the `widget_max_replies` limit hand off whatever the model does: the agent is asked
+  only for its handoff line (one reply, metered as usual), posted, then the conversation is handed
+  off. That reply is not listed in the review queue. Past the monthly cap, or when the model fails, the
+  conversation is handed off without a reply. The agent calling `handoff_to_human`, or Jev's
+  `needs_human` at 0.8 or above, hands off with a short reply.
 - Visitor `POST /v1/widget/conversations/{id}/handoff` (visitor auth, `204`, idempotent; the widget
   offers "Talk to a person" while the agent is handling the conversation) marks the ticket for a
   human: `custom.ai_handoff = true`, `custom.ai_handoff_at`, activity `ai_handoff`, notification type
@@ -634,15 +640,16 @@ no severity to filter on, set or create with.
 | --- | --- | --- |
 | `search_tickets` | `tickets:read` | filters (status, assignee, team, label, priority, text, dates), at most 50 |
 | `get_ticket` | `tickets:read` | a ticket with its thread (notes included), team, brand, `received_at` and the reply address |
+| `list_custom_fields` | `tickets:read` | custom field definitions (`GET /v1/custom-fields`): key, name, entity, type, options (id, label), `required_on_solve`; optional `entity`, archived left out unless `include_archived` |
 | `reply_to_ticket` | `tickets:write` | a public reply (`body` markdown) |
 | `draft_reply` | `tickets:write` | stages the ticket's shared draft (`body` markdown) without sending; a teammate sends it from the composer (`contracts/api.md` "Drafts") |
 | `add_note` | `tickets:write` | an internal note |
-| `update_ticket` | `tickets:write` | status, priority, severity, assignee, team, labels |
-| `create_ticket` | `tickets:write` | a ticket for a contact email |
+| `update_ticket` | `tickets:write` | status, priority, severity, assignee, team, labels, `fields` (custom field values by key, merged; null clears one); returns the ticket with its `fields` |
+| `create_ticket` | `tickets:write` | a ticket for a contact email, with optional `fields`; returns the ticket with its `fields` |
 | `search_contacts` / `get_contact` | `contacts:read` | |
 | `search_knowledge` | `kb:read` | KB articles and knowledge sources |
 | `create_kb_draft` | `kb:write` | a draft article |
-| `search_wiki` / `get_wiki_page` | `wiki:read` | the team's internal wiki (`contracts/wiki.md`): matching pages with their place and a passage; one page's text, subpages and `version` |
+| `search_wiki` / `get_wiki_page` | `wiki:read` | the team's internal wiki (`contracts/wiki.md`): matching pages with their place and a passage; one page's text in Markdown (as `update_wiki_page` takes it), subpages and `version` |
 | `create_wiki_page` | `wiki:write` | a page (`body` markdown), optionally under `parent` |
 | `update_wiki_page` | `wiki:write` | a new title or text (`body` markdown replaces it); with `version`, a page changed since is refused (`page_changed`). Marked destructive |
 | `get_report` | `tickets:read` + `settings:read` | the overview report for a range |

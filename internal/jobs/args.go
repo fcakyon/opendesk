@@ -2,7 +2,11 @@
 // the owning area registers the worker (see internal/app). River runs them on Postgres.
 package jobs
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // Queues.
 const (
@@ -63,6 +67,29 @@ type SyncMailboxArgs struct {
 }
 
 func (SyncMailboxArgs) Kind() string { return "email.sync_mailbox" }
+
+// ScheduledReplyArgs sends a member's scheduled reply draft when it is due. SendAt is the time
+// it was scheduled for: a draft rescheduled or cancelled since is left alone. Owner: helpdesk.
+type ScheduledReplyArgs struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	TicketID    uuid.UUID `json:"ticket_id"`
+	UserID      uuid.UUID `json:"user_id"`
+	SendAt      time.Time `json:"send_at"`
+}
+
+func (ScheduledReplyArgs) Kind() string { return "helpdesk.scheduled_reply" }
+
+// SentCopyArgs stores a copy of an email a mailbox sent in its IMAP sent folder (IMAP
+// APPEND). StorageKey holds the message as it went out; the job removes it. Owner: email.
+type SentCopyArgs struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	MailboxID   uuid.UUID `json:"mailbox_id"`
+	StorageKey  string    `json:"storage_key"`
+	// SentAt is when the email went out: the copy's date in the folder.
+	SentAt time.Time `json:"sent_at"`
+}
+
+func (SentCopyArgs) Kind() string { return "email.sent_copy" }
 
 // Provider tidy-up actions (ProviderTidyArgs.Action).
 const (
@@ -517,3 +544,15 @@ func (CustomerPortalForgotArgs) Kind() string { return "helpdesk.customer_portal
 type CustomerPortalCleanupArgs struct{}
 
 func (CustomerPortalCleanupArgs) Kind() string { return "helpdesk.customer_portal_cleanup" }
+
+// WikiTrashPurgeArgs deletes for good the wiki pages that have been in the trash for 30
+// days (contracts/wiki.md "Trash"). Owner: helpdesk.
+type WikiTrashPurgeArgs struct{}
+
+func (WikiTrashPurgeArgs) Kind() string { return "wiki.trash_purge" }
+
+// WikiRemindersArgs sends the wiki reminders that are due (contracts/wiki.md "Reminders").
+// Owner: helpdesk.
+type WikiRemindersArgs struct{}
+
+func (WikiRemindersArgs) Kind() string { return "wiki.reminders" }

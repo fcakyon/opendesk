@@ -92,7 +92,7 @@ const replyKey = new PluginKey("saved-replies");
  * "/" saved replies. `pick` inserts the chosen reply's HTML (the composer fills it
  * for the ticket first); `clear` removes the typed "/query".
  */
-export function savedReplyExtension(getReplies: () => SavedReply[], pick: (html: string, clear: () => void) => void) {
+export function savedReplyExtension(getReplies: () => SavedReply[], pick: (html: string, clear: () => void, replyId?: string) => void) {
   return Extension.create({
     name: "savedReplies",
     addProseMirrorPlugins() {
@@ -109,7 +109,7 @@ export function savedReplyExtension(getReplies: () => SavedReply[], pick: (html:
               .map((r) => ({ kind: "reply", id: r.id, label: r.title, sub: r.shortcut ? `/${r.shortcut.replace(/^\//, "")}` : undefined, html: r.body_html })),
           command: ({ editor, range, props }: { editor: Editor; range: Range; props: SuggestItem }) => {
             if (props.kind !== "reply") return;
-            pick(props.html, () => editor.chain().focus().deleteRange(range).run());
+            pick(props.html, () => editor.chain().focus().deleteRange(range).run(), props.id);
           },
           render: renderer("reply"),
         }),

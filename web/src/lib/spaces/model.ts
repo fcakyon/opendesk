@@ -39,7 +39,7 @@ export const SPACE_COLORS: readonly SpaceColor[] = ["grey", "blue", "violet", "t
 /** The colours new Spaces take, in turn. */
 export const NEW_COLORS: readonly SpaceColor[] = ["blue", "violet", "teal", "green", "amber", "red", "pink", "grey"];
 
-export const SPACE_KINDS: readonly SpaceItemKind[] = ["section", "ticket_folder", "team", "view", "box", "account", "folder", "page", "everywhere"];
+export const SPACE_KINDS: readonly SpaceItemKind[] = ["section", "ticket_folder", "team", "view", "box", "account", "folder", "page", "wiki_page", "wiki_space", "mailbox", "everywhere"];
 /** The pages a Space row can open. */
 export const SPACE_PAGES = ["contacts", "knowledge", "wiki", "reports"] as const;
 export type SpacePage = (typeof SPACE_PAGES)[number];
@@ -79,6 +79,11 @@ export const isSpaceBox = (v: unknown): v is SpaceBox => typeof v === "string" &
 const isKind = (v: unknown): v is SpaceItemKind => typeof v === "string" && (SPACE_KINDS as readonly string[]).includes(v);
 const isBadge = (v: unknown): v is SidebarBadge => typeof v === "string" && (BADGES as readonly string[]).includes(v);
 export const isSectionId = (v: unknown): v is SidebarSectionId => typeof v === "string" && (SECTION_IDS as readonly string[]).includes(v);
+
+/** Whether a Space shows a workspace's pages: a page or teamspace row, or the whole Pages section. */
+export function needsWiki(space: Pick<Space, "sections">, wid: string): boolean {
+  return space.sections.some((sec) => sec.items.some((i) => i.workspace_id === wid && (i.kind === "wiki_page" || i.kind === "wiki_space" || (i.kind === "section" && i.id === "pages"))));
+}
 
 /** Rows that need Collab: its mail and its member prefs (Favorites). Skipped for a workspace without it. */
 export function isCollabItem(i: Pick<SpaceItem, "kind" | "id">): boolean {
@@ -121,6 +126,7 @@ function readItem(v: unknown): SpaceItem | null {
   const out: SpaceItem = { workspace_id: x.workspace_id, kind: x.kind, id: x.id };
   if (typeof x.name === "string" && x.name.trim()) out.name = x.name;
   if (isBadge(x.badge)) out.badge = x.badge;
+  if (typeof x.icon === "string" && x.icon) out.icon = x.icon;
   return out;
 }
 
@@ -139,6 +145,7 @@ export function normalizeSpace(v: unknown): Space | null {
             id: r.id,
             title: typeof r.title === "string" ? r.title : "",
             collapsed: r.collapsed === true,
+            ...(typeof r.icon === "string" && r.icon ? { icon: r.icon } : {}),
             items: Array.isArray(r.items) ? r.items.map(readItem).filter((i): i is SpaceItem => !!i) : [],
           },
         ];
@@ -270,6 +277,7 @@ export function forWire(s: Space): Space {
         const name = it.name ? cleanName(it.name) : "";
         if (name) out.name = name;
         if (it.badge) out.badge = it.badge;
+        if (it.icon) out.icon = it.icon;
         return out;
       }),
     })),
@@ -319,7 +327,7 @@ export function removeItem(s: Space, key: string): Space {
 }
 
 /** Sets a row's own name or number; null goes back to the row's default. */
-export function updateItem(s: Space, key: string, patch: { name?: string | null; badge?: SidebarBadge | null }): Space {
+export function updateItem(s: Space, key: string, patch: { name?: string | null; badge?: SidebarBadge | null; icon?: string | null }): Space {
   return {
     ...s,
     sections: s.sections.map((sec) => ({
@@ -335,6 +343,10 @@ export function updateItem(s: Space, key: string, patch: { name?: string | null;
         if (patch.badge !== undefined) {
           if (patch.badge === null) delete out.badge;
           else out.badge = patch.badge;
+        }
+        if (patch.icon !== undefined) {
+          if (patch.icon) out.icon = patch.icon;
+          else delete out.icon;
         }
         return out;
       }),
@@ -367,8 +379,16 @@ export function addSection(s: Space, title = "", items: SpaceItem[] = []): { spa
   return { space: { ...s, sections: [...s.sections, { id, title, collapsed: false, items: fresh }] }, id };
 }
 
-export function updateSection(s: Space, id: string, patch: Partial<Pick<SpaceSection, "title" | "collapsed">>): Space {
-  return mapSection(s, id, (sec) => ({ ...sec, ...patch }));
+export function updateSection(s: Space, id: string, patch: Partial<Pick<SpaceSection, "title" | "collapsed">> & { icon?: string | null }): Space {
+  return mapSection(s, id, (sec) => {
+    const { icon, ...rest } = patch;
+    const out = { ...sec, ...rest };
+    if (icon !== undefined) {
+      if (icon) out.icon = icon;
+      else delete out.icon;
+    }
+    return out;
+  });
 }
 
 export function removeSection(s: Space, id: string): Space {

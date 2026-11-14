@@ -35,6 +35,7 @@ import { useSetAvailability } from "@/lib/pictures";
 import { q, qk, upsertInList } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { tone, type Tone } from "@/lib/tones";
+import { ChatAssignmentSection } from "./ChatAssignment";
 
 export const MODES: AssignMode[] = ["none", "round_robin", "load_balanced"];
 const modeIcon: Record<AssignMode, ReactNode> = { none: <CircleSlash />, round_robin: <Repeat />, load_balanced: <Scale /> };
@@ -141,6 +142,8 @@ export default function Assignment() {
           </div>
         )}
       </Section>
+
+      <ChatAssignmentSection a={a} skills={skills} canEdit={canEdit} onChange={(b) => write.mutate(b)} />
 
       <Section title={t("assignment.awayTitle")} description={t("assignment.awayHint")}>
         {a ? (

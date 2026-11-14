@@ -113,6 +113,36 @@
       "on_hold": "On hold",
       "solved": "Solved",
       "closed": "Closed"
-    }
+    },
+    "sso": "Continue with single sign-on",
+    "or": "or",
+    "sso_error": {
+      "email_unverified": "Your provider has not confirmed your email address, so we can't sign you in with it.",
+      "unknown_customer": "We couldn't find a customer with that email address. Contact the team that gave you access.",
+      "blocked": "This account can't sign in. Contact the team for help.",
+      "relink_required": "Your account at the provider changed. Ask the team to allow a new sign-in, then try again.",
+      "identity_revoked": "This sign-in was removed. Contact the team for help.",
+      "access_denied": "The sign-in was cancelled.",
+      "provider_unavailable": "We couldn't reach the sign-in provider. Please try again.",
+      "rate_limited": "Too many attempts. Wait a moment and try again.",
+      "generic": "We couldn't sign you in. Please try again."
+    },
+    "new_request": "New request",
+    "new": {
+      "title": "New request",
+      "subject": "Subject",
+      "message": "How can we help?",
+      "send": "Send request",
+      "limit": "You have sent several requests in a row. Wait a while and try again.",
+      "busy": "Many requests are arriving right now. Wait a while and try again.",
+      "attach": "Choose files",
+      "drop": "Drop files here or paste a screenshot.",
+      "remove": "Remove {{name}}",
+      "too_big": "{{name}} is over 10 MB.",
+      "max_files": "You can attach up to 5 files.",
+      "upload_failed": "{{name}} could not be uploaded.",
+      "uploading": "Uploading…"
+    },
+    "attachments": "Attachments"
   }
 }

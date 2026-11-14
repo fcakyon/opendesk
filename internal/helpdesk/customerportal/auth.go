@@ -21,6 +21,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/deps"
 	"github.com/useopendesk/opendesk/internal/emails"
+	"github.com/useopendesk/opendesk/internal/helpdesk/kb"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/ids"
 	"github.com/useopendesk/opendesk/internal/jobs"
@@ -105,6 +106,15 @@ func (s *service) human(ctx context.Context, token string) error {
 	}
 	return s.d.Captcha.VerifyHostname(ctx, token, info(ctx).IP, u.Hostname())
 }
+
+// passwordAllowed is false for a brand whose portal signs in through its identity provider only.
+func (s *service) passwordAllowed(ctx context.Context, hc kb.HelpCenter) bool {
+	var mode string
+	if err := s.d.DB.Pool.QueryRow(ctx, `SELECT portal_auth_mode FROM brands WHERE workspace_id=$1 AND id=$2`, hc.WorkspaceID, hc.BrandID).Scan(&mode); err != nil {
+		return false
+	}
+	return mode != "oidc"
+}
 func normalizeEmail(value string) string {
 	value = strings.TrimSpace(value)
 	a, err := mail.ParseAddress(value)
@@ -150,7 +160,7 @@ func (s *service) registerAuth(api huma.API) {
 			return nil, err
 		}
 		email := normalizeEmail(in.Body.Email)
-		if email == "" || s.limit(ctx, "forgot:email:"+hc.WorkspaceID.String()+":"+email, 3, time.Hour) != nil {
+		if email == "" || !s.passwordAllowed(ctx, hc) || s.limit(ctx, "forgot:email:"+hc.WorkspaceID.String()+":"+email, 3, time.Hour) != nil {
 			return nil, nil
 		}
 		_, err = s.d.Jobs.Insert(ctx, jobs.CustomerPortalForgotArgs{WorkspaceID: hc.WorkspaceID, Slug: hc.Slug, Email: email}, &river.InsertOpts{Queue: jobs.QueueEmail, MaxAttempts: 5})
@@ -213,6 +223,9 @@ func (s *service) login(ctx context.Context, slug string, in loginBody) (*authOu
 	hc, err := helpCenter(ctx, s.d, slug)
 	if err != nil {
 		return nil, err
+	}
+	if !s.passwordAllowed(ctx, hc) {
+		return nil, httpx.E(403, "password_sign_in_disabled", "This portal signs customers in through the company's identity provider.")
 	}
 	email := normalizeEmail(in.Email)
 	if err := s.limit(ctx, "login:email:"+hc.WorkspaceID.String()+":"+email, 10, 15*time.Minute); err != nil {
@@ -328,10 +341,10 @@ func (s *service) refresh(ctx context.Context, slug string) (*authOut, error) {
 		// the live session and can never be selected by the caller's input.
 		err := tx.QueryRow(ctx, `SELECT s.id,s.workspace_id,s.contact_id,s.expires_at FROM customer_sessions s
    JOIN contacts c ON c.workspace_id=s.workspace_id AND c.id=s.contact_id
-   JOIN customer_credentials a ON a.workspace_id=s.workspace_id AND a.contact_id=s.contact_id
+   LEFT JOIN customer_credentials a ON a.workspace_id=s.workspace_id AND a.contact_id=s.contact_id
    JOIN workspaces w ON w.id=s.workspace_id
    JOIN brands b ON b.workspace_id=s.workspace_id AND b.slug=$2 AND b.help_center_enabled
-   WHERE s.refresh_hash=$1 AND `+auth.CustomerSessionLive+` FOR UPDATE OF s`, crypto.HashToken(ri.Refresh), strings.ToLower(strings.TrimSpace(slug))).Scan(&sid, &wid, &cid, &expires)
+   WHERE s.refresh_hash=$1 AND (s.method<>'oidc' OR b.portal_auth_mode<>'local') AND `+auth.CustomerSessionLive+` FOR UPDATE OF s`, crypto.HashToken(ri.Refresh), strings.ToLower(strings.TrimSpace(slug))).Scan(&sid, &wid, &cid, &expires)
 		if err != nil {
 			return err
 		}
@@ -358,6 +371,9 @@ func (s *service) reset(ctx context.Context, slug, token, password, challenge st
 	hc, err := helpCenter(ctx, s.d, slug)
 	if err != nil {
 		return err
+	}
+	if !s.passwordAllowed(ctx, hc) {
+		return invalidToken()
 	}
 	if err := auth.CheckPassword(password); err != nil {
 		return err
