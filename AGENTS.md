@@ -109,6 +109,10 @@ ignored `.env` alongside database backups. The branch CI gates automatic deploym
 MuviSafe, Fast & Rational and My AI Patient use separate workspaces because AI source
 retrieval is workspace-scoped. The OpenDesk app service uses the shared Anthropic key
 from `../akyonlabs/.env` with `claude-haiku-5-5` for normal, fast and widget responses.
+Defaults for the chat and email agents of every product (tone, length, handoff, safety; a bot's own guidance outranks them) live in
+`deploy/openship/agent-instructions.txt`, set as the app service's `AI_AGENT_INSTRUCTIONS` in OpenShip
+(`openship service env set opendesk -p opendesk "AI_AGENT_INSTRUCTIONS=$(cat deploy/openship/agent-instructions.txt)"`, then redeploy),
+so each product's `support/instructions.txt` keeps only its own scope.
 `node scripts/sync-support.mjs <app-repo>` publishes that repo's `support/knowledge.txt`
 and `support/instructions.txt` using its `support/opendesk.json` IDs and ignored
 `OPENDESK_API_KEY`. Add `--test` to exercise `support/questions.json` and review the
