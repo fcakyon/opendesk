@@ -485,17 +485,20 @@ func (s *service) composeAndSend(ctx context.Context, wid, mid, ticketID uuid.UU
 			return "", nil, err
 		}
 	}
-	hideAgent := false
+	emailAuthorID := authorID
 	if t.channel == domain.ChannelChat {
-		hideAgent, err = domain.HideWidgetAgentIdentity(ctx, s.d.DB.Pool, wid, t.widgetID, t.teamID)
+		hideAgent, err := domain.HideWidgetAgentIdentity(ctx, s.d.DB.Pool, wid, t.widgetID, t.teamID)
 		if err != nil {
 			return "", nil, err
+		}
+		if hideAgent {
+			emailAuthorID = nil
 		}
 	}
 	alias := m.alias(t.receivedAt)
 	names := t.names
 	names.Mailbox = m.nameFor(alias)
-	if authorID != nil && !hideAgent {
+	if emailAuthorID != nil {
 		if u, err := domain.LoadUserRef(ctx, s.d.DB.Pool, *authorID); err == nil {
 			names.Agent = agentName(u.Name)
 		}
@@ -534,10 +537,6 @@ func (s *service) composeAndSend(ctx context.Context, wid, mid, ticketID uuid.UU
 		} else {
 			subject = replySubject(firstNonEmpty(subject, t.subject), t.number, inReplyTo != "", t.subjectTag || needed)
 		}
-	}
-	emailAuthorID := authorID
-	if hideAgent {
-		emailAuthorID = nil
 	}
 	ref := templates.Ref{WorkspaceID: wid, TicketID: &ticketID, AuthorUserID: emailAuthorID, MailboxID: &m.ID, MailboxEmail: firstNonEmpty(alias, m.Email)}
 	if authorID == nil && bot.ai {
