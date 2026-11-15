@@ -29,6 +29,29 @@ describe("mock Collab", () => {
     expect(typeof counts.boxes.inbox).toBe("number");
   });
 
+  it("makes a ticket inbox of an account the caller connected, counted on its own", async () => {
+    const accounts = (await call("GET", "/v1/collab/accounts")).body as { id: string; email: string; owner: { id: string } | null }[];
+    const mine = accounts.find((a) => a.owner?.id === db.meId)!;
+    const theirs = accounts.find((a) => a.owner && a.owner.id !== db.meId);
+    if (theirs) expect((await call("POST", `/v1/collab/accounts/${theirs.id}/use-for-tickets`, {})).status).toBe(404);
+    const r = await call("POST", `/v1/collab/accounts/${mine.id}/use-for-tickets`, { name: "Sales desk", keep_account: true });
+    expect(r.status).toBe(201);
+    expect(r.body.account_removed).toBe(false);
+    const box = (await call("GET", `/v1/mailboxes/${r.body.mailbox_id}`)).body;
+    expect(box).toMatchObject({ name: "Sales desk", email: mine.email, config: { sync_start: "new" } });
+    expect(((await call("GET", "/v1/collab/accounts")).body as { id: string }[]).some((a) => a.id === mine.id)).toBe(true);
+    expect((await call("POST", `/v1/collab/accounts/${mine.id}/use-for-tickets`, { keep_account: true })).status).toBe(409);
+    // Each reply address's folders are counted for its own sidebar section.
+    const counts = (await call("GET", "/v1/tickets/counts")).body as { mailboxes: Record<string, { unassigned: number }> };
+    expect(Object.keys(counts.mailboxes).length).toBeGreaterThan(0);
+    // An inbox shown as a section of its own is named by its id in the order.
+    const prefs = (await call("GET", "/v1/collab/sidebar")).body;
+    expect((await call("PUT", "/v1/collab/sidebar", { ...prefs, order: [...prefs.order, `mailbox:${r.body.mailbox_id}`] })).status).toBe(200);
+    expect((await call("PUT", "/v1/collab/sidebar", { ...prefs, order: [...prefs.order, "mailbox:sales"] })).status).toBe(422);
+    await call("PUT", "/v1/collab/sidebar", prefs);
+    await call("DELETE", `/v1/mailboxes/${r.body.mailbox_id}`);
+  });
+
   it("counts each address of an account with aliases like the list's to=", async () => {
     const accounts = (await call("GET", "/v1/collab/accounts")).body as { id: string; identities: { email: string; primary: boolean }[] }[];
     const a = accounts.find((x) => x.identities.some((i) => !i.primary))!;
@@ -64,6 +87,24 @@ describe("mock Collab", () => {
     const kept = (await call("PUT", "/v1/collab/sidebar", { order: ["mail"], hidden: [], pinned: [], expanded_accounts: [], mark_read_on_open: true, unified_inbox: true })).body;
     expect(kept.badges).toEqual({ "section:mail": "total" });
     expect(kept.mail_tabs).toEqual(["inbox", "spam"]);
+    // The member's own sections: kept when left out, and bounded.
+    const sections = [{ id: "launch", title: "Launch", collapsed: false, items: [{ kind: "view", id: "v1" }, { kind: "wiki_page", id: "p1" }] }];
+    await call("PUT", "/v1/collab/sidebar", { ...kept, order: ["custom:launch", "inbox"], sections });
+    expect((await call("PUT", "/v1/collab/sidebar", { order: ["custom:launch"], hidden: [], pinned: [], expanded_accounts: [], mark_read_on_open: true, unified_inbox: true })).body.sections).toEqual(sections);
+    expect((await call("PUT", "/v1/collab/sidebar", { ...kept, sections: [...sections, { ...sections[0] }] })).body.code).toBe("validation_failed");
+    // Emoji on own sections and rows, and the order of a built-in section's rows: kept when left out.
+    const withIcons = [{ ...sections[0], icon: "🚀", items: [{ kind: "view", id: "v1", icon: "🔥" }] }];
+    const ordered = (await call("PUT", "/v1/collab/sidebar", { ...kept, sections: withIcons, row_order: { inbox: ["ticket_folder:open", "ticket_folder:unassigned"] } })).body;
+    expect(ordered.sections[0].icon).toBe("🚀");
+    expect(ordered.sections[0].items[0].icon).toBe("🔥");
+    expect((await call("PUT", "/v1/collab/sidebar", { order: ["inbox"], hidden: [], pinned: [], expanded_accounts: [], mark_read_on_open: true, unified_inbox: true })).body.row_order).toEqual({ inbox: ["ticket_folder:open", "ticket_folder:unassigned"] });
+    expect((await call("PUT", "/v1/collab/sidebar", { ...kept, sections: [{ ...withIcons[0], icon: "rocket" }] })).body.code).toBe("validation_failed");
+    expect((await call("PUT", "/v1/collab/sidebar", { ...kept, row_order: { "custom:launch": ["view:v1"] } })).body.code).toBe("validation_failed");
+    // The member's own names and emoji for built-in sections and rows: kept when left out, an empty name dropped.
+    const named = (await call("PUT", "/v1/collab/sidebar", { ...kept, names: { "section:inbox": "Desk", "view:v1": " " }, icons: { "section:inbox": "🛎️" } })).body;
+    expect(named.names).toEqual({ "section:inbox": "Desk" });
+    expect((await call("PUT", "/v1/collab/sidebar", { order: ["inbox"], hidden: [], pinned: [], expanded_accounts: [], mark_read_on_open: true, unified_inbox: true })).body.icons).toEqual({ "section:inbox": "🛎️" });
+    expect((await call("PUT", "/v1/collab/sidebar", { ...kept, icons: { "section:inbox": "bell" } })).body.code).toBe("validation_failed");
   });
 
   it("keeps the sidebar prefs without Collab too", async () => {

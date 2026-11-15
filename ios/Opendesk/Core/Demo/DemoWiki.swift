@@ -9,17 +9,33 @@ import Foundation
 //   04 Refund policy                05  Refunds over 100 euros
 //   06 Onboarding                   07  First week checklist    08  Tone of voice
 //   09 SSO troubleshooting          10  Release notes process
+//
+// Margin's Pages (contracts/pages.md), the workspace's own pages beside the wiki:
+//
+//   30 Q4 roadmap                   31  Self-serve refunds      32  Help center refresh
+//   33 Team offsite                 40  Meeting notes (a template)
 
 struct DemoWiki: Sendable {
     var pages: [WikiPage] = []
     /// Each page's kept versions, newest first, with their bodies.
     var revisions: [String: [WikiRevision]] = [:]
+    /// Pages in the trash, and the pages that went with each one trashed.
+    var trash: [WikiPage] = []
+    var trashedWith: [String: [String]] = [:]
+    /// The demo person's favorites, in order.
+    var favorites: [String] = []
+    /// Comment threads by page, as the API answers them, and whether the demo person follows.
+    var threads: [String: [JSONValue]] = [:]
+    var following: [String: Bool] = [:]
 
     static func pageID(_ n: Int) -> String { demoKBID(0x23, n) }
     static func revisionID(_ n: Int, _ r: Int) -> String { demoKBID(0x24, n * 100 + r) }
 
     static func seed(_ ws: DemoWorkspace) -> DemoWiki {
-        ws.id == DemoSeed.marginID ? margin() : ws.id == DemoSeed.lumenID ? lumen() : DemoWiki()
+        guard ws.id == DemoSeed.marginID else { return ws.id == DemoSeed.lumenID ? lumen() : DemoWiki() }
+        var wiki = margin()
+        wiki.addPagesWork()
+        return wiki
     }
 
     private struct Spec {
@@ -63,6 +79,14 @@ struct DemoWiki: Sendable {
     // MARK: Margin
 
     static func margin() -> DemoWiki {
+        var wiki = marginWiki()
+        let pages = marginPages()
+        wiki.pages += pages.pages
+        wiki.revisions.merge(pages.revisions) { old, _ in old }
+        return wiki
+    }
+
+    private static func marginWiki() -> DemoWiki {
         build([
             Spec(n: 1, parent: nil, position: 0, icon: "🚨", title: "Escalation process", body: """
             Escalate when a customer is blocked, money is at stake, or you have tried twice without progress.
@@ -182,6 +206,51 @@ struct DemoWiki: Sendable {
         ])
     }
 
+    /// Margin's Pages: a roadmap with two projects under it, an offsite plan, and a template.
+    private static func marginPages() -> DemoWiki {
+        var wiki = build([
+            Spec(n: 30, parent: nil, position: 0, icon: "🗺️", title: "Q4 roadmap", body: """
+            What support and product ship together this quarter.
+
+            ## Now
+
+            - Self-serve refunds in the help center.
+            - A refreshed help center home.
+
+            ## Next
+
+            - Chat in the mobile app.
+            """, writer: .priya, created: 12, updated: 0.2),
+            Spec(n: 31, parent: 30, position: 0, icon: "💸", title: "Self-serve refunds", body: """
+            Customers refund a duplicate charge themselves, without a ticket.
+
+            - [ ] Agree the limit with billing.
+            - [ ] Write the help article.
+            - [x] Add the refund button to receipts.
+            """, writer: .jonas, created: 10, updated: 1),
+            Spec(n: 32, parent: 30, position: 1, icon: "🧭", title: "Help center refresh", body: """
+            A home that answers the five most asked questions before anyone searches.
+            """, writer: .sam, created: 9, updated: 3),
+            Spec(n: 33, parent: nil, position: 1, icon: "🏕️", title: "Team offsite", body: """
+            Two days in Lisbon in March. Agenda, travel and who brings what.
+            """, writer: .sam, created: 6, updated: 2),
+            Spec(n: 40, parent: nil, position: 2, icon: "📝", title: "Meeting notes", body: """
+            ## Attendees
+
+            ## Agenda
+
+            ## Decisions
+
+            ## Next steps
+            """, writer: .priya, created: 30, updated: 30),
+        ])
+        for index in wiki.pages.indices {
+            wiki.pages[index].area = .pages
+            if wiki.pages[index].id == pageID(40) { wiki.pages[index].template = true }
+        }
+        return wiki
+    }
+
     static func lumen() -> DemoWiki {
         let ruth = UserRef(id: demoID(.user, 20), name: "Ruth Adler", email: nil, avatarURL: nil)
         let at = DemoSeed.ago(5000)
@@ -219,6 +288,7 @@ struct DemoWiki: Sendable {
         guard var page = page(id) else { return nil }
         page.breadcrumbs = ancestors(of: id).map { WikiRef(id: $0.id, title: $0.title, icon: $0.icon) }
         page.children = children(of: id).map { WikiRef(id: $0.id, title: $0.title, icon: $0.icon) }
+        page.extras.tags = Self.tags(in: page.bodyHTML)
         return page
     }
 
@@ -233,11 +303,15 @@ struct DemoWiki: Sendable {
 
 extension DemoBackend {
     func wikiRoutes(_ call: Call, in ws: inout DemoWorkspace) throws -> Data?? {
-        if call.match("GET", "wiki/pages") != nil {
-            return .some(encode(ListBody(data: ws.kb.wiki.pages.map(\.node))))
-        }
+        if let answer = try wikiAreaRoutes(call, in: &ws) { return answer }
+        if let answer = try wikiPersonalRoutes(call, in: &ws) { return answer }
         if call.match("GET", "wiki/search") != nil {
-            return .some(encode(ListBody(data: wikiSearch(call.query["q"] ?? "", in: ws.kb.wiki))))
+            let pagesOn = ws.workspace.pagesOn
+            let asked = call.query["area"].flatMap(WikiArea.init(rawValue:))
+            let hits = wikiSearch(call.query["q"] ?? "", in: ws.kb.wiki).filter { hit in
+                (asked == nil || hit.area == asked) && (pagesOn || hit.area != .pages)
+            }
+            return .some(encode(ListBody(data: hits)))
         }
         if let id = call.match("GET", "wiki/pages/*")?.first {
             guard let page = ws.kb.wiki.full(id) else { throw notFound("page") }
@@ -247,11 +321,18 @@ extension DemoBackend {
             let parent = call.string("parent_id").flatMap { $0.isEmpty ? nil : $0 }
             if let parent, ws.kb.wiki.page(parent) == nil { throw Failure(status: 422, code: "invalid", detail: "That parent page isn't in this wiki.") }
             let at = now()
-            let page = WikiPage(
+            // A subpage is in its parent's area; a top-level page in the one asked, the wiki's by default.
+            let area = parent.flatMap { ws.kb.wiki.page($0)?.area } ?? call.string("area").flatMap(WikiArea.init(rawValue:)) ?? .wiki
+            if area == .pages, !ws.workspace.pagesOn { throw pagesOff() }
+            var page = WikiPage(
                 id: made(), parentID: parent, title: String((call.string("title") ?? "").prefix(200)), icon: call.string("icon") ?? "",
                 bodyHTML: call.string("body_html") ?? "", position: ws.kb.wiki.children(of: parent).count, version: 1,
                 createdBy: me, updatedBy: me, createdAt: at, updatedAt: at, breadcrumbs: [], children: []
             )
+            page.area = area
+            if let kind = call.string("kind"), kind == "database" || kind == "canvas" { page.kind = kind }
+            page.isPrivate = parent.flatMap { ws.kb.wiki.page($0)?.isPrivate } ?? (call.string("space") == "private")
+            page.teamID = parent.flatMap { ws.kb.wiki.page($0)?.teamID } ?? (call.string("space") == "team" ? call.string("team_id") : nil)
             ws.kb.wiki.pages.append(page)
             ws.kb.wiki.revisions[page.id] = [WikiRevision(id: made(), title: page.title, icon: page.icon, bodyHTML: page.bodyHTML, author: me, createdAt: at, updatedAt: at)]
             publish("wiki_page.created", ["wiki_page": DemoSeed.json(page.node), "updated_by": DemoSeed.json(me)], in: &ws)
@@ -295,6 +376,11 @@ extension DemoBackend {
                 }
             }
             let old = ws.kb.wiki.pages[index].parentID
+            // To the other area at the top level, or under a page of it: the subpages go along.
+            let area = parent.flatMap { ws.kb.wiki.page($0)?.area } ?? call.string("area").flatMap(WikiArea.init(rawValue:)) ?? ws.kb.wiki.pages[index].area
+            if area == .pages, !ws.workspace.pagesOn { throw pagesOff() }
+            let moved = Set([id] + ws.kb.wiki.descendants(of: id))
+            for i in ws.kb.wiki.pages.indices where moved.contains(ws.kb.wiki.pages[i].id) { ws.kb.wiki.pages[i].area = area }
             ws.kb.wiki.pages[index].parentID = parent
             var siblings = ws.kb.wiki.children(of: parent).filter { $0.id != id }
             let position = max(0, min(call.body["position"]?.int ?? siblings.count, siblings.count))
@@ -349,6 +435,156 @@ extension DemoBackend {
         return nil
     }
 
+    /// The trash, favorites, comments and following (contracts/wiki.md).
+    private func wikiPersonalRoutes(_ call: Call, in ws: inout DemoWorkspace) throws -> Data?? {
+        if let id = call.match("GET", "wiki/pages/*")?.first, let page = ws.kb.wiki.trash.first(where: { $0.id == id }) {
+            return .some(encode(page))
+        }
+        if let id = call.match("POST", "wiki/pages/*/trash")?.first {
+            guard var page = ws.kb.wiki.full(id) else { throw notFound("page") }
+            let gone = [id] + ws.kb.wiki.descendants(of: id)
+            let at = now()
+            for goneID in gone {
+                guard var moved = ws.kb.wiki.page(goneID) else { continue }
+                moved.deletedAt = at
+                moved.deletedBy = me
+                ws.kb.wiki.trash.append(moved)
+            }
+            ws.kb.wiki.pages.removeAll { gone.contains($0.id) }
+            ws.kb.wiki.trashedWith[id] = gone
+            ws.kb.wiki.favorites.removeAll { gone.contains($0) }
+            ws.kb.wiki.renumber(page.parentID)
+            page.deletedAt = at
+            page.deletedBy = me
+            publish("wiki_page.deleted", ["wiki_page_id": .string(id), "wiki_page_ids": .array(gone.map(JSONValue.string)), "trashed": .bool(true)], in: &ws)
+            return .some(encode(page))
+        }
+        if let id = call.match("POST", "wiki/pages/*/restore")?.first {
+            guard let gone = ws.kb.wiki.trashedWith[id] else {
+                if ws.kb.wiki.trash.contains(where: { $0.id == id }) {
+                    throw Failure(status: 422, code: "trashed_with_parent", detail: "This page went to the trash with a page above it. Restore that one.")
+                }
+                throw Failure(status: 422, code: "not_in_trash", detail: "This page isn't in the trash.")
+            }
+            var back = ws.kb.wiki.trash.filter { gone.contains($0.id) }
+            ws.kb.wiki.trash.removeAll { gone.contains($0.id) }
+            ws.kb.wiki.trashedWith[id] = nil
+            for index in back.indices {
+                back[index].deletedAt = nil
+                back[index].deletedBy = nil
+            }
+            if let root = back.firstIndex(where: { $0.id == id }) {
+                if let parent = back[root].parentID, ws.kb.wiki.page(parent) == nil { back[root].parentID = nil }
+                back[root].position = ws.kb.wiki.children(of: back[root].parentID).count
+            }
+            ws.kb.wiki.pages.append(contentsOf: back)
+            guard let page = ws.kb.wiki.full(id) else { throw notFound("page") }
+            publish("wiki_page.restored", ["wiki_page": DemoSeed.json(page.node), "wiki_page_ids": .array(gone.map(JSONValue.string))], in: &ws)
+            return .some(encode(page))
+        }
+        if call.match("GET", "wiki/trash") != nil {
+            let wiki = ws.kb.wiki
+            let area = call.query["area"].flatMap(WikiArea.init(rawValue:)) ?? .wiki
+            if area == .pages, !ws.workspace.pagesOn { throw pagesOff() }
+            let roots = wiki.trash.filter { wiki.trashedWith[$0.id] != nil && $0.area == area }.sorted { ($0.deletedAt ?? .distantPast) > ($1.deletedAt ?? .distantPast) }
+            let list: [JSONValue] = roots.map { page in
+                var object = DemoSeed.json(page.node).object ?? [:]
+                let at = page.deletedAt ?? DemoMode.anchor
+                var above: [WikiPage] = []
+                if let parent = page.parentID, let found = wiki.page(parent) { above = wiki.ancestors(of: parent) + [found] }
+                let path = above.map { WikiRef(id: $0.id, title: $0.title, icon: $0.icon) }
+                object["deleted_at"] = .string(DemoSeed.stamp(at))
+                object["deleted_by"] = DemoSeed.json(page.deletedBy)
+                object["purge_at"] = .string(DemoSeed.stamp(at.addingTimeInterval(30 * 24 * 3600)))
+                object["subpages"] = .number(Double(max(0, (wiki.trashedWith[page.id]?.count ?? 1) - 1)))
+                object["path"] = DemoSeed.json(path)
+                return .object(object)
+            }
+            return .some(encode(ListBody(data: list)))
+        }
+        if let id = call.match("DELETE", "wiki/pages/*")?.first, let gone = ws.kb.wiki.trashedWith[id] {
+            ws.kb.wiki.trash.removeAll { gone.contains($0.id) }
+            ws.kb.wiki.trashedWith[id] = nil
+            for page in gone { ws.kb.wiki.revisions[page] = nil }
+            return .some(nil)
+        }
+        if call.match("GET", "wiki/favorites") != nil {
+            let wiki = ws.kb.wiki
+            let pagesOn = ws.workspace.pagesOn
+            return .some(encode(ListBody(data: wiki.favorites.compactMap { wiki.page($0)?.node }.filter { pagesOn || $0.area != .pages })))
+        }
+        if call.match("PUT", "wiki/favorites") != nil {
+            let wiki = ws.kb.wiki
+            var kept: [String] = []
+            for id in (call.body["page_ids"]?.array ?? []).compactMap(\.string) where wiki.page(id) != nil && !kept.contains(id) {
+                kept.append(id)
+            }
+            ws.kb.wiki.favorites = Array(kept.prefix(100))
+            return .some(encode(ListBody(data: ws.kb.wiki.favorites.compactMap { wiki.page($0)?.node })))
+        }
+        if let id = call.match("PUT", "wiki/pages/*/follow")?.first {
+            let on = call.body["following"]?.bool ?? true
+            ws.kb.wiki.following[id] = on
+            return .some(encode(WikiFollowing(following: on)))
+        }
+        if let id = call.match("GET", "wiki/pages/*/comments")?.first {
+            guard ws.kb.wiki.page(id) != nil || ws.kb.wiki.trash.contains(where: { $0.id == id }) else { throw notFound("page") }
+            return .some(encode(JSONValue.object(["data": .array(ws.kb.wiki.threads[id] ?? []), "following": .bool(ws.kb.wiki.following[id] ?? true)])))
+        }
+        if let id = call.match("POST", "wiki/pages/*/comments")?.first {
+            guard ws.kb.wiki.page(id) != nil else { throw notFound("page") }
+            let body = call.string("body_html") ?? ""
+            guard !HTMLText.plain(from: body).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw Failure(status: 422, code: "invalid", detail: "Write something first.")
+            }
+            let at = JSONValue.string(DemoSeed.stamp(now()))
+            var comment: [String: JSONValue] = [
+                "id": .string(made()), "author": DemoSeed.json(me), "body_html": .string(body), "mentions": .array([]),
+                "created_at": at, "edited_at": .null, "reactions": .array([]),
+            ]
+            var threads = ws.kb.wiki.threads[id] ?? []
+            let thread: JSONValue
+            if let threadID = call.string("thread_id") {
+                guard let index = threads.firstIndex(where: { $0["id"]?.string == threadID }) else {
+                    throw Failure(status: 422, code: "invalid", detail: "That thread isn't on this page.")
+                }
+                comment["thread_id"] = .string(threadID)
+                var object = threads[index].object ?? [:]
+                object["comments"] = .array((object["comments"]?.array ?? []) + [.object(comment)])
+                object["resolved_at"] = .null
+                object["resolved_by"] = .null
+                thread = .object(object)
+                threads[index] = thread
+            } else {
+                let threadID = comment["id"]?.string ?? made()
+                comment["thread_id"] = .string(threadID)
+                thread = .object([
+                    "id": .string(threadID), "page_id": .string(id), "quote": .string(""), "inline": .bool(false), "created_at": at,
+                    "resolved_at": .null, "resolved_by": .null, "comments": .array([.object(comment)]),
+                ])
+                threads.append(thread)
+            }
+            ws.kb.wiki.threads[id] = threads
+            if ws.kb.wiki.following[id] == nil { ws.kb.wiki.following[id] = true }
+            publish("wiki_comment.changed", ["page_id": .string(id), "thread_id": thread["id"] ?? .null], in: &ws)
+            return .some(encode(thread))
+        }
+        if let threadID = call.match("POST", "wiki/threads/*/resolve")?.first {
+            for (page, list) in ws.kb.wiki.threads {
+                guard let index = list.firstIndex(where: { $0["id"]?.string == threadID }) else { continue }
+                let resolved = call.body["resolved"]?.bool ?? true
+                var object = list[index].object ?? [:]
+                object["resolved_at"] = resolved ? .string(DemoSeed.stamp(now())) : .null
+                object["resolved_by"] = resolved ? DemoSeed.json(me) : .null
+                ws.kb.wiki.threads[page]?[index] = .object(object)
+                publish("wiki_comment.changed", ["page_id": .string(page), "thread_id": .string(threadID)], in: &ws)
+                return .some(encode(JSONValue.object(object)))
+            }
+            throw notFound("thread")
+        }
+        return nil
+    }
+
     /// One person's edits less than ten minutes apart are one revision (contracts/wiki.md "History").
     private func keepRevision(of page: WikiPage, in ws: inout DemoWorkspace) {
         var list = ws.kb.wiki.revisions[page.id] ?? []
@@ -372,7 +608,7 @@ extension DemoBackend {
             let tokens = text.lowercased().split { !$0.isLetter && !$0.isNumber }
             return words.allSatisfy { word in tokens.contains { $0.hasPrefix(word) } }
         }
-        let scored: [(WikiPage, Int)] = wiki.pages.compactMap { page in
+        let scored: [(WikiPage, Int)] = wiki.pages.filter { !$0.template }.compactMap { page in
             let text = HTMLText.plain(from: page.bodyHTML)
             if matches(page.title) { return (page, 2) }
             if matches(page.title + " " + text) { return (page, 1) }
@@ -388,7 +624,7 @@ extension DemoBackend {
             }
             return WikiSearchHit(
                 id: page.id, parentID: page.parentID, title: page.title, icon: page.icon, snippet: snippet,
-                path: wiki.ancestors(of: page.id).map { WikiRef(id: $0.id, title: $0.title, icon: $0.icon) }, updatedAt: page.updatedAt
+                path: wiki.ancestors(of: page.id).map { WikiRef(id: $0.id, title: $0.title, icon: $0.icon) }, updatedAt: page.updatedAt, area: page.area
             )
         }
     }

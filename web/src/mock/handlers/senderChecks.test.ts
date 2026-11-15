@@ -53,6 +53,15 @@ describe("mock sender checks", () => {
     expect((cleared.body as Mailbox).trusted_form_senders).toEqual([]);
   });
 
+  it("stores whether a mailbox keeps automatic mail", async () => {
+    const m = (await call("GET", "/v1/mailboxes")).body.data[0] as Mailbox;
+    expect(m.keep_automatic_mail).toBe(false);
+    const on = await call("PATCH", `/v1/mailboxes/${m.id}`, { keep_automatic_mail: true });
+    expect((on.body as Mailbox).keep_automatic_mail).toBe(true);
+    const off = await call("PATCH", `/v1/mailboxes/${m.id}`, { keep_automatic_mail: false });
+    expect((off.body as Mailbox).keep_automatic_mail).toBe(false);
+  });
+
   it("normalizes form sender entries like the API", () => {
     expect(normalizeFormSender(" Website@Company.com ")).toBe("website@company.com");
     expect(normalizeFormSender("@Forms.Company.com")).toBe("@forms.company.com");

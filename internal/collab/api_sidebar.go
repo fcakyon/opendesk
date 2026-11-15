@@ -10,15 +10,22 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/events"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/products"
 )
 
-// maxSidebarBytes bounds the stored sidebar preferences.
-const maxSidebarBytes = 16 << 10
+// maxSidebarBytes bounds the stored sidebar preferences, the member's own sections
+// (maxOwnSectionsBytes) and row order (maxRowOrderBytes) apart.
+const (
+	maxSidebarBytes  = 16 << 10
+	maxRowOrderBytes = 16 << 10
+	maxLabelsBytes   = 48 << 10
+)
 
 // maxSidebarItem bounds one id in the sidebar preferences ("folder:<uuid>" and the like).
 const maxSidebarItem = 100
@@ -49,9 +56,10 @@ var (
 
 // defaultSidebar is the sidebar of a member who never arranged it.
 func defaultSidebar() SidebarPrefs {
-	return SidebarPrefs{Order: []string{"favorites", "inbox", "mail", "teams", "views", "workspace"}, Hidden: []string{},
+	return SidebarPrefs{Order: slices.Clone(SidebarSectionIDs), Hidden: []string{},
 		Pinned: []SidebarPin{}, ExpandedAccounts: []string{}, MarkReadOnOpen: true, UnifiedInbox: true,
-		Badges: map[string]string{}, MailTabs: defaultMailTabs(), AutoPins: []string{}}
+		Badges: map[string]string{}, MailTabs: defaultMailTabs(), AutoPins: []string{}, Sections: []SidebarSection{},
+		RowOrder: map[string][]string{}, Names: map[string]string{}, Icons: map[string]string{}, ShowWaitingChats: new(bool)}
 }
 
 // normalized fills missing lists so the shape always has arrays.
@@ -76,6 +84,26 @@ func (p SidebarPrefs) normalized() SidebarPrefs {
 	}
 	if p.AutoPins == nil {
 		p.AutoPins = []string{}
+	}
+	if p.Sections == nil {
+		p.Sections = []SidebarSection{}
+	}
+	if p.RowOrder == nil {
+		p.RowOrder = map[string][]string{}
+	}
+	if p.Names == nil {
+		p.Names = map[string]string{}
+	}
+	if p.Icons == nil {
+		p.Icons = map[string]string{}
+	}
+	if p.ShowWaitingChats == nil {
+		p.ShowWaitingChats = new(bool)
+	}
+	for i := range p.Sections {
+		if p.Sections[i].Items == nil {
+			p.Sections[i].Items = []SidebarItem{}
+		}
 	}
 	return p
 }
@@ -117,6 +145,11 @@ func validateSidebar(p SidebarPrefs) error {
 	for k, v := range p.Badges {
 		if !badgeKeyOK(k) || !badgeValues[v] {
 			return httpx.Validation("Each number choice names a sidebar row or section and is unread, total, count or none.")
+		}
+	}
+	for _, id := range p.Order {
+		if !orderEntryOK(id) {
+			return httpx.Validation("A ticket inbox or team shown as its own section is named by its id.")
 		}
 	}
 	if len(p.MailTabs) > maxMailTabs {
@@ -182,9 +215,10 @@ func (s *service) registerSidebarRoutes(api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			// A client that does not know the numbers, the tabs or the pins added by themselves
+			// A client that does not know the numbers, the tabs, the pins added by themselves,
+			// the member's own sections, their row order, names, icons or the waiting chats row
 			// leaves them as saved.
-			if in.Body.Badges == nil || in.Body.MailTabs == nil || in.Body.AutoPins == nil {
+			if in.Body.Badges == nil || in.Body.MailTabs == nil || in.Body.AutoPins == nil || in.Body.Sections == nil || in.Body.RowOrder == nil || in.Body.Names == nil || in.Body.Icons == nil || in.Body.ShowWaitingChats == nil {
 				saved, err := s.loadSidebar(ctx, p.WorkspaceID, p.UserID)
 				if err != nil {
 					return nil, httpx.Wrap(err)
@@ -198,10 +232,41 @@ func (s *service) registerSidebarRoutes(api huma.API) {
 				if in.Body.AutoPins == nil {
 					in.Body.AutoPins = saved.AutoPins
 				}
+				if in.Body.Sections == nil {
+					in.Body.Sections = saved.Sections
+				}
+				if in.Body.RowOrder == nil {
+					in.Body.RowOrder = saved.RowOrder
+				}
+				if in.Body.Names == nil {
+					in.Body.Names = saved.Names
+				}
+				if in.Body.Icons == nil {
+					in.Body.Icons = saved.Icons
+				}
+				if in.Body.ShowWaitingChats == nil {
+					in.Body.ShowWaitingChats = saved.ShowWaitingChats
+				}
 			}
 			prefs := in.Body.normalized()
 			if err := validateSidebar(prefs); err != nil {
 				return nil, err
+			}
+			if err := validateRowOrder(prefs.RowOrder); err != nil {
+				return nil, err
+			}
+			if prefs.Names, prefs.Icons, err = validateLabels(prefs.Names, prefs.Icons); err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if prefs.Sections, err = validateSections(prefs.Sections); err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			own, err := json.Marshal(prefs.Sections)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if len(own) > maxOwnSectionsBytes {
+				return nil, httpx.Validation("Your sections are too large.")
 			}
 			for _, list := range [][]string{prefs.Order, prefs.Hidden, prefs.ExpandedAccounts, prefs.AutoPins} {
 				for _, item := range list {
@@ -215,14 +280,37 @@ func (s *service) registerSidebarRoutes(api huma.API) {
 					return nil, httpx.Validation("Each sidebar item is 1 to 100 characters.")
 				}
 			}
+			order, err := json.Marshal(prefs.RowOrder)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if len(order) > maxRowOrderBytes {
+				return nil, httpx.Validation("Your row order is too large.")
+			}
+			labels, err := json.Marshal([]any{prefs.Names, prefs.Icons})
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if len(labels) > maxLabelsBytes {
+				return nil, httpx.Validation("Your names and icons are too large.")
+			}
 			raw, err := json.Marshal(prefs)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			if len(raw) > maxSidebarBytes {
+			if len(raw)-len(own)-len(order)-len(labels) > maxSidebarBytes {
 				return nil, httpx.Validation("The sidebar settings are too large.")
 			}
-			if err := saveSidebar(ctx, s.d.DB.Pool, p.WorkspaceID, p.UserID, raw); err != nil {
+			// The member's other tabs and devices follow (contracts/collab.md "Events").
+			err = s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+				if err := saveSidebar(ctx, tx, p.WorkspaceID, p.UserID, raw); err != nil {
+					return err
+				}
+				_, err := events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: EventSidebar, Users: []uuid.UUID{p.UserID},
+					Data: map[string]any{}})
+				return err
+			})
+			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
 			return &sidebarBody{prefs}, nil
@@ -255,7 +343,7 @@ func (s *service) pinAllInboxes(ctx context.Context, wid, uid uuid.UUID, prefs S
 		return prefs, err
 	}
 	var n int
-	if err := s.d.DB.Pool.QueryRow(ctx, `SELECT count(*) FROM collab_accounts a WHERE a.workspace_id = $1 AND `+accountVisibleSQL("a", "$2"),
+	if err := s.d.DB.Pool.QueryRow(ctx, `SELECT count(*) FROM collab_accounts a WHERE a.workspace_id = $1 AND `+AccountVisibleSQL("a", "$2"),
 		wid, uid).Scan(&n); err != nil || n < 2 {
 		return prefs, err
 	}

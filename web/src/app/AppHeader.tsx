@@ -5,16 +5,20 @@
 // The brand zone spans the sidebar column and narrows with the rail, so the
 // crumbs always start where the work panel does.
 
-import { Link } from "@tanstack/react-router";
-import { ChevronRight, Menu as MenuIcon, Search, SquarePen } from "lucide-react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { ChevronDown, ChevronRight, FileText, FileUp, Mail, Menu as MenuIcon, Search, SquarePen } from "lucide-react";
 import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 import { Mark } from "@/components/brand";
 import { OllieButton } from "@/components/assistant/OllieButton";
 import { Kbd } from "@/components/ui/kbd";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
+import { compose } from "@/lib/collab/compose";
+import { useCollab } from "@/lib/collab/hooks";
 import { desktop } from "@/lib/desktop";
+import { useProducts } from "@/lib/products";
 import { atLeast, useRole, useWorkspace } from "@/lib/session";
 import { useSpaces } from "@/lib/spaces/hooks";
 import { pickedSpace } from "@/lib/spaces/model";
@@ -23,8 +27,31 @@ import { ConnectionIndicator } from "./ConnectionIndicator";
 import { NotificationsButton } from "./Notifications";
 import { WorkspaceSwitcher } from "./Sidebar";
 import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
+import { openImport, quickAdd } from "./quickAdd";
 import { shell, useNav } from "./shellStore";
-import { useBreadcrumbs } from "./useBreadcrumbs";
+import { foldCrumbs, useBreadcrumbs, type Crumb } from "./useBreadcrumbs";
+
+function FoldedCrumbs({ crumbs }: { crumbs: Crumb[] }) {
+  const { t } = useTranslation("shell");
+  const navigate = useNavigate();
+  return (
+    <Menu>
+      <MenuTrigger asChild>
+        <button type="button" aria-label={t("crumbs.more", { count: crumbs.length })} className="flex h-5 items-center rounded px-1 text-[12.5px] text-fg-3 transition-colors hover:bg-chrome-hover hover:text-fg">
+          …
+        </button>
+      </MenuTrigger>
+      <MenuContent align="start">
+        {crumbs.map((c, i) => (
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          <MenuItem key={`${c.label}-${i}`} disabled={!c.to} onSelect={() => c.to && void navigate({ to: c.to as any, params: c.params as any })}>
+            {c.label}
+          </MenuItem>
+        ))}
+      </MenuContent>
+    </Menu>
+  );
+}
 
 export function AppHeader() {
   const crumbs = useBreadcrumbs();
@@ -35,6 +62,13 @@ export function AppHeader() {
   const collapsed = useNav((s) => s.collapsed);
   const role = useRole();
   const { t } = useTranslation("shell");
+  const collab = useCollab();
+  const { tickets: ticketsOn } = useProducts();
+  const onMailPage = useRouterState({ select: (s) => s.location.pathname.split("/")[1] === "mail" });
+  // Mail pages, and a workspace that keeps mail but not tickets, write mail first (GH#430).
+  const primary: "mail" | "tickets" | "page" = collab.enabled && (onMailPage || !ticketsOn) ? "mail" : ticketsOn ? "tickets" : "page";
+  const primaryLabel = primary === "mail" ? t("compose") : primary === "tickets" ? t("newTicket") : t("newPage");
+  const createPrimary = primary === "mail" ? () => compose.open() : primary === "tickets" ? () => shell.newTicket() : () => quickAdd.page();
 
   return (
     // In the desktop app the header is the window's title bar: it drags the
@@ -81,8 +115,19 @@ export function AppHeader() {
                 </li>
               </>
             )}
-            {crumbs.map((c, i) => {
-              const last = i === crumbs.length - 1;
+            {foldCrumbs(crumbs).map((c, i, all) => {
+              const last = i === all.length - 1;
+              if ("fold" in c)
+                return (
+                  <Fragment key={`fold-${i}`}>
+                    <li aria-hidden>
+                      <ChevronRight className="size-3.5 shrink-0 text-fg-4" />
+                    </li>
+                    <li className="shrink-0">
+                      <FoldedCrumbs crumbs={c.fold} />
+                    </li>
+                  </Fragment>
+                );
               return (
                 <Fragment key={`${c.label}-${i}`}>
                   <li aria-hidden>
@@ -132,17 +177,60 @@ export function AppHeader() {
           <Kbd className="hidden lg:inline-flex">mod k</Kbd>
         </button>
         {atLeast(role, "agent") && (
-          <Tooltip content={t("newTicket")} shortcut="c">
-            <button
-              type="button"
-              aria-label={t("newTicket")}
-              onClick={() => shell.newTicket()}
-              className="ml-1 flex h-7 items-center gap-1.5 rounded-md bg-inverse px-2.5 text-[12.5px] font-medium text-inverse-fg transition-[background-color,transform] hover:bg-inverse-hover active:scale-[0.97] max-sm:w-7 max-sm:justify-center max-sm:px-0"
-            >
-              <SquarePen className="size-3.5" />
-              <span className="hidden sm:inline">{t("newTicket")}</span>
-            </button>
-          </Tooltip>
+          // The page's own "new" (Compose on the mail pages or without Tickets, else New ticket),
+          // and beside it what else can be made in place: a ticket or email, a page and an import.
+          <div className="ml-1 flex h-7 items-stretch rounded-md bg-inverse text-inverse-fg">
+            {/* c makes a ticket or an email; without either there is no shortcut to show. */}
+            <Tooltip content={primaryLabel} shortcut={primary !== "page" ? "c" : undefined}>
+              <button
+                type="button"
+                aria-label={primaryLabel}
+                onClick={createPrimary}
+                className="flex items-center gap-1.5 rounded-l-md pl-2.5 pr-2 text-[12.5px] font-medium transition-[background-color,transform] hover:bg-inverse-hover active:scale-[0.97] max-sm:w-7 max-sm:justify-center max-sm:px-0"
+              >
+                <SquarePen className="size-3.5" />
+                <span className="hidden sm:inline">{primaryLabel}</span>
+              </button>
+            </Tooltip>
+            <Menu>
+              <Tooltip content={t("newMore")}>
+                <MenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={t("newMore")}
+                    className="flex w-6 items-center justify-center rounded-r-md border-l border-inverse-fg/15 transition-colors hover:bg-inverse-hover data-[state=open]:bg-inverse-hover"
+                  >
+                    <ChevronDown className="size-3.5" />
+                  </button>
+                </MenuTrigger>
+              </Tooltip>
+              <MenuContent align="end" className="w-[200px]">
+                {/* The page's own first (with c), then the other. */}
+                {(primary === "mail" ? ["mail", "tickets"] : ["tickets", "mail"]).map((kind) =>
+                  kind === "mail"
+                    ? collab.enabled && (
+                        <MenuItem key="mail" icon={<Mail />} shortcut={primary === "mail" ? "c" : undefined} onSelect={() => compose.open()}>
+                          {t("compose")}
+                        </MenuItem>
+                      )
+                    : ticketsOn && (
+                        <MenuItem key="tickets" icon={<SquarePen />} shortcut={primary === "tickets" ? "c" : undefined} onSelect={() => shell.newTicket()}>
+                          {t("newTicket")}
+                        </MenuItem>
+                      ),
+                )}
+                {/* With neither, New page is already the button. */}
+                {primary !== "page" && (
+                  <MenuItem icon={<FileText />} onSelect={() => quickAdd.page()}>
+                    {t("newPage")}
+                  </MenuItem>
+                )}
+                <MenuItem icon={<FileUp />} onSelect={() => openImport()}>
+                  {t("importPages")}
+                </MenuItem>
+              </MenuContent>
+            </Menu>
+          </div>
         )}
       </div>
     </header>

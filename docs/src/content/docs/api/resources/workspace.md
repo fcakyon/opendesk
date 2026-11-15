@@ -48,6 +48,7 @@ type WorkspaceSettings = {
   send_and_finish_button?: boolean;              // default false: a Send and solve button (named after solved's display label) next to Send in the reply box
   message_delete?: "off" | "own" | "all";        // default "own" (own internal notes); "all": any agent's notes and replies; admins any
   agent_online_time?: boolean;                   // default true: record each member's online time for the agents report; false deletes it and records none
+  ticket_number_in_subject?: boolean;            // default true: customer emails carry "[#n]" in the subject; false leaves it out (replies thread by headers; an email that starts a ticket's conversation keeps it when the mailbox sends through Microsoft, Amazon SES or a Gmail connection that cannot read back the Message-ID it went out with)
   severity_enabled?: boolean;                    // default true: tickets have a severity; false hides it in the app and AI never sets it (the API still reads and writes it)
   snooze_presets?: SnoozePreset[];               // at most 8: the snooze menu's times, in order; absent or [] = in 1 hour, in 4 hours, tomorrow and next week at 09:00
 };
@@ -116,8 +117,9 @@ Requires the owner, with two-factor authentication and a recent sign-in. All wor
 ```ts
 type Notification = {
   id: string;
-  type: "assigned" | "new_ticket" | "mentioned" | "customer_replied" | "thread_replied" | "sla_breached" | "ai_handoff" | "ai_cap_reached"
-    | "ai_balance_low" | "ai_balance_out" | "auto_recharge_failed" | "ai_key_failed";
+  type: "assigned" | "new_ticket" | "mentioned" | "customer_replied" | "thread_replied" | "sla_breached" | "scheduled_reply_failed" | "ai_handoff" | "ai_cap_reached"
+    | "ai_balance_low" | "ai_balance_out" | "auto_recharge_failed" | "ai_key_failed"
+    | "wiki_mention" | "wiki_comment" | "wiki_reminder";
   ticket: { id: string; number: number; subject: string } | null;
   data: Record<string, unknown>;
   read_at: string | null;
@@ -128,6 +130,8 @@ type Notification = {
 `new_ticket` (`{ channel, contact?: { id, name } }`) tells the team about a ticket nobody is assigned to; who gets it follows `new_ticket_notify` in [assignment](/api/resources/pictures-assignment/).
 
 Owners and admins get the workspace notices, which have no ticket: `ai_cap_reached` (`{ cap_usd }`, the AI agent reached its monthly spending cap), `ai_balance_low` and `ai_balance_out` (`{ remaining_usd }`, in US dollars), `auto_recharge_failed` (`{ reason }`) and `ai_key_failed` (`{ provider, reason }`). See [Billing](/api/resources/billing/#auto-recharge).
+
+The wiki's notifications have no ticket: `wiki_mention` (`{ page_id, page_title, by, preview, thread_id?, comment_id? }`), `wiki_comment` (`{ page_id, page_title, by, preview, thread_id, comment_id }`) and `wiki_reminder` (`{ page_id, page_title, reminder_id, remind_at, label }`). See [Wiki](/api/resources/wiki/#notifications).
 
 Mark some or all read with `POST /v1/notifications/read` and `{ "ids": [...] }` or `{ "all": true }`. New notifications arrive live as `notification.created` on your `user:<uid>` topic.
 

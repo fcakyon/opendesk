@@ -7,11 +7,12 @@ import { ConfirmProvider } from "@/components/ui/confirm";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ApiError } from "@/lib/api/client";
 import { api } from "@/lib/api/endpoints";
-import type { Role, WikiPage } from "@/lib/api/types";
+import type { Role, WikiComments, WikiPage } from "@/lib/api/types";
 import { qk } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { flushAll, openSaver, resetSavers, SAVE_DELAY } from "@/lib/wiki/saver";
 import { PageScreen } from "./WikiPageView";
+import { DEFAULT_LOOK } from "@/lib/wiki/look";
 
 vi.mock("@tanstack/react-router", () => ({
   getRouteApi: () => ({ useParams: () => ({ pageId: "p1" }) }),
@@ -20,7 +21,7 @@ vi.mock("@tanstack/react-router", () => ({
   useRouterState: ({ select }: { select: (s: unknown) => unknown }) => select({ location: { pathname: "/wiki/p1" } }),
 }));
 vi.mock("@/app/RootLayout", () => ({ useDocumentTitle: () => {} }));
-vi.mock("@/app/useBreadcrumbs", () => ({ usePageCrumb: () => {} }));
+vi.mock("@/app/useBreadcrumbs", () => ({ usePageCrumb: () => {}, usePageTrail: () => {} }));
 let restore: ((p: WikiPage) => void) | undefined;
 vi.mock("@/components/wiki/HistoryDrawer", () => ({
   HistoryDrawer: ({ onRestored }: { onRestored: (p: WikiPage) => void }) => {
@@ -32,6 +33,14 @@ vi.mock("@/components/wiki/HistoryDrawer", () => ({
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const page = (over: Partial<WikiPage> = {}): WikiPage => ({
+  ...DEFAULT_LOOK,
+  tags: [],
+  verification: null,
+  deleted_at: null,
+  deleted_by: null,
+  kind: "page",
+  database: null,
+  props: {},
   id: "p1",
   parent_id: null,
   title: "Refunds",
@@ -52,6 +61,16 @@ const page = (over: Partial<WikiPage> = {}): WikiPage => ({
 // As the API stores it: sanitized, so the editor's own HTML for it differs.
 const theirs = page({ version: 2, body_html: `<p>It&#39;s <a href="https://example.com/x" rel="nofollow noopener" target="_blank">40 days</a> now.</p>` });
 
+// Two comments in an open thread, one in a resolved one: the line under the title counts the open ones.
+const comment = (id: string) => ({ id, thread_id: "t1", author: null, body_html: "<p>x</p>", mentions: [], created_at: "2026-10-01T00:00:00Z", edited_at: null, reactions: [] });
+const comments: WikiComments = {
+  following: true,
+  data: [
+    { id: "t1", page_id: "p1", quote: "", inline: false, created_at: "2026-10-01T00:00:00Z", resolved_at: null, resolved_by: null, comments: [comment("t1"), comment("c2")] },
+    { id: "t2", page_id: "p1", quote: "", inline: false, created_at: "2026-10-01T00:00:00Z", resolved_at: "2026-10-02T00:00:00Z", resolved_by: null, comments: [comment("t2")] },
+  ],
+};
+
 const wait = (ms: number) => act(() => new Promise((r) => setTimeout(r, ms)));
 
 let host: HTMLDivElement;
@@ -67,6 +86,7 @@ async function open(role: Role, shown = page()) {
   qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   qc.setQueryData(qk.wikiPage("p1"), shown);
   qc.setQueryData(qk.wikiTree, []);
+  qc.setQueryData(qk.wikiComments("p1"), comments);
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
@@ -118,6 +138,17 @@ describe("wiki page view", () => {
     await wait(SAVE_DELAY + 300);
     expect(api.wiki.update).not.toHaveBeenCalled();
     expect(host.querySelector("[role=alert]")).toBeNull();
+  });
+
+  it("counts the open comments under the title, and offers following to readers too", async () => {
+    await open("agent");
+    expect(host.textContent).toContain("2 comments");
+    expect(host.querySelector('[aria-label="Following"]')?.getAttribute("aria-pressed")).toBe("true");
+    await act(async () => root.unmount());
+    host.remove();
+    await open("viewer");
+    expect(host.textContent).toContain("2 comments");
+    expect(host.querySelector('[aria-label="Following"]')?.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("shows a restored version without saving it again", async () => {

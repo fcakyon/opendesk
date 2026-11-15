@@ -22,6 +22,7 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/useopendesk/opendesk/internal/crypto"
+	"github.com/useopendesk/opendesk/internal/deps"
 	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/ids"
 )
@@ -279,6 +280,147 @@ func TestSendMessageSystemWithAttachments(t *testing.T) {
 	// The kept copy shows the image from its stored attachment, not the email's part.
 	if kept := sentCopy(t, w, mid); !strings.Contains(kept, "/v1/attachments/"+img.String()+"?exp=") || strings.Contains(kept, "cid:") {
 		t.Errorf("kept copy image: %s", kept)
+	}
+}
+
+// With ticket_number_in_subject off the subject carries no "[#n]", and the customer's reply
+// still threads onto the ticket through its headers.
+func TestSendMessageWithoutSubjectTag(t *testing.T) {
+	w := newWorld(t)
+	sink, port := startSink(t, w)
+	m := w.mailbox(InboundIMAP, OutboundSMTP, func(m *mailboxRow, c *credentials) {
+		m.Config = MailboxConfig{IMAPHost: "127.0.0.1", IMAPPort: 1, IMAPTLS: TLSImplicit, IMAPUsername: "u",
+			SMTPHost: "127.0.0.1", SMTPPort: port, SMTPTLS: TLSStart, SMTPUsername: "support@acme.test"}
+		c.Password = "imap-pass"
+		c.SMTPPassword = "s3cret-pass"
+	})
+	if _, err := w.s.d.DB.Pool.Exec(w.ctx, `UPDATE workspaces SET settings = settings || '{"ticket_number_in_subject": false}' WHERE id = $1`, w.wid); err != nil {
+		t.Fatal(err)
+	}
+	from := customer()
+	in := w.receive(m, fixture(t, "new_plain.eml", "{{FROM}}", from, "{{TO}}", "", "{{ID}}", "abc"+crypto.RandomString(6)))
+	tk := w.ticket(w.messageFor(in).TicketID)
+	mid := w.agentReply(tk.ID, "Unplug it now.", "")
+	if err := w.s.sendMessage(w.ctx, w.wid, mid, false); err != nil {
+		t.Fatal(err)
+	}
+	if len(sink.msgs) != 1 {
+		t.Fatalf("sink got %d messages", len(sink.msgs))
+	}
+	env, err := enmime.ReadEnvelope(bytes.NewReader(sink.msgs[0].data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := env.GetHeader("Subject"); got != "Re: Printer is on fire" {
+		t.Errorf("Subject = %q", got)
+	}
+	// The customer answers on the same thread, without any tag.
+	reply := "From: " + from + "\r\nTo: " + m.Email + "\r\nSubject: Re: Printer is on fire\r\nIn-Reply-To: " + env.GetHeader("Message-Id") +
+		"\r\nMessage-ID: <r" + crypto.RandomString(6) + "@c.test>\r\n\r\nStill smoking.\r\n"
+	back := w.receive(m, reply)
+	if got := w.messageFor(back).TicketID; got != tk.ID {
+		t.Errorf("the reply opened ticket %s, not %s", got, tk.ID)
+	}
+}
+
+// With ticket_number_in_subject off, an email that continues no earlier email of its ticket
+// keeps "[#n]" when the Message-ID the customer gets is not one we record, so the answer
+// still finds its ticket; the next email, which has a thread, goes without it.
+func TestSubjectTagKeptWhereHeadersCannotMatch(t *testing.T) {
+	w := newWorld(t)
+	google := func(grant string) mailboxRow {
+		m := mailboxRow{OutboundKind: KindGoogle}
+		m.Config.OAuthGrant = grant
+		return m
+	}
+	for _, c := range []struct {
+		name   string
+		m      mailboxRow
+		driver string
+		stored bool // a reply, whose sent Message-ID is stored; not an auto-reply or survey
+		want   bool
+	}{
+		{"mailbox smtp", mailboxRow{OutboundKind: OutboundSMTP}, "log", true, false},
+		{"platform smtp", mailboxRow{OutboundKind: OutboundSystem}, "smtp", true, false},
+		{"platform ses", mailboxRow{OutboundKind: OutboundSystem}, "ses", true, true},
+		{"microsoft graph", mailboxRow{OutboundKind: KindMicrosoft}, "log", true, true},
+		{"gmail send-only", google(GrantSend), "log", true, true},
+		{"gmail reads back", google(GrantAPI), "log", true, false},
+		{"gmail auto-reply", google(GrantAPI), "log", false, true},
+	} {
+		w.withDeps(func(d *deps.Deps) { d.Cfg.MailDriver = c.driver })
+		if got := w.s.subjectTagNeeded(&c.m, "", c.stored); got != c.want {
+			t.Errorf("%s, first email: tag needed %v, want %v", c.name, got, c.want)
+		}
+		if w.s.subjectTagNeeded(&c.m, "<earlier@c.test>", c.stored) {
+			t.Errorf("%s: an email with a thread needs no tag", c.name)
+		}
+	}
+
+	// Through Microsoft Graph, which stamps its own Message-ID, on a ticket an agent opened.
+	f := newFakeProvider(t)
+	w.s.graphBase = f.srv.URL
+	var sent [][]byte
+	f.handler = func(rw http.ResponseWriter, r *http.Request) bool {
+		if r.Method != http.MethodPost || r.URL.Path != "/me/sendMail" {
+			return false
+		}
+		b, _ := io.ReadAll(r.Body)
+		raw, _ := base64.StdEncoding.DecodeString(string(b))
+		sent = append(sent, raw)
+		rw.WriteHeader(http.StatusAccepted)
+		return true
+	}
+	m := w.mailbox(KindMicrosoft, KindMicrosoft, func(m *mailboxRow, c *credentials) {
+		m.Config = MailboxConfig{IMAPHost: "outlook.office365.com", IMAPPort: 993, IMAPTLS: TLSImplicit, OAuthEmail: "support@acme.test"}
+		c.RefreshToken, c.AccessToken, c.Expiry = "refresh-0", "imap-token", time.Now().Add(time.Hour)
+		c.GraphAccessToken, c.GraphExpiry = "graph-cached", time.Now().Add(time.Hour)
+	})
+	mustExec(t, w.d, `UPDATE workspaces SET settings = settings || '{"ticket_number_in_subject": false}' WHERE id = $1`, w.wid)
+	from := customer()
+	var tk domain.Ticket
+	err := w.d.DB.Tx(w.ctx, func(tx pgxTx) error {
+		contact, _, err := domain.UpsertContactByEmail(w.ctx, tx, w.wid, from, "Carla Customer")
+		if err != nil {
+			return err
+		}
+		tk, err = domain.CreateTicket(w.ctx, tx, domain.NewTicket{WorkspaceID: w.wid, Subject: "Your new printer", Channel: domain.ChannelEmail,
+			MailboxID: &m.ID, ContactID: &contact})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	subjectOf := func(i int) string {
+		t.Helper()
+		if len(sent) <= i {
+			t.Fatalf("Graph got %d messages", len(sent))
+		}
+		env, err := enmime.ReadEnvelope(bytes.NewReader(sent[i]))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return env.GetHeader("Subject")
+	}
+	if err := w.s.sendMessage(w.ctx, w.wid, w.agentReply(tk.ID, "Your printer ships today.", ""), false); err != nil {
+		t.Fatal(err)
+	}
+	tag := " [#" + itoa(tk.Number) + "]"
+	if got := subjectOf(0); got != "Your new printer"+tag {
+		t.Fatalf("first email's subject %q", got)
+	}
+	// The customer's answer names only the id Exchange gave the email.
+	answer := "From: " + from + "\r\nTo: " + m.Email + "\r\nSubject: Re: Your new printer" + tag +
+		"\r\nIn-Reply-To: <stamped@exchange.test>\r\nReferences: <stamped@exchange.test>\r\nMessage-ID: <r" + crypto.RandomString(6) +
+		"@c.test>\r\n\r\nThank you.\r\n"
+	if got := w.messageFor(w.receive(m, answer)).TicketID; got != tk.ID {
+		t.Fatalf("the answer opened ticket %s, not %s", got, tk.ID)
+	}
+	if err := w.s.sendMessage(w.ctx, w.wid, w.agentReply(tk.ID, "Glad to help.", ""), false); err != nil {
+		t.Fatal(err)
+	}
+	if got := subjectOf(1); got != "Re: Your new printer" {
+		t.Fatalf("a reply in the thread keeps the tag: %q", got)
 	}
 }
 

@@ -1,8 +1,9 @@
 // The view editor's icon: a button showing the view as its sidebar row, which opens a
 // popover with three tabs (an emoji, an icon of the list, one or two characters), the
-// palette and None. The preview at its top is the sidebar row as it will read.
+// palette and None. The preview at its top is the sidebar row as it will read. A view
+// section's icon (`section`) takes the same picker, previewed as the section's heading.
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -25,20 +26,39 @@ const cell =
 /** Only letters and digits, at most two of them. */
 const cleanText = (s: string) => [...s.replace(/[^\p{L}\p{N}]/gu, "")].slice(0, 2).join("");
 
-/** The sidebar row a view becomes: its icon and its name, as the sidebar shows them. */
-function RowPreview({ icon, name, className }: { icon: ViewIconValue | null; name: string; className?: string }) {
+/**
+ * The sidebar row a view becomes: its icon and its name, as the sidebar shows them; for a
+ * section, its heading: the chevron, the icon if any and the name in semibold.
+ */
+function RowPreview({ icon, name, section, className }: { icon: ViewIconValue | null; name: string; section?: boolean; className?: string }) {
   return (
     <span
       data-testid="view-icon-preview"
-      className={cn("flex h-7 min-w-0 items-center gap-2.5 rounded-md px-2 text-[12.5px] text-fg-2 [&>svg]:size-[15px] [&>svg]:shrink-0 [&>svg]:text-fg-3", className)}
+      className={cn(
+        "flex h-7 min-w-0 items-center gap-2.5 rounded-md px-2 text-[12.5px] text-fg-2 [&>svg]:size-[15px] [&>svg]:shrink-0 [&>svg]:text-fg-3",
+        section && "font-semibold",
+        className,
+      )}
     >
-      <ViewIcon icon={icon} />
+      {section && <ChevronRight className="rotate-90" />}
+      {(icon || !section) && <ViewIcon icon={icon} />}
       <span className="truncate">{name}</span>
     </span>
   );
 }
 
-export function ViewIconField({ value, onChange, name }: { value: ViewIconValue | null; onChange: (icon: ViewIconValue | null) => void; name: string }) {
+export function ViewIconField({
+  value,
+  onChange,
+  name,
+  section,
+}: {
+  value: ViewIconValue | null;
+  onChange: (icon: ViewIconValue | null) => void;
+  name: string;
+  /** A view section's icon: no icon is none, not the default one. */
+  section?: boolean;
+}) {
   const { t } = useTranslation("settingsInbox");
   const { t: tw } = useTranslation("wiki");
   const [open, setOpen] = useState(false);
@@ -46,9 +66,10 @@ export function ViewIconField({ value, onChange, name }: { value: ViewIconValue 
   const [q, setQ] = useState("");
   // The colour stays chosen while the tabs change, so an emoji in between does not lose it.
   const [color, setColor] = useState<Tone | null>(viewIconTone(value));
-  const shown = name.trim() ? viewName({ name: name.trim(), icon: value }) : t("views.namePlaceholder");
+  const shown = name.trim() ? viewName({ name: name.trim(), icon: value }) : section ? t("views.sectionIcon.namePlaceholder") : t("views.namePlaceholder");
 
-  const set = (next: ViewIconValue | null) => onChange(next && next.kind === "icon" && next.value === "layers" && !next.color ? null : next);
+  // A view's plain layers icon is its default one; a section has no default.
+  const set = (next: ViewIconValue | null) => onChange(!section && next && next.kind === "icon" && next.value === "layers" && !next.color ? null : next);
   const pickColor = (c: Tone) => {
     const next = color === c ? null : c;
     setColor(next);
@@ -91,7 +112,7 @@ export function ViewIconField({ value, onChange, name }: { value: ViewIconValue 
             className="flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-line bg-surface pr-2 text-left outline-none transition-colors hover:bg-hover focus-visible:shadow-[0_0_0_2px_var(--focus)]"
           >
             <span id="view-icon-current" className="min-w-0 flex-1">
-              <RowPreview icon={value} name={shown} />
+              <RowPreview icon={value} name={shown} section={section} />
             </span>
             <span className="flex shrink-0 items-center gap-1 text-[12px] text-fg-3">
               {t("views.icon.change")}
@@ -102,7 +123,7 @@ export function ViewIconField({ value, onChange, name }: { value: ViewIconValue 
       >
         <div className="border-b border-line p-2">
           <div className="label-caps px-1 pb-1">{t("views.icon.preview")}</div>
-          <RowPreview icon={value} name={shown} className="bg-chrome text-fg" />
+          <RowPreview icon={value} name={shown} section={section} className="bg-chrome text-fg" />
         </div>
         <div className="flex items-center justify-between gap-2 px-2 pt-2">
           <Segmented
@@ -231,7 +252,7 @@ export function ViewIconField({ value, onChange, name }: { value: ViewIconValue 
           </Button>
         </div>
       </Popover>
-      <p className="text-[12px] text-fg-3">{t("views.icon.hint")}</p>
+      <p className="text-[12px] text-fg-3">{section ? t("views.sectionIcon.hint") : t("views.icon.hint")}</p>
     </div>
   );
 }

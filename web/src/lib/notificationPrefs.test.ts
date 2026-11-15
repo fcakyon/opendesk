@@ -105,6 +105,12 @@ describe("groupTypes", () => {
     expect(g.map((x) => x.group)).toEqual(["tickets", "team"]);
     expect(g[0].types.map((t) => t.type)).toEqual(["assigned", "mentioned"]);
   });
+  it("lists the wiki after mail, with comments kept out of email", () => {
+    const g = groupTypes([row("wiki_reminder"), row("team_joined"), row("collab_mention"), row("wiki_comment"), row("wiki_mention")]);
+    expect(g.map((x) => x.group)).toEqual(["team", "mail", "wiki"]);
+    expect(g[2].types.map((t) => t.type)).toEqual(["wiki_mention", "wiki_comment", "wiki_reminder"]);
+    expect(NOTIFICATION_DEFAULTS.wiki_comment.defaults).toEqual({ email: false, push: true, desktop: true });
+  });
 });
 
 describe("pacing copy", () => {
@@ -131,7 +137,7 @@ describe("pacing copy", () => {
     expect(pacingCopy(undefined, 3).instant).toMatchObject({ key: "instantPaced", delay: 3 });
   });
   it("marks the urgent types", () => {
-    expect([...URGENT_TYPES].sort()).toEqual(["ai_balance_out", "ai_handoff", "ai_key_failed", "auto_recharge_failed", "mentioned", "sla_breached"]);
+    expect([...URGENT_TYPES].sort()).toEqual(["ai_balance_out", "ai_handoff", "ai_key_failed", "auto_recharge_failed", "collab_mention", "mentioned", "sla_breached", "wiki_mention", "wiki_reminder"]);
   });
 });
 

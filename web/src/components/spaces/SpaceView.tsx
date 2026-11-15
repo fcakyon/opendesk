@@ -6,9 +6,13 @@
 // its title. Section titles the person wrote read like the built-in ones and fold.
 
 import { Pencil } from "lucide-react";
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { Fragment, lazy, Suspense, useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Section, SectionMarkCtx } from "@/app/sidebarParts";
+import { Section, SectionMarkCtx, type SectionEdit } from "@/app/sidebarParts";
+import { SectionMenu } from "@/components/collab/SectionMenu";
+import { SidebarRow } from "@/components/collab/SidebarRow";
+import { toast } from "@/components/ui/toast";
+import { ownSectionsUi } from "@/lib/collab/ownSectionsUi";
 import { useWaitingFor } from "@/components/tickets/useUrgentChats";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty";
@@ -19,15 +23,17 @@ import { findSection, orderViews } from "@/lib/viewSections";
 import { folders as ticketFolders } from "@/lib/folders";
 import { useSession } from "@/lib/session";
 import { canSeeTeam, useOverview, useWorkspacesData, type WorkspaceData } from "@/lib/spaces/hooks";
-import { isEverywhere, isSectionId, itemKey, replaceSpace, showSpace, SPACE_PAGES, updateItem, updateSection } from "@/lib/spaces/model";
+import { isEverywhere, isSectionId, itemKey, needsWiki, removeSection, replaceSpace, showSpace, SPACE_PAGES, updateItem, updateSection } from "@/lib/spaces/model";
 import { spaceUi } from "@/lib/spaces/store";
 import { buildEverywhereRow, buildRow, InWorkspace, NavItemRow, useMailLocation, useRowLabels, type RowContext, type RowModel } from "./rows";
-import { RenameRow, SpaceRowMenu } from "./SpaceRowMenu";
+import { SpaceRowMenu } from "./SpaceRowMenu";
 import { useSpaceActions } from "./actions";
 import { defaultSidebarPrefs } from "@/lib/collab/sidebarPrefs";
 
+const LazyTeamspace = lazy(() => import("@/components/wiki/PagesSection").then((m) => ({ default: m.SpaceTeamspace })));
+
 /** The open workspace's sections, in its order: the sidebar without Spaces. */
-export function SectionList({ ids, render }: { ids: SidebarSectionId[]; render: (id: SidebarSectionId, first: boolean) => ReactNode }) {
+export function SectionList<Id extends string = SidebarSectionId>({ ids, render }: { ids: Id[]; render: (id: Id, first: boolean) => ReactNode }) {
   return (
     <div className="[&>*:first-child]:!mt-0">
       {ids.map((id, i) => (
@@ -40,18 +46,18 @@ export function SectionList({ ids, render }: { ids: SidebarSectionId[]; render: 
 const NO_PREFS = defaultSidebarPrefs();
 
 /** One of the Space's sections: under the person's title, read and folded like a built-in section; untitled, its rows alone. */
-function SpaceSectionBlock({ section, first, rail, onFold, children }: { section: SpaceSection; first: boolean; rail: boolean; onFold: (folded: boolean) => void; children: ReactNode }) {
+function SpaceSectionBlock({ section, first, rail, onFold, edit, children }: { section: SpaceSection; first: boolean; rail: boolean; onFold: (folded: boolean) => void; edit: SectionEdit; children: ReactNode }) {
   const title = section.title.trim();
   if (!title)
     return (
-      <div className={cn(!first && "mt-5")}>
+      <div className={cn(!first && "mt-5")} data-edit-section={section.id}>
         {rail && !first && <div aria-hidden className="mx-4 mb-2 h-px bg-chrome-line" />}
         <div className="[&>*:first-child]:!mt-0">{children}</div>
       </div>
     );
   return (
     <SectionMarkCtx.Provider value={null}>
-      <Section id={`space-${section.id}`} label={title} rail={rail} first={first} folded={section.collapsed} onFold={onFold}>
+      <Section id={`space-${section.id}`} label={title} rail={rail} first={first} folded={section.collapsed} onFold={onFold} icon={section.icon} edit={edit} dragKey={section.id}>
         <div className="[&>*:first-child]:!mt-0">{children}</div>
       </Section>
     </SectionMarkCtx.Provider>
@@ -96,6 +102,14 @@ function RemoteSection({ d, id, first, rail, mark, ctx }: { d: WorkspaceData; id
       // In that workspace's sidebar order, a section's views together (lib/viewSections).
       list = orderViews((d.views ?? []).filter((v) => !hidden.has(hid.view(v.id)))).map((v) => row("view", v.id));
       break;
+    case "pages":
+      // The workspace's top-level pages that workspace's sidebar shows (its teamspaces and private pages stay there).
+      if (hidden.has(hid.pages("workspace"))) break;
+      list = (d.wiki ?? [])
+        .filter((n) => !n.parent_id && !n.private && !n.team_id && !n.journal && !hidden.has(hid.wikiPage(n.id)))
+        .sort((a, b) => a.position - b.position)
+        .map((n) => row("wiki_page", n.id));
+      break;
     case "workspace":
       list = SPACE_PAGES.map((pg) => row("page", pg));
       break;
@@ -135,14 +149,15 @@ export function SpaceView({
     for (const sec of space.sections) for (const i of sec.items) if (members.has(i.workspace_id) && !out.includes(i.workspace_id)) out.push(i.workspace_id);
     return out;
   }, [space, members]);
-  const data = useWorkspacesData(wids, { folders: (w) => space.sections.some((sec) => sec.items.some((i) => i.workspace_id === w && i.kind === "folder")) });
+  const names = (w: string, kind: string) => space.sections.some((sec) => sec.items.some((i) => i.workspace_id === w && i.kind === kind));
+  const data = useWorkspacesData(wids, { folders: (w) => names(w, "folder"), wiki: (w) => needsWiki(space, w) });
   const everywhere = space.sections.some((sec) => sec.items.some(isEverywhere));
   const overview = useOverview(everywhere);
   const shown = showSpace(space, { members, collab: (w) => data.get(w)?.collab });
   const labels = useRowLabels();
   const here = useMailLocation();
   const waitingFor = useWaitingFor();
-  const [renaming, setRenaming] = useState<string | null>(null);
+  const { t: tc } = useTranslation("collab");
 
   // Only another workspace's rows say which workspace they are in: the open one's are the sidebar's own.
   const badgeFor = (d: WorkspaceData): ReactNode => (shown.marks && !d.open ? <InWorkspace name={d.name} logo={d.logo} /> : null);
@@ -154,38 +169,41 @@ export function SpaceView({
     const model = d ? buildRow(item, d, { labels, here: d.open ? here : undefined, waiting: d.open ? waitingFor : undefined }) : buildEverywhereRow(item.id, labels, [...overview.values()]);
     if (!model) return null;
     const key = itemKey(item);
-    const rk = `${section.id}|${key}`;
-    if (renaming === rk && !rail)
-      return (
-        <RenameRow
-          key={key}
-          initial={item.name ?? model.label}
-          placeholder={model.label}
-          label={t("row.renameLabel", { name: model.label })}
-          onDone={(v) => {
-            setRenaming(null);
-            if (v === null) return;
-            const name = v.trim();
-            change(updateItem(space, key, { name: !name || name === model.label ? null : name }));
-          }}
-        />
-      );
+    const name = item.name || model.label;
     return (
-      <NavItemRow
+      <SidebarRow
         key={key}
+        id={`space:${section.id}|${key}`}
+        scope="space"
+        source={{ kind: "row", from: section.id, key }}
+        label={name}
+        rail={rail}
+        edit={{
+          name,
+          placeholder: model.label,
+          label: t("row.renameLabel", { name: model.label }),
+          emoji: item.icon,
+          onName: (v) => change(updateItem(space, key, { name: !v || v === model.label ? null : v })),
+          onIcon: (v) => change(updateItem(space, key, { icon: v || null })),
+        }}
+      >
+      <NavItemRow
         model={model}
         rail={rail}
         prefs={d?.prefs ?? NO_PREFS}
         own={item.badge}
         label={item.name}
+        emoji={item.icon}
+        place={`space:${section.id}`}
         ws={d && !d.open ? d.id : undefined}
         mark={d ? badgeFor(d) : null}
         menu={(row) => (
-          <SpaceRowMenu spaces={spaces} space={space} item={item} model={model} put={actions.put} onRename={() => setRenaming(rk)} rail={rail} label={item.name || model.label}>
+          <SpaceRowMenu spaces={spaces} space={space} item={item} model={model} put={actions.put} onRename={() => undefined} rail={rail} label={item.name || model.label}>
             {row}
           </SpaceRowMenu>
         )}
       />
+      </SidebarRow>
     );
   };
 
@@ -194,13 +212,25 @@ export function SpaceView({
     const blocks: ({ kind: "section"; item: SpaceItem } | { kind: "rows"; items: SpaceItem[] })[] = [];
     for (const item of items) {
       const last = blocks[blocks.length - 1];
-      if (item.kind === "section") blocks.push({ kind: "section", item });
+      // A teamspace of the open workspace is its tree of pages, like a section.
+      if (item.kind === "section" || (item.kind === "wiki_space" && data.get(item.workspace_id)?.open)) blocks.push({ kind: "section", item });
       else if (last?.kind === "rows") last.items.push(item);
       else blocks.push({ kind: "rows", items: [item] });
     }
     return blocks.map((b, bi) => {
       if (b.kind === "section") {
         const it = b.item;
+        if (it.kind === "wiki_space") {
+          const team = data.get(it.workspace_id)?.teams?.find((x) => x.id === it.id);
+          if (!team || !buildRow(it, data.get(it.workspace_id)!, { labels })) return null;
+          return (
+            <div key={itemKey(it)} className={cn("flex flex-col gap-px", bi > 0 && "mt-3")}>
+              <Suspense fallback={null}>
+                <LazyTeamspace team={team} />
+              </Suspense>
+            </div>
+          );
+        }
         if (!isSectionId(it.id)) return null;
         const d = data.get(it.workspace_id);
         if (!d) return null;
@@ -238,11 +268,35 @@ export function SpaceView({
 
   return (
     <>
-      {shown.sections.map(({ section, items }, si) => (
-        <SpaceSectionBlock key={section.id} section={section} first={si === 0} rail={rail} onFold={(collapsed) => change(updateSection(space, section.id, { collapsed }))}>
-          {renderItems(section, items)}
-        </SpaceSectionBlock>
-      ))}
+      {shown.sections.map(({ section, items }, si) => {
+        const title = section.title.trim() || tc("ownSections.untitled");
+        const rid = `section:space:${section.id}`;
+        const edit: SectionEdit = {
+          key: rid,
+          placeholder: tc("ownSections.untitled"),
+          renameLabel: tc("edit.rename", { name: title }),
+          onName: (v) => change(updateSection(space, section.id, { title: v })),
+          menu: (
+            <SectionMenu
+              id={rid}
+              name={title}
+              dragKey={section.id}
+              emoji={section.icon}
+              onIcon={(v) => change(updateSection(space, section.id, { icon: v || null }))}
+              onAdd={() => ownSectionsUi.addToSpace(space.id, section.id)}
+              onDelete={() => {
+                change(removeSection(space, section.id));
+                toast.undo(tc("edit.sectionDeleted", { name: title }), () => change(space), tc("edit.undo"));
+              }}
+            />
+          ),
+        };
+        return (
+          <SpaceSectionBlock key={section.id} section={section} first={si === 0} rail={rail} edit={edit} onFold={(collapsed) => change(updateSection(space, section.id, { collapsed }))}>
+            {renderItems(section, items)}
+          </SpaceSectionBlock>
+        );
+      })}
     </>
   );
 }

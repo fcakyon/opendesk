@@ -52,8 +52,14 @@ type BrandImages struct {
 	HelpCenterFavicon domain.Avatar `json:"help_center_favicon"`
 }
 
+// PortalAuth is the non-sensitive authentication mode visible on a brand.
+type PortalAuth struct {
+	Mode string `json:"mode"`
+}
+
 // Brand is Brand from contracts/teams.md.
 type Brand struct {
+	PortalAuth       PortalAuth      `json:"portal_auth"`
 	ID               uuid.UUID       `json:"id"`
 	Name             string          `json:"name"`
 	Slug             string          `json:"slug" doc:"Help center path, 3..40 of a-z, 0-9 and -"`
@@ -75,7 +81,7 @@ const brandSelect = `SELECT b.id, b.name, b.slug, b.is_default, b.color, b.local
 		ORDER BY (m.status = 'active') DESC, m.created_at, m.id LIMIT 1),
 	(SELECT count(*) FROM mailboxes m WHERE m.workspace_id = b.workspace_id AND m.brand_id = b.id),
 	(SELECT count(*) FROM widgets g WHERE g.workspace_id = b.workspace_id AND g.brand_id = b.id),
-	b.position, b.created_at, b.updated_at,
+	b.position, b.created_at, b.updated_at, b.portal_auth_mode,
 	hd.hostname, hd.token, hd.status, hd.problem, hd.txt_ok, hd.cname_ok, hd.checked_at, hd.verified_at, hd.created_at
 FROM brands b LEFT JOIN help_domains hd ON hd.brand_id = b.id`
 
@@ -84,7 +90,7 @@ func scan(row pgx.Row, cfg *config.Config) (Brand, error) {
 	var imgs map[string]string
 	var dom domainRow
 	err := row.Scan(&b.ID, &b.Name, &b.Slug, &b.IsDefault, &b.Color, &b.Locale, &b.HelpCenter.Enabled, &b.HelpCenter.Title, &imgs,
-		&b.DefaultMailboxID, &b.MailboxCount, &b.WidgetCount, &b.Position, &b.CreatedAt, &b.UpdatedAt,
+		&b.DefaultMailboxID, &b.MailboxCount, &b.WidgetCount, &b.Position, &b.CreatedAt, &b.UpdatedAt, &b.PortalAuth.Mode,
 		&dom.hostname, &dom.token, &dom.status, &dom.problem, &dom.txtOK, &dom.cnameOK, &dom.checkedAt, &dom.verifiedAt, &dom.createdAt)
 	if err != nil {
 		return b, err

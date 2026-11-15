@@ -1,32 +1,39 @@
 // The sidebar with Collab on: the member's sections in their order, with Favorites
 // (pinned boxes, folders, accounts, views, view sections and teams) and Mail, kept short: All inboxes,
-// Shared with me and Assigned to me while they hold something, then one row per account
+// Shared with me and Assigned to me while they hold something (the work queues always once
+// an account has Handling on), then one row per account
 // (its folders unfold on request) with its own Assigned to me under it while it has some. Unread counts come from GET /v1/collab/counts, kept
 // fresh by collab.changed events.
 
+import { applyRowOrder } from "@/lib/collab/rowOrder";
+import type { EditSource } from "@/lib/collab/sidebarEditModel";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { AlertCircle, ChevronRight, Layers, Plus, SlidersHorizontal } from "lucide-react";
-import { Fragment, type ReactElement, type ReactNode } from "react";
+import { AlertCircle, ChevronRight, Inbox, Layers, Plus } from "lucide-react";
+import { useCanHandOver } from "@/components/tickets/inboxes/handOver";
+import { type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { ActivePill, Count, Label, NavTip, rowActive, rowBase, rowIdle, rowShape, Section } from "@/app/sidebarParts";
+import { ActivePill, Count, givesWay, Label, markOpener, NavTip, rowActive, rowBase, rowIdle, rowShape, Section, useOpener } from "@/app/sidebarParts";
 import { useFoldedSections, useOpenView, ViewSectionGroup } from "@/app/ViewSectionGroup";
-import { buildRow, NavItemRow, rowNumber, useMailLocation, useRowLabels, type MailHere, type RowModel } from "@/components/spaces/rows";
+import { buildRow, NavItemRow, RowEmoji, rowNumber, useMailLocation, useRowLabels, type MailHere, type RowModel } from "@/components/spaces/rows";
 import { useWaitingFor } from "@/components/tickets/useUrgentChats";
 import { Tooltip } from "@/components/ui/tooltip";
-import type { MailAccount, MailBox, MailCounts, MailFolder, SidebarPin, SidebarPrefs, SidebarSectionId, View } from "@/lib/api/types";
-import { accountAssignedNumbers, accountNumbers, allInboxNumbers, folderNumbers, listBoxNumbers, type RowNumbers } from "@/lib/collab/badges";
+import type { MailAccount, MailBox, MailCounts, MailFolder, SidebarPin, SidebarPrefs, SidebarSectionId, View, ViewIcon } from "@/lib/api/types";
+import { accountAssignedNumbers, accountNumbers, allInboxNumbers, folderNumbers, handlingSpam, listBoxNumbers, tracksHandling, type RowNumbers } from "@/lib/collab/badges";
 import { ACCOUNT_BOXES, accountName, buildFolderTree, flattenTree, folderWithRole } from "@/lib/collab/boxes";
 import { useAllFolders, useMailAccounts, useSaveSidebarPrefs } from "@/lib/collab/hooks";
-import { badgeFor, hid, livePins, pickCount, toggleExpanded, type MailBadge } from "@/lib/collab/sidebarPrefs";
-import { collabUi } from "@/lib/collab/ui";
+import { badgeFor, hid, iconOf, livePins, nameOf, pickCount, toggleExpanded, type MailBadge } from "@/lib/collab/sidebarPrefs";
+import { dropOverCls, useThreadDrop } from "@/lib/collab/threadDrag";
 import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
 import { useOpenWorkspaceData } from "@/lib/spaces/hooks";
 import { findSection } from "@/lib/viewSections";
 import { AccountTags } from "./AccountTags";
 import { AccountDot, boxIcon, FolderGlyph } from "./bits";
+import { quickAdd } from "@/app/quickAdd";
+import { FavoritePageRows, useHasFavoritePages } from "@/components/wiki/PagesSection";
 import { RowMenu, type RowMenuProps } from "./RowMenu";
+import { SidebarRow, useRowEdit } from "./SidebarRow";
 
 const sectionAction =
   "flex size-5 items-center justify-center rounded text-fg-4 opacity-0 transition-opacity hover:bg-chrome-hover hover:text-fg group-hover/section:opacity-100 focus-visible:opacity-100";
@@ -76,25 +83,44 @@ function MailRow({
   menu?: Menu;
 }) {
   const count = shown?.count;
+  // The member's own name and emoji for the row (contracts/collab.md "Names and icons").
+  const rowKey = menu?.hideId ?? "";
+  const name = rowKey ? nameOf(prefs, rowKey, label) : label;
+  const glyph = rowKey ? iconOf(prefs, rowKey) : undefined;
+  // Pinned to Favorites as well, the row clicked lights up alone (app/sidebarParts.tsx).
+  const who = useOpener();
+  const target = `mail:${link.box}:${link.account ?? ""}:${link.folder ?? ""}`;
+  const lit = active && !givesWay(who, target, "mail");
   // The menu lists what each choice would show.
   const withNums: Menu | undefined = menu?.badge && shown?.nums ? { ...menu, badge: { ...menu.badge, numbers: shown.nums } } : menu;
+  const rowEdit = useRowEdit();
+  // Accounts keep the member's order inside Mail; every mail row drags into Favorites and their own sections.
+  const pin = menu?.pin;
+  const source: EditSource | undefined = rowKey
+    ? { kind: "row", from: rowKey.startsWith("account:") ? "mail" : "mail:box", key: rowKey, pin, row: pin && pin.kind !== "view_section" ? { kind: pin.kind, id: pin.id } : undefined }
+    : undefined;
+  // Conversations dragged from the list land here: moved, starred, marked or assigned (lib/collab/threadDrag.ts).
+  const drop = useThreadDrop(link);
   return (
-    <NavTip rail={rail} label={label}>
+    <SidebarRow id={`mail|${rowKey || target}`} source={source} label={name} edit={rowKey ? rowEdit(rowKey, label) : undefined} rail={rail}>
+    <NavTip rail={rail} label={name}>
       <RowMenu enabled={!!menu} prefs={prefs} rail={rail} label={label} {...withNums}>
       <Link
         to="/mail/$box/{-$threadId}"
         params={{ box: link.box, threadId: undefined }}
         search={{ account: link.account, folder: link.folder }}
-        className={cn(rowBase, rowShape(rail), active ? rowActive : rowIdle)}
-        data-status={active ? "active" : undefined}
+        onClick={() => markOpener(target, "mail")}
+        {...drop.props}
+        className={cn(rowBase, rowShape(rail), lit ? rowActive : rowIdle, drop.over && dropOverCls)}
+        data-status={lit ? "active" : undefined}
         aria-current={active ? "page" : undefined}
         aria-label={rail ? label : undefined}
         title={rail ? undefined : title}
         style={!rail && depth ? { paddingLeft: `${8 + depth * 14}px` } : undefined}
       >
-        {active && <ActivePill />}
-        {icon}
-        <Label rail={rail}>{label}</Label>
+        {lit && <ActivePill />}
+        {glyph ? <RowEmoji emoji={glyph} /> : icon}
+        <Label rail={rail}>{name}</Label>
         {!rail && tag}
         {end}
         {!end && count !== undefined && count > 0 && <Count n={count} rail={rail} />}
@@ -102,6 +128,7 @@ function MailRow({
       </Link>
       </RowMenu>
     </NavTip>
+    </SidebarRow>
   );
 }
 
@@ -144,6 +171,7 @@ function AccountGroup({
   counts,
   here,
   rail,
+  queues,
 }: {
   account: MailAccount;
   folders: MailFolder[] | undefined;
@@ -152,6 +180,8 @@ function AccountGroup({
   counts: MailCounts | undefined;
   here: MailHere;
   rail: boolean;
+  /** The work queues are always shown above the accounts. */
+  queues: boolean;
 }) {
   const { t } = useTranslation("collab");
   const navigate = useNavigate();
@@ -160,11 +190,15 @@ function AccountGroup({
   const key = `account:${account.id}`;
   const shown = mailShown(prefs, key, ["mail"], accountNumbers(account, folders, counts));
   const openSettings = () => void navigate({ to: "/settings/mail-accounts/$accountId", params: { accountId: account.id } });
+  const { t: tInbox } = useTranslation("inbox");
+  const handOver = useCanHandOver(account);
   const menu: Menu = {
     badge: { key, kind: "mail", sections: ["mail"] },
     pin: { kind: "account", id: account.id },
     hideId: hid.account(account.id),
     settings: { label: t("rowMenu.accountSettings"), onSelect: openSettings },
+    // An admin turns an address they connected into a ticket inbox (contracts/collab.md "Using an account for tickets").
+    items: handOver ? [{ label: tInbox("inboxes.useForTickets"), icon: <Inbox />, onSelect: () => quickAdd.inbox({ accountId: account.id }) }] : undefined,
   };
   const expanded = !rail && prefs.expanded_accounts.includes(account.id);
   const atInbox = here.box === "inbox" && here.account === account.id && !here.folder;
@@ -238,7 +272,8 @@ function AccountGroup({
           </button>
         </Tooltip>
       </div>
-      {!hidden.has(hid.box("assigned")) && (assignedHere || !!counts?.assigned?.[account.id]) && (
+      {/* With the work queues in sight above, Assigned to me is one row there (GH#430). */}
+      {!hidden.has(hid.box("assigned")) && (assignedHere || (!queues && !!counts?.assigned?.[account.id])) && (
         <MailRow
           link={{ box: "assigned", account: account.id }}
           active={assignedHere}
@@ -312,13 +347,25 @@ export function MailSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail:
   const folders = useAllFolders(accounts);
   const here = useMailLocation();
   const hidden = new Set(prefs.hidden);
-  const shown = (accounts ?? []).filter((a) => !hidden.has(hid.account(a.id)));
+  // In the member's order (contracts/collab.md "Row order").
+  const shown = applyRowOrder((accounts ?? []).filter((a) => !hidden.has(hid.account(a.id))), (a) => hid.account(a.id), prefs.row_order.mail);
   const unified = prefs.unified_inbox && (accounts?.length ?? 0) >= 2 && !hidden.has(hid.box("inbox"));
   // Each account shows its own assigned conversations; the row across them shows while they
   // span two accounts, or some are in an account without a row here (and always on the rail,
   // which has no rows under an account).
   const assignedIn = Object.entries(counts?.assigned ?? {}).filter(([, n]) => n > 0).map(([id]) => id);
   const assignedAcross = !!counts?.boxes.assigned && (rail || assignedIn.length > 1 || assignedIn.some((id) => !shown.some((a) => a.id === id)));
+  // Spam never reaches Needs action, so handling accounts show their unread spam after the work
+  // queues, and keep the row while it is open (contracts/collab.md "Spam beside Needs action").
+  const spam = handlingSpam(accounts, counts);
+  const atSpam = here.box === "spam" && !here.folder;
+  const openHandling = atSpam && (here.account ? !!accounts?.some((a) => a.id === here.account && tracksHandling(a)) : !!accounts?.some(tracksHandling));
+  const spamAccount = spam.n ? spam.account : here.account;
+  const spamRow = !hidden.has(hid.box("spam")) && (spam.n > 0 || openHandling);
+  // With Handling on for a shared account the team works from queues: Ready for review,
+  // Assigned to me, Needs action and Snoozed stay in sight even while empty, so people know
+  // they exist (GH#430). Without it they show only while they hold something.
+  const handling = !!accounts?.some((a) => a.visibility === "shared" && a.handling_enabled);
 
   return (
     <Section
@@ -327,18 +374,11 @@ export function MailSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail:
       rail={rail}
       first={first}
       action={
-        <span className="flex items-center gap-0.5">
-          <Tooltip content={t("nav.customize")}>
-            <button type="button" aria-label={t("nav.customize")} onClick={() => collabUi.customize(true)} className={sectionAction}>
-              <SlidersHorizontal className="size-3.5" />
-            </button>
-          </Tooltip>
-          <Tooltip content={t("nav.connect")}>
-            <Link to="/settings/mail-accounts" search={{}} aria-label={t("nav.connect")} className={sectionAction}>
-              <Plus className="size-3.5" />
-            </Link>
-          </Tooltip>
-        </span>
+        <Tooltip content={t("nav.connect")}>
+          <button type="button" aria-label={t("nav.connect")} onClick={() => quickAdd.mail()} className={sectionAction}>
+            <Plus className="size-3.5" />
+          </button>
+        </Tooltip>
       }
     >
       {unified && (
@@ -367,7 +407,7 @@ export function MailSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail:
           menu={{ badge: { key: "box:shared", kind: "mail", sections: ["mail"] }, pin: { kind: "box", id: "shared" }, hideId: hid.box("shared") }}
         />
       )}
-      {!hidden.has(hid.box("assigned")) && ((here.box === "assigned" && (rail || !here.account)) || assignedAcross) && (
+      {!hidden.has(hid.box("assigned")) && ((here.box === "assigned" && (rail || !here.account)) || assignedAcross || handling) && (
         <MailRow
           link={{ box: "assigned" }}
           active={here.box === "assigned" && (rail || !here.account)}
@@ -379,7 +419,20 @@ export function MailSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail:
           menu={{ badge: { key: "box:assigned", kind: "mail", sections: ["mail"] }, pin: { kind: "box", id: "assigned" }, hideId: hid.box("assigned") }}
         />
       )}
-      {!hidden.has(hid.box("needs_action")) && (here.box === "needs_action" || !!counts?.boxes.needs_action) && (
+      {/* AI drafts waiting for a person to send, edit or discard (contracts/collab.md "AI queue"). */}
+      {!hidden.has(hid.box("ai_review")) && (here.box === "ai_review" || !!counts?.boxes.ai_review || handling) && (
+        <MailRow
+          link={{ box: "ai_review" }}
+          active={here.box === "ai_review"}
+          icon={boxIcon.ai_review}
+          label={t("box.ai_review")}
+          shown={mailShown(prefs, "box:ai_review", ["mail"], listBoxNumbers("ai_review", counts))}
+          rail={rail}
+          prefs={prefs}
+          menu={{ badge: { key: "box:ai_review", kind: "mail", sections: ["mail"] }, pin: { kind: "box", id: "ai_review" }, hideId: hid.box("ai_review") }}
+        />
+      )}
+      {!hidden.has(hid.box("needs_action")) && (here.box === "needs_action" || !!counts?.boxes.needs_action || handling) && (
         <MailRow
           link={{ box: "needs_action" }}
           active={here.box === "needs_action"}
@@ -391,7 +444,7 @@ export function MailSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail:
           menu={{ badge: { key: "box:needs_action", kind: "mail", sections: ["mail"] }, pin: { kind: "box", id: "needs_action" }, hideId: hid.box("needs_action") }}
         />
       )}
-      {!hidden.has(hid.box("snoozed")) && (here.box === "snoozed" || !!counts?.boxes.snoozed) && (
+      {!hidden.has(hid.box("snoozed")) && (here.box === "snoozed" || !!counts?.boxes.snoozed || handling) && (
         <MailRow
           link={{ box: "snoozed" }}
           active={here.box === "snoozed"}
@@ -403,15 +456,27 @@ export function MailSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail:
           menu={{ badge: { key: "box:snoozed", kind: "mail", sections: ["mail"] }, pin: { kind: "box", id: "snoozed" }, hideId: hid.box("snoozed") }}
         />
       )}
+      {spamRow && (
+        <MailRow
+          link={{ box: "spam", account: spamAccount }}
+          active={atSpam && here.account === spamAccount}
+          icon={boxIcon.spam}
+          label={t("box.spam")}
+          shown={mailShown(prefs, "box:spam", ["mail"], { unread: spam.n, total: spamAccount ? folderWithRole(folders[spamAccount], "spam")?.total : undefined })}
+          rail={rail}
+          prefs={prefs}
+          menu={{ badge: { key: "box:spam", kind: "mail", sections: ["mail"] }, pin: { kind: "box", id: "spam" }, hideId: hid.box("spam") }}
+        />
+      )}
       {shown.map((a) => (
-        <AccountGroup key={a.id} account={a} folders={folders[a.id]} prefs={prefs} hidden={hidden} counts={counts} here={here} rail={rail} />
+        <AccountGroup key={a.id} account={a} folders={folders[a.id]} prefs={prefs} hidden={hidden} counts={counts} here={here} rail={rail} queues={handling} />
       ))}
       {accounts && accounts.length === 0 && (
         <NavTip rail={rail} label={t("nav.noAccounts")}>
-          <Link to="/settings/mail-accounts" search={{}} className={cn(rowBase, rowShape(rail), rowIdle, "text-fg-3")}>
+          <button type="button" onClick={() => quickAdd.mail()} className={cn(rowBase, rowShape(rail), rowIdle, "text-fg-3")}>
             <Plus />
             <Label rail={rail}>{t("nav.noAccounts")}</Label>
-          </Link>
+          </button>
         </NavTip>
       )}
     </Section>
@@ -432,6 +497,8 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
   const navigate = useNavigate();
   const [folded, toggle] = useFoldedSections("favorites");
   const openView = useOpenView();
+  const pages = useHasFavoritePages();
+  const rowEdit = useRowEdit();
   if (!data) return null;
   // A favorite is unpinned rather than hidden, and reads Favorites' number first, then its own section's.
   const ctx = { labels, via: ["favorites"] as SidebarSectionId[], here, waiting: waitingFor };
@@ -442,9 +509,9 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
     }
     // Every view of the section the member sees, those hidden from Views too, like a pinned view.
     const section = findSection(data.views ?? [], pin.id);
-    return section && { kind: "section", name: section.name, views: section.views };
+    return section && { kind: "section", name: section.name, icon: section.icon, views: section.views };
   });
-  if (!pins.length) return null;
+  if (!pins.length && !pages) return null;
   const menuFor = (model: RowModel, pin: SidebarPin) => (row: ReactElement) => (
     <RowMenu
       enabled
@@ -468,14 +535,22 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
       {pins.map(({ pin, target }, i) => {
         if (target.kind === "row")
           return (
-            <Fragment key={`${pin.kind}:${pin.id}`}>
-              <NavItemRow model={target.model} rail={rail} prefs={prefs} menu={menuFor(target.model, pin)} />
-            </Fragment>
+            <SidebarRow
+              key={`${pin.kind}:${pin.id}`}
+              id={`favorites|${pin.kind}:${pin.id}`}
+              source={{ kind: "row", from: "favorites", key: `${pin.kind}:${pin.id}`, pin, row: pin.kind === "view_section" ? undefined : { kind: pin.kind, id: pin.id } }}
+              label={prefs.names[target.model.key] || target.model.label}
+              edit={rowEdit(target.model.key, target.model.label)}
+              rail={rail}
+            >
+              <NavItemRow model={target.model} rail={rail} prefs={prefs} place="favorites" menu={menuFor(target.model, pin)} />
+            </SidebarRow>
           );
         return (
           <ViewSectionGroup
             key={`${pin.kind}:${pin.id}`}
             name={target.name}
+            icon={target.icon}
             views={target.views}
             rail={rail}
             folded={folded.has(pin.id)}
@@ -484,7 +559,7 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
             openView={openView}
             row={(v) => {
               const model = viewRow(v);
-              return model && <NavItemRow model={model} rail={rail} prefs={prefs} nested={!rail} menu={menuFor(model, { kind: "view", id: v.id })} />;
+              return model && <NavItemRow model={model} rail={rail} prefs={prefs} nested={!rail} place="favorites" menu={menuFor(model, { kind: "view", id: v.id })} />;
             }}
             count={(v) => {
               const model = viewRow(v);
@@ -499,9 +574,11 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
           />
         );
       })}
+      {/* The member's favorite pages, the wiki's own list, after the pins. */}
+      <FavoritePageRows rail={rail} />
     </Section>
   );
 }
 
 /** What a favorite shows: one row, or a pinned view section and its views. */
-type Favorite = { kind: "row"; model: RowModel } | { kind: "section"; name: string; views: View[] };
+type Favorite = { kind: "row"; model: RowModel } | { kind: "section"; name: string; icon: ViewIcon | null; views: View[] };

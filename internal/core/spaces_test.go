@@ -103,12 +103,14 @@ func TestSpacesRoundTrip(t *testing.T) {
 	team := uuid.NewString()
 	body := map[string]any{"spaces": []any{
 		map[string]any{"id": uuid.NewString(), "name": "  Morning   shift ", "icon": "sun", "color": "amber", "marks": false,
-			"sections": []any{map[string]any{"id": "today", "title": "Today", "collapsed": true, "items": []any{
-				spaceItem(wid, "ticket_folder", "mine"),
+			"sections": []any{map[string]any{"id": "today", "title": "Today", "collapsed": true, "icon": "☀️", "items": []any{
+				map[string]any{"workspace_id": wid, "kind": "ticket_folder", "id": "mine", "icon": "🎯"},
 				map[string]any{"workspace_id": wid, "kind": "team", "id": team, "name": "Billing  crew", "badge": "awaiting"},
 				spaceItem(wid, "box", "inbox"),
 				spaceItem(wid, "page", "reports"),
 				spaceItem(wid, "page", "wiki"),
+				spaceItem(wid, "section", "pages"),
+				spaceItem(wid, "wiki_space", team),
 				spaceItem("", "everywhere", "mine"),
 			}}}},
 		spaceBody(uuid.NewString(), "Second"),
@@ -118,7 +120,8 @@ func TestSpacesRoundTrip(t *testing.T) {
 		t.Fatalf("put: %d %s", r.Status, r.Raw)
 	}
 	spaces := spacesOf(t, r)
-	if spaces[0]["name"] != "Morning shift" || spaces[0]["marks"] != false {
+	sec := spaces[0]["sections"].([]any)[0].(map[string]any)
+	if spaces[0]["name"] != "Morning shift" || spaces[0]["marks"] != false || sec["icon"] != "☀️" || sec["items"].([]any)[0].(map[string]any)["icon"] != "🎯" {
 		t.Fatalf("stored first: %s", r.Raw)
 	}
 	if spaces[1]["color"] != "grey" || spaces[1]["marks"] != true || spaces[1]["icon"] != "" {
@@ -256,11 +259,14 @@ func TestSpacesValidation(t *testing.T) {
 		{"view id not a uuid", withItem(spaceItem(wid, "view", "42"))},
 		{"account id not a uuid", withItem(spaceItem(wid, "account", "x"))},
 		{"folder id not a uuid", withItem(spaceItem(wid, "folder", "inbox"))},
+		{"teamspace id not a uuid", withItem(spaceItem(wid, "wiki_space", "support"))},
 		{"row name with a link", withItem(map[string]any{"workspace_id": wid, "kind": "section", "id": "inbox", "name": "mail me@x.com"})},
 		{"row name 65 characters", withItem(map[string]any{"workspace_id": wid, "kind": "section", "id": "inbox", "name": strings.Repeat("r", 65)})},
 		{"unknown everywhere list", withItem(spaceItem("", "everywhere", "views"))},
 		{"everywhere row of a workspace", withItem(spaceItem(wid, "everywhere", "mine"))},
 		{"unknown badge", withItem(map[string]any{"workspace_id": wid, "kind": "section", "id": "inbox", "badge": "all"})},
+		{"row icon not an emoji", withItem(map[string]any{"workspace_id": wid, "kind": "section", "id": "inbox", "icon": "inbox"})},
+		{"section icon not one emoji", one(spaceBody(uuid.NewString(), "Space", map[string]any{"id": "a", "icon": "🚀🚀", "items": []any{}}))},
 		{"over 64 KB", big()},
 	}
 	for _, tc := range cases {

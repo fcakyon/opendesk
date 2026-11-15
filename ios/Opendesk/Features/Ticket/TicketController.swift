@@ -572,6 +572,8 @@ final class TicketController {
             return !(folder.contains(moved, me: me?.id) && inbox.filters.matches(moved, myTeams: inbox.myTeamIDs))
         case let .team(_, tab):
             return !tab.contains(moved)
+        case let .mailbox(_, folder):
+            return !folder.contains(moved, me: me?.id)
         case .view:
             return false
         }

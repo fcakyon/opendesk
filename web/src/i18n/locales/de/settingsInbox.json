@@ -48,7 +48,15 @@
       "slash": "Tippe im Editor / und ein Kürzel",
       "team": "Antworten sind für dein ganzes Team verfügbar"
     },
-    "variablesHint": "Variablen werden beim Einfügen des Textbausteins für jedes Ticket ausgefüllt."
+    "variablesHint": "Variablen werden beim Einfügen des Textbausteins für jedes Ticket ausgefüllt.",
+    "actionsTitle": "Aktionen beim Senden",
+    "actionsHint": "Werden auf das Ticket angewendet, wenn eine Nachricht mit dieser Antwort gesendet wird. Beim Verwerfen des Entwurfs passiert nichts.",
+    "addTags": "Labels hinzufügen",
+    "removeTags": "Labels entfernen",
+    "tagsPlaceholder": "label-a, label-b",
+    "setTeam": "In Team verschieben",
+    "setAssignee": "Zuweisen an",
+    "noChange": "Nicht ändern"
   },
   "views": {
     "reorderAria": "{{name}} neu anordnen. Halte Alt gedrückt und bewege es mit den Pfeiltasten.",
@@ -74,6 +82,9 @@
     },
     "updateFailed": "Ansicht konnte nicht aktualisiert werden",
     "reorderFailed": "Ansichten konnten nicht neu angeordnet werden",
+    "moveTo": "In Abschnitt verschieben",
+    "movedTo": "{{name}} in den Abschnitt {{section}} verschoben",
+    "movedOut": "{{name}} aus seinem Abschnitt genommen",
     "deleteFailed": "Ansicht konnte nicht gelöscht werden",
     "editTitle": "Ansicht bearbeiten",
     "nameLabel": "Name",
@@ -87,6 +98,19 @@
     "inSection": "Im Abschnitt {{name}}",
     "reorderSectionAria": "Abschnitt {{name}} neu anordnen. Halte Alt gedrückt und bewege ihn mit seinen Ansichten über die Pfeiltasten.",
     "sectionChars": "Ein Abschnittsname darf weder < noch > enthalten.",
+    "sectionEdit": {
+      "title": "Abschnitt bearbeiten",
+      "aria": "Abschnitt {{name}} bearbeiten",
+      "description_one": "Ein neuer Name benennt den Abschnitt in seiner hier aufgeführten Ansicht um, und sein Symbol geht mit.",
+      "description_other": "Ein neuer Name benennt den Abschnitt in seinen {{count}} hier aufgeführten Ansichten um, und sein Symbol geht mit.",
+      "save": "Abschnitt speichern",
+      "saved": "Abschnitt gespeichert",
+      "needName": "Gib dem Abschnitt einen Namen."
+    },
+    "sectionIcon": {
+      "hint": "Steht in der Seitenleiste neben dem Namen des Abschnitts, für alle, die eine Ansicht darin haben.",
+      "namePlaceholder": "Name des Abschnitts"
+    },
     "needName": "Gib der Ansicht einen Namen.",
     "icon": {
       "label": "Symbol",
@@ -559,6 +583,22 @@
       "label": "Folgetickets der zuständigen Person des geschlossenen Tickets zuweisen",
       "on": "Das Folgeticket geht an die Person, die das geschlossene Ticket hatte, wenn sie noch Tickets übernehmen kann und, bei einem privaten Team, dazugehört",
       "off": "Folgetickets kommen ohne Zuweisung an, wie jedes neue Ticket"
+    },
+    "chat": {
+      "title": "Live-Chats",
+      "hint": "Jeder neue Chat geht sofort an ein Teammitglied, damit der Besucher eine Person hat, solange er noch auf der Seite ist. E-Mails folgen weiter den Regeln oben.",
+      "mode": "Chats zuweisen",
+      "modes": {
+        "none": "Chats folgen den Regeln oben, wie E-Mails",
+        "round_robin": "Jeder neue Chat geht reihum an das nächste Teammitglied, das Chats übernimmt",
+        "load_balanced": "Jeder neue Chat geht an das Teammitglied, das Chats übernimmt und die wenigsten offenen Tickets hat"
+      },
+      "skill": "Wer Chats übernimmt",
+      "anyone": "Das ganze Team",
+      "skillOn": "Nur Teammitglieder mit der Fähigkeit {{name}}, online und nicht abwesend. Mit dem Antwort-Bot wird ein Chat zugewiesen, wenn der Bot übergibt",
+      "skillOff": "Alle Teammitglieder des Chat-Teams, die online und nicht abwesend sind. Wähle eine Fähigkeit, um Chats denen vorzubehalten, die sie übernehmen",
+      "noSkills": "Alle Teammitglieder des Chat-Teams, die online sind. Lege unter Routing-Fähigkeiten eine Fähigkeit an, um Chats denen vorzubehalten, die sie übernehmen",
+      "awayTip": "Teammitglieder bleiben online, bis sie es selbst ändern: Schalte unten „Inaktive Teammitglieder als abwesend markieren“ ein, damit niemand nach dem Gehen einen Chat bekommt und Chats außerhalb der Arbeitszeit im Posteingang warten."
     },
     "awayTitle": "Abwesend",
     "awayHint": "Teammitglieder, die weg sind, bekommen keine neuen Tickets, bis sie zurück sind.",

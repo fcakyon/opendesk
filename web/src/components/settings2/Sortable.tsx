@@ -114,7 +114,7 @@ function SortableItem({
   );
 }
 
-function DragHandle({ label, onPointerDown, onMove, dragging }: { label?: string; onPointerDown: (e: React.PointerEvent) => void; onMove: (dir: -1 | 1) => void; dragging: boolean }) {
+export function DragHandle({ label, onPointerDown, onMove, dragging }: { label?: string; onPointerDown: (e: React.PointerEvent) => void; onMove: (dir: -1 | 1) => void; dragging: boolean }) {
   const { t } = useTranslation("settings");
   return (
     <button

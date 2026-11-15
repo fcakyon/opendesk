@@ -6,10 +6,10 @@
 // everywhere row (assigned to me, all mail) spans every workspace and opens its list.
 
 import { Link, useRouterState, type NavigateOptions } from "@tanstack/react-router";
-import { BarChart3, BookOpen, CircleCheck, CircleDashed, Clock, Inbox, Layers, Lock, Mails, NotebookText, ShieldAlert, User, UserCheck, Users } from "lucide-react";
+import { BarChart3, BookOpen, CircleCheck, CircleDashed, Clock, FileText, Inbox, Layers, Lock, Mails, NotebookText, ShieldAlert, User, UserCheck, Users } from "lucide-react";
 import { forwardRef, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { ActivePill, Count, Label, NavTip, rowActive, rowBase, rowIdle, rowShape, WaitingBadge } from "@/app/sidebarParts";
+import { ActivePill, Count, givesWay, Label, markOpener, NavTip, rowActive, rowBase, rowIdle, rowShape, useOpener, WaitingBadge } from "@/app/sidebarParts";
 import { AccountTags } from "@/components/collab/AccountTags";
 import { AccountDot, boxIcon, FolderGlyph } from "@/components/collab/bits";
 import { TeamDot } from "@/components/tickets/teams";
@@ -17,23 +17,26 @@ import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import { Tooltip } from "@/components/ui/tooltip";
 import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
 import type { WaitingScope } from "@/components/tickets/useUrgentChats";
-import type { MailBox, SidebarBadge, SidebarPrefs, SidebarSectionId, WorkspaceOverview } from "@/lib/api/types";
+import type { MailBox, SidebarBadge, SidebarPrefs, SidebarSectionId, WikiArea, WorkspaceOverview } from "@/lib/api/types";
+import { pageTo } from "@/lib/wiki/area";
 import { accountNumbers, allInboxNumbers, boxTabNumbers, folderNumbers, listBoxNumbers, ticketRowNumbers } from "@/lib/collab/badges";
 import { accountName, isMailBox, isTabBox, type MailSearch } from "@/lib/collab/boxes";
 import { badgeFor, hid, pickCount, type BadgeKind, type BadgeNumbers, type MailBadge, type TicketBadge } from "@/lib/collab/sidebarPrefs";
 import { cn } from "@/lib/cn";
-import { folderById, type FolderId } from "@/lib/folders";
+import { folderById, type FolderId, type TeamTab } from "@/lib/folders";
 import { canSeeTeam, type WorkspaceData } from "@/lib/spaces/hooks";
 import { isEverywhereList, isSpacePage, type EverywhereList, type SpacePage } from "@/lib/spaces/model";
 import { useOpenInWorkspace } from "@/lib/workspaces";
 import { useCollab } from "@/lib/collab/hooks";
 
 export type RowLink =
-  | { kind: "inbox"; folder: FolderId }
-  | { kind: "team"; teamId: string }
+  | { kind: "inbox"; folder: FolderId; mailbox?: string }
+  /** With `tab` (undefined for Unassigned), one of the team inbox's tabs, lit apart from the others. */
+  | { kind: "team"; teamId: string; tab?: TeamTab }
   | { kind: "view"; viewId: string }
   | { kind: "mail"; box: MailBox | "folder"; account?: string; folder?: string }
   | { kind: "page"; page: SpacePage }
+  | { kind: "wiki"; pageId: string; area?: WikiArea }
   | { kind: "everywhere"; list: EverywhereList };
 
 const pagePaths: Record<SpacePage, string> = { contacts: "/contacts", knowledge: "/kb", wiki: "/wiki", reports: "/reports" };
@@ -46,9 +49,11 @@ export function rowHref(l: RowLink, ws?: string): string {
   switch (l.kind) {
     case "inbox":
       path = `/inbox/${l.folder}`;
+      if (l.mailbox) p.set("mailbox", l.mailbox);
       break;
     case "team":
       path = `/teams/${encodeURIComponent(l.teamId)}`;
+      if (l.tab) p.set("tab", l.tab);
       break;
     case "view":
       path = `/views/${encodeURIComponent(l.viewId)}`;
@@ -60,6 +65,9 @@ export function rowHref(l: RowLink, ws?: string): string {
       break;
     case "page":
       path = pagePaths[l.page];
+      break;
+    case "wiki":
+      path = `/wiki/${encodeURIComponent(l.pageId)}`;
       break;
     case "everywhere":
       path = `/everywhere/${l.list}`;
@@ -74,15 +82,17 @@ export function rowHref(l: RowLink, ws?: string): string {
 export function rowNavigate(l: RowLink): NavigateOptions {
   switch (l.kind) {
     case "inbox":
-      return { to: "/inbox/$folder/{-$ticketId}", params: { folder: l.folder, ticketId: undefined } } as NavigateOptions;
+      return { to: "/inbox/$folder/{-$ticketId}", params: { folder: l.folder, ticketId: undefined }, search: { mailbox: l.mailbox } } as NavigateOptions;
     case "team":
-      return { to: "/teams/$teamId/{-$ticketId}", params: { teamId: l.teamId, ticketId: undefined } } as NavigateOptions;
+      return { to: "/teams/$teamId/{-$ticketId}", params: { teamId: l.teamId, ticketId: undefined }, search: { tab: l.tab } } as NavigateOptions;
     case "view":
       return { to: "/views/$viewId/{-$ticketId}", params: { viewId: l.viewId, ticketId: undefined } } as NavigateOptions;
     case "mail":
       return { to: "/mail/$box/{-$threadId}", params: { box: l.box, threadId: undefined }, search: { account: l.account, folder: l.folder } } as NavigateOptions;
     case "page":
       return (l.page === "contacts" ? { to: "/contacts/{-$contactId}", params: { contactId: undefined } } : { to: pagePaths[l.page] }) as NavigateOptions;
+    case "wiki":
+      return pageTo({ id: l.pageId, area: l.area }) as NavigateOptions;
     case "everywhere":
       return { to: "/everywhere/$list", params: { list: l.list } } as NavigateOptions;
   }
@@ -129,6 +139,8 @@ export type RowLabels = {
   allInboxes: string;
   myTeams: string;
   page: (p: SpacePage) => string;
+  /** A wiki page without a title. */
+  untitled: string;
   section: (id: SidebarSectionId, collabEnabled?: boolean) => string;
   everywhere: (list: EverywhereList) => string;
 };
@@ -138,6 +150,7 @@ export function useRowLabels(): RowLabels {
   const { t: tShell } = useTranslation("shell");
   const { t: tc } = useTranslation("collab");
   const { t: tw } = useTranslation("workspaces");
+  const { t: tWiki } = useTranslation("wiki");
   const collab = useCollab();
   return {
     everywhere: (l) => (l === "mine" ? tw("everywhere.mineTitle") : tw("everywhere.mailTitle")),
@@ -149,8 +162,21 @@ export function useRowLabels(): RowLabels {
     allInboxes: tc("nav.allInboxes"),
     myTeams: tShell("nav.myTeams"),
     page: (p) => tShell(pageLabels[p]),
+    untitled: tWiki("untitled"),
     section: (id, collabEnabled = collab.enabled) =>
-      id === "favorites" ? tc("nav.favorites") : id === "mail" ? tc("nav.mail") : id === "inbox" ? tShell(collabEnabled ? "nav.tickets" : "nav.inbox") : id === "teams" ? tShell("nav.teams") : id === "views" ? tShell("nav.views") : tShell("nav.workspace"),
+      id === "favorites"
+        ? tc("nav.favorites")
+        : id === "mail"
+          ? tc("nav.mail")
+          : id === "inbox"
+            ? tShell(collabEnabled ? "nav.tickets" : "nav.inbox")
+            : id === "teams"
+              ? tShell("nav.teams")
+              : id === "views"
+                ? tShell("nav.views")
+                : id === "pages"
+                  ? tShell("nav.pages")
+                  : tShell("nav.workspace"),
   };
 }
 
@@ -247,6 +273,21 @@ export function buildRow(item: { kind: string; id: string }, d: WorkspaceData, c
         locked: team.private,
       };
     }
+    case "mailbox": {
+      // A ticket inbox opens its Unassigned folder; one removed is skipped.
+      const m = d.mailboxes?.find((x) => x.id === item.id);
+      if (!m) return null;
+      const key = `mailbox:${m.id}`;
+      return {
+        key,
+        label: m.name || m.email,
+        title: m.email,
+        icon: <Inbox />,
+        badge: { kind: "ticket", sections: [...via, "inbox"], nums: ticketRowNumbers(d.counts, key) },
+        link: { kind: "inbox", folder: "unassigned", mailbox: m.id },
+        railDot: "count",
+      };
+    }
     case "view": {
       const v = d.views?.find((x) => x.id === item.id);
       if (!v) return null;
@@ -263,6 +304,18 @@ export function buildRow(item: { kind: string; id: string }, d: WorkspaceData, c
     case "page": {
       if (!isSpacePage(item.id)) return null;
       return { key: `page:${item.id}`, label: ctx.labels.page(item.id), icon: pageIcons[item.id], link: { kind: "page", page: item.id } };
+    }
+    case "wiki_page": {
+      // A page in the trash, deleted or out of the person's sight is skipped.
+      const n = d.wiki?.find((x) => x.id === item.id);
+      if (!n) return null;
+      return { key: `wiki_page:${n.id}`, label: n.title.trim() || ctx.labels.untitled, icon: <WikiPageGlyph icon={n.icon} />, link: { kind: "wiki", pageId: n.id, area: n.area } };
+    }
+    case "wiki_space": {
+      // A teamspace shows while its team is in sight and has pages the person sees.
+      const team = d.teams?.find((x) => x.id === item.id);
+      if (!team || !canSeeTeam(d, team) || !d.wiki?.some((n) => n.team_id === team.id)) return null;
+      return { key: hid.wikiSpace(team.id), label: team.name, icon: dotIcon(<TeamDot team={team} />), link: { kind: "page", page: "wiki" }, locked: team.private };
     }
     case "box": {
       if (!d.collab || !isMailBox(item.id)) return null;
@@ -340,9 +393,39 @@ export function rowNumber(model: RowModel, prefs: SidebarPrefs, own?: SidebarBad
 const activeLink = { className: rowActive, "data-status": "active" } as Record<string, string>;
 
 /** The row's link: the router's own in the open workspace, a plain one that opens another workspace otherwise. */
-type AnchorProps = { link: RowLink; ws?: string; className: string; label?: string; title?: string; active?: boolean; children: (active: boolean) => ReactNode } & Omit<React.HTMLAttributes<HTMLAnchorElement>, "children" | "title">;
+type AnchorProps = {
+  link: RowLink;
+  ws?: string;
+  className: string;
+  label?: string;
+  title?: string;
+  active?: boolean;
+  /** Another row of the same target was the one clicked: this one does not light up (app/sidebarParts.tsx). */
+  away?: boolean;
+  children: (active: boolean) => ReactNode;
+} & Omit<React.HTMLAttributes<HTMLAnchorElement>, "children" | "title">;
 
-const RowAnchor = forwardRef<HTMLAnchorElement, AnchorProps>(function RowAnchor({ link, ws, className, label, title, active, children, ...rest }, ref) {
+/** What a row opens, as the sidebar's opener names it ("view:<id>", "wiki_page:<id>"). */
+export function rowTarget(l: RowLink): string {
+  switch (l.kind) {
+    case "inbox":
+      return l.mailbox ? `mailbox:${l.mailbox}:${l.folder}` : `ticket_folder:${l.folder}`;
+    case "team":
+      return l.tab ? `team:${l.teamId}:${l.tab}` : `team:${l.teamId}`;
+    case "view":
+      return `view:${l.viewId}`;
+    case "mail":
+      return `mail:${l.box}:${l.account ?? ""}:${l.folder ?? ""}`;
+    case "page":
+      return `page:${l.page}`;
+    case "wiki":
+      return `wiki_page:${l.pageId}`;
+    case "everywhere":
+      return `everywhere:${l.list}`;
+  }
+}
+
+const RowAnchor = forwardRef<HTMLAnchorElement, AnchorProps>(function RowAnchor({ link, ws, className, label, title, active, away, children, ...rest }, ref) {
   const openIn = useOpenInWorkspace();
   const common = { ref, className, "aria-label": label, title, ...rest };
   if (ws) {
@@ -362,39 +445,61 @@ const RowAnchor = forwardRef<HTMLAnchorElement, AnchorProps>(function RowAnchor(
       </a>
     );
   }
-  const fn = ({ isActive }: { isActive: boolean }) => children(isActive);
+  const lit = away ? undefined : activeLink;
+  const fn = ({ isActive }: { isActive: boolean }) => children(isActive && !away);
   switch (link.kind) {
     case "inbox":
+      // A folder of one ticket inbox (?mailbox=) and the folder of every inbox light up apart.
       return (
-        <Link to="/inbox/$folder/{-$ticketId}" params={{ folder: link.folder, ticketId: undefined }} activeProps={activeLink} {...common}>
+        <Link
+          to="/inbox/$folder/{-$ticketId}"
+          params={{ folder: link.folder, ticketId: undefined }}
+          search={{ mailbox: link.mailbox }}
+          activeOptions={{ explicitUndefined: true }}
+          activeProps={lit}
+          {...common}
+        >
           {fn}
         </Link>
       );
     case "team":
       return (
-        <Link to="/teams/$teamId/{-$ticketId}" params={{ teamId: link.teamId, ticketId: undefined }} activeProps={activeLink} {...common}>
+        <Link
+          to="/teams/$teamId/{-$ticketId}"
+          params={{ teamId: link.teamId, ticketId: undefined }}
+          search={"tab" in link ? { tab: link.tab } : undefined}
+          activeOptions={"tab" in link ? { explicitUndefined: true } : undefined}
+          activeProps={lit}
+          {...common}
+        >
           {fn}
         </Link>
       );
     case "view":
       return (
-        <Link to="/views/$viewId/{-$ticketId}" params={{ viewId: link.viewId, ticketId: undefined }} activeProps={activeLink} {...common}>
+        <Link to="/views/$viewId/{-$ticketId}" params={{ viewId: link.viewId, ticketId: undefined }} activeProps={lit} {...common}>
           {fn}
         </Link>
       );
     case "page":
       return link.page === "contacts" ? (
-        <Link to="/contacts/{-$contactId}" params={{ contactId: undefined }} activeProps={activeLink} {...common}>
+        <Link to="/contacts/{-$contactId}" params={{ contactId: undefined }} activeProps={lit} {...common}>
           {fn}
         </Link>
       ) : (
-        <Link to={link.page === "knowledge" ? "/kb" : "/reports"} activeProps={activeLink} {...common}>
+        <Link to={pagePaths[link.page] as "/kb" | "/wiki" | "/reports"} activeProps={lit} {...common}>
+          {fn}
+        </Link>
+      );
+    case "wiki":
+      return (
+        <Link {...pageTo({ id: link.pageId, area: link.area })} activeProps={lit} {...common}>
           {fn}
         </Link>
       );
     case "everywhere":
       return (
-        <Link to="/everywhere/$list" params={{ list: link.list }} activeProps={activeLink} {...common}>
+        <Link to="/everywhere/$list" params={{ list: link.list }} activeProps={lit} {...common}>
           {fn}
         </Link>
       );
@@ -404,12 +509,12 @@ const RowAnchor = forwardRef<HTMLAnchorElement, AnchorProps>(function RowAnchor(
           to="/mail/$box/{-$threadId}"
           params={{ box: link.box, threadId: undefined }}
           search={{ account: link.account, folder: link.folder }}
-          data-status={active ? "active" : undefined}
+          data-status={active && !away ? "active" : undefined}
           aria-current={active ? "page" : undefined}
           {...common}
-          className={cn(className, active && rowActive)}
+          className={cn(className, active && !away && rowActive)}
         >
-          {children(!!active)}
+          {children(!!active && !away)}
         </Link>
       );
   }
@@ -443,6 +548,8 @@ export function NavItemRow({
   mark,
   menu,
   nested,
+  emoji,
+  place,
 }: {
   model: RowModel;
   rail: boolean;
@@ -458,19 +565,36 @@ export function NavItemRow({
   menu?: (row: ReactElement) => ReactElement;
   /** Indented under a view section's header (app/ViewSectionGroup.tsx). */
   nested?: boolean;
+  /** The emoji the person gave the row, in place of its icon. */
+  emoji?: string;
+  /** Where the row sits ("favorites", "section:<id>"): clicked, it lights up alone among rows of the same target. */
+  place?: string;
 }) {
   const { t } = useTranslation("shell");
-  const name = label || model.label;
+  const who = useOpener();
+  const target = rowTarget(model.link);
+  // The person's own name and emoji: the row's in its section first, then the sidebar's for that row.
+  const name = label || prefs.names[model.key] || model.label;
+  const glyph = emoji ?? prefs.icons[model.key];
   const { n, choice } = rowNumber(model, prefs, own);
   // Mail and team rows show a number above zero; inbox folders and views show their count, zero too.
   const count = n !== undefined && (model.badge?.kind === "ticket" || n > 0) ? n : undefined;
   const dot = rail && (model.railDot === "unread" ? choice !== "none" && !!model.badge?.nums.unread : model.railDot === "count" ? (n ?? 0) > 0 : false);
   const link = (
-    <RowAnchor link={model.link} ws={ws} active={model.active} className={cn(rowBase, rowShape(rail), rowIdle, nested && "pl-[22px]")} label={rail ? name : undefined} title={rail ? undefined : (model.title ?? (label ? model.label : undefined))}>
+    <RowAnchor
+      link={model.link}
+      ws={ws}
+      active={model.active}
+      away={place ? givesWay(who, target, place) : false}
+      onClick={place ? () => markOpener(target, place) : undefined}
+      className={cn(rowBase, rowShape(rail), rowIdle, nested && "pl-[22px]")}
+      label={rail ? name : undefined}
+      title={rail ? undefined : (model.title ?? (label ? model.label : undefined))}
+    >
       {(active) => (
         <>
           {active && <ActivePill />}
-          {model.icon}
+          {glyph ? <RowEmoji emoji={glyph} /> : model.icon}
           <Label rail={rail}>
             <span className="flex min-w-0 items-center gap-1">
               <span className="truncate">{name}</span>
@@ -490,5 +614,25 @@ export function NavItemRow({
     <NavTip rail={rail} label={name}>
       {menu ? menu(link) : link}
     </NavTip>
+  );
+}
+
+/** An emoji where a row has its icon, the icon's size. */
+export function RowEmoji({ emoji }: { emoji: string }) {
+  return (
+    <span aria-hidden className="flex size-[15px] shrink-0 items-center justify-center text-[13px] leading-none">
+      {emoji}
+    </span>
+  );
+}
+
+/** A wiki page's emoji where the other rows have an icon, or the page glyph. */
+function WikiPageGlyph({ icon }: { icon: string }) {
+  return icon ? (
+    <span className="flex size-[15px] items-center justify-center text-[13px] leading-none" aria-hidden>
+      {icon}
+    </span>
+  ) : (
+    <FileText />
   );
 }

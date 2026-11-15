@@ -5,6 +5,9 @@ import SwiftUI
 /// or Microsoft runs in the web app, whose sign-in cookie the provider's callback checks.
 struct MailboxNewView: View {
     var brandID: String?
+    var title = "Add a mailbox"
+    /// Where the new mailbox goes once added (Add a ticket inbox); its settings page when nil.
+    var onDone: ((String) -> Void)?
 
     @Environment(AppEnvironment.self) private var env
     @State private var store = MailboxSettingsStore()
@@ -19,7 +22,7 @@ struct MailboxNewView: View {
     @State private var allMethods = false
 
     var body: some View {
-        AccountPage(title: "Add a mailbox", spacing: 20) {
+        AccountPage(title: title, spacing: 20) {
             Text("Choose how mail reaches opendesk. You can change the details later.")
                 .font(ODFont.callout)
                 .foregroundStyle(Theme.fg3)
@@ -365,6 +368,7 @@ struct MailboxNewView: View {
     }
 
     private func replace(with id: String) {
+        if let onDone { return onDone(id) }
         if !env.router.accountPath.isEmpty { env.router.accountPath.removeLast() }
         env.router.openSetting(.mailboxes, id: id)
     }

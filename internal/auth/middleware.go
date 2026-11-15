@@ -25,6 +25,9 @@ type Resolver struct {
 	Tokens *Tokens
 	// ClientIP extracts the caller address (honors proxies only when configured).
 	ClientIP func(*http.Request) string
+	// VisitorSeen, when set, is called after a visitor's request refreshed their widget
+	// session's last_seen_at (at most once a minute a session). It must not block.
+	VisitorSeen func(ctx context.Context, wid, contactID uuid.UUID)
 
 	mu        sync.Mutex
 	lastTouch map[uuid.UUID]time.Time
@@ -133,14 +136,18 @@ func (rv *Resolver) resolveVisitor(ctx context.Context, token string, p *Princip
 	p.Kind = KindVisitor
 	if rv.shouldTouch(p.VisitorID) {
 		_, _ = rv.Pool.Exec(context.WithoutCancel(ctx), `UPDATE widget_sessions SET last_seen_at = now() WHERE id = $1`, p.VisitorID)
+		if rv.VisitorSeen != nil {
+			rv.VisitorSeen(ctx, p.WorkspaceID, p.ContactID)
+		}
 	}
 	return true
 }
 
 // CustomerSessionLive is the live identity condition shared by access and refresh.
-// Aliases: s customer_sessions, c contacts, a customer_credentials, w workspaces.
+// Aliases: s customer_sessions, c contacts, a customer_credentials (a LEFT JOIN: only a
+// password session needs its row), w workspaces.
 const CustomerSessionLive = `s.revoked_at IS NULL AND s.expires_at > now()
- AND c.email = s.email AND a.email = c.email AND NOT c.blocked AND w.suspended_at IS NULL`
+ AND c.email = s.email AND (s.method <> 'password' OR a.email = c.email) AND NOT c.blocked AND w.suspended_at IS NULL`
 
 func (rv *Resolver) resolveCustomer(ctx context.Context, token string, p *Principal) bool {
 	c, err := rv.Tokens.Verify(token, PurposeCustomerAccess)
@@ -155,7 +162,7 @@ func (rv *Resolver) resolveCustomer(ctx context.Context, token string, p *Princi
 	}
 	err = rv.Pool.QueryRow(ctx, `SELECT s.workspace_id, s.contact_id, s.id FROM customer_sessions s
  JOIN contacts c ON c.workspace_id = s.workspace_id AND c.id = s.contact_id
- JOIN customer_credentials a ON a.workspace_id = s.workspace_id AND a.contact_id = s.contact_id
+ LEFT JOIN customer_credentials a ON a.workspace_id = s.workspace_id AND a.contact_id = s.contact_id
  JOIN workspaces w ON w.id = s.workspace_id
  WHERE s.id = $1 AND s.contact_id = $2 AND s.workspace_id = $3 AND `+CustomerSessionLive, sid, cid, wid).
 		Scan(&p.WorkspaceID, &p.ContactID, &p.SessionID)

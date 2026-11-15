@@ -218,15 +218,42 @@ func TestChatFollowUpSkips(t *testing.T) {
 		t.Fatalf("setting off queued %d", n)
 	}
 
-	// A brand without an address sends nothing.
-	w2 := newWorld(t)
-	tid, _ := w2.chat(customer(), "10 minutes")
-	mid := w2.chatReply(tid, "Hi", false)
-	if err := w2.s.chatFollowUp(w2.ctx, w2.followUps(mid)[0]); err != nil {
-		t.Fatal(err)
-	}
-	if got := w2.message(mid).Delivery; got != "none" {
-		t.Fatalf("no address: %q", got)
+}
+
+// A brand with no address that can send emails nothing, and the ticket's timeline says so.
+func TestChatFollowUpNoMailbox(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(w *world)
+	}{
+		{"no address", func(*world) {}},
+		{"only address disabled", func(w *world) {
+			w.mailbox(InboundForwarding, OutboundSystem, func(m *mailboxRow, _ *credentials) { m.Status = "disabled" })
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newWorld(t)
+			tc.setup(w)
+			tid, _ := w.chat(customer(), "10 minutes")
+			mid := w.chatReply(tid, "Hi", false)
+			if err := w.s.chatFollowUp(w.ctx, w.followUps(mid)[0]); err != nil {
+				t.Fatal(err)
+			}
+			if got := w.message(mid).Delivery; got != "none" {
+				t.Fatalf("delivery %q", got)
+			}
+			if n := w.jobCount(jobs.SendMessageArgs{}.Kind(), "message_id", mid.String()); n != 0 {
+				t.Fatalf("send jobs %d", n)
+			}
+			if n := w.count(`SELECT count(*) FROM activities WHERE workspace_id = $1 AND ticket_id = $2 AND type = 'follow_up_skipped'
+				AND actor_type = 'system' AND data->>'message_id' = $3 AND data->>'reason' = 'no_mailbox'`, w.wid, tid, mid.String()); n != 1 {
+				t.Fatalf("follow_up_skipped activities %d", n)
+			}
+			if n := w.count(`SELECT count(*) FROM events WHERE workspace_id = $1 AND type = 'activity.created'
+				AND data->>'ticket_id' = $2 AND data->'activity'->>'type' = 'follow_up_skipped'`, w.wid, tid.String()); n != 1 {
+				t.Fatalf("activity.created events %d", n)
+			}
+		})
 	}
 }
 

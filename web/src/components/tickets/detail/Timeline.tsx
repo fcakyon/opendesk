@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlarmClock, Hand, ShieldAlert, Sparkles, ArrowRightLeft, CircleDot, GitMerge, Link2, MessagesSquare, PencilLine, Star, Tag as TagIcon, TimerOff, Trash2, Undo2, Users, UserRound, Reply } from "lucide-react";
+import { AlarmClock, Hand, ShieldAlert, Sparkles, ArrowRightLeft, CircleDot, GitMerge, Link2, MailX, MessagesSquare, PencilLine, Star, Tag as TagIcon, TimerOff, Trash2, Undo2, Users, UserRound, Reply } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -220,6 +220,9 @@ function describe(a: Activity, t: TFunction<"inbox">, { teams, members, tags, fi
     }
     case "sla_breached":
       return { icon: <TimerOff />, hue: "red", text: line(d.kind === "first_response" ? "activity.slaFirst" : "activity.slaResolution") };
+    case "follow_up_skipped":
+      // A chat reply that could not be emailed to the visitor who had left.
+      return { icon: <MailX />, hue: "amber", text: line("activity.followUpSkipped") };
     case "subject_changed":
       return { icon: <ArrowRightLeft />, text: line("activity.subject") };
     case "alias_changed":
@@ -232,6 +235,10 @@ function describe(a: Activity, t: TFunction<"inbox">, { teams, members, tags, fi
       return { icon: <ShieldAlert />, text: line("activity.spam") };
     case "unmarked_spam":
       return { icon: <ShieldAlert />, text: line("activity.unspam") };
+    case "deleted":
+      return { icon: <Trash2 />, text: line("activity.ticketDeleted") };
+    case "restored":
+      return { icon: <Undo2 />, text: line("activity.ticketRestored") };
     case "custom_updated":
       return { icon: <ArrowRightLeft />, text: Array.isArray(d.keys) ? line("activity.customKeys", { keys: (d.keys as string[]).join(", ") }) : line("activity.custom") };
     case "merged": {

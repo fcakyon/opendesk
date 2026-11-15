@@ -2,7 +2,7 @@
 // (contracts/wiki.md), and the moves the tree panel makes on it. Pure: the panel,
 // the cache patcher and the mock share these.
 
-import type { WikiNode } from "../api/types";
+import type { WikiArea, WikiNode } from "../api/types";
 
 export const MAX_DEPTH = 10;
 /** Characters in a title; the API refuses longer ones. */
@@ -80,7 +80,36 @@ export function ownership(tree: Tree, id: string, me: string | undefined): Owner
   return descendantsOf(tree, id).every((d) => d.created_by_id === me) ? "yes" : "subpages";
 }
 
-export type Drop = { parent: string | null; position: number };
+/**
+ * Where a page goes: under parent at position; at the top level, in space and area
+ * (contracts/pages.md) when they change.
+ */
+export type Drop = { parent: string | null; position: number; space?: SpaceKey; area?: WikiArea };
+
+const areaOf = (n: Pick<WikiNode, "area">): WikiArea => n.area ?? "wiki";
+
+/**
+ * The space a page lives in (contracts/wiki.md "Private pages and teamspaces"): "workspace",
+ * "private" or "team:<id>". The sidebar shows one section per space.
+ */
+export type SpaceKey = "workspace" | "private" | `team:${string}`;
+
+export function spaceOf(n: Pick<WikiNode, "private" | "team_id">): SpaceKey {
+  if (n.private) return "private";
+  if (n.team_id) return `team:${n.team_id}`;
+  return "workspace";
+}
+
+/** The API's way of naming a space in create and move. */
+export function spaceBody(key: SpaceKey): { space: "workspace" | "private" | "team"; team_id?: string } {
+  if (key === "private" || key === "workspace") return { space: key };
+  return { space: "team", team_id: key.slice(5) };
+}
+
+/** The part of the tree in one space: its pages, its top-level pages at the top. */
+export function spaceTree(nodes: readonly WikiNode[], key: SpaceKey): Tree {
+  return buildTree(nodes.filter((n) => spaceOf(n) === key));
+}
 
 /**
  * Whether id may go under parent: never under itself or a subpage, and no deeper than
@@ -117,37 +146,65 @@ export type Zone = "before" | "inside" | "after";
 
 /** Where a drop on target's row puts the dragged page, as the API's move takes it. */
 export function dropFor(tree: Tree, dragged: string, target: string, zone: Zone): Drop | null {
-  const t = tree.byId.get(target);
-  if (!t || dragged === target) return null;
-  if (zone === "inside") {
-    const kids = childrenOf(tree, target).filter((c) => c.id !== dragged);
-    const drop = { parent: target, position: kids.length };
-    return canPlace(tree, dragged, drop.parent) ? drop : null;
-  }
-  const siblings = childrenOf(tree, t.parent_id).filter((c) => c.id !== dragged);
-  const at = siblings.findIndex((c) => c.id === target);
-  const drop = { parent: t.parent_id, position: zone === "before" ? at : at + 1 };
-  return canPlace(tree, dragged, drop.parent) ? drop : null;
+  return dropIn(tree, tree, dragged, target, zone);
 }
 
-/** The nodes after moving id to drop, positions renumbered as the API does. */
+/**
+ * dropFor in one section of the sidebar: the target and its siblings are view's (one
+ * space), while what the dragged page takes along is in full (it may come from another
+ * space). A drop at the top level of another space carries that space.
+ */
+export function dropIn(view: Tree, full: Tree, dragged: string, target: string, zone: Zone, space?: SpaceKey, area?: WikiArea): Drop | null {
+  const t = view.byId.get(target);
+  if (!t || dragged === target) return null;
+  const fits = (parent: string | null) => canPlace(full, dragged, parent);
+  if (zone === "inside") {
+    const kids = childrenOf(view, target).filter((c) => c.id !== dragged);
+    return fits(target) ? { parent: target, position: kids.length } : null;
+  }
+  const siblings = childrenOf(view, t.parent_id).filter((c) => c.id !== dragged);
+  const at = siblings.findIndex((c) => c.id === target);
+  if (!fits(t.parent_id)) return null;
+  const drop: Drop = { parent: t.parent_id, position: zone === "before" ? at : at + 1 };
+  const from = full.byId.get(dragged);
+  if (!t.parent_id && space && from && spaceOf(from) !== space) drop.space = space;
+  if (!t.parent_id && area && from && areaOf(from) !== area) drop.area = area;
+  return drop;
+}
+
+/**
+ * The nodes after moving id to drop, positions renumbered as the API does: top-level pages
+ * are numbered within their area and space, and the moved page with its subpages takes on
+ * the area and space of where it lands.
+ */
 export function applyMove(nodes: readonly WikiNode[], id: string, drop: Drop): WikiNode[] {
   const moving = nodes.find((n) => n.id === id);
   if (!moving) return nodes.slice();
   const tree = buildTree(nodes);
+  const parentNode = drop.parent ? tree.byId.get(drop.parent) : undefined;
+  const toSpace: SpaceKey = parentNode ? spaceOf(parentNode) : (drop.space ?? spaceOf(moving));
+  const fromSpace = spaceOf(moving);
+  const fromArea = areaOf(moving);
+  const toArea = parentNode ? areaOf(parentNode) : (drop.area ?? fromArea);
+  const inSpace = (s: SpaceKey, a: WikiArea = toArea) => (n: WikiNode) => n.parent_id !== null || (spaceOf(n) === s && areaOf(n) === a);
   const from = moving.parent_id;
-  const target = childrenOf(tree, drop.parent).filter((c) => c.id !== id);
+  const target = childrenOf(tree, drop.parent).filter((c) => c.id !== id && inSpace(toSpace)(c));
   target.splice(Math.max(0, Math.min(drop.position, target.length)), 0, { ...moving, parent_id: drop.parent });
   const pos = new Map<string, { parent: string | null; position: number }>();
   target.forEach((n, i) => pos.set(n.id, { parent: drop.parent, position: i }));
-  if (key(from) !== key(drop.parent)) {
+  if (key(from) !== key(drop.parent) || fromSpace !== toSpace || fromArea !== toArea) {
     childrenOf(tree, from)
-      .filter((c) => c.id !== id)
+      .filter((c) => c.id !== id && inSpace(fromSpace, fromArea)(c))
       .forEach((n, i) => pos.set(n.id, { parent: from, position: i }));
   }
+  const taken = new Set([id, ...descendantsOf(tree, id).map((d) => d.id)]);
+  const look = toSpace === "private" ? { private: true, team_id: null } : toSpace === "workspace" ? { private: false, team_id: null } : { private: false, team_id: toSpace.slice(5) };
   return nodes.map((n) => {
     const p = pos.get(n.id);
-    return p && (p.parent !== n.parent_id || p.position !== n.position) ? { ...n, parent_id: p.parent, position: p.position } : n;
+    let next = p && (p.parent !== n.parent_id || p.position !== n.position) ? { ...n, parent_id: p.parent, position: p.position } : n;
+    if (fromSpace !== toSpace && taken.has(n.id)) next = { ...next, ...look };
+    if (fromArea !== toArea && taken.has(n.id)) next = { ...next, area: toArea };
+    return next;
   });
 }
 

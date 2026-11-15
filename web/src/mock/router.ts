@@ -102,7 +102,8 @@ export async function dispatch(input: string, init: RequestInit): Promise<Respon
     }
   }
 
-  await sleep(60 + Math.random() * 120);
+  // The demo answers after a network-like pause; tests answer at once.
+  if (import.meta.env.MODE !== "test") await sleep(60 + Math.random() * 120);
 
   // Most-specific first: static segments beat params.
   const candidates = routes

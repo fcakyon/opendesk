@@ -17,6 +17,7 @@ When no AI provider is configured, `GET /v1/ai/config` reports `enabled: false` 
 | `DELETE` | `/v1/tickets/{id}/ai/suggestions/{field}` | agent | $0 | Dismiss Ollie's suggestion for `priority`, `severity`, `labels`, `team` or `spam` |
 | `POST` | `/v1/ai/rewrite` | agent | $0.01 | Rewrite HTML |
 | `POST` | `/v1/ai/translate` | agent | $0.01 | Translate HTML or text |
+| `POST` | `/v1/wiki/ai/write` | agent | $0.01 (a selection), $0.03 (from a page) | Ollie edits wiki text or writes from a page (not saved). See [Wiki](/api/resources/wiki/#ollie-writing) |
 | `POST` | `/v1/kb/articles/ai/draft` | agent | $0.05 | Draft an article (not saved) |
 | `GET` | `/v1/ai/search?q=` | viewer | $0 | Semantic search, same shape as `/v1/search` |
 

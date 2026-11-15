@@ -81,6 +81,7 @@ export function seedPhone(ws: WsData, agent: UserRef) {
   const contact: Contact = {
     id: uuid(),
     email: null,
+    emails: [],
     name: "Lena Hoffmann",
     phone: "+32 470 00 00 00",
     avatar_url: null,

@@ -14,6 +14,7 @@
     "connectAnApp": "Connect an app",
     "createAWorkspace": "Create a workspace",
     "connectAMailbox": "Connect a mailbox",
+    "whatIsItFor": "What is it for?",
     "inbox": "Inbox",
     "view": "View",
     "tickets": "Tickets",
@@ -48,6 +49,7 @@
     "notifications": "Notifications",
     "agentToAgent": "Agent-to-agent",
     "workspaces": "Workspaces",
+    "shortcuts": "Shortcuts",
     "general": "General",
     "members": "Members",
     "teams": "Teams",
@@ -68,6 +70,7 @@
     "aiClients": "AI clients",
     "webhooks": "Webhooks",
     "auditLog": "Audit log",
+    "trash": "Trash",
     "ai": "AI",
     "aiAgent": "AI agent",
     "agentBehaviour": "Agent behaviour",
@@ -83,7 +86,14 @@
     "myTeams": "My teams",
     "newTicket": "New ticket",
     "phone": "Phone",
-    "print": "Print"
+    "print": "Print",
+    "wikiGraph": "Graph",
+    "wikiTags": "Tags",
+    "wikiTemplates": "Templates",
+    "wikiTrash": "Trash",
+    "pages": "Pages",
+    "pagesPage": "Page",
+    "pagesSettings": "Pages"
   },
   "folders": {
     "unassigned": "Unassigned",
@@ -108,6 +118,7 @@
     "notifications": "Notifications",
     "agentToAgent": "Agent-to-agent",
     "workspaces": "Workspaces",
+    "shortcuts": "Shortcuts",
     "general": "General",
     "members": "Members",
     "teams": "Teams",
@@ -143,7 +154,9 @@
     "aiClients": "AI clients",
     "webhooks": "Webhooks",
     "auditLog": "Audit log",
-    "phone": "Phone"
+    "trash": "Trash",
+    "phone": "Phone",
+    "pages": "Pages"
   },
   "settingsPage": "Settings page",
   "command": {
@@ -177,7 +190,9 @@
     "aiKnowledge": "AI agent knowledge",
     "aiTools": "AI agent tools",
     "aiPlayground": "AI agent playground",
-    "importHistory": "Import history from Zendesk, Help Scout, Freshdesk, Intercom, Front or CSV"
+    "importHistory": "Import history from Zendesk, Help Scout, FreeScout, Freshdesk, Intercom, Front or CSV",
+    "pages": "Pages",
+    "newPage": "New page"
   },
   "shortcuts": {
     "general": "General",

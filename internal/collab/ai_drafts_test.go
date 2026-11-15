@@ -1,6 +1,7 @@
 package collab
 
 import (
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -89,6 +90,19 @@ func TestAIClientDrafts(t *testing.T) {
 	if n := w.count(`SELECT count(*) FROM collab_messages WHERE id = $1 AND draft AND ai_api_key_id = $2`, d.ID, bot.APIKeyID); n != 1 {
 		t.Fatal("the sync dropped the draft's key")
 	}
+	// The conversation waits in Ready for review for the member.
+	var counts CollabCounts
+	if st := doJSON(t, "GET", human.URL+"/v1/collab/counts", nil, &counts); st != 200 || counts.Boxes.AIReview != 1 || counts.AIReview[a.ID] != 1 {
+		t.Fatalf("ready for review counts: %d %+v", st, counts)
+	}
+	if st := doJSON(t, "GET", human.URL+"/v1/collab/threads?box=ai_review", nil, &list); st != 200 || len(list.Data) != 1 || list.Data[0].ID != m1.ThreadID {
+		t.Fatalf("ready for review: %d %+v", st, list)
+	}
+	// Its row carries the draft, so it can be sent, edited or discarded in place (GH#430).
+	if p := list.Data[0].AIDraft; p == nil || p.DraftID != d.ID || p.DraftedBy != "Local drafter" || !strings.Contains(p.Snippet, "1.90") ||
+		len(p.To) != 1 || p.To[0].Email != "frank@example.com" || d2.AIDraft == nil || p.RecordID == nil || *p.RecordID != d2.AIDraft.ID {
+		t.Fatalf("row preview: %+v", list.Data[0].AIDraft)
+	}
 
 	// It never sends, discards, marks read, assigns or comments.
 	refusals := []struct {
@@ -146,6 +160,13 @@ func TestAIClientDrafts(t *testing.T) {
 	if st := doJSON(t, "PUT", ai.URL+"/v1/collab/drafts/"+d.ID.String(), map[string]any{"to": []string{"frank@example.com"},
 		"subject": "Re: Quote?", "body_html": "<p>Again</p>"}, &e); st != 403 {
 		t.Fatalf("client saves a draft a person took over: %d", st)
+	}
+	// Taken over, it is no longer waiting for review.
+	if st := doJSON(t, "GET", human.URL+"/v1/collab/threads?box=ai_review", nil, &list); st != 200 || len(list.Data) != 0 {
+		t.Fatalf("ready for review after takeover: %d %+v", st, list)
+	}
+	if st := doJSON(t, "GET", human.URL+"/v1/collab/threads?box=inbox", nil, &list); st != 200 || len(list.Data) == 0 || list.Data[0].AIDraft != nil {
+		t.Fatalf("preview after takeover: %d %+v", st, list)
 	}
 	// Another key of the same member does not own the first one's drafts.
 	var d3 MailMessage

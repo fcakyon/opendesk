@@ -60,7 +60,7 @@ describe("a sidebar view row's menu", () => {
 
   it("puts Duplicate first, before Collab's own entries", async () => {
     const items = await open((await row(true, () => {}))!);
-    expect(items.map((x) => x.textContent)).toEqual(["Duplicate", "Pin to favorites", "Hide from sidebar", "Customize sidebar"]);
+    expect(items.map((x) => x.textContent)).toEqual(["Duplicate", "Rename in sidebar", "Pin to favorites", "Hide from sidebar", "Edit sidebar", "Customize sidebar"]);
   });
 
   it("leaves a row without actions as it is when Collab is off", async () => {

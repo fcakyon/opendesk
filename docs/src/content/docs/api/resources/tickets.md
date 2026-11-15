@@ -15,8 +15,11 @@ Scopes: `tickets:read` to read, `tickets:write` to change.
 | `PATCH` | `/v1/tickets/{id}` | Update a ticket |
 | `DELETE` | `/v1/tickets/{id}` | Delete a ticket (soft delete) |
 | `POST` | `/v1/tickets/bulk` | Update or delete many tickets |
+| `GET` | `/v1/tickets/deleted` | The trash: deleted tickets, who deleted each and when (admins) |
+| `POST` | `/v1/tickets/{id}/restore` | Restore a deleted ticket (admins) |
 | `POST` | `/v1/tickets/{id}/merge` | Merge into another ticket |
 | `GET` | `/v1/tickets/{id}/activities` | The ticket's activity, ascending |
+| `GET` | `/v1/tickets/{id}/wiki` | The wiki pages you can see that mention the ticket. Also needs `wiki:read`. See [Wiki](/api/resources/wiki/#tickets-and-the-help-center) |
 
 Messages are on their own page: [Messages and attachments](/api/resources/messages/).
 
@@ -151,6 +154,7 @@ curl https://api.opendesk.sh/v1/tickets \
 | `widget_id` | the widget a chat opens in |
 | `body_html` | the first message |
 | `kind` | `reply` or `note` |
+| `direction` | `outbound` (default) or `inbound`: with `inbound`, a `reply` is stored as the contact's own message, as if they had emailed it, and nothing is sent. Needs a contact; takes no `cc` or `bcc` |
 | `priority`, `severity`, `assignee_id`, `team_id`, `tags`, `fields`, `status` | optional |
 
 An `email` ticket created with a `reply` sends that reply to the contact from the mailbox. When that mailbox has no way to send (`sending: "system_off"`, see [Mailboxes](/api/resources/mailboxes/#sending-through-opendesk)), the request is `422 mailbox_cannot_send` and no ticket is created.
@@ -203,6 +207,28 @@ curl https://api.opendesk.sh/v1/tickets/bulk \
 ```
 
 Send `{ "ids": [...], "delete": true }` to delete instead.
+
+## Trash
+
+Deleting a ticket takes it out of every list, view and search, but keeps it: who deleted it (a member, or an API key) and when are recorded, and an admin can bring it back. `GET /v1/tickets/deleted` lists the deleted tickets, newest first, 50 at a time (`limit` up to 100, the page's `next_before` as `before` for the next one, `q` for a number or words of the subject). Each row has `deleted_at`, `deleted_by` (`{ id, name, email }`) or `deleted_by_api_key` (`{ id, name }`), both `null` for an automation's delete, and `merged_into_number` for a ticket merged into another.
+
+```sh
+curl -X POST https://api.opendesk.sh/v1/tickets/1234/restore   -H "Authorization: Bearer od_live_..."
+```
+
+Restoring brings the ticket back as it was and answers it. A ticket merged into another is `409`: its conversation lives on that ticket. Both routes need an admin, or a key with `tickets:read` and `tickets:write`.
+
+## Your reply draft
+
+The app saves the reply a member is writing, so it comes back after a refresh or on another device. It is private to the member and one per ticket.
+
+| Method | Path | |
+| --- | --- | --- |
+| `GET` | `/v1/tickets/{id}/reply-draft` | `{ "draft": { ticket_id, body_html, attachments, updated_at } }`, or `null` |
+| `PUT` | `/v1/tickets/{id}/reply-draft` | `{ body_html, attachment_ids? }` saves it, replacing the one before. Nothing in it discards it |
+| `DELETE` | `/v1/tickets/{id}/reply-draft` | discards it (`204`) |
+
+These need a signed-in member with the agent role; an API key gets `403`. `attachment_ids` are your uploads that are not on a message yet. Sending your reply on the ticket clears the draft; a teammate's reply does not. A draft untouched for 30 days is removed.
 
 ## Merge
 

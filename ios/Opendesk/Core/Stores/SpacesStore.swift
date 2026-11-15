@@ -1,13 +1,64 @@
 import Foundation
 import Observation
 
+/// A page as a Space row names it (`GET /v1/wiki/pages`, the part a row needs).
+struct SpacePage: Decodable, Hashable, Sendable, Identifiable {
+    var id: String
+    var parentID: String?
+    var title: String
+    var icon: String?
+    /// "pages" or "wiki" (contracts/pages.md).
+    var area: String
+    var kind: String
+    var teamID: String?
+    var isPrivate: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, icon, area, kind
+        case parentID = "parent_id"
+        case teamID = "team_id"
+        case isPrivate = "private"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        parentID = c.lenient(String.self, forKey: .parentID)
+        title = c.lenient(String.self, forKey: .title) ?? ""
+        icon = c.lenient(String.self, forKey: .icon).flatMap { $0.isEmpty ? nil : $0 }
+        area = c.lenient(String.self, forKey: .area) ?? "wiki"
+        kind = c.lenient(String.self, forKey: .kind) ?? "page"
+        teamID = c.lenient(String.self, forKey: .teamID)
+        isPrivate = c.lenient(Bool.self, forKey: .isPrivate) ?? false
+    }
+
+    var displayTitle: String { SpaceRules.clean(title).isEmpty ? "Untitled" : title }
+
+    /// The app path that opens it, in its own area.
+    var path: String { (area == "pages" ? "/pages/" : "/wiki/") + id }
+
+    /// What a page of its kind is drawn with, when it has no emoji of its own.
+    var symbol: String {
+        switch kind {
+        case "database": "tablecells"
+        case "canvas": "square.on.square.dashed"
+        default: "doc.text"
+        }
+    }
+}
+
 /// What one workspace offers a Space's rows and its editor: teams, views, mail accounts and
-/// their folders, read with that workspace's `OD-Workspace`.
+/// their folders, ticket inboxes and pages, read with that workspace's `OD-Workspace`.
 struct SpaceWorkspaceData: Sendable {
     var teams: [Team] = []
     var views: [SavedView] = []
     var accounts: [MailAccount] = []
     var folders: [String: [MailFolder]] = [:]
+    var mailboxes: [InboxMailbox] = []
+    /// Pages and the wiki's pages the person sees, each area in its tree order.
+    var pages: [SpacePage] = []
+    /// The workspace has Pages on (its list answered).
+    var pagesOn = false
     var loaded = false
     var foldersLoaded = false
 
@@ -23,6 +74,8 @@ enum SpaceDestination: Hashable, Sendable {
     case mailAccount(String)
     case mailFolder(id: String, account: String)
     case area(AppArea)
+    /// An app path, opened as a link to it would be (`/pages/<id>`, `/inbox/unassigned?mailbox=<id>`).
+    case path(String)
     /// An Everywhere list: of no workspace, it opens where you are.
     case everywhere(EverywhereList)
 }
@@ -186,10 +239,18 @@ final class SpacesStore {
             async let teams: Page<Team>? = try? api.get("v1/teams", query: [URLQueryItem(name: "limit", value: "100")], workspace: scope)
             async let views: Page<SavedView>? = try? api.get("v1/views", query: [URLQueryItem(name: "limit", value: "100")], workspace: scope)
             async let accounts: [MailAccount]? = Self.accounts(api: api, scope: scope, collab: collab)
+            async let mailboxes: Page<InboxMailbox>? = try? api.get("v1/mailboxes", workspace: scope)
+            async let pages: Page<SpacePage>? = try? api.get("v1/wiki/pages", query: [URLQueryItem(name: "area", value: "pages")], workspace: scope)
+            async let wiki: Page<SpacePage>? = try? api.get("v1/wiki/pages", query: [URLQueryItem(name: "area", value: "wiki")], workspace: scope)
             var next = current ?? SpaceWorkspaceData()
             if let page = await teams { next.teams = page.data.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending } }
             if let page = await views { next.views = page.data.sorted { ($0.position ?? 0) < ($1.position ?? 0) } }
             if let list = await accounts { next.accounts = list }
+            if let page = await mailboxes { next.mailboxes = page.data }
+            let pagesList = await pages
+            let wikiList = await wiki
+            next.pagesOn = pagesList != nil
+            next.pages = (pagesList?.data ?? []) + (wikiList?.data ?? [])
             next.loaded = true
             if folders, collab {
                 var byAccount: [String: [MailFolder]] = [:]
@@ -214,6 +275,13 @@ final class SpacesStore {
     private nonisolated static func accounts(api: APIClient, scope: WorkspaceScope, collab: Bool) async -> [MailAccount]? {
         guard collab else { return nil }
         return try? await api.get("v1/collab/accounts", workspace: scope)
+    }
+
+    /// Reads `workspace`'s data again on its next `loadData`, showing what it had meanwhile.
+    func invalidate(_ workspace: String) {
+        guard dataTasks[workspace] == nil else { return }
+        data[workspace]?.loaded = false
+        data[workspace]?.foldersLoaded = false
     }
 
     /// Reads every workspace's data again (pull to refresh).
@@ -328,6 +396,9 @@ final class SpacesStore {
             openMail(MailScope(box: .inbox, folderID: id, accountID: account), env: env)
         case let .area(area):
             env.router.show(area, [])
+        case let .path(path):
+            guard let link = DeepLink.parse(path: path) else { return }
+            env.router.open(DeepLink.Target(link: link, server: nil, workspaceID: nil))
         case let .everywhere(list):
             env.router.openEverywhere(list)
         }

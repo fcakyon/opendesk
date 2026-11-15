@@ -173,6 +173,7 @@ func TestLogPathLeavesOutSecrets(t *testing.T) {
 		"/v1/phone/hooks/aircall/conn-1":       "/v1/phone/hooks/aircall/conn-1",
 		"/v1/phone/connections/conn-1/test":    "/v1/phone/connections/conn-1/test",
 		"/v1/tickets/123":                      "/v1/tickets/123",
+		"/v1/tickets/1\r\nlevel=ERROR":         "/v1/tickets/1level=ERROR",
 	} {
 		if got := LogPath(in); got != want {
 			t.Errorf("LogPath(%q) = %q, want %q", in, got, want)

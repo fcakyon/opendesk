@@ -20,6 +20,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
+	"github.com/useopendesk/opendesk/internal/helpdesk/wiki"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/storage"
 )
@@ -129,23 +130,24 @@ type storedAttachment struct {
 	TicketIsAttached bool
 	TicketTeam       *uuid.UUID
 	TicketAssignee   *uuid.UUID
+	WikiPage         *uuid.UUID
 }
 
 func loadStored(ctx context.Context, q db.Querier, id uuid.UUID) (storedAttachment, error) {
 	var a storedAttachment
 	err := q.QueryRow(ctx, `SELECT a.workspace_id, a.filename, a.content_type, a.size_bytes, a.storage_key,
 		a.uploaded_by_contact_id, a.uploaded_by, a.uploaded_by_api_key_id, t.contact_id, m.kind,
-		COALESCE(t.deleted_at IS NOT NULL, false), COALESCE(m.deleted_at IS NOT NULL, false), m.id IS NOT NULL, t.team_id, t.assignee_id
+		COALESCE(t.deleted_at IS NOT NULL, false), COALESCE(m.deleted_at IS NOT NULL, false), m.id IS NOT NULL, t.team_id, t.assignee_id, a.wiki_page_id
 		FROM attachments a LEFT JOIN messages m ON m.id = a.message_id LEFT JOIN tickets t ON t.id = m.ticket_id
 		WHERE a.id = $1`, id).Scan(&a.WorkspaceID, &a.Filename, &a.ContentType, &a.Size, &a.Key,
 		&a.UploaderContact, &a.UploaderUser, &a.UploaderKey, &a.TicketContact, &a.MessageKind, &a.TicketDeleted,
-		&a.MessageDeleted, &a.TicketIsAttached, &a.TicketTeam, &a.TicketAssignee)
+		&a.MessageDeleted, &a.TicketIsAttached, &a.TicketTeam, &a.TicketAssignee, &a.WikiPage)
 	return a, err
 }
 
 // mayRead decides access: a signed link, a member or key of the owning workspace who may
-// see the ticket carrying it (contracts/teams.md "Visibility") or who uploaded it while it
-// is not sent yet, or the visitor who uploaded the file or whose conversation carries it
+// see the ticket carrying it (contracts/teams.md "Visibility"), who may see the wiki page
+// holding it (contracts/wiki.md "Files") or who uploaded it while it is not sent yet, or the visitor who uploaded the file or whose conversation carries it
 // in a public reply. A deleted message's files are an admin's alone, as its text is: only
 // links signed for the deleted message (handed to admins with it) open them, and a link
 // handed out before it was deleted no longer does.
@@ -160,6 +162,12 @@ func mayRead(r *http.Request, q db.Querier, id uuid.UUID, a storedAttachment) (b
 	}
 	switch p.Kind {
 	case auth.KindUser, auth.KindAPIKey:
+		if a.WikiPage != nil && !a.TicketIsAttached {
+			if p.Kind == auth.KindUser && !p.Role.Valid() || p.Kind == auth.KindAPIKey && !p.HasScope(auth.ScopeWikiRead) {
+				return false, nil
+			}
+			return wiki.SeesPage(r.Context(), q, p, *a.WikiPage)
+		}
 		if p.Kind == auth.KindUser && !p.Role.Valid() || p.Kind == auth.KindAPIKey && !p.HasScope(auth.ScopeTicketsRead) {
 			return false, nil
 		}

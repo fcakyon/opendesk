@@ -13,6 +13,7 @@
  *
  *   window.opendesk = window.opendesk || function () { (opendesk.q = opendesk.q || []).push(arguments) };
  *   opendesk("identify", { user_id, user_hash, email, name }); // user_hash = hex HMAC-SHA256(widget secret, user_id)
+ *   opendesk("update", { user_id, user_hash, company: { id }, fields: { widget_plan: "pro" } }); // again, with new values
  *   opendesk("open" | "close" | "toggle");
  *   opendesk("locale", "fr");            // force a language (BCP 47)
  *   opendesk("shutdown");                 // forget the visitor and remove the widget
@@ -112,6 +113,7 @@ function start(key: string, base: string, fetcher: (u: string, i: RequestInit) =
         break;
       }
       case "identify":
+      case "update": // the same call again, with new values, for pages that change without reloading
         void c.identify((args[0] ?? {}) as SessionIdentity);
         break;
       case "open":
@@ -137,13 +139,13 @@ function start(key: string, base: string, fetcher: (u: string, i: RequestInit) =
   api.loaded = true;
   window.opendesk = api;
   // Identify before the first session so a known user never starts anonymous.
-  for (const a of queued) if (a[0] === "identify") api(...(Array.from(a) as [string, ...unknown[]]));
+  for (const a of queued) if (a[0] === "identify" || a[0] === "update") api(...(Array.from(a) as [string, ...unknown[]]));
   void c.boot().then(() => {
     const cfg = get().config;
     const fixed = explicit ? null : matchLocale(cfg?.language);
     if (fixed) explicit = fixed;
     if (fixed || (!explicit && cfg?.locale)) void applyLocale(cfg?.locale);
-    for (const a of queued) if (a[0] !== "identify" && a[0] !== "locale") api(...(Array.from(a) as [string, ...unknown[]]));
+    for (const a of queued) if (a[0] !== "identify" && a[0] !== "update" && a[0] !== "locale") api(...(Array.from(a) as [string, ...unknown[]]));
   });
 }
 

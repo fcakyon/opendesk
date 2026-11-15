@@ -157,6 +157,7 @@
     "connection": "Verbindung",
     "testConnection": "Verbindung testen",
     "lastSyncFailed": "Letzte Synchronisierung fehlgeschlagen",
+    "foldersSkipped": "Einige Ordner wurden nicht gelesen",
     "lastSynced": "Zuletzt synchronisiert",
     "never": "Nie",
     "forwardingInstant": "Weitergeleitete E-Mails kommen an, sobald sie gesendet werden.",
@@ -398,6 +399,11 @@
     "empty": "Keine Kontaktformulare. Gib eine Adresse oder @domain ein.",
     "publicDomain": "{{domain}} ist ein öffentlicher E-Mail-Anbieter. Gib stattdessen die genaue Adresse des Formulars ein.",
     "ownAddress": "Das ist die eigene Adresse dieses Postfachs."
+  },
+  "automatic": {
+    "title": "Automatische E-Mails",
+    "hint": "Manche Helpdesks markieren jede E-Mail, die sie senden, als automatisch, auch eine, die eine Person geschrieben hat. Solche E-Mails werden ignoriert, außer dieses Postfach behält sie. Behaltene E-Mails werden wie gewohnt zu Tickets, und nichts Automatisches antwortet darauf: keine automatische Antwort, keine Antwort einer Automatisierung, keine Antwort von Ollie. Abwesenheitsnotizen bleiben ignoriert.",
+    "toggle": "Automatische E-Mails behalten"
   },
   "connect": {
     "detecting": "{{domain}} wird nachgeschlagen",
@@ -741,6 +747,25 @@
           "Füge die Chat-App zu jedem gewünschten Bereich hinzu und aktualisiere dann die Bereichsliste."
         ],
         "noChannels": "Keine geeigneten Bereiche mit Threads verfügbar. Füge die Chat-App zu einem benannten Bereich hinzu und aktualisiere dann."
+      },
+      "mattermost": {
+        "description": "Spiegeln Sie E-Mail-Tickets in Mattermost-Threads und bearbeiten Sie sie im Gespräch mit Ollie.",
+        "setup": "Legen Sie in Mattermost ein Bot-Konto an (Integrationen, Bot-Konten), kopieren Sie sein Zugriffstoken und tragen Sie es mit der Adresse Ihres Servers ein. opendesk findet die Teams des Bots. Fügen Sie den Bot den Kanälen hinzu, in die Tickets gehen.",
+        "steps": [
+          "Fügen Sie den Bot in Mattermost dem Team und jedem Kanal hinzu, in den Tickets gehen.",
+          "Sprechen Sie ihn im Thread eines Tickets an: erwähnen Sie ihn für Ollie, oder beginnen Sie eine Nachricht mit !reply, !note, !assign, !status oder !priority.",
+          "Die Schaltflächen an der Nachricht eines Tickets rufen opendesk von Ihrem Mattermost-Server aus auf. Liegt opendesk auf einer privaten Adresse, erlauben Sie das unter Systemkonsole, Entwickler, Nicht vertrauenswürdige interne Verbindungen zulassen."
+        ],
+        "noChannels": "Der Bot ist noch in keinem Kanal. Fügen Sie ihn in Mattermost einem Kanal hinzu und aktualisieren Sie dann.",
+        "findAccounts": "Teams suchen",
+        "accountPlaceholder": "Team wählen",
+        "refreshAccounts": "Teams aktualisieren",
+        "noAccounts": "Dieser Bot ist noch in keinem Team. Fügen Sie ihn in Mattermost einem Team hinzu.",
+        "discoveryError": "Teams für {{name}} konnten nicht geladen werden. Prüfen Sie die Serveradresse und das Token.",
+        "help": {
+          "server_url": "Wo Ihr Mattermost liegt, zum Beispiel https://chat.example.com.",
+          "bot_token": "Das Zugriffstoken eines Bot-Kontos, nicht das einer Person."
+        }
       }
     },
     "field": {
@@ -749,7 +774,10 @@
       "public_key": "Public Key für Interactions",
       "guild_id": "Server",
       "webhook_secret": "Webhook-Secret",
-      "service_account_json": "Dienstkonto-JSON"
+      "service_account_json": "Dienstkonto-JSON",
+      "server_url": "Serveradresse",
+      "team_id": "Team",
+      "webhook_token": "Schaltflächen-Token"
     },
     "connect": {
       "title": "{{name}} verbinden",
@@ -1007,5 +1035,31 @@
       "step4": "Hake die Ereignisse für Zusammenfassungen und Transkripte an (sie brauchen Voys Intelligence) und klicke auf Opslaan.",
       "step5": "Mache einen Testanruf: Die Verbindung zeigt Empfängt Anrufe, sobald er ankommt."
     }
+  },
+  "folders": {
+    "title": "Ordner",
+    "description": "opendesk holt E-Mails aus diesen Ordnern Ihres IMAP-Servers. Wählen Sie die Ordner, in die die Regeln Ihres Servers Support-E-Mails ablegen, etwa E-Mails an einen Alias. Eine Nachricht in mehreren davon wird eine Ticketnachricht.",
+    "inbox": "Posteingang",
+    "choose": "Ordner wählen",
+    "done": "Fertig",
+    "failed": "Die Ordner konnten nicht geladen werden",
+    "retry": "Erneut versuchen",
+    "hint": "Wählen Sie bis zu {{max}} Ordner. Änderungen gelten nach dem Speichern.",
+    "full": "Ein Postfach liest höchstens {{max}} Ordner. Entfernen Sie einen, um einen anderen zu wählen.",
+    "saveFirst": "Speichern Sie zuerst die Servereinstellungen und wählen Sie dann die Ordner.",
+    "special": {
+      "sent": "Gesendet",
+      "drafts": "Entwürfe",
+      "trash": "Papierkorb",
+      "junk": "Spam",
+      "all": "Alle Nachrichten"
+    }
+  },
+  "sentCopy": {
+    "title": "Gesendete E-Mails auf dem Server behalten",
+    "hint": "Speichert eine Kopie jeder E-Mail, die dieses Postfach sendet, in einem Ordner auf Ihrem IMAP-Server, wie Ihr E-Mail-Programm, damit Ihr Postfach die ganze Unterhaltung enthält.",
+    "folder": "Ordner für gesendete E-Mails",
+    "choose": "Ordner wählen",
+    "loading": "Ordner werden geladen…"
   }
 }

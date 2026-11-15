@@ -1,17 +1,15 @@
 // Customize sidebar: the member orders sections, hides and shows sections and what
-// is in them (accounts, folders, boxes, views, teams), pins favorites, chooses the number
+// is in them (accounts, folders, boxes, views, teams, the parts and pages of Pages), pins favorites, chooses the number
 // beside each section's rows (and any one row's), and turns All inboxes and mark-as-read
 // on and off. Each change shows at once and is saved with
 // PUT /v1/collab/sidebar. Every member has it; without Collab it arranges the ticket side
-// (Favorites, Inbox, Teams, Views, Workspace) and leaves out Mail and the mail options.
+// (Favorites, Inbox, Teams, Views, Pages, Workspace) and leaves out Mail and the mail options.
 
-import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Eye, EyeOff, Hash, Layers, ListTree, Pin, PinOff } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, CornerUpLeft, Eye, EyeOff, Hash, Pencil, Pin, PinOff, Plus, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { SidebarBadge, SidebarPin, SidebarPrefs, SidebarSectionId, View } from "@/lib/api/types";
-import { ACCOUNT_BOXES, accountName, buildFolderTree, flattenTree, folderWithRole, isMailBox } from "@/lib/collab/boxes";
-import { useAllFolders, useCollab, useMailAccounts, useSaveSidebarPrefs, useSidebarPrefs } from "@/lib/collab/hooks";
+import type { SidebarBadge, SidebarPrefs, SidebarSection, SidebarSectionId, Space } from "@/lib/api/types";
+import { useCollab, useSaveSidebarPrefs, useSidebarPrefs } from "@/lib/collab/hooks";
 import {
   badgeChoices,
   badgeFor,
@@ -21,36 +19,35 @@ import {
   isPinned,
   MAX_PINS,
   movePin,
-  moveSection,
-  sectionOrder,
   sectionsOffered,
   setBadge,
   setHidden,
   togglePin,
   type BadgeKind,
-  type MailBadge,
-  type TicketBadge,
 } from "@/lib/collab/sidebarPrefs";
 import { useCollabUi, collabUi } from "@/lib/collab/ui";
-import { folderById, folders as ticketFolders } from "@/lib/folders";
 import { cn } from "@/lib/cn";
-import { findSection, groupViews } from "@/lib/viewSections";
-import { q } from "@/lib/queries";
 import { ReorderButtons } from "@/components/settings2/bits";
-import { TeamDot, useTeamsCtx } from "@/components/tickets/teams";
-import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Menu, MenuChoice, MenuContent, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { Menu, MenuChoice, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
-import { AccountDot, boxIcon, FolderGlyph } from "./bits";
+import { useSidebarItems, type Item, type ItemBadge } from "./sidebarItems";
 import { SpaceGlyph } from "@/components/spaces/icons";
 import { useSession } from "@/lib/session";
 import { useSpaces } from "@/lib/spaces/hooks";
 import { pickedSpace } from "@/lib/spaces/model";
 import { spaceUi, usePickedSpaceId } from "@/lib/spaces/store";
+import { useConfirm } from "@/components/ui/confirm";
+import { asSpace, entryKey, moveEntry, OWN_LIMITS, reorderEntries, sidebarEntries, withSpace } from "@/lib/collab/ownSections";
+import { copySpaceSections } from "@/lib/collab/copySpace";
+import { setInboxSection } from "@/lib/collab/inboxSections";
+import { useBackIntoLabel } from "@/components/tickets/inboxes/backInto";
+import { useInboxNames } from "@/components/tickets/inboxes/inboxNames";
+import { ownSectionsUi } from "@/lib/collab/ownSectionsUi";
+import { removeSection } from "@/lib/spaces/model";
 
 function IconToggle({ on, onClick, label, iconOn, iconOff, disabled }: { on: boolean; onClick: () => void; label: string; iconOn: ReactNode; iconOff: ReactNode; disabled?: boolean }) {
   return (
@@ -72,8 +69,6 @@ function IconToggle({ on, onClick, label, iconOn, iconOff, disabled }: { on: boo
   );
 }
 
-type ItemBadge = { key: string; kind: BadgeKind; sections: SidebarSectionId[]; fallback?: MailBadge | TicketBadge };
-type Item = { key: string; label: string; icon: ReactNode; hideId?: string; pin?: SidebarPin; badge?: ItemBadge; depth?: number; note?: string };
 
 /** The sections whose rows carry numbers, and what kind. */
 const SECTION_BADGE: Partial<Record<SidebarSectionId, BadgeKind | "both">> = { mail: "mail", favorites: "both", inbox: "ticket", teams: "team", views: "ticket" };
@@ -204,16 +199,11 @@ function ItemRow({ item, prefs, onChange }: { item: Item; prefs: SidebarPrefs; o
 }
 
 export function CustomizeSidebar() {
-  const { t: tNav } = useTranslation("navigation");
   const { t } = useTranslation("collab");
   const open = useCollabUi((s) => s.customizeOpen);
   const collab = useCollab().enabled;
   const prefs = useSidebarPrefs();
   const save = useSaveSidebarPrefs();
-  const { data: accounts } = useMailAccounts();
-  const folderMap = useAllFolders(accounts);
-  const { data: views } = useQuery(q.views());
-  const teams = useTeamsCtx();
   const [expanded, setExpanded] = useState<Set<SidebarSectionId>>(new Set(["mail"]));
   const { t: ts } = useTranslation("spaces");
   const { spaces } = useSpaces();
@@ -222,106 +212,62 @@ export function CustomizeSidebar() {
 
   const change = (p: SidebarPrefs) => save.mutate(p, { onError: (e) => toast.error(e, t("customize.saveFailed")) });
   const offered = sectionsOffered(collab);
-  const order = sectionOrder(prefs).filter((id) => offered.includes(id));
+  const inboxNames = useInboxNames();
+  const backMailbox = useBackIntoLabel("mailbox");
+  const backTeam = useBackIntoLabel("team");
+  // The built-in sections offered, the member's own and the inboxes shown apart, in their order.
+  const order = sidebarEntries(prefs).filter((e) => (e.kind === "builtin" ? offered.includes(e.id) : e.kind === "custom" || !!inboxNames(e.scope)));
   const name = (id: SidebarSectionId) => t(`customize.section.${id}`);
-
-  const mailBadge = (key: string, fallback?: MailBadge): ItemBadge => ({ key, kind: "mail", sections: ["mail"], fallback });
-  const ticketBadge = (key: string, section: SidebarSectionId): ItemBadge => ({ key, kind: section === "teams" ? "team" : "ticket", sections: [section] });
-
-  const itemsOf = (id: SidebarSectionId): Item[] => {
-    switch (id) {
-      case "favorites":
-        return [];
-      case "mail": {
-        const out: Item[] = [
-          { key: "box:inbox", label: t("nav.allInboxes"), icon: <Layers />, hideId: hid.box("inbox"), pin: { kind: "box", id: "inbox" }, badge: mailBadge("box:inbox") },
-          { key: "box:shared", label: t("box.shared"), icon: boxIcon.shared, hideId: hid.box("shared"), pin: { kind: "box", id: "shared" }, badge: mailBadge("box:shared") },
-          { key: "box:assigned", label: t("box.assigned"), icon: boxIcon.assigned, hideId: hid.box("assigned"), pin: { kind: "box", id: "assigned" }, badge: mailBadge("box:assigned") },
-          ...ACCOUNT_BOXES.map((b) => ({ key: `every:${b}`, label: t(`box.${b}`), icon: boxIcon[b], hideId: hid.folder(b), note: t("customize.everyAccount") })),
-        ];
-        for (const a of accounts ?? []) {
-          const fs = folderMap[a.id];
-          out.push({ key: `account:${a.id}`, label: accountName(a), icon: <AccountDot color={a.color} className="size-2.5" />, hideId: hid.account(a.id), pin: { kind: "account", id: a.id }, badge: mailBadge(`account:${a.id}`) });
-          for (const b of ACCOUNT_BOXES) {
-            const f = folderWithRole(fs, b);
-            // Only Starred of the special folders showed a number before anyone chose.
-            if (f) out.push({ key: `f:${f.id}`, label: t(`box.${b}`), icon: boxIcon[b], hideId: hid.folder(f.id), pin: { kind: "folder", id: f.id }, badge: mailBadge(`folder:${f.id}`, b === "starred" ? undefined : "none"), depth: 1 });
-          }
-          for (const { node, depth } of flattenTree(buildFolderTree(fs ?? []))) {
-            if (!node.folder) continue;
-            out.push({ key: `f:${node.folder.id}`, label: node.name, icon: <FolderGlyph folder={node.folder} />, hideId: hid.folder(node.folder.id), pin: { kind: "folder", id: node.folder.id }, badge: mailBadge(`folder:${node.folder.id}`), depth: 1 + depth });
-          }
-        }
-        return out;
-      }
-      case "inbox":
-        return [
-          // Shown only while someone waits, so a member who does not take chats can leave it out.
-          { key: "waiting_chats", label: t("customize.waitingChats"), icon: <span className="size-2 rounded-full bg-tone-red-solid" />, hideId: hid.waitingChats, note: t("customize.waitingChatsNote") },
-          ...ticketFolders.map((f): Item => ({
-            key: f.id,
-            label: tNav(f.labelKey),
-            icon: <Layers />,
-            hideId: hid.ticketFolder(f.id),
-            pin: { kind: "ticket_folder", id: f.id },
-            badge: f.id === "solved" || f.id === "spam" ? undefined : ticketBadge(hid.ticketFolder(f.id), "inbox"),
-          })),
-        ];
-      case "teams":
-        return teams.teams
-          .filter(teams.canSeeTeam)
-          .map((x) => ({ key: x.id, label: x.name, icon: <TeamDot team={x} />, hideId: hid.team(x.id), pin: { kind: "team", id: x.id }, badge: ticketBadge(hid.team(x.id), "teams") }));
-      case "views": {
-        const view = (v: View, depth: number): Item => ({
-          key: v.id,
-          label: viewName(v),
-          icon: <ViewIcon icon={v.icon} size={14} />,
-          hideId: hid.view(v.id),
-          pin: { kind: "view", id: v.id },
-          badge: ticketBadge(hid.view(v.id), "views"),
-          depth,
-        });
-        // A section heads its views, and pins to Favorites with them.
-        return groupViews(views ?? []).flatMap((e) =>
-          e.kind === "view"
-            ? [view(e.view, 0)]
-            : [{ key: `section:${e.key}`, label: e.name, icon: <ListTree />, pin: { kind: "view_section", id: e.key }, note: t("customize.viewSection") }, ...e.views.map((v) => view(v, 1))],
-        );
-      }
-      case "workspace":
-        return [];
-    }
+  const wid = useSession((s) => s.workspaceId) ?? "";
+  const confirm = useConfirm();
+  // The section being dragged in the list, and the one it would go before.
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [dropBefore, setDropBefore] = useState<string | null>(null);
+  const dropTo = (before: string) => {
+    if (!dragging || dragging === before) return;
+    const keys = order.map(entryKey).filter((k) => k !== dragging);
+    keys.splice(keys.indexOf(before), 0, dragging);
+    change(reorderEntries(prefs, keys));
+  };
+  const dragProps = (key: string) => ({
+    draggable: true,
+    onDragStart: (e: React.DragEvent) => {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", key);
+      setDragging(key);
+    },
+    onDragEnd: () => {
+      setDragging(null);
+      setDropBefore(null);
+    },
+    onDragOver: (e: React.DragEvent) => {
+      if (!dragging) return;
+      e.preventDefault();
+      if (dropBefore !== key) setDropBefore(key);
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      dropTo(key);
+      setDragging(null);
+      setDropBefore(null);
+    },
+  });
+  const ownName = (s: SidebarSection) => s.title || t("ownSections.untitled");
+  const removeOwn = (s: SidebarSection) =>
+    confirm.show(t("ownSections.deleteConfirm", { name: ownName(s) }), () => change(withSpace(prefs, removeSection(asSpace(prefs, wid), s.id))), {
+      confirmLabel: t("ownSections.deleteAction"),
+      danger: true,
+    });
+  // A Space's sections with this workspace's rows, copied as the member's own.
+  const copyable = (spaces ?? []).filter((sp) => sp.sections.some((sec) => sec.items.some((i) => i.workspace_id === wid && i.kind !== "section" && i.kind !== "everywhere")));
+  const copySpace = (sp: Space) => {
+    const r = copySpaceSections(prefs, wid, sp);
+    if (!r.made) return void toast.error(t("ownSections.nothingToCopy"));
+    change(r.prefs);
+    toast.success(t("ownSections.copied", { count: r.made }));
   };
 
-  // Favorites list: what each pin points at, by name.
-  const pinLabel = (p: SidebarPin): string | null => {
-    switch (p.kind) {
-      case "box":
-        // Mail favorites are Collab's: without it they stay saved but are not listed.
-        return collab && isMailBox(p.id) ? (p.id === "inbox" ? t("nav.allInboxes") : t(`box.${p.id}`)) : null;
-      case "account": {
-        const a = accounts?.find((x) => x.id === p.id);
-        return a ? accountName(a) : null;
-      }
-      case "folder": {
-        const f = Object.values(folderMap).flatMap((x) => x ?? []).find((x) => x.id === p.id);
-        return f ? f.name : null;
-      }
-      case "view":
-        return views?.find((v) => v.id === p.id)?.name ?? null;
-      case "view_section":
-        return findSection(views ?? [], p.id)?.name ?? null;
-      case "team":
-        return teams.team(p.id)?.name ?? null;
-      case "ticket_folder": {
-        const folder = folderById(p.id);
-        return folder ? tNav(folder.labelKey) : null;
-      }
-      default:
-        return null;
-    }
-  };
-  const livePinned = prefs.pinned.filter((p) => pinLabel(p));
+  const { itemsOf, pinLabel, livePinned } = useSidebarItems();
 
   return (
     <Dialog
@@ -380,15 +326,53 @@ export function CustomizeSidebar() {
         <section>
           <h3 className="label-caps mb-1.5">{t("customize.sections")}</h3>
           <ol className="flex flex-col rounded-lg border border-line">
-            {order.map((id, i) => {
+            {order.map((entry, i) => {
+              const key = entryKey(entry);
+              const dropLine = dragging && dropBefore === key && dragging !== key;
+              if (entry.kind === "custom") {
+                const s = entry.section;
+                return (
+                  <li key={key} {...dragProps(key)} className={cn("relative border-b border-line-soft last:border-0", dragging === key && "opacity-50", dropLine && "before:absolute before:inset-x-2 before:-top-px before:h-0.5 before:rounded-full before:bg-tone-blue-solid")}>
+                    <div className="flex h-10 items-center gap-2 px-2">
+                      <ReorderButtons label={ownName(s)} first={i === 0} last={i === order.length - 1} onUp={() => change(moveEntry(prefs, key, -1, collab))} onDown={() => change(moveEntry(prefs, key, 1, collab))} />
+                      <span className="min-w-0 flex-1 truncate pl-5 text-[13px] font-medium">{ownName(s)}</span>
+                      <span className="mono text-[10.5px] text-fg-4">{s.items.length}</span>
+                      <IconToggle on label={t("ownSections.addRows")} iconOn={<Plus />} iconOff={<Plus />} onClick={() => ownSectionsUi.add(s.id)} />
+                      <IconToggle on label={t("ownSections.rename")} iconOn={<Pencil />} iconOff={<Pencil />} onClick={() => ownSectionsUi.name({ mode: "rename", id: s.id })} />
+                      <IconToggle on label={t("ownSections.delete")} iconOn={<Trash2 />} iconOff={<Trash2 />} onClick={() => removeOwn(s)} />
+                    </div>
+                  </li>
+                );
+              }
+              if (entry.kind === "inbox") {
+                const names = inboxNames(entry.scope)!;
+                const inboxHidden = isHidden(prefs, `section:${key}`);
+                return (
+                  <li key={key} {...dragProps(key)} className={cn("relative border-b border-line-soft last:border-0", dragging === key && "opacity-50", dropLine && "before:absolute before:inset-x-2 before:-top-px before:h-0.5 before:rounded-full before:bg-tone-blue-solid")}>
+                    <div className="flex h-10 items-center gap-2 px-2">
+                      <ReorderButtons label={names.title} first={i === 0} last={i === order.length - 1} onUp={() => change(moveEntry(prefs, key, -1, collab))} onDown={() => change(moveEntry(prefs, key, 1, collab))} />
+                      <span className={cn("min-w-0 flex-1 truncate pl-5 text-[13px] font-medium", inboxHidden && "text-fg-4")}>{names.title}</span>
+                      <IconToggle on label={entry.scope.kind === "mailbox" ? backMailbox : backTeam} iconOn={<CornerUpLeft />} iconOff={<CornerUpLeft />} onClick={() => change(setInboxSection(prefs, entry.scope, false))} />
+                      <IconToggle
+                        on={!inboxHidden}
+                        label={inboxHidden ? t("customize.show", { name: names.title }) : t("customize.hide", { name: names.title })}
+                        iconOn={<Eye />}
+                        iconOff={<EyeOff />}
+                        onClick={() => change(setHidden(prefs, `section:${key}`, !inboxHidden))}
+                      />
+                    </div>
+                  </li>
+                );
+              }
+              const id = entry.id;
               const items = itemsOf(id);
               const sectionHidden = isHidden(prefs, hid.section(id));
               const isOpen = expanded.has(id);
               const hasBody = items.length > 0 || id === "favorites";
               return (
-                <li key={id} className="border-b border-line-soft last:border-0">
+                <li key={id} {...dragProps(key)} className={cn("relative border-b border-line-soft last:border-0", dragging === key && "opacity-50", dropLine && "before:absolute before:inset-x-2 before:-top-px before:h-0.5 before:rounded-full before:bg-tone-blue-solid")}>
                   <div className="flex h-10 items-center gap-2 px-2">
-                    <ReorderButtons label={name(id)} first={i === 0} last={i === order.length - 1} onUp={() => change(moveSection(prefs, id, -1, collab))} onDown={() => change(moveSection(prefs, id, 1, collab))} />
+                    <ReorderButtons label={name(id)} first={i === 0} last={i === order.length - 1} onUp={() => change(moveEntry(prefs, key, -1, collab))} onDown={() => change(moveEntry(prefs, key, 1, collab))} />
                     {hasBody ? (
                       <button
                         type="button"
@@ -450,6 +434,28 @@ export function CustomizeSidebar() {
               );
             })}
           </ol>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Button size="xs" icon={<Plus />} disabled={prefs.sections.length >= OWN_LIMITS.sections} onClick={() => ownSectionsUi.name({ mode: "new" })}>
+              {t("ownSections.addSection")}
+            </Button>
+            {copyable.length > 0 && (
+              <Menu>
+                <MenuTrigger asChild>
+                  <Button size="xs" variant="ghost" icon={<Copy />} disabled={prefs.sections.length >= OWN_LIMITS.sections}>
+                    {t("ownSections.fromSpace")}
+                  </Button>
+                </MenuTrigger>
+                <MenuContent align="start" className="w-[240px]">
+                  <p className="px-2 pb-1.5 pt-1 text-[11.5px] leading-4 text-fg-4">{t("ownSections.fromSpaceHint")}</p>
+                  {copyable.map((sp) => (
+                    <MenuItem key={sp.id} icon={<SpaceGlyph icon={sp.icon} name={sp.name} color={sp.color} />} onSelect={() => copySpace(sp)}>
+                      {sp.name}
+                    </MenuItem>
+                  ))}
+                </MenuContent>
+              </Menu>
+            )}
+          </div>
           {prefs.pinned.length >= MAX_PINS && <p className="mt-1.5 text-[11.5px] text-fg-4">{t("customize.pinLimit")}</p>}
         </section>
       </div>

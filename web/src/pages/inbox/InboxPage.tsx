@@ -1,3 +1,4 @@
+import { AddToSidebarButton } from "@/components/collab/AddToSidebar";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useRouter, useSearch, type NavigateOptions } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -10,7 +11,7 @@ import { q, qk } from "@/lib/queries";
 import { leavesList, nextInList, useNextTicketAfterSend } from "@/lib/nextTicket";
 import { teamsOf } from "@/lib/ticketCache";
 import { useUnsent } from "@/components/tickets/detail/outbox";
-import { useHotkeys } from "@/lib/hotkeys";
+import { useShortcuts } from "@/lib/shortcuts";
 import { realtime } from "@/lib/realtime/manager";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/ui/empty";
@@ -38,6 +39,7 @@ import { conversationMaxWidth, useConversationWidth } from "@/lib/conversationWi
 import { TeamDot, useTeamsCtx } from "@/components/tickets/teams";
 import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
 import { TeamTabs } from "./TeamTabs";
+import { InboxSwitcher } from "@/components/tickets/inboxes/InboxSwitcher";
 import { useHref } from "@/lib/links";
 
 const TicketDetail = lazy(() => import("@/components/tickets/detail/TicketDetail"));
@@ -158,10 +160,14 @@ export default function InboxPage() {
   const listKey = JSON.stringify(query);
   const teamCounts = teamId ? (teamId === "mine" ? counts?.my_teams : counts?.teams?.[teamId]) : undefined;
   const title = (folder ? tNav(folder.labelKey) : undefined) ?? (view && viewName(view)) ?? (teamId ? (teamId === "mine" ? tr("teams.myTeams") : (team?.name ?? tr("teams.team"))) : tr("list.view"));
+  // One ticket inbox (?mailbox=) counts its own folder; Solved and Spam are not counted per inbox.
+  const inboxCount = folder && search.mailbox && counts?.mailboxes && folder.id !== "solved" && folder.id !== "spam" ? (counts.mailboxes[search.mailbox]?.[folder.id] ?? 0) : undefined;
   const count = folder
-    ? counts
-      ? folder.count(counts)
-      : null
+    ? search.mailbox
+      ? (inboxCount ?? null)
+      : counts
+        ? folder.count(counts)
+        : null
     : params.viewId
       ? counts?.views?.[params.viewId]
       : teamCounts && (tab === "unassigned" || tab === "open")
@@ -428,36 +434,36 @@ export default function InboxPage() {
     open(t);
   };
 
-  useHotkeys({
-    j: () => move(1),
-    k: () => move(-1),
-    o: () => open(tickets[focusIdx]),
-    x: () => tickets[focusIdx] && toggle(tickets[focusIdx], false),
+  useShortcuts({
+    "tickets.next": () => move(1),
+    "tickets.previous": () => move(-1),
+    "tickets.open": () => open(tickets[focusIdx]),
+    "tickets.select": () => tickets[focusIdx] && toggle(tickets[focusIdx], false),
     // With a ticket open, the arrows and Enter are the ticket's: they scroll it and press its buttons.
     ...(openId
       ? {}
       : {
-          arrowdown: () => move(1),
-          arrowup: () => move(-1),
-          enter: () => open(tickets[focusIdx]),
-          e: solveFocused,
-          r: replyFocused,
-          i: () => tickets[focusIdx] && !tickets[focusIdx].assignee && quick(tickets[focusIdx], "assign"),
-          h: () => tickets[focusIdx] && quick(tickets[focusIdx], "snooze"),
-          s: (e: KeyboardEvent) => e.shiftKey && spamFocused(),
+          "tickets.down": () => move(1),
+          "tickets.up": () => move(-1),
+          "tickets.enter": () => open(tickets[focusIdx]),
+          "tickets.solve": solveFocused,
+          "tickets.reply": replyFocused,
+          "tickets.assign": () => tickets[focusIdx] && !tickets[focusIdx].assignee && quick(tickets[focusIdx], "assign"),
+          "tickets.snooze": () => tickets[focusIdx] && quick(tickets[focusIdx], "snooze"),
+          "tickets.spam": spamFocused,
         }),
-    "/": () => {
+    "tickets.search": () => {
       searchRef.current?.focus();
       if (!searchRef.current) document.querySelector<HTMLButtonElement>("[data-inbox-search]")?.click();
     },
-    escape: () => {
+    "tickets.escape": () => {
       if (selected.size || allMatching) {
         setSelected(new Set());
         setAllMatching(false);
       }
       else if (openId) close();
     },
-    "mod+a": () => {
+    "tickets.selectAll": () => {
       if (!openId) {
         setAllMatching(false);
         setSelected(new Set(tickets.map((t) => t.id)));
@@ -520,6 +526,13 @@ export default function InboxPage() {
           icon={folder ? folderIcon[folder.id] : team ? <TeamDot team={team} className="size-2.5" /> : teamId ? <Users /> : <ViewIcon icon={view?.icon} size={16} />}
           count={count}
           inTeam={!!teamId}
+          inboxBelow={!!folder}
+          dragItem={{ ...(folder ? { kind: "ticket_folder" as const, id: folder.id } : teamId ? { kind: "team" as const, id: teamId } : { kind: "view" as const, id: params.viewId ?? "" }), label: title }}
+          titleAction={
+            <AddToSidebarButton
+              item={folder ? { kind: "ticket_folder", id: folder.id } : teamId ? { kind: "team", id: teamId } : { kind: "view", id: params.viewId ?? "" }}
+            />
+          }
           below={
             teamId ? (
               <TeamTabs
@@ -527,6 +540,8 @@ export default function InboxPage() {
                 counts={teamCounts}
                 onTab={(next) => go(params.ticketId, { ...search, tab: next === "unassigned" ? undefined : next }, true)}
               />
+            ) : folder ? (
+              <InboxSwitcher mailbox={search.mailbox} onPick={(mailbox) => setSearch({ ...search, mailbox })} />
             ) : undefined
           }
           search={search}

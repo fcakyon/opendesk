@@ -35,7 +35,7 @@ const (
 	OutcomeAbandoned     = "abandoned"
 
 	maxClientRef      = 200
-	maxFeedbackNote   = 1000
+	maxFeedbackNote   = 2000
 	outcomesDefault   = 50
 	outcomesMax       = 200
 	outcomesPerMinute = 60
@@ -173,6 +173,19 @@ func settleDone(ctx context.Context, tx pgx.Tx, threads []uuid.UUID, by uuid.UUI
 	return err
 }
 
+// reopenAbandoned records, in tx, conversations put back in Needs action (Undo of Done, or
+// marked again): their AI drafts that Done abandoned and that still wait unsent are open again.
+func reopenAbandoned(ctx context.Context, tx pgx.Tx, threads []uuid.UUID) error {
+	if err := lockOutcomeCursor(ctx, tx); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `UPDATE collab_ai_drafts d SET outcome = NULL, outcome_at = NULL, outcome_by = NULL,
+		seq = nextval('collab_ai_drafts_seq')
+		WHERE d.thread_id = ANY($1) AND d.outcome = 'abandoned'
+			AND EXISTS (SELECT 1 FROM collab_messages m WHERE m.id = d.draft_message_id AND m.draft)`, threads)
+	return err
+}
+
 // draftWords is what a person wrote in a draft's HTML, to tell an edit from a send as
 // saved: its text without the signature block and quoted history, spaces collapsed.
 func draftWords(html string) string {
@@ -247,6 +260,30 @@ func aiDraftRefs(ctx context.Context, q db.Querier, list []*messageRow) (map[uui
 		}
 	}
 	return out, rows.Err()
+}
+
+// unusedAIDrafts lists a conversation's AI drafts a person discarded, replaced or
+// abandoned whose draft is gone, oldest outcome first, so feedback on them stays reachable
+// after the draft left the conversation (GH#437). A replaced or abandoned draft still
+// waiting shows as the draft itself.
+func unusedAIDrafts(ctx context.Context, q db.Querier, workspace, thread uuid.UUID) ([]UnusedAIDraft, error) {
+	rows, err := q.Query(ctx, `SELECT d.id, d.outcome, d.client, d.feedback_at IS NOT NULL, d.outcome_at
+		FROM collab_ai_drafts d
+		WHERE d.workspace_id = $1 AND d.thread_id = $2 AND d.outcome IN ('discarded', 'replaced', 'abandoned')
+			AND NOT EXISTS (SELECT 1 FROM collab_messages m WHERE m.id = d.draft_message_id AND m.draft)
+		ORDER BY d.outcome_at, d.id`, workspace, thread)
+	if err != nil {
+		return nil, err
+	}
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (UnusedAIDraft, error) {
+		var u UnusedAIDraft
+		err := r.Scan(&u.ID, &u.Outcome, &u.Client, &u.HasFeedback, &u.OutcomeAt)
+		return u, err
+	})
+	if list == nil {
+		list = []UnusedAIDraft{}
+	}
+	return list, err
 }
 
 func (s *service) registerOutcomeRoutes(api huma.API) {
@@ -340,7 +377,7 @@ func (s *service) registerOutcomeRoutes(api huma.API) {
 			ID   string `path:"id" doc:"The AI draft (ai_draft.id on its message)"`
 			Body struct {
 				Reason           string `json:"reason" enum:"wrong_facts,wrong_tone,missing_info,should_not_answer,other"`
-				Note             string `json:"note,omitempty" maxLength:"1000"`
+				Note             string `json:"note,omitempty" maxLength:"2000"`
 				BetterAnswerHTML string `json:"better_answer_html,omitempty" maxLength:"100000"`
 			}
 		}) (*struct{}, error) {

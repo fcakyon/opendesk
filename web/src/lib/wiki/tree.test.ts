@@ -6,6 +6,7 @@ const node = (id: string, parent: string | null, position: number, by: string | 
   id,
   parent_id: parent,
   title: id.toUpperCase(),
+  tags: [],
   icon: "",
   position,
   version: 1,

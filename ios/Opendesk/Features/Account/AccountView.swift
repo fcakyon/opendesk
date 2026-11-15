@@ -32,6 +32,7 @@ private struct AccountHome: View {
     @State private var confirm: AccountConfirm?
     @State private var deleting = false
     @State private var showAccounts = false
+    @State private var editingSidebar = false
 
     private var session: SessionStore { env.session }
 
@@ -67,6 +68,12 @@ private struct AccountHome: View {
                 .presentationCornerRadius(Theme.Radius.sheet)
         }
         .sheet(isPresented: $showAccounts) { AccountSwitcherSheet() }
+        .sheet(isPresented: $editingSidebar) {
+            SidebarEditorSheet()
+                .presentationDetents([.large])
+                .presentationCornerRadius(Theme.Radius.sheet)
+                .interactiveDismissDisabled()
+        }
         #if DEBUG
         .onAppear { handleDemo(env.router.demoAction) }
         .onChange(of: env.router.demoAction) { _, action in handleDemo(action) }
@@ -86,6 +93,8 @@ private struct AccountHome: View {
             AccountLinkRow(route: .security, subtitle: securitySubtitle)
             AccountDivider()
             AccountLinkRow(route: .appearance, value: env.appearance.title)
+            AccountDivider()
+            AccountLinkRow(route: .shortcuts, subtitle: "With a keyboard connected")
             if SettingsPage.agentToAgent.isVisible(env: env) {
                 AccountDivider()
                 SettingsLinkRow(page: .agentToAgent, subtitle: "Let teammates' \(env.directory.ai.assistantName ?? "Ollie") ask yours")
@@ -98,6 +107,15 @@ private struct AccountHome: View {
             AccountLinkRow(route: .savedReplies, value: env.directory.savedReplies.isEmpty ? nil : "\(env.directory.savedReplies.count)")
             AccountDivider()
             AccountLinkRow(route: .views, value: env.directory.views.isEmpty ? nil : "\(env.directory.views.count)")
+            AccountDivider()
+            Button {
+                editingSidebar = true
+            } label: {
+                AccountRow(symbol: "sidebar.left", tone: .teal, title: "Sidebar", subtitle: "Arrange, rename and hide its sections and rows") {
+                    AccountDisclosure()
+                }
+            }
+            .buttonStyle(RowPressStyle())
             AccountDivider()
             AccountLinkRow(route: .workspaces, value: session.memberships.count > 1 ? "\(session.memberships.count)" : nil, subtitle: "Switch or create a workspace")
         }

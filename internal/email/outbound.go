@@ -85,6 +85,7 @@ type ticketInfo struct {
 	number         int64
 	channel        string
 	subject        string
+	subjectTag     bool // the workspace puts "[#n]" in the subjects it sends
 	mailboxID      *uuid.UUID
 	contactEmail   *string
 	contactName    string
@@ -101,14 +102,15 @@ func loadTicketInfo(ctx context.Context, q db.Querier, wid, id uuid.UUID) (*tick
 	var blocked *bool
 	var contactName *string
 	err := q.QueryRow(ctx, `SELECT t.id, t.number, t.channel, t.subject, t.mailbox_id, c.email, c.blocked, c.name, t.brand_id, t.team_id, t.widget_id,
-		t.received_at, COALESCE(tm.name, ''), COALESCE(b.name, '')
+		t.received_at, COALESCE(tm.name, ''), COALESCE(b.name, ''), `+subjectTagSQL+`
 		FROM tickets t
+		JOIN workspaces w ON w.id = t.workspace_id
 		LEFT JOIN contacts c ON c.id = t.contact_id AND c.workspace_id = t.workspace_id
 		LEFT JOIN teams tm ON tm.id = t.team_id AND tm.workspace_id = t.workspace_id
 		LEFT JOIN brands b ON b.id = t.brand_id AND b.workspace_id = t.workspace_id
 		WHERE t.workspace_id = $1 AND t.id = $2 AND t.deleted_at IS NULL`, wid, id).
 		Scan(&t.id, &t.number, &t.channel, &t.subject, &t.mailboxID, &t.contactEmail, &blocked, &contactName, &t.brandID, &t.teamID, &t.widgetID,
-			&t.receivedAt, &t.names.Team, &t.names.Brand)
+			&t.receivedAt, &t.names.Team, &t.names.Brand, &t.subjectTag)
 	t.contactBlocked = blocked != nil && *blocked
 	if contactName != nil {
 		t.contactName = displayname.Displayable(*contactName)
@@ -283,6 +285,33 @@ func messageIDFor(prefix string, id uuid.UUID, number int64, m *mailboxRow) stri
 	return "<" + prefix + "_" + id.String() + ".t" + itoa(number) + "@" + domainPart + ">"
 }
 
+// subjectTagNeeded reports an email from m whose subject keeps "[#n]" even where the
+// workspace leaves the ticket number out (ticket_number_in_subject false), because the
+// customer's answer would have nothing else to find the ticket by: the email continues no
+// earlier email of the ticket (no In-Reply-To, so its References carry no id we know), and
+// the id it reaches the customer with is not one we record. stored is whether the sent
+// Message-ID is stored on a message (replies; not auto-replies or surveys).
+func (s *service) subjectTagNeeded(m *mailboxRow, inReplyTo string, stored bool) bool {
+	return inReplyTo == "" && !s.recordsMessageID(m, stored)
+}
+
+// recordsMessageID reports a mailbox whose email reaches the customer with a Message-ID
+// we record: SMTP sends ours as written (the mailbox's own server, or the platform's unless
+// that is Amazon SES, which replaces it), and Gmail, for a stored message, when the grant
+// reads the sent message back for the id Gmail gave it. Microsoft Graph stamps an id of its
+// own and does not return it.
+func (s *service) recordsMessageID(m *mailboxRow, stored bool) bool {
+	switch m.OutboundKind {
+	case OutboundSMTP:
+		return true
+	case OutboundSystem:
+		return s.d.Cfg.MailDriver != "ses"
+	case KindGoogle:
+		return stored && !m.sendOnly()
+	}
+	return false
+}
+
 // deliver encodes and sends out through the mailbox's outbound kind. It returns the
 // Message-ID the recipient sees.
 func (s *service) deliver(ctx context.Context, m *mailboxRow, out *outMessage, envFrom string) (string, error) {
@@ -310,7 +339,11 @@ func (s *service) deliver(ctx context.Context, m *mailboxRow, out *outMessage, e
 		}
 		ep := smtpEndpoint{host: m.Config.SMTPHost, port: m.Config.SMTPPort, mode: m.Config.SMTPTLS, user: m.Config.SMTPUsername,
 			pass: creds.smtpPassword(), guarded: true, helo: s.heloName(), allowNoTLS: s.guard.allowPrivate, authRequired: true}
-		return out.MessageID, s.sendSMTP(ctx, ep, &envelope{from: envFrom, rcpts: rcpts, raw: raw})
+		if err := s.sendSMTP(ctx, ep, &envelope{from: envFrom, rcpts: rcpts, raw: raw}); err != nil {
+			return out.MessageID, err
+		}
+		s.keepSentCopy(ctx, m, raw)
+		return out.MessageID, nil
 	case KindGoogle:
 		raw, err := buildMIME(out, true)
 		if err != nil {
@@ -336,7 +369,11 @@ func (s *service) deliver(ctx context.Context, m *mailboxRow, out *outMessage, e
 		if err != nil {
 			return "", err
 		}
-		return out.MessageID, s.sendSystem(ctx, &envelope{from: envFrom, rcpts: rcpts, raw: raw})
+		if err := s.sendSystem(ctx, &envelope{from: envFrom, rcpts: rcpts, raw: raw}); err != nil {
+			return out.MessageID, err
+		}
+		s.keepSentCopy(ctx, m, raw)
+		return out.MessageID, nil
 	}
 	return "", permanent("The mailbox has no way to send email.")
 }
@@ -444,10 +481,9 @@ func (s *service) composeAndSend(ctx context.Context, wid, mid, ticketID uuid.UU
 		if t.contactEmail == nil || *t.contactEmail == "" {
 			return "", nil, permanent("The customer has no email address.")
 		}
-		to = []string{*t.contactEmail}
-	}
-	if to, err = replyDestination(ctx, s.d.DB.Pool, wid, ticketID, t.contactEmail, to); err != nil {
-		return "", nil, err
+		if to, err = domain.ReplyRecipients(ctx, s.d.DB.Pool, wid, ticketID, t.contactEmail, []string{*t.contactEmail}); err != nil {
+			return "", nil, err
+		}
 	}
 	hideAgent := false
 	if t.channel == domain.ChannelChat {
@@ -492,10 +528,11 @@ func (s *service) composeAndSend(ctx context.Context, wid, mid, ticketID uuid.UU
 		bodyText = htmlToText(bodyHTML)
 	}
 	if strings.TrimSpace(subject) == "" || !subjectTagRe.MatchString(subject) {
-		if same := providerReplySubject(threadSubject); thread != nil && same != "" {
+		needed := s.subjectTagNeeded(m, inReplyTo, true)
+		if same := providerReplySubject(threadSubject); thread != nil && same != "" && !needed {
 			subject = same
 		} else {
-			subject = replySubject(firstNonEmpty(subject, t.subject), t.number, inReplyTo != "")
+			subject = replySubject(firstNonEmpty(subject, t.subject), t.number, inReplyTo != "", t.subjectTag || needed)
 		}
 	}
 	emailAuthorID := authorID
@@ -660,38 +697,6 @@ func threadMessageHeaders(ctx context.Context, q db.Querier, wid, threadID uuid.
 		refs = append(refs[:1], refs[len(refs)-19:]...)
 	}
 	return id, refs, nil
-}
-
-// replyDestination sends a reply addressed to the customer to the Reply-To of their latest
-// message instead, when it is at the same domain as the From they wrote from (a shared or
-// system address answering for a person of the same organization). Any other Reply-To
-// stays on their message for agents to see, and replies go to the From address.
-func replyDestination(ctx context.Context, q db.Querier, wid, ticketID uuid.UUID, contactEmail *string, to []string) ([]string, error) {
-	if contactEmail == nil || *contactEmail == "" {
-		return to, nil
-	}
-	var from, replyTo string
-	err := q.QueryRow(ctx, `SELECT from_email, reply_to FROM messages
-		WHERE workspace_id = $1 AND ticket_id = $2 AND direction = 'inbound' AND kind = 'reply' AND NOT auth_failed
-		ORDER BY created_at DESC LIMIT 1`, wid, ticketID).Scan(&from, &replyTo)
-	if db.IsNotFound(err) {
-		return to, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if replyTo == "" || !strings.EqualFold(from, *contactEmail) || !validAddress(replyTo) ||
-		!strings.EqualFold(emailDomain(replyTo), emailDomain(from)) {
-		return to, nil
-	}
-	out := make([]string, 0, len(to))
-	for _, a := range to {
-		if strings.EqualFold(strings.TrimSpace(a), *contactEmail) {
-			a = replyTo
-		}
-		out = append(out, a)
-	}
-	return out, nil
 }
 
 func firstNonEmpty(vals ...string) string {
@@ -912,6 +917,10 @@ func (s *service) sendTicketEmail(ctx context.Context, a jobs.SendTicketEmailArg
 	if m.Status == "disabled" || !s.canSend(m) {
 		return nil
 	}
+	to, err := domain.ReplyRecipients(ctx, s.d.DB.Pool, a.WorkspaceID, t.id, t.contactEmail, []string{strings.ToLower(*t.contactEmail)})
+	if err != nil {
+		return err
+	}
 	alias := m.alias(t.receivedAt)
 	names := t.names
 	names.Mailbox = m.nameFor(alias)
@@ -949,20 +958,20 @@ func (s *service) sendTicketEmail(ctx context.Context, a jobs.SendTicketEmailArg
 		}
 		body = tc.Fill(body)
 		subject = tc.FillText(subject)
-		if strings.TrimSpace(subject) != "" {
+		if strings.TrimSpace(subject) != "" && (t.subjectTag || s.subjectTagNeeded(m, inReplyTo, false)) {
 			if _, ok := subjectTicketNumber(subject); !ok {
 				subject += " [#" + itoa(t.number) + "]"
 			}
 		}
 	}
 	if strings.TrimSpace(subject) == "" {
-		subject = replySubject(t.subject, t.number, inReplyTo != "")
+		subject = replySubject(t.subject, t.number, inReplyTo != "", t.subjectTag || s.subjectTagNeeded(m, inReplyTo, false))
 	}
 	if strings.TrimSpace(text) == "" {
 		text = htmlToText(body)
 	}
 	mail := tc.RenderEmail(design, templates.Parts{Content: body, ContentText: text, Signature: tc.Signature()})
-	out := &outMessage{From: from, ReplyTo: replyTo, To: []string{strings.ToLower(*t.contactEmail)}, Subject: subject,
+	out := &outMessage{From: from, ReplyTo: replyTo, To: to, Subject: subject,
 		MessageID: s.autoMessageID(a.WorkspaceID, t.number, m), InReplyTo: inReplyTo, References: refs,
 		HTML: mail.HTML, Text: mail.Text, AutoGenerated: a.AutoGenerated, Date: time.Now(), Loop: s.loopToken(m.ID)}
 	if thread != nil && thread.Provider == KindGoogle {

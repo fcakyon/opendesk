@@ -1,6 +1,6 @@
 // Typed wrappers for every endpoint in contracts/api.md.
 
-import { http, stream, streamEvents, type StreamHandlers } from "./client";
+import { download, http, stream, streamEvents, type StreamHandlers } from "./client";
 import type * as T from "./types";
 import { creatingTicket } from "../ownTickets";
 import { uiLanguage } from "@/i18n";
@@ -96,8 +96,18 @@ function bulkQuery(q: TicketBulkQuery) {
 	return { ...q, spam: q.spam === true ? "true" : q.spam === false ? "false" : q.spam, merged: q.merged === true ? "true" : q.merged === false ? "false" : q.merged };
 }
 
-export type ContactListQuery = ListQuery & { q?: string; company_id?: string; tag?: string; fields?: T.FieldFilter[] };
-export type CompanyListQuery = ListQuery & { q?: string; tag?: string; fields?: T.FieldFilter[] };
+export type ContactSort = "-created" | "created" | "name" | "-name" | "-tickets" | "tickets" | "-updated" | "updated";
+export type CompanySort = "name" | "-name" | "created" | "-created" | "contacts" | "-contacts" | "-updated" | "updated";
+export type ContactListQuery = ListQuery & { q?: string; company_id?: string; tag?: string; blocked?: "true" | "false"; sort?: ContactSort; fields?: T.FieldFilter[] };
+/** What POST /v1/contacts/bulk and /v1/companies/bulk act on: ids (up to 100) or the list's filters. */
+export type DirectoryBulkTarget<Q> = { ids: string[] } | { query: Q };
+/** The People list's filters; `company_id: "none"` is the people without a company. */
+export type ContactBulkQuery = { q?: string; company_id?: string; tag?: string; blocked?: "true" | "false"; fields?: T.FieldFilter[] };
+export type CompanyBulkQuery = { q?: string; tag?: string; fields?: T.FieldFilter[] };
+/** A bulk patch's custom fields, merged into each record; null clears one. */
+export type DirectoryBulkPatch = { add_tags?: string[]; remove_tags?: string[]; fields?: T.FieldValuesPatch };
+export type BulkResult = { updated: number; deleted: number };
+export type CompanyListQuery = ListQuery & { q?: string; tag?: string; sort?: CompanySort; fields?: T.FieldFilter[] };
 
 /** Labels and custom fields on contact and company writes. */
 type LabelWrites = { tags?: string[]; add_tags?: string[]; remove_tags?: string[]; fields?: T.FieldValuesPatch };
@@ -113,6 +123,8 @@ export type CreateTicketBody = {
   brand_id?: string;
   body_html: string;
   kind?: "reply" | "note";
+  /** inbound: the first message is the contact's own words, sent to no one (not on a chat). */
+  direction?: "outbound" | "inbound";
   priority?: T.Priority;
   severity?: T.Severity;
   assignee_id?: string;
@@ -130,6 +142,8 @@ export type CreateTicketBody = {
 export type SendMessageBody = {
   kind: "reply" | "note";
   body_html: string;
+  /** Email replies: who it goes to; left out, the customer's reply address. */
+  to?: string[];
   cc?: string[];
   bcc?: string[];
   attachment_ids?: string[];
@@ -140,6 +154,8 @@ export type SendMessageBody = {
   from_note_id?: string;
   /** Email replies: send from one of your own Collab addresses instead; the ticket's reply address stays. */
   from_account?: { account_id: string; email?: string; reply_to?: string };
+  /** Saved replies used in this message: their actions apply to the ticket once it is added. */
+  saved_reply_ids?: string[];
 };
 
 /** Starts a third-party thread (contracts/api.md "Threads"). */
@@ -185,6 +201,16 @@ export type TeamBody = Partial<
 >;
 export type BrandBody = Partial<Pick<T.Brand, "name" | "slug" | "color" | "locale">> & {
   help_center?: Partial<Pick<T.Brand["help_center"], "enabled" | "title">>;
+  /** Omit the secret to keep the saved one (same issuer and client id). */
+  portal_auth?: {
+    mode: T.PortalAuthMode;
+    protocol?: T.PortalSsoProtocol;
+    issuer?: string;
+    client_id?: string;
+    client_secret?: string;
+    create_contacts?: boolean;
+    saml?: Pick<T.PortalSamlSettings, "idp_entity_id" | "idp_sso_url" | "idp_certificates"> & { email_attribute?: string; name_attribute?: string };
+  };
 };
 export type WidgetBody = { brand_id?: string; name?: string; team_id?: string | null; bot_id?: string | null; settings?: Partial<T.WidgetSettings> };
 export type RoutingRuleBody = Partial<Pick<T.RoutingRule, "name" | "enabled" | "match" | "conditions" | "team_id" | "skill_ids">>;
@@ -264,6 +290,9 @@ export const api = {
     /** How this person arranges their workspaces (contracts/api.md "Several workspaces"). */
     workspacePrefs: () => http.get<T.WorkspacePrefs>("/v1/me/workspace-prefs", { workspace: false }),
     putWorkspacePrefs: (b: T.WorkspacePrefsInput) => http.put<T.WorkspacePrefs>("/v1/me/workspace-prefs", b, { workspace: false }),
+    /** The keys the person chose for the app's shortcuts (contracts/api.md "Keyboard shortcuts"). */
+    shortcuts: () => http.get<T.ShortcutKeys>("/v1/me/shortcuts", { workspace: false }),
+    putShortcuts: (b: T.ShortcutKeys) => http.put<T.ShortcutKeys>("/v1/me/shortcuts", b, { workspace: false }),
     /** Every workspace's sidebar numbers, each as that workspace answers this person. */
     overview: () => http.get<{ workspaces: T.WorkspaceOverview[] }>("/v1/me/overview", { workspace: false }),
     /** The caller's Spaces (contracts/spaces.md): one list for every workspace and device. */
@@ -335,7 +364,7 @@ export const api = {
     dismiss: () => http.post<void>("/v1/onboarding/dismiss"),
   },
   invitations: {
-    list: () => http.get<T.Page<T.Invitation>>("/v1/invitations"),
+    list: (q?: ListQuery) => http.get<T.Page<T.Invitation>>("/v1/invitations", { query: q }),
     create: (b: { email: string; role: T.Role }) => http.create<T.Invitation>("/v1/invitations", b),
     revoke: (id: string) => http.del(`/v1/invitations/${id}`),
     link: (id: string) => http.post<{ url: string; expires_at: string }>(`/v1/invitations/${id}/link`),
@@ -364,6 +393,11 @@ export const api = {
     /** Checks the custom domain now; 6 a minute per brand. */
     checkHelpDomain: (id: string) => http.post<T.Brand>(`/v1/brands/${id}/help-domain/check`),
     removeHelpDomain: (id: string) => http.del(`/v1/brands/${id}/help-domain`),
+    /** The portal's provider sign-in settings (admin). */
+    portalAuth: (id: string) => http.get<T.PortalAuthSettings>(`/v1/brands/${id}/portal/auth`),
+    /** Lets one contact link a new provider identity for 15 minutes; needs a recent sign-in. */
+    authorizeRelink: (id: string, contactId: string) =>
+      http.post<T.PortalRelinkAuthorization>(`/v1/brands/${id}/portal/relink-authorizations`, { contact_id: contactId }),
   },
   widgets: {
     ...crud<T.Widget, WidgetBody>("/v1/widgets"),
@@ -568,6 +602,10 @@ export const api = {
     get: (id: string) => http.get<T.Ticket>(`/v1/tickets/${encodeURIComponent(id)}`),
     update: (id: string, patch: T.TicketPatch) => http.patch<T.Ticket>(`/v1/tickets/${id}`, patch),
     delete: (id: string) => http.del(`/v1/tickets/${id}`),
+    /** The trash, admins only: deleted tickets, newest first. */
+    deleted: (q: { limit?: number; before?: string | null; q?: string }) =>
+      http.get<{ data: T.DeletedTicket[]; next_before?: string }>("/v1/tickets/deleted", { query: { limit: q.limit, before: q.before || undefined, q: q.q || undefined } }),
+    restore: (id: string) => http.post<T.Ticket>(`/v1/tickets/${encodeURIComponent(id)}/restore`),
     bulk: (b: ({ ids: string[] } | { query: TicketBulkQuery }) & { patch?: T.TicketPatch; delete?: true }) =>
       http.post<{ data: T.Ticket[]; updated: number; deleted: number } | undefined>("/v1/tickets/bulk", "query" in b ? { ...b, query: bulkQuery(b.query) } : b),
     merge: (id: string, into_id: string) => http.post<T.Ticket>(`/v1/tickets/${id}/merge`, { into_id }),
@@ -591,6 +629,16 @@ export const api = {
       get: (id: string) => http.get<{ draft: T.TicketDraft | null }>(`/v1/tickets/${id}/draft`),
       discard: (id: string) => http.del(`/v1/tickets/${id}/draft`),
     },
+    /** My own unsent reply on the ticket, saved as I type (contracts/api.md "Reply drafts"). */
+    replyDraft: {
+      get: (id: string) => http.get<{ draft: T.ReplyDraft | null }>(`/v1/tickets/${id}/reply-draft`),
+      save: (id: string, b: { body_html: string; attachment_ids: string[] }) => http.put<{ draft: T.ReplyDraft | null }>(`/v1/tickets/${id}/reply-draft`, b),
+      discard: (id: string) => http.del(`/v1/tickets/${id}/reply-draft`),
+      schedule: (id: string, send_at: string, reply?: SendMessageBody) =>
+        http.post<{ draft: T.ReplyDraft | null }>(`/v1/tickets/${id}/reply-draft/schedule`, { send_at, reply }),
+      unschedule: (id: string) => http.del<{ draft: T.ReplyDraft | null }>(`/v1/tickets/${id}/reply-draft/schedule`),
+      sendScheduled: (id: string) => http.create<T.Message>(`/v1/tickets/${id}/reply-draft/send`, {}),
+    },
     threads: (id: string) => http.get<{ data: T.Thread[] }>(`/v1/tickets/${id}/threads`),
     startThread: (id: string, b: StartThreadBody) => http.create<{ thread: T.Thread; message: T.Message }>(`/v1/tickets/${id}/threads`, b),
     sendInThread: (id: string, threadId: string, b: { body_html: string; attachment_ids?: string[] }) =>
@@ -603,6 +651,8 @@ export const api = {
     render: (id: string, body_html: string, thread?: boolean) =>
       http.post<{ body_html: string }>(`/v1/tickets/${id}/render`, { body_html, thread: thread || undefined }),
     links: (id: string) => http.get<{ data: T.TicketLink[] }>(`/v1/tickets/${id}/links`),
+    /** Wiki pages the caller can see that mention the ticket, newest edit first. */
+    wiki: (id: string) => http.get<{ data: T.WikiNode[] }>(`/v1/tickets/${encodeURIComponent(id)}/wiki`),
     /**
      * What a ticket panel's product knows about the ticket's contact; `refresh` asks it again. An
      * http panel's URL is told the app's language, so it can answer in it.
@@ -619,11 +669,29 @@ export const api = {
     ...crud<T.Contact, Partial<Pick<T.Contact, "name" | "email" | "phone" | "notes" | "external_id" | "blocked" | "custom">> & { company_id?: string | null } & LabelWrites>("/v1/contacts"),
     search: (q: ContactListQuery) => http.get<T.Page<T.Contact>>("/v1/contacts", { query: listQuery(q) }),
     tickets: (id: string, q?: ListQuery) => http.get<T.Page<T.Ticket>>(`/v1/contacts/${id}/tickets`, { query: q }),
+    /** Merges the contact into another (admin): its tickets, messages and addresses become `into`'s, and it is removed. */
+    merge: (id: string, into: string) => http.post<T.Contact>(`/v1/contacts/${id}/merge`, { into }),
+    bulk: (b: DirectoryBulkTarget<ContactBulkQuery> & ({ delete: true } | { patch: DirectoryBulkPatch & { company_id?: string | null } })) =>
+      http.post<BulkResult>("/v1/contacts/bulk", b),
+    /** Extra addresses (contracts/api.md "Contact emails"); each answers with the contact. */
+    addEmail: (id: string, email: string) => http.post<T.Contact>(`/v1/contacts/${id}/emails`, { email }),
+    removeEmail: (id: string, email: string) => http.del<T.Contact>(`/v1/contacts/${id}/emails/${encodeURIComponent(email)}`),
+    makePrimaryEmail: (id: string, email: string) => http.post<T.Contact>(`/v1/contacts/${id}/emails/${encodeURIComponent(email)}/make-primary`),
+    /** Customer portal access (contracts/customer-portal.md "Invitations"). */
+    portal: (id: string) => http.get<T.PortalAccess>(`/v1/contacts/${id}/portal`),
+    /** Emails a one-time link to choose a portal password, valid 7 days (422 no_email, contact_blocked, help_center_off, brand_required, password_sign_in_off; 429). */
+    invitePortal: (id: string, brandId?: string) => http.post<T.PortalAccess>(`/v1/contacts/${id}/portal/invite`, brandId ? { brand_id: brandId } : {}),
+    /** Up to 100 contacts at once; who could not be invited is counted, not refused. */
+    invitePortalBulk: (ids: string[], brandId?: string) => http.post<T.PortalBulkInvite>("/v1/contacts/portal/invite", brandId ? { ids, brand_id: brandId } : { ids }),
+    /** Removes the portal password, ends portal sessions and closes open links. */
+    removePortal: (id: string) => http.del<void>(`/v1/contacts/${id}/portal`),
     ...pictureRoutes<T.Contact>("/v1/contacts"),
   },
   companies: {
-    ...crud<T.Company, Partial<Pick<T.Company, "name" | "domain" | "notes" | "custom">> & LabelWrites>("/v1/companies"),
+    ...crud<T.Company, Partial<Pick<T.Company, "name" | "domain" | "external_id" | "notes" | "custom">> & LabelWrites>("/v1/companies"),
     search: (q: CompanyListQuery) => http.get<T.Page<T.Company>>("/v1/companies", { query: listQuery(q) }),
+    bulk: (b: DirectoryBulkTarget<CompanyBulkQuery> & ({ delete: true } | { patch: DirectoryBulkPatch })) =>
+      http.post<BulkResult>("/v1/companies/bulk", b),
     ...pictureRoutes<T.Company>("/v1/companies"),
   },
   /** Labels (contracts/api.md "Labels and custom fields"). Writes need admin. */
@@ -646,8 +714,12 @@ export const api = {
     remove: (id: string) => http.del(`/v1/custom-fields/${id}`),
     reorder: (entity: T.FieldEntity, ids: string[]) => http.post<T.Page<T.CustomField>>("/v1/custom-fields/reorder", { entity, ids }),
   },
-  savedReplies: crud<T.SavedReply, { title: string; shortcut: string; body_html: string; team_id?: string | null }>("/v1/saved-replies"),
+  savedReplies: crud<T.SavedReply, { title: string; shortcut: string; body_html: string; team_id?: string | null; actions?: T.SavedReplyActions }>("/v1/saved-replies"),
   views: crud<T.View, { name: string; filters: T.TicketFilters; shared: boolean; position?: number; team_id?: string | null; section?: string | null; icon?: T.ViewIcon | null }>("/v1/views"),
+  /** `section` as its views name it; `name` renames it on the views the caller sees; `icon` null clears it. */
+  viewSections: {
+    update: (b: { section: string; name?: string; icon?: T.ViewIcon | null }) => http.patch<T.ViewSection>("/v1/view-sections", b),
+  },
   slaPolicies: crud<T.SlaPolicy, Omit<T.SlaPolicy, "id" | "business_hours"> & { business_hours?: boolean }>("/v1/sla-policies"),
   automations: crud<T.Automation, Omit<T.Automation, "id" | "run_count">>("/v1/automations"),
   kb: {
@@ -657,6 +729,9 @@ export const api = {
       /** `for_brand_id`: what that brand's help center shows, its own articles and those of every brand. */
       search: (q: ListQuery & { collection_id?: string; status?: T.KbArticle["status"]; q?: string; for_brand_id?: string }) =>
         http.get<T.Page<T.KbArticle>>("/v1/kb/articles", { query: q }),
+      /** A draft copy of a wiki page (contracts/api.md); `left_out` counts what stayed in the wiki. */
+      fromWiki: (b: { page_id: string; title?: string; collection_id?: string; brand_id?: string | null }) =>
+        http.create<{ article: T.KbArticle; left_out: number }>("/v1/kb/articles/from-wiki", b),
     },
   },
   changelog: {
@@ -667,17 +742,66 @@ export const api = {
     categories: () => http.get<T.ChangelogCategory[]>("/v1/changelog/categories"),
   },
   wiki: {
-    tree: () => http.get<T.Page<T.WikiNode>>("/v1/wiki/pages"),
+    /** One area's tree (contracts/pages.md); the wiki's when left out. */
+    tree: (area?: T.WikiArea) => http.get<T.Page<T.WikiNode>>("/v1/wiki/pages", area ? { query: { area } } : undefined),
     get: (id: string) => http.get<T.WikiPage>(`/v1/wiki/pages/${id}`),
-    create: (b: { parent_id?: string | null; title?: string; icon?: string; body_html?: string; position?: number }) => http.create<T.WikiPage>("/v1/wiki/pages", b),
+    create: (b: { parent_id?: string | null; space?: T.WikiSpace; team_id?: string; template?: boolean; kind?: T.WikiKind; database?: T.Database; canvas?: T.Canvas; props?: Record<string, T.DbValue>; title?: string; icon?: string; body_html?: string; position?: number; area?: T.WikiArea }) => http.create<T.WikiPage>("/v1/wiki/pages", b),
     /** `keepalive` lets a save started as the page closes finish (contracts/wiki.md "Editing together"). */
     update: (id: string, b: T.WikiPagePatch, opts?: { keepalive?: boolean }) => http.patch<T.WikiPage>(`/v1/wiki/pages/${id}`, b, opts),
-    move: (id: string, b: { parent_id: string | null; position: number }) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/move`, b),
+    move: (id: string, b: { parent_id: string | null; position: number; space?: T.WikiSpace; team_id?: string; area?: T.WikiArea }) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/move`, b),
+    trash: (id: string) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/trash`, {}),
+    untrash: (id: string) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/restore`, {}),
+    trashList: (area?: T.WikiArea) => http.get<T.Page<T.WikiTrashed>>("/v1/wiki/trash", area ? { query: { area } } : undefined),
+    duplicate: (id: string, b: { parent_id?: string | null; space?: T.WikiSpace; team_id?: string; template?: boolean; title?: string; position?: number; area?: T.WikiArea }) =>
+      http.create<T.WikiPage>(`/v1/wiki/pages/${id}/duplicate`, b),
+    templates: () => http.get<T.Page<T.WikiNode>>("/v1/wiki/templates"),
+    favorites: () => http.get<T.Page<T.WikiNode>>("/v1/wiki/favorites"),
+    setFavorites: (page_ids: string[]) => http.put<T.Page<T.WikiNode>>("/v1/wiki/favorites", { page_ids }),
+    recent: (area: T.WikiArea = "wiki") => http.get<T.Page<T.WikiNode>>("/v1/wiki/recent", { query: { area } }),
+    views: (id: string) => http.get<T.WikiPageViews>(`/v1/wiki/pages/${id}/views`),
+    analytics: (id: string, days = 28) => http.get<T.WikiPageAnalytics>(`/v1/wiki/pages/${id}/analytics`, { query: { days } }),
+    rows: (id: string) => http.get<T.DbRows>(`/v1/wiki/databases/${id}/rows`),
+    dailyNotes: (from: string, to: string, area: T.WikiArea = "wiki") => http.get<T.Page<T.WikiDailyNote>>("/v1/wiki/daily", { query: { from, to, area } }),
+    openDaily: (b: { date: string; title: string; journal_title: string; body_html?: string; area?: T.WikiArea }) => http.post<T.WikiPage>("/v1/wiki/daily", b),
     remove: (id: string) => http.del(`/v1/wiki/pages/${id}`),
     revisions: (id: string) => http.get<T.Page<T.WikiRevision>>(`/v1/wiki/pages/${id}/revisions`),
     revision: (id: string, rid: string) => http.get<T.WikiRevision>(`/v1/wiki/pages/${id}/revisions/${rid}`),
     restore: (id: string, rid: string) => http.post<T.WikiPage>(`/v1/wiki/pages/${id}/revisions/${rid}/restore`, {}),
     search: (q: string, limit = 20) => http.get<T.Page<T.WikiSearchHit>>("/v1/wiki/search", { query: { q, limit } }),
+    /** A link's card for a bookmark block, read by the API (contracts/wiki.md "Bookmarks"). */
+    unfurl: (url: string) => http.post<T.LinkCard>("/v1/wiki/unfurl", { url }),
+    backlinks: (id: string) => http.get<T.Page<T.WikiMention>>(`/v1/wiki/pages/${id}/backlinks`),
+    mentions: (id: string) => http.get<T.Page<T.WikiMention>>(`/v1/wiki/pages/${id}/mentions`),
+    graph: (area: T.WikiArea = "wiki") => http.get<T.Page<T.WikiLink>>("/v1/wiki/graph", { query: { area } }),
+    /** A page's discussions (contracts/wiki.md "Comments"): every write answers with the whole thread. */
+    comments: {
+      list: (pageId: string) => http.get<T.WikiComments>(`/v1/wiki/pages/${pageId}/comments`),
+      /** A new thread without thread_id (inline with the quote it is on), else a reply, which reopens it. */
+      create: (pageId: string, b: { body_html: string; mentions?: string[]; thread_id?: string; quote?: string; inline?: boolean }) =>
+        http.post<T.WikiThread>(`/v1/wiki/pages/${pageId}/comments`, b),
+      update: (id: string, b: { body_html: string; mentions?: string[] }) => http.patch<T.WikiThread>(`/v1/wiki/comments/${id}`, b),
+      /** Deleting a thread's first comment deletes the thread. */
+      remove: (id: string) => http.del(`/v1/wiki/comments/${id}`),
+      resolve: (threadId: string, resolved: boolean) => http.post<T.WikiThread>(`/v1/wiki/threads/${threadId}/resolve`, { resolved }),
+      react: (id: string, emoji: string, on: boolean) => http.post<T.WikiThread>(`/v1/wiki/comments/${id}/reactions`, { emoji, on }),
+    },
+    follow: (pageId: string, following: boolean) => http.put<{ following: boolean }>(`/v1/wiki/pages/${pageId}/follow`, { following }),
+    /** Ollie writing (contracts/ai.md): streams `delta` text for a preview, resolves with the sanitized HTML. Nothing is saved. */
+    write: (b: T.WikiWriteInput, h?: StreamHandlers) => stream<{ html: string }>("/v1/wiki/ai/write", b, h),
+    /**
+     * Pages from other tools: one zip, or page sources with the files they use; up to 100 MB in all.
+     * No Idempotency-Key: the API hashes a keyed request's body, up to 32 MB.
+     */
+    importPages: (files: File[], to: T.WikiImportTarget, onProgress?: (fraction: number) => void, signal?: AbortSignal) => {
+      const fd = new FormData();
+      for (const f of files) fd.append("files", f, f.name);
+      for (const [k, v] of Object.entries(to)) if (v) fd.append(k, v);
+      return http.post<T.WikiImportResult>("/v1/wiki/import", fd, { onUploadProgress: onProgress, signal });
+    },
+    /** One page as a file, or with subpages a zip of the page and the subpages the caller sees. */
+    exportPage: (id: string, format: T.WikiExportFormat, subpages: boolean) => download(`/v1/wiki/pages/${id}/export`, { query: { format, subpages } }),
+    /** Every page of the caller's tree of an area as a zip. */
+    exportAll: (format: T.WikiExportFormat, area: T.WikiArea = "wiki") => download("/v1/wiki/export", { query: { format, area } }),
   },
   search: (q: string) => http.get<T.SearchResults>("/v1/search", { query: { q } }),
   reports: {
@@ -696,10 +820,12 @@ export const api = {
     update: (b: Partial<T.WidgetSettings>) => http.patch<T.WidgetSettings>("/v1/widget/settings", b),
   },
   mailboxes: {
-    ...crud<T.Mailbox, Partial<CreateMailboxBody> & Partial<Pick<T.Mailbox, "signature_html" | "auto_reply_enabled" | "auto_reply_subject" | "auto_reply_html" | "status" | "ai_answers" | "ai_answers_mode" | "ai_answers_outside_hours" | "trusted_form_senders" | "personal_replies">> & { bot_id?: string | null; alias_settings?: Record<string, T.AliasSettingsInput> }>("/v1/mailboxes"),
+    ...crud<T.Mailbox, Partial<CreateMailboxBody> & Partial<Pick<T.Mailbox, "signature_html" | "auto_reply_enabled" | "auto_reply_subject" | "auto_reply_html" | "status" | "ai_answers" | "ai_answers_mode" | "ai_answers_outside_hours" | "trusted_form_senders" | "keep_automatic_mail" | "personal_replies" | "imap_folders" | "imap_sent_folder">> & { bot_id?: string | null; alias_settings?: Record<string, T.AliasSettingsInput> }>("/v1/mailboxes"),
     create: (b: CreateMailboxBody) => http.create<T.Mailbox>("/v1/mailboxes", b),
     test: (id: string) => http.post<T.MailboxTest>(`/v1/mailboxes/${id}/test`),
     usage: (id: string) => http.get<T.MailboxUsage>(`/v1/mailboxes/${id}/usage`),
+    /** Signs in to the IMAP server and lists the folders it can read (422 not_imap, 422 imap_failed with the server's reason). */
+    imapFolders: (id: string) => http.get<T.ImapFolders>(`/v1/mailboxes/${id}/imap-folders`),
     /** Reads Gmail's send-as list again (422 send_as_unreadable for a send-only connection). */
     checkSendAs: (id: string) => http.post<T.Mailbox>(`/v1/mailboxes/${id}/send-as/check`),
     /**
@@ -837,6 +963,11 @@ export const api = {
       update: (id: string, b: CollabAccountPatch) => http.patch<T.MailAccount>(`/v1/collab/accounts/${id}`, b),
       /** Removes the account and its mail from opendesk; nothing is deleted at the provider. */
       remove: (id: string) => http.del(`/v1/collab/accounts/${id}`),
+      /**
+       * Makes a ticket inbox of an account the caller connected, read with its own connection
+       * from new mail on; the account goes unless keep_account (contracts/collab.md "Using an account for tickets").
+       */
+      useForTickets: (id: string, b: T.UseForTicketsBody) => http.post<{ mailbox_id: string; account_removed: boolean }>(`/v1/collab/accounts/${id}/use-for-tickets`, b),
       sync: (id: string) => http.post<void>(`/v1/collab/accounts/${id}/sync`),
       /** Starts a history import, or starts it again with this scope (contracts/collab.md "History"). */
       startHistory: (id: string, b: { since: string | null; include_spam_trash?: boolean }) =>
@@ -1003,6 +1134,8 @@ export type CollabAccountPatch = {
   signature_html?: string;
   visibility?: "private" | "shared";
   handling_enabled?: boolean;
+  /** With handling_enabled turning on: put what is in the inbox now in Needs action (once). */
+  mark_inbox_needs_action?: boolean;
   reply_all?: boolean;
   shared_with?: T.MailAudience;
   imap?: Partial<T.MailImapSettings> & { password?: string; smtp_password?: string };

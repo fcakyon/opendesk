@@ -111,6 +111,37 @@
       "on_hold": "保留",
       "solved": "已解决",
       "closed": "已关闭"
-    }
+    },
+    "sso": "使用单点登录继续",
+    "or": "或",
+    "sso_error": {
+      "email_unverified": "您的身份提供商尚未确认您的邮箱地址，因此无法用它登录。",
+      "unknown_customer": "未找到使用该邮箱地址的客户。请联系授予您访问权限的团队。",
+      "blocked": "此账户无法登录。请联系团队获取帮助。",
+      "relink_required": "您在身份提供商处的账户已更改。请让团队允许一次新的登录，然后重试。",
+      "transient_name_id": "登录提供商每次发送的 ID 都不同，因此我们无法识别您。请联系团队寻求帮助。",
+      "identity_revoked": "此登录已被移除。请联系团队获取帮助。",
+      "access_denied": "登录已取消。",
+      "provider_unavailable": "无法连接到登录提供商。请重试。",
+      "rate_limited": "尝试次数过多。请稍候再试。",
+      "generic": "无法为您登录。请重试。"
+    },
+    "new_request": "新请求",
+    "new": {
+      "title": "新请求",
+      "subject": "主题",
+      "message": "我们能帮您什么？",
+      "send": "发送请求",
+      "limit": "您连续发送了多个请求。请稍候再试。",
+      "busy": "当前收到的请求较多。请稍后再试。",
+      "attach": "选择文件",
+      "drop": "将文件拖到此处，或粘贴截图。",
+      "remove": "移除 {{name}}",
+      "too_big": "{{name}} 超过 10 MB。",
+      "max_files": "最多可附加 5 个文件。",
+      "upload_failed": "无法上传 {{name}}。",
+      "uploading": "正在上传…"
+    },
+    "attachments": "附件"
   }
 }

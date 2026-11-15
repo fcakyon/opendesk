@@ -27,7 +27,7 @@ func (w *chatFollowUpWorker) Work(ctx context.Context, job *river.Job[jobs.ChatF
 // like an email reply: it goes out from the ticket's reply address, else the brand's
 // address for its team, else the brand's default address, with the address's From name
 // format and signature, and threads with the follow-ups before it. Without such an
-// address nothing is sent.
+// address nothing is sent, and a follow_up_skipped activity on the ticket says so.
 func (s *service) chatFollowUp(ctx context.Context, a jobs.ChatFollowUpArgs) error {
 	return s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
 		var kind, direction, authorType, status string
@@ -56,7 +56,15 @@ func (s *service) chatFollowUp(ctx context.Context, a jobs.ChatFollowUpArgs) err
 			return err
 		}
 		mailbox, err := followUpMailbox(ctx, tx, a.WorkspaceID, ticketMailbox, brand, team)
-		if err != nil || mailbox == nil {
+		if err != nil {
+			return err
+		}
+		if mailbox == nil {
+			// The reply stays in the chat only, and the ticket's timeline says why.
+			s.log.Warn("chat follow-up not sent: no mailbox of the brand can send",
+				"workspace_id", a.WorkspaceID, "ticket_id", a.TicketID, "message_id", a.MessageID)
+			_, err := domain.LogActivity(ctx, tx, a.WorkspaceID, a.TicketID, "system", nil, "follow_up_skipped",
+				map[string]any{"message_id": a.MessageID, "reason": "no_mailbox"})
 			return err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE messages SET delivery_status = 'pending', mailbox_id = $3

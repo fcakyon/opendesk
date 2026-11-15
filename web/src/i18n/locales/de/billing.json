@@ -230,6 +230,7 @@
     "assistant": "Assistent",
     "assistant_peer": "Beim Ollie eines Teammitglieds nachfragen",
     "procedure": "Von Automatisierungen ausgeführte Abläufe",
+    "wiki_write": "Schreiben im Wiki",
     "other": "Sonstiges"
   },
   "dialog": {

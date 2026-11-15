@@ -397,6 +397,30 @@
         }
       }
     },
+    "push.scheduled_reply_failed.body": {
+      "comment": "Push notification body for scheduled_reply_failed. It may come without a ticket number.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It is back in your reply box as a draft"
+          }
+        }
+      }
+    },
+    "push.scheduled_reply_failed.title": {
+      "comment": "Push notification title for scheduled_reply_failed.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scheduled reply not sent"
+          }
+        }
+      }
+    },
     "push.sla_breached.body": {
       "comment": "Push notification body for sla_breached. %@ is the ticket number.",
       "extractionState": "manual",
@@ -465,6 +489,78 @@
           "stringUnit": {
             "state": "translated",
             "value": "Side conversation answered"
+          }
+        }
+      }
+    },
+    "push.wiki_comment.body": {
+      "comment": "Push notification body for wiki_comment.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On a wiki page"
+          }
+        }
+      }
+    },
+    "push.wiki_comment.title": {
+      "comment": "Push notification title for wiki_comment.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New comment"
+          }
+        }
+      }
+    },
+    "push.wiki_mention.body": {
+      "comment": "Push notification body for wiki_mention.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On a wiki page"
+          }
+        }
+      }
+    },
+    "push.wiki_mention.title": {
+      "comment": "Push notification title for wiki_mention.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You were mentioned"
+          }
+        }
+      }
+    },
+    "push.wiki_reminder.body": {
+      "comment": "Push notification body for wiki_reminder.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In a wiki page"
+          }
+        }
+      }
+    },
+    "push.wiki_reminder.title": {
+      "comment": "Push notification title for wiki_reminder.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your reminder is due"
           }
         }
       }

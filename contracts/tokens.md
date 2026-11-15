@@ -10,7 +10,7 @@ and a consumer accepts exactly one purpose. `exp` is required.
 | `ws`         | `POST /v1/realtime/token`     | 5 min    | Elixir gateway (socket connect) |
 | `widget_ws`  | `POST /v1/widget/session`     | 5 min    | Elixir gateway (socket connect) |
 | `mfa`        | login when TOTP is enabled    | 5 min    | `POST /v1/auth/mfa`             |
-| `oauth_state`| OAuth start endpoints (sign-in, mailboxes, integrations; `data.flow` tells them apart) | 10 min | the matching OAuth callback |
+| `oauth_state`| OAuth start endpoints (sign-in, mailboxes, integrations, customer portal OIDC and SAML sign-in; `data.flow` tells them apart; a SAML sign-in carries it in a cookie, since RelayState is short) | 10 min | the matching OAuth callback |
 | `passkey_login` | `POST /v1/auth/passkey/login/begin` | 5 min | `POST /v1/auth/passkey/login/finish` |
 | `passkey_register` | `POST /v1/me/passkeys/register/begin` | 5 min | `POST /v1/me/passkeys/register/finish` |
 | `assistant_approval` | a Ollie run's `approval` event | 15 min | `POST /v1/assistant/actions/{id}/decision` |
@@ -157,8 +157,8 @@ Passwords: Argon2id only (`m=64MiB, t=3, p=2`, 16-byte salt, 32-byte key), PHC s
 Customer access JWTs have purpose `customer_access`, `sub` = contact id, `wid` = workspace
 id and `sid` = customer session id. They last at most 15 minutes and are accepted only
 by customer portal operations. They grant no member, API key, visitor or realtime
-permissions. Every resolution joins the live customer session, credential, contact and
-workspace: expiry, revocation, email snapshots, block state and workspace suspension
+permissions. Every resolution joins the live customer session, contact and workspace (and the credential,
+for a password session; a provider session has none): expiry, revocation, email snapshots, block state and workspace suspension
 are checked for each request. `OD-Workspace` does not select a customer's workspace.
 Login returns `access_token` and `expires_at`. When an existing password no longer meets
 the current password policy, login also returns `change_password: true`; the portal asks

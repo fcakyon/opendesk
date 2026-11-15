@@ -115,6 +115,37 @@
       "on_hold": "Em espera",
       "solved": "Resolvido",
       "closed": "Terminados"
-    }
+    },
+    "sso": "Continuar com o login único",
+    "or": "ou",
+    "sso_error": {
+      "email_unverified": "O seu provedor não confirmou o seu e-mail, por isso não podemos iniciar sessão com ele.",
+      "unknown_customer": "Não encontramos nenhum cliente com esse e-mail. Fale com a equipa que lhe deu acesso.",
+      "blocked": "Esta conta não pode iniciar sessão. Fale com a equipa para obter ajuda.",
+      "relink_required": "A sua conta no provedor mudou. Peça à equipa para permitir um novo início de sessão e tente novamente.",
+      "transient_name_id": "O provedor de início de sessão envia um identificador diferente de cada vez, por isso não o conseguimos reconhecer. Contacte a equipa para obter ajuda.",
+      "identity_revoked": "Este início de sessão foi removido. Fale com a equipa para obter ajuda.",
+      "access_denied": "O início de sessão foi cancelado.",
+      "provider_unavailable": "Não foi possível contactar o provedor de início de sessão. Tente novamente.",
+      "rate_limited": "Demasiadas tentativas. Aguarde um momento e tente novamente.",
+      "generic": "Não foi possível iniciar a sua sessão. Tente novamente."
+    },
+    "new_request": "Novo pedido",
+    "new": {
+      "title": "Novo pedido",
+      "subject": "Assunto",
+      "message": "Como podemos ajudar?",
+      "send": "Enviar pedido",
+      "limit": "Enviou vários pedidos seguidos. Aguarde um pouco e tente novamente.",
+      "busy": "Estão a chegar muitos pedidos neste momento. Aguarde um pouco e tente novamente.",
+      "attach": "Escolher ficheiros",
+      "drop": "Largue ficheiros aqui ou cole uma captura de ecrã.",
+      "remove": "Remover {{name}}",
+      "too_big": "{{name}} ultrapassa 10 MB.",
+      "max_files": "Pode anexar até 5 ficheiros.",
+      "upload_failed": "Não foi possível carregar {{name}}.",
+      "uploading": "A carregar…"
+    },
+    "attachments": "Anexos"
   }
 }

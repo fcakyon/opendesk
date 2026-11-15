@@ -24,6 +24,10 @@ struct TicketDetailsSheet: View {
                         timers(ticket)
                         sides
                         links
+                        TicketWikiSection(ticketID: ticket.id) { page in
+                            dismiss()
+                            env.router.push(.wikiPage(page))
+                        }
                         source(ticket)
                     }
                     .padding(16)

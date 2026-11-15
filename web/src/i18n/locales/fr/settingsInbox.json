@@ -49,7 +49,15 @@
       "slash": "Saisissez / et un raccourci dans l’éditeur",
       "team": "Les réponses sont partagées avec toute votre équipe"
     },
-    "variablesHint": "Les variables sont renseignées pour chaque ticket au moment d’insérer la réponse."
+    "variablesHint": "Les variables sont renseignées pour chaque ticket au moment d’insérer la réponse.",
+    "actionsTitle": "Actions à l’envoi",
+    "actionsHint": "Appliquées au ticket quand un message utilisant cette réponse est envoyé. Rien ne se passe si le brouillon est abandonné.",
+    "addTags": "Ajouter des étiquettes",
+    "removeTags": "Retirer des étiquettes",
+    "tagsPlaceholder": "etiquette-a, etiquette-b",
+    "setTeam": "Déplacer vers l’équipe",
+    "setAssignee": "Attribuer à",
+    "noChange": "Ne pas changer"
   },
   "views": {
     "reorderAria": "Réorganiser {{name}}. Maintenez Alt et appuyez sur les touches fléchées pour déplacer cet élément.",
@@ -76,6 +84,9 @@
     },
     "updateFailed": "Impossible de mettre à jour la vue",
     "reorderFailed": "Impossible de réorganiser les vues",
+    "moveTo": "Déplacer vers la section",
+    "movedTo": "Vue {{name}} déplacée dans la section {{section}}",
+    "movedOut": "Vue {{name}} sortie de sa section",
     "deleteFailed": "Impossible de supprimer la vue",
     "editTitle": "Modifier la vue",
     "nameLabel": "Nom",
@@ -89,6 +100,20 @@
     "inSection": "Dans la section {{name}}",
     "reorderSectionAria": "Réorganiser la section {{name}}. Maintenez Alt et appuyez sur les touches fléchées pour la déplacer avec ses vues.",
     "sectionChars": "Un nom de section ne peut pas contenir < ou >.",
+    "sectionEdit": {
+      "title": "Modifier la section",
+      "aria": "Modifier la section {{name}}",
+      "description_one": "Un nouveau nom renomme la section sur sa vue listée ici, et son icône la suit.",
+      "description_other": "Un nouveau nom renomme la section sur ses {{count}} vues listées ici, et son icône la suit.",
+      "description_many": "Un nouveau nom renomme la section sur ses {{count}} vues listées ici, et son icône la suit.",
+      "save": "Enregistrer la section",
+      "saved": "Section enregistrée",
+      "needName": "Donnez un nom à la section."
+    },
+    "sectionIcon": {
+      "hint": "Affichée à côté du nom de la section dans la barre latérale, pour tous ceux qui y ont une vue.",
+      "namePlaceholder": "Nom de la section"
+    },
     "needName": "Donnez un nom à la vue.",
     "icon": {
       "label": "Icône",
@@ -582,6 +607,22 @@
       "label": "Attribuer la suite au responsable du ticket fermé",
       "on": "La suite va à la personne qui avait le ticket fermé, si elle peut encore recevoir des tickets et, pour une équipe privée, en fait partie",
       "off": "Les suites arrivent sans responsable, comme tout nouveau ticket"
+    },
+    "chat": {
+      "title": "Chats en direct",
+      "hint": "Chaque nouveau chat va aussitôt à un collègue, pour que le visiteur ait une personne pendant qu’il est encore sur la page. Les e-mails gardent les règles ci-dessus.",
+      "mode": "Attribuer les chats",
+      "modes": {
+        "none": "Les chats suivent les règles ci-dessus, comme les e-mails",
+        "round_robin": "Chaque nouveau chat va au collègue suivant parmi ceux qui prennent les chats, à tour de rôle",
+        "load_balanced": "Chaque nouveau chat va au collègue qui prend les chats et a le moins de tickets ouverts"
+      },
+      "skill": "Qui prend les chats",
+      "anyone": "Toute l’équipe",
+      "skillOn": "Seulement les collègues avec la compétence {{name}}, en ligne et pas absents. Avec le bot de réponse, un chat est attribué quand le bot passe la main",
+      "skillOff": "Tous les collègues de l’équipe du chat en ligne et pas absents. Choisissez une compétence pour réserver les chats à ceux qui les prennent",
+      "noSkills": "Tous les collègues de l’équipe du chat en ligne. Ajoutez une compétence dans Compétences de routage pour réserver les chats à ceux qui les prennent",
+      "awayTip": "Les collègues restent en ligne jusqu’à ce qu’ils changent eux-mêmes leur statut : activez « Marquer les collègues inactifs comme absents » ci-dessous, pour que personne ne reçoive de chat après son départ et que les chats hors des heures de travail attendent dans la boîte."
     },
     "awayTitle": "Absence",
     "awayHint": "Les collègues absents ne reçoivent plus de nouveaux tickets jusqu’à leur retour.",

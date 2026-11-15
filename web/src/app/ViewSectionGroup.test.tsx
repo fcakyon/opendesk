@@ -2,7 +2,7 @@ import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n";
-import type { View } from "@/lib/api/types";
+import type { View, ViewIcon } from "@/lib/api/types";
 import { useSession } from "@/lib/session";
 import { readFolded } from "@/lib/viewSections";
 import { useFoldedSections, ViewSectionGroup } from "./ViewSectionGroup";
@@ -31,11 +31,12 @@ afterEach(async () => {
 });
 
 /** A section as Favorites draws it: its own fold, a menu around the header. */
-function Pinned({ rail = false, openView, menu }: { rail?: boolean; openView?: string; menu?: (h: ReactElement) => ReactElement }) {
+function Pinned({ rail = false, openView, menu, icon, name = "After sales" }: { rail?: boolean; openView?: string; menu?: (h: ReactElement) => ReactElement; icon?: ViewIcon; name?: string }) {
   const [folded, toggle] = useFoldedSections("favorites");
   return (
     <ViewSectionGroup
-      name="After sales"
+      name={name}
+      icon={icon}
       views={views}
       rail={rail}
       folded={folded.has("after sales")}
@@ -96,6 +97,30 @@ describe("a view section in the sidebar", () => {
   it("puts its menu around the header", async () => {
     await render(<Pinned menu={(h) => <div data-menu="">{h}</div>} />);
     expect(host.querySelector("[data-menu] > button[aria-expanded]")).not.toBeNull();
+  });
+
+  it("shows the section's icon between the chevron and the name, and none without one", async () => {
+    await render(<Pinned />);
+    expect(header().querySelector("[data-view-icon]")).toBeNull();
+    await render(<Pinned icon={{ kind: "emoji", value: "⭐", color: null }} name={"⭐ After sales"} />);
+    const icon = header().querySelector('[data-view-icon="emoji"]')!;
+    expect(icon.textContent).toBe("⭐");
+    expect(icon.previousElementSibling?.tagName.toLowerCase()).toBe("svg");
+    // A name that starts with the icon's emoji shows it once.
+    expect(header().textContent).toBe("⭐After sales");
+    await render(<Pinned icon={{ kind: "icon", value: "truck", color: "teal" }} />);
+    expect(header().querySelector('[data-view-icon="icon"]')).not.toBeNull();
+  });
+
+  it("marks the section in the rail with its icon, in the hairline above it", async () => {
+    await render(<Pinned rail />);
+    expect(host.querySelector("[data-section-mark]")).toBeNull();
+    await render(<Pinned rail icon={{ kind: "text", value: "AS", color: "violet" }} />);
+    const mark = host.querySelector("[data-section-mark]")!;
+    expect(mark.getAttribute("aria-hidden")).toBe("true");
+    expect(mark.getAttribute("title")).toBe("After sales");
+    expect(mark.querySelector('[data-view-icon="text"]')?.textContent).toBe("AS");
+    expect(rows()).toEqual(["Damaged", "Refunds"]);
   });
 
   it("shows every view in the rail, with no header to fold", async () => {

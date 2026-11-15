@@ -28,6 +28,7 @@ type WikiSearchHit struct {
 	Snippet   string     `json:"snippet" doc:"Plain text around the match"`
 	Path      []WikiRef  `json:"path" doc:"Its ancestors, the top-level page first"`
 	UpdatedAt time.Time  `json:"updated_at"`
+	Area      string     `json:"area" enum:"wiki,pages" doc:"Whose tree it is in (contracts/pages.md)"`
 }
 
 var wordRe = regexp.MustCompile(`[\p{L}\p{N}]+`)
@@ -45,24 +46,34 @@ func prefixQuery(q string) string {
 
 const tsq = `(websearch_to_tsquery('simple', $2) || to_tsquery('simple', $3))`
 
-// Search returns the workspace's best matching pages, title matches first.
-func Search(ctx context.Context, q db.Querier, wid uuid.UUID, query string, limit int) ([]WikiSearchHit, error) {
+// Search returns the best matching pages of the tree the viewer may see, title matches first:
+// of area, or of both (the wiki's and Pages', while Pages is on) when area is "".
+func Search(ctx context.Context, q db.Querier, v Viewer, wid uuid.UUID, query, area string, limit int) ([]WikiSearchHit, error) {
 	query = strings.TrimSpace(query)
 	pq := prefixQuery(query)
 	if pq == "" {
 		return []WikiSearchHit{}, nil
 	}
-	rows, err := q.Query(ctx, `SELECT p.id, p.parent_id, p.title, p.icon, p.updated_at,
-			ts_headline('simple', regexp_replace(p.body_html, '<[^>]+>', ' ', 'g'), `+tsq+`,
+	areas := []string{area}
+	if area == "" {
+		var err error
+		if areas, err = areasOn(ctx, q, wid); err != nil {
+			return nil, err
+		}
+	} else if err := requireArea(ctx, q, wid, area); err != nil {
+		return nil, err
+	}
+	rows, err := q.Query(ctx, `SELECT p.id, p.parent_id, p.title, p.icon, p.updated_at, p.area,
+			ts_headline('simple', regexp_replace(p.body_html, '<[^>]+>', ' ', 'g') || ' ' || p.canvas_text, `+tsq+`,
 				'MaxFragments=1, MaxWords=28, MinWords=10, ShortWord=2, StartSel="", StopSel=""')
-		FROM wiki_pages p WHERE p.workspace_id = $1 AND p.search @@ `+tsq+`
-		ORDER BY ts_rank(p.search, `+tsq+`) DESC, p.updated_at DESC, p.id LIMIT $4`, wid, query, pq, limit)
+		FROM wiki_pages p WHERE p.workspace_id = $1 AND p.search @@ `+tsq+` AND p.area = ANY($7) AND `+liveSQL("p", 5, 6)+`
+		ORDER BY ts_rank(p.search, `+tsq+`) DESC, p.updated_at DESC, p.id LIMIT $4`, wid, query, pq, limit, v.Me, v.Hidden, areas)
 	if err != nil {
 		return nil, err
 	}
 	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (WikiSearchHit, error) {
 		var h WikiSearchHit
-		err := r.Scan(&h.ID, &h.ParentID, &h.Title, &h.Icon, &h.UpdatedAt, &h.Snippet)
+		err := r.Scan(&h.ID, &h.ParentID, &h.Title, &h.Icon, &h.UpdatedAt, &h.Area, &h.Snippet)
 		h.Snippet = strings.Join(strings.Fields(html.UnescapeString(h.Snippet)), " ")
 		return h, err
 	})
@@ -82,10 +93,11 @@ func Search(ctx context.Context, q db.Querier, wid uuid.UUID, query string, limi
 
 func registerSearch(d *deps.Deps, api huma.API) {
 	huma.Register(api, huma.Operation{OperationID: "search-wiki", Method: http.MethodGet, Path: "/v1/wiki/search",
-		Summary: "Search the wiki", Description: "Full-text search over titles and bodies; every word also matches as a prefix. The best matches first.", Tags: tags},
+		Summary: "Search the wiki", Description: "Full-text search over titles and bodies; every word also matches as a prefix. The best matches first. Both areas, the wiki's and Pages' (contracts/pages.md), unless area names one; each hit says its own.", Tags: tags},
 		func(ctx context.Context, in *struct {
 			Q     string `query:"q" required:"true" maxLength:"200"`
 			Limit int    `query:"limit" minimum:"0" maximum:"50" doc:"Default 20"`
+			Area  string `query:"area" enum:"wiki,pages" doc:"Only this area's pages; left out, both"`
 		}) (*struct{ Body httpx.Page[WikiSearchHit] }, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeWikiRead)
 			if err != nil {
@@ -95,7 +107,11 @@ func registerSearch(d *deps.Deps, api huma.API) {
 			if limit <= 0 {
 				limit = 20
 			}
-			out, err := Search(ctx, d.DB.Pool, p.WorkspaceID, in.Q, limit)
+			v, err := viewerFor(ctx, d, p)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			out, err := Search(ctx, d.DB.Pool, v, p.WorkspaceID, in.Q, in.Area, limit)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}

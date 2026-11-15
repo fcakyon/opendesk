@@ -30,6 +30,9 @@ type View struct {
 	TeamID   *uuid.UUID       `json:"team_id" doc:"Shared with this team's members; shared is then false"`
 	Icon     *ViewIcon        `json:"icon" doc:"What the sidebar shows beside the name; null shows the default icon"`
 	Section  *string          `json:"section" doc:"The sidebar heading the view shows under, with the other views of that name; null for none"`
+	// SectionIcon is the section's, set with PATCH /v1/view-sections: every view that names
+	// the section carries it.
+	SectionIcon *ViewIcon `json:"section_icon" doc:"What the sidebar shows beside the section's heading, the same on every view that names it; null for none"`
 
 	owner *uuid.UUID
 }
@@ -51,22 +54,33 @@ type viewOut struct{ Body View }
 
 func scanView(r pgx.Row) (View, error) {
 	var v View
-	var raw, icon []byte
-	if err := r.Scan(&v.ID, &v.Name, &v.owner, &raw, &v.Position, &v.TeamID, &icon, &v.Section); err != nil {
+	var raw, icon, sectionIcon []byte
+	if err := r.Scan(&v.ID, &v.Name, &v.owner, &raw, &v.Position, &v.TeamID, &icon, &v.Section, &sectionIcon); err != nil {
 		return v, err
 	}
 	v.Shared = v.owner == nil && v.TeamID == nil
 	_ = json.Unmarshal(raw, &v.Filters)
-	if len(icon) > 0 {
-		var i ViewIcon
-		if json.Unmarshal(icon, &i) == nil && i.Kind != "" {
-			v.Icon = &i
-		}
-	}
+	v.Icon = parseViewIcon(icon)
+	v.SectionIcon = parseViewIcon(sectionIcon)
 	return v, nil
 }
 
-const viewSelect = `SELECT v.id, v.name, v.user_id, v.filters, v.position, v.team_id, v.icon, v.section FROM views v`
+// parseViewIcon reads a stored icon; nil when there is none.
+func parseViewIcon(raw []byte) *ViewIcon {
+	if len(raw) == 0 {
+		return nil
+	}
+	var i ViewIcon
+	if json.Unmarshal(raw, &i) != nil || i.Kind == "" {
+		return nil
+	}
+	return &i
+}
+
+// viewSelect reads a view with its section's icon (view_sections, keyed by the section in
+// lower case).
+const viewSelect = `SELECT v.id, v.name, v.user_id, v.filters, v.position, v.team_id, v.icon, v.section,
+	(SELECT vs.icon FROM view_sections vs WHERE vs.workspace_id = v.workspace_id AND vs.key = lower(v.section)) FROM views v`
 
 // applyViewIcon sets the view's icon from the body; null clears it.
 func applyViewIcon(b viewWriteBody, v *View) error {
@@ -315,6 +329,11 @@ func registerViews(d *deps.Deps, api huma.API) {
 					v.ID, p.WorkspaceID, v.owner, v.Name, v.Filters, v.Position, v.TeamID, v.Icon, v.Section); err != nil {
 					return err
 				}
+				icon, err := sectionIcon(ctx, tx, p.WorkspaceID, v.Section)
+				if err != nil {
+					return err
+				}
+				v.SectionIcon = icon
 				return publishView(ctx, tx, p.WorkspaceID, "view.created", v, map[string]any{"view": v})
 			})
 			if err != nil {
@@ -404,6 +423,9 @@ func registerViews(d *deps.Deps, api huma.API) {
 				}
 				if _, err := tx.Exec(ctx, `UPDATE views SET name = $3, filters = $4, position = $5, user_id = $6, team_id = $7, icon = $8, section = $9, updated_at = now()
 					WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, id, v.Name, v.Filters, v.Position, v.owner, v.TeamID, v.Icon, v.Section); err != nil {
+					return err
+				}
+				if v.SectionIcon, err = sectionIcon(ctx, tx, p.WorkspaceID, v.Section); err != nil {
 					return err
 				}
 				return publishView(ctx, tx, p.WorkspaceID, "view.updated", v, map[string]any{"view": v})

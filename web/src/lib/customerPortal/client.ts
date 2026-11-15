@@ -1,7 +1,7 @@
-import { ApiError } from "@/lib/api/client";
+import { ApiError, send } from "@/lib/api/client";
 import { config } from "@/lib/config";
 import { queryClient } from "@/lib/queryClient";
-import type { CustomerToken, CustomerLogin, PortalConfig, CustomerTicket, CustomerMessage, Page } from "./types";
+import type { CustomerToken, CustomerLogin, PortalConfig, CustomerTicket, CustomerMessage, CustomerUpload, Page } from "./types";
 
 let accessToken: string | null = null;
 let activeSlug: string | null = null;
@@ -32,7 +32,7 @@ export function clearCustomer() {
   identityChanged();
 }
 async function request<T>(path: string, body?: unknown, bearer = false): Promise<T> {
-  const response = await fetch(`${config.apiUrl}${path}`, {
+  const response = await send(`${config.apiUrl}${path}`, {
     method: body === undefined ? "GET" : "POST", credentials: "include", cache: "no-store", referrerPolicy: "no-referrer",
     headers: { ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...(bearer && accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -79,6 +79,18 @@ async function authed<T>(slug: string, path: string, body?: unknown): Promise<T>
   try { return await request<T>(path, body, true); }
   catch (e) { if (!(e instanceof ApiError) || e.status !== 401 || !await refreshCustomer(slug)) throw e; return request<T>(path, body, true); }
 }
+async function uploadFile(slug: string, file: File): Promise<CustomerUpload> {
+  const send1 = () => {
+    const form = new FormData();
+    form.append("file", file);
+    return send(`${config.apiUrl}/v1/customer/portal/attachments`, { method: "POST", credentials: "include", cache: "no-store", referrerPolicy: "no-referrer", headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}, body: form });
+  };
+  if (activeSlug !== slug || !accessToken) { if (!await refreshCustomer(slug)) throw new ApiError({ status: 401 }); }
+  let response = await send1();
+  if (response.status === 401 && await refreshCustomer(slug)) response = await send1();
+  if (!response.ok) throw new ApiError({ ...(await response.json().catch(() => ({}))), status: response.status });
+  return response.json();
+}
 export const customerPortal = {
   config: (slug: string) => request<PortalConfig>(`${publicPath(slug)}/config`),
   login: async (slug: string, email: string, password: string, turnstile_token?: string) => {
@@ -97,5 +109,10 @@ export const customerPortal = {
   tickets: (slug: string, cursor?: string) => authed<Page<CustomerTicket>>(slug, `/v1/customer/portal/tickets${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`),
   ticket: (slug: string, id: string) => authed<CustomerTicket>(slug, `/v1/customer/portal/tickets/${encodeURIComponent(id)}`),
   messages: (slug: string, id: string, cursor?: string) => authed<Page<CustomerMessage>>(slug, `/v1/customer/portal/tickets/${encodeURIComponent(id)}/messages${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`),
+  /** Starts a request as the signed-in customer; the slug only names the portal's brand. */
+  create: (slug: string, subject: string, body: string, attachmentIds: string[] = []) =>
+    authed<CustomerTicket>(slug, "/v1/customer/portal/tickets", { workspace_slug: slug, subject, body, ...(attachmentIds.length ? { attachment_ids: attachmentIds } : {}) }),
+  /** Uploads one file for a request; the answer's id goes in the request's attachment ids. */
+  upload: (slug: string, file: File) => uploadFile(slug, file),
   reply: (slug: string, id: string, body: string) => authed<CustomerMessage>(slug, `/v1/customer/portal/tickets/${encodeURIComponent(id)}/messages`, { body }),
 };

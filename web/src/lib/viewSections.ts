@@ -1,8 +1,9 @@
 // Views grouped by their section (contracts/api.md, /v1/views): views that name the same
 // section, in any case, read together under one header. Sections and views without one
 // keep `position` order, a section at its first view's place, and its views by position.
+// A section's icon is the one its views carry (View.section_icon, PATCH /v1/view-sections).
 
-import type { View } from "@/lib/api/types";
+import type { View, ViewIcon } from "@/lib/api/types";
 
 /** The longest section name the API takes. */
 export const MAX_VIEW_SECTION = 60;
@@ -10,8 +11,8 @@ export const MAX_VIEW_SECTION = 60;
 /** One entry of the views list: a view on its own, or a section and its views. */
 export type ViewEntry =
   | { kind: "view"; view: View }
-  /** `key` matches every spelling of the name; `name` is its first view's. */
-  | { kind: "section"; key: string; name: string; views: View[] };
+  /** `key` matches every spelling of the name; `name` is its first view's; `icon` the first its views carry. */
+  | { kind: "section"; key: string; name: string; icon: ViewIcon | null; views: View[] };
 
 /** A section's name as typed: spaces collapsed, blank for none. */
 export const cleanSection = (s: string | null | undefined) => (s ?? "").split(/\s+/).filter(Boolean).join(" ");
@@ -44,9 +45,11 @@ export function groupViews(views: readonly View[]): ViewEntry[] {
     }
     const key = sectionKey(name);
     const sec = sections.get(key);
-    if (sec) sec.views.push(v);
-    else {
-      const entry = { kind: "section" as const, key, name, views: [v] };
+    if (sec) {
+      sec.views.push(v);
+      sec.icon ??= v.section_icon ?? null;
+    } else {
+      const entry = { kind: "section" as const, key, name, icon: v.section_icon ?? null, views: [v] };
       sections.set(key, entry);
       out.push(entry);
     }

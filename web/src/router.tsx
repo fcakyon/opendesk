@@ -21,11 +21,15 @@ import { atLeast, bootSession, currentMembership, openLinkedWorkspace } from "./
 import { stripWorkspaceParam, workspaceParam } from "./lib/workspaceParam";
 import { queryClient } from "./lib/queryClient";
 import { q } from "./lib/queries";
-import { productHome, requireTickets, TICKET_SETTINGS } from "./lib/products";
+import { companyFilter, parseCompanySearch, parsePeopleSearch, peopleFilter } from "./lib/directorySort";
+import { productHome, productsOf, requireTickets, TICKET_SETTINGS } from "./lib/products";
 import { folderById, listQuery, parseInboxSearch, teamQuery } from "./lib/folders";
+import { viewOrTicket } from "./lib/viewLink";
 import { withRememberedSort } from "./lib/listSort";
 import { isMailRouteBox, mailListQuery, parseMailSearch } from "./lib/collab/boxes";
 import { parsePrintSearch } from "./lib/ticketPrint";
+import { parseMemberSearch } from "./lib/memberFilters";
+import { parseBeside, type PageSearch } from "./lib/wiki/split";
 
 export type RouterContext = { queryClient: QueryClient };
 
@@ -116,6 +120,7 @@ const portalResetRoute = createRoute({
   beforeLoad: ({ location }) => ({ portalResetToken: location.pathname === initialPortalResetPath ? initialPortalResetToken : "" }),
   component: portalPage,
 });
+const portalNewRoute = createRoute({ getParentRoute: () => rootRoute, path: "/portal/$slug/new", component: portalPage });
 const portalTicketRoute = createRoute({ getParentRoute: () => rootRoute, path: "/portal/$slug/tickets/$ticketId", component: portalPage });
 
 // ─── Auth ──────────────────────────────────────────────────────────────────
@@ -219,6 +224,13 @@ const onboardingRoute = createRoute({
   component: page(() => import("./pages/onboarding/Workspace")),
   staticData: { title: "createAWorkspace" },
 });
+const onboardingProductsRoute = createRoute({
+  getParentRoute: () => authLayout,
+  path: "/onboarding/products",
+  beforeLoad: ({ location }) => requireWorkspace(location.href),
+  component: page(() => import("./pages/onboarding/Products")),
+  staticData: { title: "whatIsItFor" },
+});
 const onboardingMailboxRoute = createRoute({
   getParentRoute: () => authLayout,
   path: "/onboarding/mailbox",
@@ -251,7 +263,9 @@ const appLayout = createRoute({
     void qc.prefetchQuery(q.notifications());
     // Collab's mail sections join the sidebar when the workspace has it.
     void qc.prefetchQuery(q.collabStatus());
-    return Promise.all([qc.ensureQueryData(q.counts()), qc.ensureQueryData(q.views())]);
+    // Ticket counts only while the workspace has Tickets: with it off, Mail, Pages and settings still load.
+    const counts = qc.ensureQueryData(q.workspace()).then((ws) => (productsOf(ws).tickets ? qc.ensureQueryData(q.counts()) : null));
+    return Promise.all([counts, qc.ensureQueryData(q.views())]);
   },
   component: AppLayout,
 });
@@ -315,7 +329,8 @@ const viewRoute = createRoute({
     await requireTickets(qc);
     if (params.ticketId) prefetchTicket(qc, params.ticketId);
     prefetchInboxShared(qc);
-    return qc.ensureInfiniteQueryData(q.tickets(listQuery({ view_id: params.viewId }, deps)));
+    // A view the reader can't load (another member's personal view) opens the link's ticket in its folder.
+    return viewOrTicket(qc, params.ticketId, () => qc.ensureInfiniteQueryData(q.tickets(listQuery({ view_id: params.viewId }, deps))));
   },
   component: page(() => import("./pages/inbox/InboxPage")),
   staticData: { title: "view" },
@@ -437,14 +452,14 @@ const newTicketRoute = createRoute({
 const contactsRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/contacts/{-$contactId}",
-  validateSearch: (s: Record<string, unknown>): { q?: string; company?: string } => ({ q: str(s.q), company: str(s.company) }),
+  validateSearch: parsePeopleSearch,
   loaderDeps: ({ search }) => search,
   loader: ({ context, params, deps }) => {
     if (params.contactId) {
       void context.queryClient.prefetchQuery(q.contact(params.contactId));
       void context.queryClient.prefetchQuery(q.contactTickets(params.contactId));
     }
-    return context.queryClient.ensureInfiniteQueryData(q.contacts({ q: deps.q, company_id: deps.company }));
+    return context.queryClient.ensureInfiniteQueryData(q.contacts({ ...peopleFilter(deps), sort: deps.sort }));
   },
   component: page(() => import("./pages/contacts/ContactsPage")),
   staticData: { title: "contacts" },
@@ -453,14 +468,14 @@ const contactsRoute = createRoute({
 const companiesRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/companies/{-$companyId}",
-  validateSearch: (s: Record<string, unknown>): { q?: string } => ({ q: str(s.q) }),
+  validateSearch: parseCompanySearch,
   loaderDeps: ({ search }) => search,
   loader: ({ context, params, deps }) => {
     if (params.companyId) {
       void context.queryClient.prefetchQuery(q.company(params.companyId));
       void context.queryClient.prefetchInfiniteQuery(q.contacts({ company_id: params.companyId }));
     }
-    return context.queryClient.ensureInfiniteQueryData(q.companies({ q: deps.q }));
+    return context.queryClient.ensureInfiniteQueryData(q.companies({ ...companyFilter(deps), sort: deps.sort }));
   },
   component: page(() => import("./pages/contacts/CompaniesPage")),
   staticData: { title: "companies" },
@@ -554,12 +569,120 @@ const wikiIndexRoute = createRoute({
   staticData: { title: "wiki" },
 });
 
+const wikiGraphRoute = createRoute({
+  getParentRoute: () => wikiLayout,
+  path: "graph",
+  validateSearch: (s: Record<string, unknown>): { focus?: string; tag?: string } => ({ focus: str(s.focus), tag: str(s.tag) }),
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.wikiGraph()),
+  component: page(() => import("./pages/wiki/WikiGraphPage")),
+  staticData: { title: "wikiGraph" },
+});
+
+const wikiTagsRoute = createRoute({
+  getParentRoute: () => wikiLayout,
+  path: "tags",
+  validateSearch: (s: Record<string, unknown>): { tag?: string } => ({ tag: str(s.tag) }),
+  component: page(() => import("./pages/wiki/WikiTagsPage")),
+  staticData: { title: "wikiTags" },
+});
+
+const wikiTemplatesRoute = createRoute({
+  getParentRoute: () => wikiLayout,
+  path: "templates",
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.wikiTemplates()),
+  component: page(() => import("./pages/wiki/WikiTemplatesPage")),
+  staticData: { title: "wikiTemplates" },
+});
+
+const wikiTrashRoute = createRoute({
+  getParentRoute: () => wikiLayout,
+  path: "trash",
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.wikiTrash()),
+  component: page(() => import("./pages/wiki/WikiTrashPage")),
+  staticData: { title: "wikiTrash" },
+});
+
 const wikiPageRoute = createRoute({
   getParentRoute: () => wikiLayout,
   path: "$pageId",
-  loader: ({ context, params }) => context.queryClient.ensureQueryData(q.wikiPage(params.pageId)).catch(() => undefined),
+  // ?comment=<thread id> opens that thread (notifications link there; contracts/wiki.md "Comments");
+  // ?beside=<page id> opens a second page beside it ("Split view").
+  validateSearch: (s: Record<string, unknown>): PageSearch => ({ comment: str(s.comment), beside: parseBeside(s.beside) }),
+  // A page of Pages opens at /pages/<id>, wherever the link came from (contracts/pages.md).
+  loader: async ({ context, params }) => {
+    const p = await context.queryClient.ensureQueryData(q.wikiPage(params.pageId)).catch(() => undefined);
+    if (p?.area === "pages") throw redirect({ to: "/pages/$pageId", params, search: true, replace: true });
+    return p;
+  },
   component: page(() => import("./pages/wiki/WikiPageView")),
   staticData: { title: "wikiPage" },
+});
+
+// Pages (contracts/pages.md): the workspace's own pages, databases and canvases, a product of
+// their own with the wiki's engine. The same views as the wiki's, in Pages' area.
+const pagesLayout = createRoute({
+  getParentRoute: () => appLayout,
+  path: "/pages",
+  beforeLoad: async ({ context }) => {
+    if (!productsOf(await context.queryClient.ensureQueryData(q.workspace())).pages) throw await productHome(context.queryClient);
+  },
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.wikiTree()),
+  component: page(() => import("./pages/wiki/PagesLayout")),
+  staticData: { title: "pages" },
+});
+
+const pagesIndexRoute = createRoute({
+  getParentRoute: () => pagesLayout,
+  path: "/",
+  component: page(() => import("./pages/wiki/PagesHome")),
+  staticData: { title: "pages" },
+});
+
+const pagesGraphRoute = createRoute({
+  getParentRoute: () => pagesLayout,
+  path: "graph",
+  validateSearch: (s: Record<string, unknown>): { focus?: string; tag?: string } => ({ focus: str(s.focus), tag: str(s.tag) }),
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.wikiGraph()),
+  component: page(() => import("./pages/wiki/WikiGraphPage")),
+  staticData: { title: "wikiGraph" },
+});
+
+const pagesTagsRoute = createRoute({
+  getParentRoute: () => pagesLayout,
+  path: "tags",
+  validateSearch: (s: Record<string, unknown>): { tag?: string } => ({ tag: str(s.tag) }),
+  component: page(() => import("./pages/wiki/WikiTagsPage")),
+  staticData: { title: "wikiTags" },
+});
+
+const pagesTemplatesRoute = createRoute({
+  getParentRoute: () => pagesLayout,
+  path: "templates",
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.wikiTemplates()),
+  component: page(() => import("./pages/wiki/WikiTemplatesPage")),
+  staticData: { title: "wikiTemplates" },
+});
+
+const pagesTrashRoute = createRoute({
+  getParentRoute: () => pagesLayout,
+  path: "trash",
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.wikiTrash()),
+  component: page(() => import("./pages/wiki/WikiTrashPage")),
+  staticData: { title: "wikiTrash" },
+});
+
+const pagesPageRoute = createRoute({
+  getParentRoute: () => pagesLayout,
+  path: "$pageId",
+  validateSearch: (s: Record<string, unknown>): PageSearch => ({ comment: str(s.comment), beside: parseBeside(s.beside) }),
+  // A page of the wiki opens at /wiki/<id>.
+  loader: async ({ context, params }) => {
+    const p = await context.queryClient.ensureQueryData(q.wikiPage(params.pageId)).catch(() => undefined);
+    if (p && p.area !== "pages") throw redirect({ to: "/wiki/$pageId", params, search: true, replace: true });
+    return p;
+  },
+  component: page(() => import("./pages/wiki/WikiPageView")),
+  staticData: { title: "pagesPage" },
 });
 
 export function defaultRange() {
@@ -651,15 +774,29 @@ const sAgentToAgent = settingsPage("/agent-to-agent", "agentToAgent", () => impo
   void qc.prefetchInfiniteQuery(q.assistantPeerAsks());
   return qc.ensureQueryData(q.assistantPeer()).catch(() => null);
 });
+const sShortcuts = settingsPage("/shortcuts", "shortcuts", () => import("./pages/settings/Shortcuts"));
 const sWorkspaces = settingsPage("/workspaces", "workspaces", () => import("./pages/settings/Workspaces"), (qc) =>
   Promise.all([qc.ensureQueryData(q.workspacePrefs()), qc.prefetchQuery(q.overview())]),
+);
+// Pages (contracts/pages.md): the product's own settings, its import and export, and its trash.
+const sPages = settingsPage("/pages", "pagesSettings", () => import("./pages/settings/PagesSettings"), (qc) =>
+  Promise.all([qc.ensureQueryData(q.workspace()), qc.prefetchQuery(q.teams())]),
 );
 const sWorkspace = settingsPage("/workspace", "general", () => import("./pages/settings/WorkspaceSettings"), (qc) =>
   Promise.all([qc.ensureQueryData(q.workspace()), qc.ensureQueryData(q.members())]),
 );
-const sMembers = settingsPage("/members", "members", () => import("./pages/settings/Members"), (qc) =>
-  Promise.all([qc.ensureQueryData(q.members()), qc.ensureQueryData(q.invitations())]),
-);
+// Filters live in the URL (lib/memberFilters.ts); the list is loaded whole and filtered in the page.
+const sMembers = createRoute({
+  getParentRoute: () => settingsLayout,
+  path: "/members",
+  validateSearch: parseMemberSearch,
+  loader: ({ context }) => {
+    void context.queryClient.prefetchQuery(q.teams());
+    return Promise.all([context.queryClient.ensureQueryData(q.members()), context.queryClient.ensureQueryData(q.invitations())]);
+  },
+  component: page(() => import("./pages/settings/Members")),
+  staticData: { title: "members" },
+});
 const sTeams = settingsPage("/teams", "teams", () => import("./pages/settings/Teams"), (qc) => {
   void qc.prefetchQuery(q.mailboxes());
   return Promise.all([qc.ensureQueryData(q.teams()), qc.ensureQueryData(q.members())]);
@@ -779,7 +916,12 @@ const sMailboxDetail = createRoute({
 const sMailAccounts = createRoute({
   getParentRoute: () => settingsLayout,
   path: "/mail-accounts",
-  validateSearch: (s: Record<string, unknown>): { connected?: string; error?: string } => ({ connected: str(s.connected), error: str(s.error) }),
+  // connect=1 opens the Connect dialog (first run for a shared inbox).
+  validateSearch: (s: Record<string, unknown>): { connected?: string; error?: string; connect?: string } => ({
+    connected: str(s.connected),
+    error: str(s.error),
+    connect: s.connect === "1" || s.connect === 1 ? "1" : undefined,
+  }),
   loader: async ({ context }) => {
     const qc = context.queryClient;
     const status = await qc.ensureQueryData(q.collabStatus());
@@ -888,6 +1030,9 @@ const sWebhookDetail = createRoute({
 });
 const sAudit = settingsPage("/audit-log", "auditLog", () => import("./pages/settings/AuditLog"), (qc) =>
   qc.ensureInfiniteQueryData(q.auditLogs()),
+);
+const sTrash = settingsPage("/trash", "trash", () => import("./pages/settings/Trash"), (qc) =>
+  qc.ensureInfiniteQueryData(q.deletedTickets()),
 );
 
 const sBilling = createRoute({
@@ -1001,7 +1146,7 @@ const routeTree = rootRoute.addChildren([
   helpRoute,
   csatRoute,
   csatLegacyRoute,
-  portalRoute, portalForgotRoute, portalResetRoute, portalTicketRoute,
+  portalRoute, portalForgotRoute, portalResetRoute, portalNewRoute, portalTicketRoute,
   ticketPrintRoute,
   authLayout.addChildren([
     loginRoute,
@@ -1015,6 +1160,7 @@ const routeTree = rootRoute.addChildren([
     unsubscribeRoute,
     oauthConsentRoute,
     onboardingRoute,
+    onboardingProductsRoute,
     onboardingMailboxRoute,
   ]),
   appLayout.addChildren([
@@ -1032,7 +1178,8 @@ const routeTree = rootRoute.addChildren([
     kbArticleRoute,
     changelogRoute,
     changelogEntryRoute,
-    wikiLayout.addChildren([wikiIndexRoute, wikiPageRoute]),
+    wikiLayout.addChildren([wikiIndexRoute, wikiGraphRoute, wikiTagsRoute, wikiTemplatesRoute, wikiTrashRoute, wikiPageRoute]),
+    pagesLayout.addChildren([pagesIndexRoute, pagesGraphRoute, pagesTagsRoute, pagesTemplatesRoute, pagesTrashRoute, pagesPageRoute]),
     reportsRoute,
     settingsLayout.addChildren([
       settingsIndex,
@@ -1041,7 +1188,9 @@ const routeTree = rootRoute.addChildren([
       sNotifications,
       sAgentToAgent,
       sWorkspaces,
+      sShortcuts,
       sWorkspace,
+      sPages,
       sMembers,
       sTeams,
       sTeamDetail,
@@ -1075,6 +1224,7 @@ const routeTree = rootRoute.addChildren([
       sWebhooks,
       sWebhookDetail,
       sAudit,
+      sTrash,
       sBilling,
       sAi,
       sAgent,

@@ -3,14 +3,17 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 
 	"github.com/useopendesk/opendesk/internal/domain"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 	"github.com/useopendesk/opendesk/internal/jobs"
 )
 
@@ -224,12 +227,17 @@ func TestWidgetAgent(t *testing.T) {
 		t.Fatalf("handoff %+v", got.Custom)
 	}
 
-	// Asking for a person hands off without a model call.
+	// Asking for a person hands off with the agent's line first; that line is not one for review.
+	e.F.queue("widget", "A person from the team will reply here.\n@tool handoff_to_human {\"reason\":\"asked\"}")
 	before := e.F.calls()
 	_, tid6, _ := widgetConversation(e, "I want to talk to a real person please")
 	e.runWidgetJobs()
-	if got := e.loadTicket(tid6); e.F.calls() != before || got.Custom["ai_handoff"] != true || len(publicMessages(e, tid6)) != 1 {
+	if got := e.loadTicket(tid6); e.F.calls() != before+1 || got.Custom["ai_handoff"] != true || len(publicMessages(e, tid6)) != 2 ||
+		!strings.Contains(lastMessage(e, tid6).BodyText, "person from the team") {
 		t.Fatalf("%+v", got.Custom)
+	}
+	if !strings.Contains(userText(e.F.last()), "order number") {
+		t.Fatal("the line does not ask for what the team needs")
 	}
 
 	// Assigned conversations are left to the assignee.
@@ -245,23 +253,55 @@ func TestWidgetAgent(t *testing.T) {
 	va8, tid8, _ := widgetConversation(e, "How do I reset my password?")
 	e.runWidgetJobs()
 	e.Do("POST", "/v1/widget/conversations/"+tid8.String()+"/messages", va8, map[string]any{"body": "And on mobile?"}).Want(t, 201)
+	e.F.queue("widget", "A person from the team will reply here.\n@tool handoff_to_human {\"reason\":\"limit\"}")
 	before = e.F.calls()
 	e.runWidgetJobs()
-	if got := e.loadTicket(tid8); e.F.calls() != before || got.Custom["ai_handoff"] != true {
+	if got := e.loadTicket(tid8); e.F.calls() != before+1 || got.Custom["ai_handoff"] != true ||
+		!strings.Contains(lastMessage(e, tid8).BodyText, "person from the team") {
 		t.Fatalf("max replies %+v", got.Custom)
 	}
 	e.settings(map[string]any{"widget_max_replies": 20})
 
-	// The monthly cap stops the agent and notifies owners and admins once.
+	// The monthly cap stops the agent and notifies owners and admins once. Each chat it leaves
+	// goes to the workspace's chat assignment (contracts/api.md "Assignment").
+	var mu sync.Mutex
+	var offered, declined []uuid.UUID
+	hd.SetChatAssigner(func(_ context.Context, _ pgx.Tx, _, tid uuid.UUID) (*uuid.UUID, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		offered = append(offered, tid)
+		return nil, nil
+	})
+	t.Cleanup(func() { hd.SetChatAssigner(nil) })
 	e.settings(map[string]any{"widget_monthly_cap_usd": 0.01})
 	for i := 0; i < 2; i++ {
 		_, tid9, _ := widgetConversation(e, "How do I reset my password?")
+		declined = append(declined, tid9)
 		before = e.F.calls()
 		e.runWidgetJobs()
 		if e.F.calls() != before || len(publicMessages(e, tid9)) != 1 {
 			t.Fatal("answered over the cap")
 		}
 	}
+	// Under the cap, a provider failing leaves the chat to the chat assignment too.
+	e.settings(map[string]any{"widget_monthly_cap_usd": 0})
+	e.F.fail(529, 529, 529, 529, 529, 529, 529, 529, 529)
+	_, tid10, _ := widgetConversation(e, "How do I reset my password?")
+	declined = append(declined, tid10)
+	e.runWidgetJobs()
+	e.F.mu.Lock()
+	e.F.failures = nil
+	e.F.mu.Unlock()
+	if len(publicMessages(e, tid10)) != 1 {
+		t.Fatal("answered while the provider failed")
+	}
+	mu.Lock()
+	if !slices.Equal(offered, declined) {
+		t.Fatalf("chats offered to the chat assignment %v, want %v", offered, declined)
+	}
+	mu.Unlock()
+	hd.SetChatAssigner(nil)
+	e.settings(map[string]any{"widget_monthly_cap_usd": 0.01})
 	if n := e.count(`SELECT count(*) FROM notifications WHERE workspace_id = $1 AND type = 'ai_cap_reached'`, e.WS.ID); n != 2 {
 		t.Fatalf("cap notifications %d (owner and admin, once)", n)
 	}

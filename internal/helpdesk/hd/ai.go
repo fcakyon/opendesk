@@ -395,6 +395,16 @@ func MarkAIHandoff(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, actorType
 	if _, err := domain.LogActivity(ctx, tx, wid, tid, actorType, nil, "ai_handoff", data); err != nil {
 		return false, err
 	}
+	// A chat nobody has goes to a member who takes chats, when the workspace assigns chats: their
+	// assigned notification tells them, and nobody else is disturbed.
+	if assignee == nil {
+		if uid, err := AssignChat(ctx, tx, wid, tid); err != nil || uid != nil {
+			if err != nil {
+				return false, err
+			}
+			return true, domain.PublishTicketUpdated(ctx, tx, wid, tid, []string{"custom"})
+		}
+	}
 	// The assignee, else the ticket's team's leads and members (not observers), else every
 	// member who can reply. Notify skips anyone who may not see the ticket.
 	var recipients []uuid.UUID

@@ -3,6 +3,8 @@ import path from "node:path";
 
 export default defineConfig({
   resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
+  // The keyboard shortcuts guide is read by a test that keeps it in step with the app.
+  server: { fs: { allow: [import.meta.dirname, path.resolve(import.meta.dirname, "../docs/src/content/docs/guides")] } },
   test: {
     environment: "jsdom",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx", "widget/**/*.test.ts"],

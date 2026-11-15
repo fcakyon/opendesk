@@ -66,7 +66,7 @@ func registerThreads(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			id, err := resolveVisible(ctx, d.DB.Pool, p, in.ID)
+			id, err := domain.ResolveVisibleTicket(ctx, d.DB.Pool, p, in.ID)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -96,7 +96,7 @@ func registerThreads(d *deps.Deps, api huma.API) {
 			}
 			var out threadCreated
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				tid, err := resolveVisible(ctx, tx, p, in.ID)
+				tid, err := domain.ResolveVisibleTicket(ctx, tx, p, in.ID)
 				if err != nil {
 					return err
 				}
@@ -182,7 +182,7 @@ func registerThreads(d *deps.Deps, api huma.API) {
 
 // resolveThread finds a thread of a ticket the caller can see.
 func resolveThread(ctx context.Context, tx pgx.Tx, p *auth.Principal, ticketRef, threadRef string) (uuid.UUID, domain.Thread, error) {
-	tid, err := resolveVisible(ctx, tx, p, ticketRef)
+	tid, err := domain.ResolveVisibleTicket(ctx, tx, p, ticketRef)
 	if err != nil {
 		return tid, domain.Thread{}, err
 	}

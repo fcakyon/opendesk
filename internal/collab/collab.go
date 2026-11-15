@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -59,6 +60,8 @@ type service struct {
 
 	// tickets is ticket email, for replies on tickets sent from an account ("Answering tickets").
 	tickets *email.TicketMail
+	// handover makes ticket mailboxes of accounts ("Using an account for tickets").
+	handover *email.Handover
 
 	// mailAI sorts mail into categories and suggests them ("Categories"); tests replace it.
 	mailAI mailAI
@@ -70,6 +73,9 @@ type service struct {
 	paceLimits map[string]paceLimit
 	paceMu     sync.Mutex
 	paced      map[uuid.UUID]*pace
+
+	// pushKeys verify Gmail push tokens (push.go); tests replace them.
+	pushKeys oidc.KeySet
 }
 
 func newService(d *deps.Deps) *service {
@@ -87,6 +93,7 @@ func newService(d *deps.Deps) *service {
 	s.oauth = oauthClients(d.Cfg)
 	s.newProvider = s.defaultProvider
 	s.tickets = email.NewTicketMail(d)
+	s.handover = email.NewHandover(d)
 	s.mailAI = mailAIFor(d)
 	return s
 }
@@ -110,7 +117,9 @@ func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	s.registerDetailRoutes(api)
 	s.registerSidebarRoutes(api)
 	s.registerCategoryRoutes(api)
+	s.registerHandoverRoutes(api)
 	r.Get("/v1/collab/attachments/{message_id}/{index}", s.attachmentHandler)
+	r.Post(gmailPushPath, s.gmailPush)
 	d.Overview.MailCounts = s.overviewCounts
 }
 

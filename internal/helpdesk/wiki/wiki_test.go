@@ -420,7 +420,7 @@ func TestSearch(t *testing.T) {
 	if len(res.Data) != 0 {
 		t.Fatalf("punctuation matched %+v", res.Data)
 	}
-	found, err := wiki.Search(e.Ctx, e.D.DB.Pool, ws.ID, "holiday", 5)
+	found, err := wiki.Search(e.Ctx, e.D.DB.Pool, wiki.Viewer{}, ws.ID, "holiday", "", 5)
 	if err != nil || len(found) != 1 {
 		t.Fatalf("Search %v %+v", err, found)
 	}

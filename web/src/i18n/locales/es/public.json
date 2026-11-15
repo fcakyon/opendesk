@@ -115,6 +115,37 @@
       "on_hold": "En espera",
       "solved": "Resuelto",
       "closed": "Cerrado"
-    }
+    },
+    "sso": "Continuar con el inicio de sesión único",
+    "or": "o",
+    "sso_error": {
+      "email_unverified": "Tu proveedor no ha confirmado tu correo electrónico, así que no podemos iniciar sesión con él.",
+      "unknown_customer": "No encontramos ningún cliente con ese correo electrónico. Contacta con el equipo que te dio acceso.",
+      "blocked": "Esta cuenta no puede iniciar sesión. Contacta con el equipo para obtener ayuda.",
+      "relink_required": "Tu cuenta en el proveedor ha cambiado. Pide al equipo que permita un nuevo inicio de sesión y vuelve a intentarlo.",
+      "transient_name_id": "El proveedor de inicio de sesión envía un identificador distinto cada vez, así que no podemos reconocerte. Contacta con el equipo para obtener ayuda.",
+      "identity_revoked": "Este inicio de sesión se eliminó. Contacta con el equipo para obtener ayuda.",
+      "access_denied": "Se canceló el inicio de sesión.",
+      "provider_unavailable": "No pudimos conectar con el proveedor de inicio de sesión. Inténtalo de nuevo.",
+      "rate_limited": "Demasiados intentos. Espera un momento e inténtalo de nuevo.",
+      "generic": "No pudimos iniciar tu sesión. Inténtalo de nuevo."
+    },
+    "new_request": "Nueva solicitud",
+    "new": {
+      "title": "Nueva solicitud",
+      "subject": "Asunto",
+      "message": "¿Cómo podemos ayudarte?",
+      "send": "Enviar solicitud",
+      "limit": "Has enviado varias solicitudes seguidas. Espera un rato e inténtalo de nuevo.",
+      "busy": "Ahora mismo llegan muchas solicitudes. Espera un rato y vuelve a intentarlo.",
+      "attach": "Elegir archivos",
+      "drop": "Suelta archivos aquí o pega una captura de pantalla.",
+      "remove": "Quitar {{name}}",
+      "too_big": "{{name}} supera los 10 MB.",
+      "max_files": "Puedes adjuntar hasta 5 archivos.",
+      "upload_failed": "No se pudo subir {{name}}.",
+      "uploading": "Subiendo…"
+    },
+    "attachments": "Adjuntos"
   }
 }

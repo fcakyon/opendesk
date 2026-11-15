@@ -1,0 +1,132 @@
+---
+title: Canvas pages
+description: Lay out notes, pages, links, files and images on an endless board, connect them with arrows, and group them, together with your team.
+---
+
+import Steps from '../../../components/Steps.astro';
+import Step from '../../../components/Step.astro';
+import Callout from '../../../components/Callout.astro';
+import Fold from '../../../components/Fold.astro';
+
+A canvas is a wiki page you draw on: cards on an endless board, and the connections between them. Map an escalation path, plan a launch, sketch how your products fit together, or pin the pages, links and screenshots of an incident in one place. Cards can be notes you write, other wiki pages, links, files and images, and groups that hold them.
+
+A canvas is a page like any other: it sits in the sidebar, has subpages, comments and a place in search, and only members see it. Everything else about pages is in the [wiki guide](/guides/wiki/).
+
+## Create a canvas
+
+Click **+** at the top of the wiki's sidebar and choose **New canvas**. Name it as you would a page. An empty canvas offers **Add a card**, or double-click anywhere to start.
+
+## Cards
+
+| Card | Holds | Double-click it to |
+| --- | --- | --- |
+| **Card** | Text you write, with bold, italic, headings, lists and links | Edit its text |
+| **Page** | A wiki page: its icon, title and how its text starts | Open the page beside the canvas |
+| **Link** | A web address, with its title, description and picture | Open the link |
+| **File** | An image, shown whole, or any other file | Open the file |
+| **Group** | A labelled area around other cards | Rename it |
+
+### Add cards
+
+- **Double-click** empty space for a text card, and start typing.
+- The toolbar at the bottom: **Add a card**, **Add a page** (then **Find a page**), **Add a link** (paste an https address), **Add a group** and **Add a file or image**.
+- **Paste**: a link makes a link card, an image or a file uploads it into a file card, and any other text makes a text card. Cards copied from a canvas paste as cards, with their connections.
+- **Drop** files from your computer onto the board.
+
+While you edit a text card, a small bar over it offers **Bold**, **Italic**, **Heading**, **Bulleted list**, **Numbered list** and **Link**. <kbd>mod</kbd> click a link in a card to open it; a plain click selects the card.
+
+A page card shows the page as each reader sees it. A page the reader can't see, or one that was deleted, shows as **A page you can't see**, without its title.
+
+## Connect cards
+
+Hover over a card and a dot shows on each side. Drag from one onto another card. Let go on empty space instead and a new text card appears there, connected, ready to type in.
+
+Click a connection to select it. The toolbar then sets its **Color**, its **Arrows** (**No arrows**, **Arrow at the end** or **Arrows at both ends**) and its **Label**. Double-click a connection to label it too.
+
+## Groups
+
+A group is a labelled frame. Select some cards and click **Group the selection** (<kbd>mod</kbd> <kbd>g</kbd>) for a group around them, or **Add a group** for an empty one, and name it.
+
+Moving a group moves the cards inside it. A group always sits under the cards, so it never covers them.
+
+## Colors
+
+Select cards or connections and click **Color**: **Red**, **Orange**, **Yellow**, **Green**, **Cyan** or **Purple**, or **No color**. A card takes the color as a soft tint and border; a connection as its line. Canvases imported from Obsidian keep their own colors.
+
+## Select, move and resize
+
+- **Click** a card or connection to select it; <kbd>shift</kbd> click adds to the selection or takes away from it.
+- <kbd>shift</kbd> and drag on empty space draws a box: it selects the cards it touches, and the groups it holds whole.
+- **Drag** cards to move them. They snap to a 20 point grid; hold <kbd>alt</kbd> to place them freely. A moved card comes to the front.
+- **Resize** a card: select it on its own and drag its edges or corners, on the same grid.
+- <kbd>tab</kbd> moves from card to card and brings each into view.
+
+## Move around
+
+- **Pan**: drag empty space, scroll (<kbd>shift</kbd> and scroll goes sideways), hold <kbd>space</kbd> and drag anywhere, or use the arrow keys with nothing selected.
+- **Zoom**: hold <kbd>mod</kbd> and scroll, pinch on a trackpad or a touch screen, or use the controls in the corner, from 10% to 400%. Click the percentage to go back to 100%.
+- **Fit to screen** shows every card.
+- **Minimap** shows the whole canvas in a corner, with the part you are looking at. Click it to go there.
+
+A canvas opens fitted to its cards the first time, and after that where you left it. This browser remembers the view of each canvas and whether the minimap is on.
+
+## Keys
+
+| Keys | Action |
+| --- | --- |
+| Double-click | Add a text card on empty space; on a card, edit, rename or open it |
+| <kbd>enter</kbd> | Edit or open the selected card, or label the selected connection |
+| <kbd>esc</kbd> | Clear the selection |
+| <kbd>mod</kbd> <kbd>a</kbd> | Select every card |
+| <kbd>mod</kbd> <kbd>c</kbd>, <kbd>mod</kbd> <kbd>x</kbd>, <kbd>mod</kbd> <kbd>v</kbd> | Copy, cut and paste cards |
+| <kbd>mod</kbd> <kbd>d</kbd> | Duplicate the selected cards |
+| <kbd>mod</kbd> <kbd>g</kbd> | Group the selected cards |
+| <kbd>delete</kbd> or <kbd>backspace</kbd> | Delete what is selected |
+| <kbd>mod</kbd> <kbd>z</kbd> | Undo |
+| <kbd>mod</kbd> <kbd>shift</kbd> <kbd>z</kbd> or <kbd>mod</kbd> <kbd>y</kbd> | Redo |
+| Arrow keys | Move the selected cards 20 points; with nothing selected, pan |
+| <kbd>alt</kbd> and an arrow key | Move the selected cards 1 point |
+| <kbd>space</kbd> and drag | Pan |
+| <kbd>shift</kbd> and drag | Select with a box |
+| <kbd>+</kbd> and <kbd>-</kbd> (or with <kbd>mod</kbd>) | Zoom in and out |
+| <kbd>mod</kbd> <kbd>0</kbd> | Zoom to 100% |
+| <kbd>shift</kbd> <kbd>1</kbd> | Fit every card on screen |
+| <kbd>shift</kbd> <kbd>2</kbd> | Fit the selected cards on screen |
+
+## Editing together
+
+A canvas saves a moment after each change, and updates live for everyone who has it open. Two people can work on one canvas at once: each save holds the whole canvas, and the last save wins. A teammate's change arrives once you have nothing unsaved and aren't in the middle of a drag.
+
+Undo and redo step through your own changes in this tab. When someone else's change arrives, they start over, so undo never takes back a teammate's work.
+
+Viewers, and anyone who can't edit the page, see **View only**: they pan, zoom and open cards, but don't change them.
+
+## Search, links and tags
+
+The words on a canvas count as the page's text:
+
+- **Search** finds a canvas by the words on its cards, group labels, link titles and descriptions, file names and connection labels.
+- **Page cards** and page links in text cards are links of the canvas: the pages they show list it in their [backlinks](/guides/wiki-links/#backlinks), and the [graph](/guides/wiki-links/#the-graph) draws them.
+- `#tags` in text cards tag the canvas, and ticket mentions show it on the ticket.
+
+Mentions of people and dates in text cards notify and remind nobody.
+
+Duplicating a canvas, saving it as a template and the trash carry its cards like the rest of the page. In a copy made with its subpages, page cards that showed those subpages show the copies.
+
+## Obsidian canvases
+
+Import an Obsidian vault and each `.canvas` file in it becomes a canvas page; a `.canvas` file imports on its own too. Exported as Markdown, a canvas page is a `.canvas` file that Obsidian opens as a canvas; exported as HTML, it is a page that draws its cards and connections. See [Import and export](/guides/wiki-import-export/).
+
+<Callout>
+
+- A canvas holds up to 2,000 cards and 4,000 connections, in up to 1 MB.
+- Link cards take https addresses.
+
+</Callout>
+
+## Related
+
+- [Wiki](/guides/wiki/)
+- [Links, tags and the graph](/guides/wiki-links/)
+- [Import and export](/guides/wiki-import-export/)
+- [Wiki API](/api/resources/wiki/#canvas)

@@ -73,11 +73,13 @@ Add **Topics** to let visitors say what they need: the widget then asks "What ca
 
 Once a conversation has a team, the widget's header shows the team's name.
 
+To give each new chat to one teammate at once, with a pop-up on their screen, use [Live chats](/guides/triage-and-assignment/#live-chats) on the Assignment page.
+
 ## When you're closed
 
 Outside business hours, the widget shows your **Offline message**: by the hours of the team the chat goes to, else the workspace's. Visitors can still write, and your team answers when it is back.
 
-With **Reply by email when they leave**, on by default, a visitor who left an email address and is no longer on your site gets your replies by email, from the brand's address for the team. Their answer by email comes back into the same chat.
+With **Reply by email when they leave**, on by default, a visitor who left an email address and is no longer on your site gets your replies by email, from the brand's address for the team. Their answer by email comes back into the same chat. The email needs a mailbox of the brand that can send: without one, the reply box says so, and each reply that could not be emailed is marked on the ticket's timeline.
 
 <Screenshot src="/guides/brands/widget-offline" alt="The When you're closed section: the offline message ringed as 1, and the Reply by email when they leave switch ringed as 2" />
 
@@ -93,9 +95,32 @@ If your visitors are signed in to your product, pass their user id, email and na
 
 - **Appearance**: the accent colour (the brand's colour unless you pick one), light, dark or automatic theme, which corner the launcher sits in and how far from the edge, the corners, and the launcher's icon or label.
 - **Header**: the title (the brand name when empty), the subtitle, an avatar, and **Show team faces**: up to three teammates of the widget's team, first names only, available people first. A private team's members are never shown.
-- **Home screen**: the greeting and up to four suggested questions. A tap starts a conversation with that question.
+- **Home screen**: the greeting and up to four suggested questions. A tap starts a conversation with that question. A returning visitor sees their conversations under them: open ones first, then finished ones, each newest first, six at most. A conversation solved or closed more than 30 days ago leaves the home screen; **See older conversations** opens all of them.
 - **Intro**: the line under the greeting when a visitor starts a new chat. Empty shows a translated default. Turn off **Welcome text in a new chat** to open new chats empty.
 - **Sound for new replies**: a soft chime while the visitor's tab is in the background.
+
+### Change it from your own CSS
+
+The settings above apply to every screen size. To change the position or colour for one of them, set these CSS variables from your site's stylesheet. They win over the widget's settings, and need no `!important`:
+
+| Variable | Sets |
+| --- | --- |
+| `--opendesk-offset-x` | distance from the side, such as `16px` |
+| `--opendesk-offset-y` | distance from the bottom, such as `40px` |
+| `--opendesk-z-index` | stacking order |
+| `--opendesk-brand` | accent colour of the launcher, buttons and your messages |
+| `--opendesk-brand-text` | text and icons on that colour |
+
+```css
+:root { --opendesk-offset-y: 20px; }
+
+@media (max-width: 479px) {
+  /* Sit above a bottom bar on phones. */
+  :root { --opendesk-offset-y: 40px; }
+}
+```
+
+Set them on `:root`, or on the widget's host element, `[data-opendesk-widget]`.
 
 </Fold>
 
@@ -105,7 +130,7 @@ If your visitors are signed in to your product, pass their user id, email and na
 
 1. When the widget opens, it creates a **visitor session** and receives a visitor token, stored in the browser so returning visitors see their history. A visitor's conversation list holds the chats of that brand only.
 2. The visitor's first message creates a ticket and a [contact](/guides/inbox-and-tickets/#contacts-and-companies).
-3. Agent replies appear in the widget in real time. Internal notes are never sent to the widget.
+3. Agent replies appear in the widget in real time. Internal notes are never sent to the widget. In an agent's or the AI agent's reply, a web address (`https://`, `http://`, `www.`) or an email written as plain text shows as a link that opens in a new tab, labelled with its site and a short path, like `example.com/help/…`. A link that shows its own address gets the same short label; a link with words of its own keeps them. Only how it shows changes: the message, and its email copy, keep the full address.
 4. Agents see when the visitor is typing, and the visitor sees when an agent is typing.
 5. Visitors can attach files of up to 25 MB, unless **Let visitors send files** is off for the widget. Any file but programs and scripts is taken, or pick **Only these types**: images, documents, spreadsheets, presentations, audio and video, or ZIP archives. Each file is checked by its contents as well as its name, so a script renamed to `.png` is refused, and programs never get through.
 6. With **Let visitors send voice messages** on, a microphone button sits next to the message field. A visitor records up to the **Longest voice message** you pick (5 seconds to 5 minutes), listens back, then sends the recording or deletes it. Recording stops on its own at that length. Voice messages work with files turned off, and agents play them right in the conversation.

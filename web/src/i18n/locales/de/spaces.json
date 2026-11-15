@@ -120,8 +120,10 @@
       "teams": "Teams",
       "views": "Ansichten",
       "mail": "Mail",
-      "pages": "Seiten",
-      "everywhere": "Über deine Workspaces hinweg"
+      "pages": "Workspace",
+      "everywhere": "Über deine Workspaces hinweg",
+      "wiki": "Seiten",
+      "teamspaces": "Teamspaces"
     },
     "wholeHint": "Bleibt aktuell",
     "noCollab": "Collab ist in {{workspace}} aus, daher können seine E-Mails nicht hinzugefügt werden.",

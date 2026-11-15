@@ -20,6 +20,7 @@ func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	registerCustomFields(d, api)
 	registerSavedReplies(d, api)
 	registerViews(d, api)
+	registerViewSections(d, api)
 	registerSLA(d, api)
 	registerAutomations(d, api)
 	registerRouting(d, api)

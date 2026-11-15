@@ -48,16 +48,16 @@ var spaceIcons = []string{"sun", "moon", "star", "inbox", "mail", "headphones", 
 // spaceItemIDs are the ids of the item kinds with a fixed set; the other kinds name a uuid.
 var spaceItemIDs = map[string][]string{
 	"section":       collab.SidebarSectionIDs,
-	"ticket_folder": {"unassigned", "mine", "open", "pending", "solved", "spam"},
-	"box":           {"inbox", "shared", "assigned"},
-	"page":          {"contacts", "knowledge", "wiki", "reports"},
+	"ticket_folder": collab.SidebarItemIDs["ticket_folder"],
+	"box":           collab.SidebarItemIDs["box"],
+	"page":          collab.SidebarItemIDs["page"],
 	"everywhere":    {"mine", "mail"},
 }
 
 // spaceEverywhere is the kind of the Everywhere lists, the one kind of no workspace (workspace_id "").
 const spaceEverywhere = "everywhere"
 
-var spaceUUIDKinds = []string{"team", "view", "account", "folder"}
+var spaceUUIDKinds = collab.SidebarUUIDKinds
 
 var spaceSectionIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,40}$`)
 
@@ -76,16 +76,18 @@ type CoreSpaceSection struct {
 	ID        string          `json:"id"`
 	Title     string          `json:"title"`
 	Collapsed bool            `json:"collapsed"`
+	Icon      string          `json:"icon,omitempty"`
 	Items     []CoreSpaceItem `json:"items"`
 }
 
 // CoreSpaceItem is the contract shape SpaceItem.
 type CoreSpaceItem struct {
 	WorkspaceID string `json:"workspace_id"`
-	Kind        string `json:"kind" enum:"section,ticket_folder,team,view,box,account,folder,page,everywhere"`
+	Kind        string `json:"kind" enum:"section,ticket_folder,team,view,box,account,folder,page,wiki_page,wiki_space,mailbox,everywhere"`
 	ID          string `json:"id"`
 	Name        string `json:"name,omitempty"`
 	Badge       string `json:"badge,omitempty" enum:"unread,total,count,awaiting,urgent,overdue,open,none"`
+	Icon        string `json:"icon,omitempty"`
 }
 
 // coreSpaceIn is a Space as a client sends it: color, icon and marks may be left out.
@@ -102,6 +104,7 @@ type coreSpaceSectionIn struct {
 	ID        string            `json:"id" maxLength:"40"`
 	Title     string            `json:"title,omitempty" maxLength:"200"`
 	Collapsed bool              `json:"collapsed,omitempty"`
+	Icon      string            `json:"icon,omitempty" maxLength:"64" doc:"One emoji beside the title, or empty"`
 	Items     []coreSpaceItemIn `json:"items" maxItems:"60"`
 }
 
@@ -111,6 +114,7 @@ type coreSpaceItemIn struct {
 	ID          string `json:"id" maxLength:"100"`
 	Name        string `json:"name,omitempty" maxLength:"300"`
 	Badge       string `json:"badge,omitempty" maxLength:"20"`
+	Icon        string `json:"icon,omitempty" maxLength:"64" doc:"One emoji in place of the row's own icon, or empty"`
 }
 
 type coreSpacesBody struct {
@@ -192,7 +196,11 @@ func validateSpace(in coreSpaceIn, workspace *uuid.UUID) (CoreSpace, error) {
 		if total > maxSpaceItems {
 			return out, httpx.Validation("A Space holds at most 300 rows.")
 		}
-		oSec := CoreSpaceSection{ID: sec.ID, Title: title, Collapsed: sec.Collapsed, Items: make([]CoreSpaceItem, 0, len(sec.Items))}
+		icon, err := collab.SidebarIcon(sec.Icon)
+		if err != nil {
+			return out, err
+		}
+		oSec := CoreSpaceSection{ID: sec.ID, Title: title, Collapsed: sec.Collapsed, Icon: icon, Items: make([]CoreSpaceItem, 0, len(sec.Items))}
 		for _, it := range sec.Items {
 			item, err := validateSpaceItem(it, workspace)
 			if err != nil {
@@ -239,7 +247,7 @@ func validateSpaceItem(in coreSpaceItemIn, workspace *uuid.UUID) (CoreSpaceItem,
 		}
 		out.ID = id
 	} else {
-		return out, httpx.Validation("Each row's kind is section, ticket_folder, team, view, box, account, folder, page or everywhere.")
+		return out, httpx.Validation("Each row's kind is section, ticket_folder, team, view, box, account, folder, page, wiki_page, wiki_space, mailbox or everywhere.")
 	}
 	if in.Name != "" {
 		if utf8.RuneCountInString(displayname.Normalize(in.Name)) > maxSpaceItemName {
@@ -254,6 +262,11 @@ func validateSpaceItem(in coreSpaceItemIn, workspace *uuid.UUID) (CoreSpaceItem,
 	if out.Badge != "" && !collab.BadgeValue(out.Badge) {
 		return out, httpx.Validation("A row's number is unread, total, count, awaiting, urgent, overdue, open or none.")
 	}
+	icon, err := collab.SidebarIcon(in.Icon)
+	if err != nil {
+		return out, err
+	}
+	out.Icon = icon
 	return out, nil
 }
 
@@ -267,6 +280,12 @@ func kindLabel(kind string) string {
 		return "mail account"
 	case "folder":
 		return "mail folder"
+	case "wiki_page":
+		return "wiki page"
+	case "wiki_space":
+		return "teamspace"
+	case "mailbox":
+		return "ticket inbox"
 	case spaceEverywhere:
 		return "everywhere"
 	}

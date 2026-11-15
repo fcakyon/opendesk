@@ -13,6 +13,11 @@ export type PickerItem = {
   hint?: ReactNode;
   keywords?: string[];
   group?: string;
+  /**
+   * Kept only while the search is empty or its label contains it, not on a fuzzy match: an
+   * action row on top, like "Assign to me", leaves when a name is typed, so Enter picks the name.
+   */
+  strict?: boolean;
 };
 
 /**
@@ -53,7 +58,7 @@ type Multi = Common & { multi: true; values: string[]; onChange: (v: string[]) =
  */
 export function Picker(props: Single | Multi) {
   const { t } = useTranslation("ui");
-  const { trigger, items, placeholder = t("search"), emptyText = t("noMatches"), align = "start", side = "bottom", width = 240 } = props;
+  const { trigger, placeholder = t("search"), emptyText = t("noMatches"), align = "start", side = "bottom", width = 240 } = props;
   const [innerOpen, setInnerOpen] = useState(false);
   const open = props.open ?? innerOpen;
   const setOpen = (o: boolean) => {
@@ -77,6 +82,8 @@ export function Picker(props: Single | Multi) {
     }
   };
 
+  const typed = query.trim().toLowerCase();
+  const items = props.items.filter((i) => !i.strict || !typed || i.label.toLowerCase().includes(typed));
   const groups = Array.from(new Set(items.map((i) => i.group ?? "")));
   const exact = items.some((i) => i.label.toLowerCase() === query.trim().toLowerCase());
 

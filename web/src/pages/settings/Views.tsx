@@ -1,57 +1,39 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowUpRight, AtSign, Building2, Copy, FolderClosed, Globe, Inbox, Lock, MoreHorizontal, Pencil, Plus, Search, Tag, Trash2, UserRound, Users, UsersRound, X } from "lucide-react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { ArrowUpRight, AtSign, Building2, Copy, FolderClosed, FolderInput, Globe, Inbox, Lock, MoreHorizontal, Pencil, Plus, Search, Tag, Trash2, UserRound, Users, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsPage, Section, ListRow } from "@/components/layout";
 import { Button } from "@/components/ui/button";
-import { Drawer } from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Field, TextInput } from "@/components/ui/input";
-import { Picker } from "@/components/ui/picker";
-import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { ViewDrawer } from "@/components/settings2/ViewDrawer";
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuTrigger } from "@/components/ui/menu";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
 import { IconTile, ListSkeleton } from "@/components/settings2/bits";
 import { Avatar } from "@/components/ui/avatar";
 import { TagChip } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
-import { orderBy, useListMutation } from "@/components/settings2/optimistic";
-import { SortableList } from "@/components/settings2/Sortable";
-import { TeamChip, TeamPick, useTeams } from "@/components/settings2/teams";
+import { useListMutation } from "@/components/settings2/optimistic";
+import { ViewOrderList } from "@/components/settings2/ViewOrderList";
+import { TeamChip, useTeams } from "@/components/settings2/teams";
+import { canWriteView, viewRights } from "@/components/settings2/viewCopy";
 import { ViewIconField } from "@/components/settings2/ViewIconField";
 import { ViewIcon, viewIconTone, viewName } from "@/components/tickets/ViewIcon";
-import { Segmented } from "@/components/ui/tabs";
 import { viewAudience, viewAudienceHint, viewDeleteBody } from "@/components/settings2/viewAudience";
-import { canWriteView, copyPersonalNote, copyView, makeRoom, viewRights } from "@/components/settings2/viewCopy";
-import { cleanFilters, clearField, fieldOps, filterOp, hasFilter, joinList, splitList, withOp, type FilterOp, type OpField } from "@/components/settings2/viewFilters";
-import {
-  CompaniesPick,
-  ContactsPick,
-  MultiPick,
-  SinglePick,
-  ValueButton,
-  channelItems,
-  priorityItems,
-  severityFilterItems,
-  statusItems,
-  useCompanyItems,
-  useContactItems,
-  useMailboxItems,
-  useMemberItems,
-  useTagItems,
-  useTeamItems,
-} from "@/components/settings2/pickers";
+import { splitList } from "@/components/settings2/viewFilters";
+import { useCompanyItems, useContactItems } from "@/components/settings2/pickers";
 import { ChannelIcon, PriorityIcon, SeverityChip, StatusIcon, channelLabel, priorityLabel, severityLabel, statusLabel } from "@/components/tickets/bits";
-import { useDisplay } from "@/components/tickets/fields";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
-import type { Channel, Priority, Severity, TicketFilters, TicketStatus, View, ViewIcon as ViewIconValue } from "@/lib/api/types";
-import { q, qk, upsertInList } from "@/lib/queries";
+import type { TicketFilters, View, ViewIcon as ViewIconValue } from "@/lib/api/types";
+import { q, qk } from "@/lib/queries";
 import { atLeast, useRole, useUser } from "@/lib/session";
 import { cn } from "@/lib/cn";
+import { placeViews, sameLayout, sectionSpot, viewPatches, type Dragged, type ViewSpot } from "@/lib/viewMoves";
 import { cleanSection, clipSection, groupViews, matchSection, orderViews, sectionKey, sectionProblem, viewSections, type ViewEntry } from "@/lib/viewSections";
 
 const chip =
@@ -225,6 +207,9 @@ export default function Views() {
   const { t } = useTranslation("settingsInbox");
   const confirm = useConfirm();
   const [editing, setEditing] = useState<View | "new" | null>(null);
+  // A section's name and icon are written for everyone who sees it: shared-view rights.
+  const canEditSections = atLeast(role, "admin");
+  const [editingSection, setEditingSection] = useState<SectionEntry | null>(null);
   const navigate = useNavigate();
   // The copy being made: from a row's menu here, or ?duplicate=<id> (the sidebar's Duplicate).
   const [copying, setCopying] = useState<View | null>(null);
@@ -237,11 +222,15 @@ export default function Views() {
 
   // In the sidebar's order: a section's views together, at its first view's place.
   const sorted = useMemo(() => orderViews(views ?? []), [views]);
-  // What drags: a view on its own or a whole section; a section's views drag inside it.
-  const entries = useMemo(() => groupViews(views ?? []).map((e) => ({ id: e.kind === "view" ? e.view.id : `section:${e.key}`, entry: e })), [views]);
-  const idsOf = (e: ViewEntry) => (e.kind === "view" ? [e.view.id] : e.views.map((v) => v.id));
+  // The sections a view can be moved to from its menu.
+  const sections = useMemo(() => groupViews(views ?? []).flatMap((e: ViewEntry) => (e.kind === "section" ? [e] : [])), [views]);
   const { teams } = useTeams();
   const teamById = new Map(teams.map((x) => [x.id, x]));
+  // Which views the person may move: their own, a team's they lead, and any for admins.
+  const me = useUser();
+  const rights = viewRights(atLeast(role, "admin"), teams, me.id);
+  const canMove = (v: View) => canEdit && canWriteView(rights, v);
+  const [said, setSaid] = useState("");
 
   const toggleShared = useListMutation<View, { id: string; shared: boolean }>(
     qk.views,
@@ -249,16 +238,27 @@ export default function Views() {
     (rows, v) => rows.map((r) => (r.id === v.id ? { ...r, shared: v.shared } : r)),
     { errorText: t("views.updateFailed") },
   );
-  const reorder = useListMutation<View, string[]>(
+  // A view or a section moved: one PATCH per view that moved, among those the person may write
+  // (the moved view's section and position, the others' position).
+  const move = useListMutation<View, View[]>(
     qk.views,
-    async (ids) => {
-      const next = orderBy(sorted, ids);
-      const changed = next.filter((n) => sorted.find((o) => o.id === n.id)?.position !== n.position);
-      await Promise.all(changed.map((n) => api.views.update(n.id, { position: n.position })));
+    async (next) => {
+      const writable = new Set(sorted.filter(canMove).map((v) => v.id));
+      await Promise.all(viewPatches(sorted, next).flatMap(({ id, ...body }) => (writable.has(id) ? [api.views.update(id, body)] : [])));
     },
-    (rows, ids) => orderBy(rows, ids),
+    (rows, next) => rows.map((r) => next.find((n) => n.id === r.id) ?? r),
     { errorText: t("views.reorderFailed") },
   );
+  const moveTo = (dragged: Dragged, spot: ViewSpot) => {
+    const next = placeViews(sorted, dragged, spot);
+    if (sameLayout(sorted, next)) return;
+    move.mutate(next);
+    if (!("view" in dragged)) return;
+    const was = sorted.find((v) => v.id === dragged.view);
+    const now = next.find((v) => v.id === dragged.view);
+    if (!was || !now || cleanSection(was.section) === cleanSection(now.section)) return;
+    setSaid(now.section ? t("views.movedTo", { name: was.name, section: now.section }) : t("views.movedOut", { name: was.name }));
+  };
   const remove = useListMutation<View, string>(
     qk.views,
     (id) => api.views.remove(id),
@@ -292,41 +292,48 @@ export default function Views() {
             ]}
           />
         ) : (
-          <SortableList
-            items={entries}
-            disabled={!canEdit}
-            onReorder={(ids) => reorder.mutate(ids.flatMap((id) => idsOf(entries.find((x) => x.id === id)!.entry)))}
-            handleLabel={({ entry: e }) => (e.kind === "view" ? t("views.reorderAria", { name: e.view.name }) : t("views.reorderSectionAria", { name: e.name }))}
-            renderRow={({ entry: e }, handle) =>
-              e.kind === "view" ? (
-                viewRow(e.view, handle)
-              ) : (
-                <div role="group" aria-label={t("views.inSection", { name: e.name })}>
-                  <div className="group relative flex h-9 items-center gap-2 border-b border-line-soft bg-sunken/60 px-4 text-[12.5px] font-medium text-fg-2">
-                    {handle}
-                    <FolderClosed className="size-3.5 shrink-0 text-fg-3" />
-                    <span className="min-w-0 truncate">{e.name}</span>
-                    <span className="mono text-[11px] font-normal text-fg-4">{e.views.length}</span>
-                  </div>
-                  <SortableList
-                    items={e.views}
-                    disabled={!canEdit}
-                    // Inside a section only: the section keeps its place among the others.
-                    onReorder={(ids) => reorder.mutate(entries.flatMap((x) => (x.entry === e ? ids : idsOf(x.entry))))}
-                    handleLabel={(v) => t("views.reorderAria", { name: v.name })}
-                    renderRow={(v, h) => viewRow(v, h)}
-                  />
-                </div>
-              )
-            }
+          <ViewOrderList
+            views={sorted}
+            canMoveView={canMove}
+            // A section moves with every view in it.
+            canMoveSection={(e) => e.views.every(canMove)}
+            onMove={moveTo}
+            viewLabel={(v) => t("views.reorderAria", { name: v.name })}
+            sectionLabel={(e) => t("views.reorderSectionAria", { name: e.name })}
+            groupLabel={(e) => t("views.inSection", { name: e.name })}
+            renderView={viewRow}
+            renderHeader={(e, handle) => (
+              <div className="group relative flex h-9 items-center gap-2 border-b border-line-soft bg-sunken/60 px-4 text-[12.5px] font-medium text-fg-2">
+                {handle}
+                {e.icon ? <ViewIcon icon={e.icon} size={14} className="size-3.5 shrink-0 text-fg-3" /> : <FolderClosed className="size-3.5 shrink-0 text-fg-3" />}
+                <span className="min-w-0 truncate">{viewName(e)}</span>
+                <span className="mono text-[11px] font-normal text-fg-4">{e.views.length}</span>
+                {canEditSections && (
+                  <Tooltip content={t("views.sectionEdit.title")}>
+                    <button
+                      type="button"
+                      aria-label={t("views.sectionEdit.aria", { name: e.name })}
+                      onClick={() => setEditingSection(e)}
+                      className="ml-auto flex size-7 items-center justify-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
+                  </Tooltip>
+                )}
+              </div>
+            )}
           />
         )}
+        <span className="sr-only" aria-live="polite">
+          {said}
+        </span>
       </Section>
       {copyOf ? (
         <ViewDrawer key={copyOf.id} view={null} copyOf={copyOf} views={sorted} nextPosition={sorted.length} onClose={closeCopy} />
       ) : (
         editing && <ViewDrawer view={editing === "new" ? null : editing} views={sorted} nextPosition={sorted.length} onClose={() => setEditing(null)} />
       )}
+      {editingSection && <SectionDialog key={editingSection.key} section={editingSection} views={views ?? []} onClose={() => setEditingSection(null)} />}
     </SettingsPage>
   );
 
@@ -384,6 +391,22 @@ export default function Views() {
                           <MenuItem icon={<Copy />} onSelect={() => setCopying(v)}>
                             {t("views.duplicate")}
                           </MenuItem>
+                          {canMove(v) && (cleanSection(v.section) || sections.length > 0) && (
+                            <MenuSub label={t("views.moveTo")} icon={<FolderInput />}>
+                              {cleanSection(v.section) && (
+                                <MenuItem icon={<X />} onSelect={() => moveTo({ view: v.id }, sectionSpot(sorted, v.id, null))}>
+                                  {t("views.noSection")}
+                                </MenuItem>
+                              )}
+                              {sections
+                                .filter((s) => s.key !== sectionKey(v.section ?? ""))
+                                .map((s) => (
+                                  <MenuItem key={s.key} icon={s.icon ? <ViewIcon icon={s.icon} size={14} /> : <FolderClosed />} onSelect={() => moveTo({ view: v.id }, sectionSpot(sorted, v.id, s.key))}>
+                                    {viewName(s)}
+                                  </MenuItem>
+                                ))}
+                            </MenuSub>
+                          )}
                           <MenuItem
                             icon={<ArrowUpRight />}
                             onSelect={() =>
@@ -424,389 +447,65 @@ export default function Views() {
   }
 }
 
+type SectionEntry = Extract<ViewEntry, { kind: "section" }>;
+
 /**
- * The view editor: `view` to change one, else a new view, started from a copy of `copyOf`
- * (Duplicate) that is saved right after it.
+ * A view section's name and icon (PATCH /v1/view-sections). A new name renames the section on
+ * the views listed here, and its icon goes with it; the icon shows on every view of the
+ * section, in the sidebar of everyone who has one.
  */
-function ViewDrawer({ view, copyOf, views, nextPosition, onClose }: { view: View | null; copyOf?: View; views: View[]; nextPosition: number; onClose: () => void }) {
+function SectionDialog({ section, views, onClose }: { section: SectionEntry; views: View[]; onClose: () => void }) {
   const { t } = useTranslation("settingsInbox");
-  useTranslation("indicators");
   const qc = useQueryClient();
-  const confirm = useConfirm();
-  const { teams: allTeams } = useTeams();
-  // Without severity in the workspace, its filter is offered only to clear one the view has.
-  const display = useDisplay();
-  const role = useRole();
-  const me = useUser();
-  const rights = viewRights(atLeast(role, "admin"), allTeams, me.id);
-  // What the editor starts from: the view, the copy, or a blank view.
-  const [start] = useState(() => view ?? (copyOf ? copyView(copyOf, t("views.copyName", { name: copyOf.name }), rights) : null));
-  const [name, setName] = useState(start?.name ?? "");
-  const [shared, setShared] = useState(start?.shared ?? true);
-  const [teamId, setTeamId] = useState<string | null>(start?.team_id ?? null);
-  const [icon, setIcon] = useState<ViewIconValue | null>(start?.icon ?? null);
-  const [section, setSection] = useState(cleanSection(start?.section));
-  const inUse = viewSections(useQuery(q.views()).data ?? []);
-  const sections = section && !inUse.some((s) => sectionKey(s) === sectionKey(section)) ? [...inUse, section] : inUse;
-  const { t: tt } = useTranslation("settingsTeams");
-  const [f, setF] = useState<TicketFilters>(start?.filters ?? { status: ["open"] });
-  // The operator each row shows; it stays put while the row has no value yet.
-  const [ops, setOps] = useState<Record<OpField, FilterOp>>(() => {
-    const init = start?.filters ?? {};
-    return { tag: filterOp(init, "tag"), team: filterOp(init, "team"), mailbox: filterOp(init, "mailbox"), channel: filterOp(init, "channel") };
-  });
+  const [name, setName] = useState(section.name);
+  const [icon, setIcon] = useState<ViewIconValue | null>(section.icon);
   const [error, setError] = useState<string | null>(null);
-  const members = useMemberItems();
-  const teams = useTeamItems();
-  const mailboxes = useMailboxItems();
-  const tagItems = useTagItems();
-  // Stored names match labels in any case; show them as the label is spelled.
-  const tagValues = (list: string | undefined) => splitList(list).map((n) => tagItems.find((i) => i.value.toLowerCase() === n.toLowerCase())?.value ?? n);
-  // Every address tickets can be written to: each mailbox's own and its aliases.
-  const mailboxRows = useQuery(q.mailboxes()).data;
-  const addresses = useMemo(
-    () => (mailboxRows ?? []).flatMap((m) => [m.email, ...(m.aliases ?? [])].map((a) => ({ value: a.toLowerCase(), label: a.toLowerCase(), group: m.display_name || m.name }))),
-    [mailboxRows],
-  );
-
-  const initial = JSON.stringify({
-    name: start?.name ?? "",
-    shared: start?.shared ?? true,
-    teamId: start?.team_id ?? null,
-    section: cleanSection(start?.section),
-    f: start?.filters ?? { status: ["open"] },
-    icon: start?.icon ?? null,
-  });
-  const dirty = JSON.stringify({ name, shared, teamId, section, f, icon }) !== initial;
-  const audience = viewAudience({ shared, team_id: teamId });
-  // The original is for people the person may not create views for, so the copy is theirs alone.
-  const madePersonal = copyOf && start ? viewAudience(copyOf) !== viewAudience(start) : false;
-
-  const requestClose = () => {
-    if (!dirty) return onClose();
-    confirm.show(t("views.discardBody"), onClose, {
-      title: t("common.discardTitle"),
-      confirmLabel: t("common.discard"),
-      danger: true,
-    });
-  };
-
+  // A name another section has, in any case, joins it as that section spells it.
+  const others = viewSections(views).filter((s) => sectionKey(s) !== section.key);
+  const next = matchSection(clipSection(name), others);
   const save = useMutation({
-    mutationFn: async () => {
-      const filters = cleanFilters(f);
-      if (view) return api.views.update(view.id, { name: name.trim(), shared: teamId ? false : shared, team_id: teamId, filters, section: section || null, icon });
-      const position = copyOf ? copyOf.position + 1 : nextPosition;
-      const created = await api.views.create({
-        // A copy keeps every other field of the original.
-        ...start,
-        name: name.trim(),
-        shared: teamId ? false : shared,
-        team_id: teamId,
-        filters,
-        section: section || null,
-        icon,
-        position,
-      });
-      if (copyOf) {
-        // The views after the original move down one, so the copy sits right after it.
-        const moves = makeRoom(views, copyOf.id, position, (v) => canWriteView(rights, v));
-        const done = await Promise.allSettled(moves.map((m) => api.views.update(m.id, { position: m.position })));
-        if (done.some((r) => r.status === "rejected")) toast.error(t("views.reorderFailed"));
-        void qc.invalidateQueries({ queryKey: qk.views });
-      }
-      return created;
-    },
-    onSuccess: (v) => {
-      upsertInList(qc, qk.views, v);
-      void qc.invalidateQueries({ queryKey: qk.counts });
-      toast.success(view ? t("views.saved") : t("views.created"));
+    mutationFn: () => api.viewSections.update({ section: section.name, ...(next !== section.name ? { name: next } : {}), icon }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.views });
+      toast.success(t("views.sectionEdit.saved"));
       onClose();
     },
     onError: (e) => setError(errorMessage(e)),
   });
-
-  const set = <K extends keyof TicketFilters>(k: K, v: TicketFilters[K] | undefined) => setF((cur) => ({ ...cur, [k]: v }));
-  const setOp = (field: OpField, op: FilterOp) => {
-    setOps((cur) => ({ ...cur, [field]: op }));
-    setF((cur) => withOp(cur, field, op));
-  };
-  const clearRow = (field: OpField) => () => {
-    setOps((cur) => ({ ...cur, [field]: "is" }));
-    setF((cur) => clearField(cur, field));
-  };
-  const opPick = (field: OpField) => <OpSelect field={field} value={ops[field]} onChange={(op) => setOp(field, op)} />;
-
-  const assigneeItems = [
-    { value: "me", label: t("views.assigneeViewer"), icon: <UserRound /> },
-    {
-      value: "none",
-      label: t("views.unassigned"),
-      icon: <span className="size-3.5 rounded-full border border-dashed border-fg-4" />,
-    },
-    ...members,
-  ];
-
   return (
-    <Drawer
+    <Dialog
       open
-      onOpenChange={(o) => !o && requestClose()}
-      title={view ? t("views.editTitle") : copyOf ? t("views.duplicateTitle") : t("views.new")}
-      width={480}
-      onEscapeKeyDown={(e) => {
-        if (dirty) {
-          e.preventDefault();
-          requestClose();
-        }
-      }}
-      onInteractOutside={(e) => {
-        e.preventDefault();
-        requestClose();
-      }}
+      onOpenChange={(o) => !o && onClose()}
+      size="sm"
+      title={t("views.sectionEdit.title")}
+      description={t("views.sectionEdit.description", { count: section.views.length })}
+      footer={
+        <>
+          <span className="flex-1 text-xs text-danger-fg">{error}</span>
+          <Button variant="ghost" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button variant="primary" type="submit" form="view-section-form" loading={save.isPending}>
+            {t("views.sectionEdit.save")}
+          </Button>
+        </>
+      }
     >
       <form
-        className="flex min-h-full flex-col"
+        id="view-section-form"
+        className="flex flex-col gap-5 pb-2"
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);
-          if (!name.trim()) return setError(t("views.needName"));
+          if (!cleanSection(name)) return setError(t("views.sectionEdit.needName"));
+          if (sectionProblem(name)) return setError(t("views.sectionChars"));
           save.mutate();
         }}
       >
-        <div className="flex flex-1 flex-col gap-5 p-5">
-          <Field label={t("views.nameLabel")}>
-            {(p) => (
-              <TextInput {...p} autoFocus value={name} maxLength={60} placeholder={t("views.namePlaceholder")} onChange={(e) => setName(e.target.value)} />
-            )}
-          </Field>
-          <ViewIconField value={icon} onChange={setIcon} name={name} />
-          <Field label={t("views.sectionLabel")} hint={t("views.sectionHint")} optional>
-            {(p) => (
-              <Picker
-                items={[
-                  { value: "", label: t("views.noSection"), icon: <X /> },
-                  ...sections.map((s) => ({ value: s, label: s, icon: <FolderClosed /> })),
-                ]}
-                value={section}
-                onSelect={setSection}
-                // A typed name joins the section it names in any case.
-                onCreate={(typed) => {
-                  // The API's rule for names: no angle brackets or control characters, at most 60 characters.
-                  if (sectionProblem(typed)) return setError(t("views.sectionChars"));
-                  setError(null);
-                  setSection(matchSection(clipSection(typed), inUse));
-                }}
-                createLabel={t("views.newSection")}
-                placeholder={t("views.sectionSearch")}
-                emptyText={t("views.sectionEmpty")}
-                width={300}
-                trigger={
-                  <ValueButton id={p.id} aria-describedby={p["aria-describedby"]} size="md" placeholder={t("views.noSection")} icon={section ? <FolderClosed /> : undefined} className="w-full">
-                    {section || undefined}
-                  </ValueButton>
-                }
-              />
-            )}
-          </Field>
-          {allTeams.length > 0 || teamId ? (
-            <div className="flex flex-col gap-2.5 rounded-lg border border-line px-3 py-2.5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-[13px] font-medium">{tt("scoped.viewShare")}</div>
-                <Segmented
-                  size="xs"
-                  value={audience}
-                  onChange={(v) => {
-                    if (v === "team") {
-                      setTeamId(teamId ?? allTeams[0]?.id ?? null);
-                      setShared(false);
-                    } else {
-                      setTeamId(null);
-                      setShared(v === "everyone");
-                    }
-                  }}
-                  options={[
-                    { value: "me", label: tt("scoped.viewMe"), icon: <Lock /> },
-                    { value: "team", label: tt("scoped.viewTeam"), icon: <UsersRound /> },
-                    { value: "everyone", label: tt("scoped.viewEveryone"), icon: <Globe /> },
-                  ]}
-                />
-              </div>
-              {audience === "team" && <TeamPick className="w-full" value={teamId} onChange={(v) => setTeamId(v)} />}
-              <div className="text-[12px] text-fg-3">{viewAudienceHint(t, audience, allTeams.find((x) => x.id === teamId)?.name)}</div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3 rounded-lg border border-line px-3 py-2.5">
-              <IconTile tone={shared ? "blue" : "gray"} size="sm">
-                {shared ? <Globe /> : <Lock />}
-              </IconTile>
-              <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-medium">{t("views.visibleTitle")}</div>
-                <div className="text-[12px] text-fg-3">{viewAudienceHint(t, audience)}</div>
-              </div>
-              <Switch checked={shared} onCheckedChange={setShared} aria-label={t("views.visibleTitle")} />
-            </div>
-          )}
-          {madePersonal && copyOf && (
-            <p className="-mt-3 text-[12px] text-fg-3">
-              {copyPersonalNote(t, copyOf, allTeams)}
-            </p>
-          )}
-
-          <div>
-            <div className="label-caps mb-2">{t("views.showWhere")}</div>
-            <div className="flex flex-col rounded-lg border border-line bg-surface">
-              <FilterRow label={t("views.filters.status")} onClear={f.status?.length ? () => set("status", undefined) : undefined}>
-                <MultiPick
-                  items={statusItems()}
-                  values={f.status ?? []}
-                  onChange={(v) => set("status", v as TicketStatus[])}
-                  placeholder={t("views.any.status")}
-                />
-              </FilterRow>
-              <FilterRow label={t("views.filters.priority")} onClear={f.priority?.length ? () => set("priority", undefined) : undefined}>
-                <MultiPick
-                  items={priorityItems()}
-                  values={f.priority ?? []}
-                  onChange={(v) => set("priority", v as Priority[])}
-                  placeholder={t("views.any.priority")}
-                />
-              </FilterRow>
-              {(display.severity || !!f.severity?.length) && (
-                <FilterRow label={t("views.filters.severity")} onClear={f.severity?.length ? () => set("severity", undefined) : undefined}>
-                  <MultiPick
-                    items={severityFilterItems()}
-                    values={f.severity ?? []}
-                    onChange={(v) => set("severity", v as (Severity | "none")[])}
-                    placeholder={t("views.any.severity")}
-                  />
-                </FilterRow>
-              )}
-              <FilterRow label={t("views.filters.assignee")} onClear={f.assignee ? () => set("assignee", undefined) : undefined}>
-                <SinglePick items={assigneeItems} value={f.assignee} onChange={(v) => set("assignee", v)} placeholder={t("views.any.assignee")} width={280} />
-              </FilterRow>
-              <FilterRow label={t("views.filters.team")} onClear={hasFilter(f, "team") ? clearRow("team") : undefined}>
-                {opPick("team")}
-                {ops.team === "not" ? (
-                  <MultiPick items={teams} values={splitList(f.team_not)} onChange={(v) => set("team_not", joinList(v))} placeholder={t("views.choose.team")} />
-                ) : (
-                  <MultiPick items={teams} values={splitList(f.team_id)} onChange={(v) => set("team_id", joinList(v))} placeholder={t("views.any.team")} />
-                )}
-              </FilterRow>
-              <FilterRow label={t("views.filters.mailbox")} onClear={hasFilter(f, "mailbox") ? clearRow("mailbox") : undefined}>
-                {opPick("mailbox")}
-                {ops.mailbox === "not" ? (
-                  <MultiPick items={mailboxes} values={splitList(f.mailbox_not)} onChange={(v) => set("mailbox_not", joinList(v))} placeholder={t("views.choose.mailbox")} />
-                ) : (
-                  <SinglePick items={mailboxes} value={f.mailbox_id} onChange={(v) => set("mailbox_id", v)} placeholder={t("views.any.mailbox")} width={300} />
-                )}
-              </FilterRow>
-              <FilterRow label={t("views.filters.writtenTo")} onClear={f.received_at ? () => set("received_at", undefined) : undefined}>
-                <SinglePick items={addresses} value={f.received_at} onChange={(v) => set("received_at", v)} placeholder={t("views.any.writtenTo")} width={300} />
-              </FilterRow>
-              <FilterRow label={t("views.filters.contact")} onClear={f.contact_not ? () => set("contact_not", undefined) : undefined}>
-                <NotOp />
-                <ContactsPick values={splitList(f.contact_not)} onChange={(v) => set("contact_not", joinList(v))} placeholder={t("views.choose.contact")} />
-              </FilterRow>
-              <FilterRow label={t("views.filters.company")} onClear={f.company_not ? () => set("company_not", undefined) : undefined}>
-                <NotOp />
-                <CompaniesPick values={splitList(f.company_not)} onChange={(v) => set("company_not", joinList(v))} placeholder={t("views.choose.company")} />
-              </FilterRow>
-              <FilterRow label={t("views.filters.tag")} onClear={hasFilter(f, "tag") ? clearRow("tag") : undefined}>
-                {opPick("tag")}
-                {ops.tag === "not" ? (
-                  <MultiPick items={tagItems} values={tagValues(f.tag_not)} onChange={(v) => set("tag_not", joinList(v))} placeholder={t("views.choose.tag")} />
-                ) : ops.tag === "is" ? (
-                  <MultiPick items={tagItems} values={tagValues(f.tag)} onChange={(v) => set("tag", joinList(v))} placeholder={t("views.any.tag")} />
-                ) : null}
-              </FilterRow>
-              <FilterRow label={t("views.filters.channel")} onClear={hasFilter(f, "channel") ? clearRow("channel") : undefined}>
-                {opPick("channel")}
-                {ops.channel === "not" ? (
-                  <MultiPick
-                    items={channelItems()}
-                    values={f.channel_not ?? []}
-                    onChange={(v) => set("channel_not", v.length ? (v as Channel[]) : undefined)}
-                    placeholder={t("views.choose.channel")}
-                  />
-                ) : (
-                  <SinglePick items={channelItems()} value={f.channel} onChange={(v) => set("channel", v as Channel)} placeholder={t("views.any.channel")} />
-                )}
-              </FilterRow>
-              <FilterRow label={t("views.filters.keyword")} onClear={f.q ? () => set("q", undefined) : undefined}>
-                <TextInput
-                  inputSize="sm"
-                  value={f.q ?? ""}
-                  placeholder={t("views.keywordPlaceholder")}
-                  aria-label={t("views.filters.keyword")}
-                  onChange={(e) => set("q", e.target.value || undefined)}
-                  className="w-full"
-                />
-              </FilterRow>
-            </div>
-          </div>
-          {view && (
-            <Link
-              to="/views/$viewId/{-$ticketId}"
-              params={{ viewId: view.id, ticketId: undefined }}
-              className="inline-flex w-fit items-center gap-1 text-[12.5px] text-fg-3 underline-offset-2 hover:text-fg hover:underline"
-            >
-              {t("views.openThis")} <ArrowUpRight className="size-3.5" />
-            </Link>
-          )}
-        </div>
-        <div className="sticky bottom-0 flex items-center gap-2 border-t border-line bg-surface px-5 py-3">
-          <span className="flex-1 text-xs text-danger-fg">{error}</span>
-          <Button variant="ghost" onClick={requestClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="primary" type="submit" loading={save.isPending}>
-            {view ? t("views.save") : t("views.create")}
-          </Button>
-        </div>
+        <Field label={t("views.nameLabel")}>{(p) => <TextInput {...p} autoFocus value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />}</Field>
+        <ViewIconField section value={icon} onChange={setIcon} name={next} />
       </form>
-    </Drawer>
+    </Dialog>
   );
 }
 
-function FilterRow({ label, children, onClear }: { label: string; children: React.ReactNode; onClear?: () => void }) {
-  const { t } = useTranslation("settingsInbox");
-  return (
-    <div className={cn("flex min-h-11 items-center gap-3 border-b border-line-soft px-3 transition-colors last:border-0", onClear && "bg-sunken/60")}>
-      <span className={cn("w-[72px] shrink-0 text-[12.5px]", onClear ? "font-medium text-fg-2" : "text-fg-3")}>{label}</span>
-      <div className="flex min-w-0 flex-1 items-center gap-2">{children}</div>
-      <button
-        type="button"
-        aria-label={t("views.clear", { field: label.toLowerCase() })}
-        onClick={onClear}
-        disabled={!onClear}
-        className="flex size-6 shrink-0 items-center justify-center rounded-sm text-fg-4 hover:bg-hover hover:text-fg disabled:invisible"
-      >
-        <X className="size-3.5" />
-      </button>
-    </div>
-  );
-}
-
-/** The operator of a row that only leaves tickets out, in the place of OpSelect. */
-function NotOp() {
-  const { t } = useTranslation("settingsInbox");
-  return <span className="w-[104px] shrink-0 px-2 text-[12.5px] text-fg-2">{t("views.ops.not")}</span>;
-}
-
-/** A row's operator: is / is not, and for labels any of / none of / empty. */
-function OpSelect({ field, value, onChange }: { field: OpField; value: FilterOp; onChange: (op: FilterOp) => void }) {
-  const { t } = useTranslation("settingsInbox");
-  const label: Record<FilterOp, string> =
-    field === "tag"
-      ? { is: t("views.labelOps.is"), not: t("views.labelOps.not"), empty: t("views.labelOps.empty") }
-      : { is: t("views.ops.is"), not: t("views.ops.not"), empty: t("views.labelOps.empty") };
-  return (
-    <Select<FilterOp>
-      size="sm"
-      value={value}
-      onChange={onChange}
-      options={fieldOps[field].map((o) => ({ value: o, label: label[o] }))}
-      className="w-[104px] shrink-0"
-      aria-label={t("edit.operator")}
-    />
-  );
-}

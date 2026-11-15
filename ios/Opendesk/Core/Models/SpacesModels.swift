@@ -47,6 +47,12 @@ struct SpaceItemKind: RawRepresentable, Hashable, Codable, Sendable {
     static let account = SpaceItemKind(rawValue: "account")
     static let folder = SpaceItemKind(rawValue: "folder")
     static let page = SpaceItemKind(rawValue: "page")
+    /// A page of Pages or the wiki.
+    static let wikiPage = SpaceItemKind(rawValue: "wiki_page")
+    /// A teamspace: a team's pages.
+    static let wikiSpace = SpaceItemKind(rawValue: "wiki_space")
+    /// A ticket inbox (a helpdesk mailbox): its Unassigned folder.
+    static let mailbox = SpaceItemKind(rawValue: "mailbox")
     static let everywhere = SpaceItemKind(rawValue: "everywhere")
 
     init(from decoder: Decoder) throws {
@@ -68,19 +74,22 @@ struct SpaceItem: Codable, Hashable, Sendable, Identifiable {
     var name: String?
     /// The number beside the row (`SidebarBadge`); nil is the row's default, "none" shows none.
     var badge: String?
+    /// One emoji in place of the row's own icon.
+    var icon: String?
 
     enum CodingKeys: String, CodingKey {
-        case kind, name, badge
+        case kind, name, badge, icon
         case workspaceID = "workspace_id"
         case itemID = "id"
     }
 
-    init(workspaceID: String, kind: SpaceItemKind, itemID: String, name: String? = nil, badge: String? = nil) {
+    init(workspaceID: String, kind: SpaceItemKind, itemID: String, name: String? = nil, badge: String? = nil, icon: String? = nil) {
         self.workspaceID = workspaceID
         self.kind = kind
         self.itemID = itemID
         self.name = name
         self.badge = badge
+        self.icon = icon
     }
 
     init(from decoder: Decoder) throws {
@@ -90,6 +99,7 @@ struct SpaceItem: Codable, Hashable, Sendable, Identifiable {
         itemID = try c.decode(String.self, forKey: .itemID)
         name = c.lenient(String.self, forKey: .name).flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
         badge = c.lenient(String.self, forKey: .badge)
+        icon = c.lenient(String.self, forKey: .icon).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     func encode(to encoder: Encoder) throws {
@@ -100,6 +110,7 @@ struct SpaceItem: Codable, Hashable, Sendable, Identifiable {
         let cleaned = name.map(SpaceRules.clean) ?? ""
         if !cleaned.isEmpty { try c.encode(cleaned, forKey: .name) }
         if let badge { try c.encode(badge, forKey: .badge) }
+        if let icon, !icon.isEmpty { try c.encode(icon, forKey: .icon) }
     }
 
     /// The one key an item has in a Space: its workspace, kind and id.
@@ -115,7 +126,7 @@ struct SpaceItem: Codable, Hashable, Sendable, Identifiable {
 
     /// Rows of tickets, left out where the workspace has Tickets off.
     var needsTickets: Bool {
-        kind == .ticketFolder || kind == .team || kind == .view || (kind == .page && itemID == "reports")
+        kind == .ticketFolder || kind == .team || kind == .view || kind == .mailbox || (kind == .page && itemID == "reports")
             || (kind == .section && ["inbox", "teams", "views"].contains(itemID))
     }
 }
@@ -124,14 +135,17 @@ struct SpaceSection: Codable, Hashable, Sendable, Identifiable {
     var id: String
     var title: String = ""
     var collapsed = false
+    /// One emoji beside the title.
+    var icon: String?
     var items: [SpaceItem] = []
 
-    enum CodingKeys: String, CodingKey { case id, title, collapsed, items }
+    enum CodingKeys: String, CodingKey { case id, title, collapsed, icon, items }
 
-    init(id: String, title: String = "", collapsed: Bool = false, items: [SpaceItem] = []) {
+    init(id: String, title: String = "", collapsed: Bool = false, icon: String? = nil, items: [SpaceItem] = []) {
         self.id = id
         self.title = title
         self.collapsed = collapsed
+        self.icon = icon
         self.items = items
     }
 
@@ -140,6 +154,7 @@ struct SpaceSection: Codable, Hashable, Sendable, Identifiable {
         id = try c.decode(String.self, forKey: .id)
         title = c.lenient(String.self, forKey: .title) ?? ""
         collapsed = c.lenient(Bool.self, forKey: .collapsed) ?? false
+        icon = c.lenient(String.self, forKey: .icon).flatMap { $0.isEmpty ? nil : $0 }
         items = (c.lenient([LenientItem].self, forKey: .items) ?? []).compactMap(\.item)
     }
 
@@ -148,6 +163,7 @@ struct SpaceSection: Codable, Hashable, Sendable, Identifiable {
         try c.encode(id, forKey: .id)
         try c.encode(SpaceRules.clean(title), forKey: .title)
         try c.encode(collapsed, forKey: .collapsed)
+        if let icon, !icon.isEmpty { try c.encode(icon, forKey: .icon) }
         try c.encode(items, forKey: .items)
     }
 

@@ -141,6 +141,23 @@
     "you": "You",
     "noMatch": "No members match",
     "noMatchHint": "Try a different name or email.",
+    "filter": {
+      "label": "Filter members",
+      "allRoles": "All roles",
+      "roleLabel": "Role: {{value}}",
+      "searchRoles": "Search roles",
+      "allTeams": "All teams",
+      "noTeam": "No team",
+      "unknownTeam": "Unknown team",
+      "teamLabel": "Team: {{value}}",
+      "searchTeams": "Search teams",
+      "anyStatus": "Any status",
+      "statusLabel": "Status: {{value}}",
+      "searchStatuses": "Search statuses",
+      "shown": "{{shown}} of {{total}}",
+      "clear": "Clear filters",
+      "noMatchHint": "Try other filters, or clear them to see everyone."
+    },
     "emptyTitle": "Just you so far",
     "emptyHint": "Invite teammates to share the inbox.",
     "columns": {
@@ -321,6 +338,41 @@
       "saved": "Time format saved"
     }
   },
+  "pages": {
+    "title": "Pages",
+    "description": "Your team's own pages, databases and canvases. They live beside the wiki, in the sidebar and at Pages.",
+    "product": "Product",
+    "productHint": "Turn Pages off to hide it from everyone. Nothing is deleted, and it all comes back when you turn it on.",
+    "use": "Use Pages",
+    "useOn": "Pages is on: members see it in the sidebar and can add pages.",
+    "useOff": "Pages is off: it is hidden, and its pages are kept.",
+    "lastProduct": "Pages is the only product on",
+    "lastProductHint": "Turn Tickets or Mail on under General first: one product always stays on.",
+    "saved": "Saved",
+    "saveFailed": "Couldn't save the change",
+    "teamspaces": "Teamspaces",
+    "teamspacesHint": "Each team has a teamspace for its pages. A private team's pages show only to its members.",
+    "manageTeams": "Manage teams",
+    "privateTeam": "Private team",
+    "privateTeamHint": "Only its members see its pages",
+    "pageCount_one": "{{count}} page",
+    "pageCount_other": "{{count}} pages",
+    "noTeams": "No teams yet",
+    "noTeamsHint": "Add a team to give it a teamspace.",
+    "port": "Import and export",
+    "portHint": "Bring pages in from Notion, Obsidian and other tools, or take them with you.",
+    "import": "Import pages",
+    "importHint": "A Notion or Obsidian export, or Markdown, HTML, CSV and text files.",
+    "importAction": "Import",
+    "export": "Export Pages",
+    "exportHint": "Every page you can see, as a Markdown vault or HTML, in a zip.",
+    "exportAction": "Export",
+    "trash": "Trash",
+    "trashHint": "Pages stay in the trash for 30 days, then go for good.",
+    "inTrash_one": "{{count}} page in the trash",
+    "inTrash_other": "{{count}} pages in the trash",
+    "openTrash": "Open the trash"
+  },
   "saveBar": {
     "region": "Unsaved changes",
     "message": "You have unsaved changes",
@@ -348,9 +400,11 @@
     "productTicketsHint": "Shared inboxes, live chat, the help center and reports. Turn it off to hide them and pause new ticket work.",
     "productMail": "Mail",
     "productMailHint": "Members’ own mail accounts, synced with their inboxes.",
+    "productPages": "Pages",
+    "productPagesHint": "Your team's own pages, databases and canvases, apart from the wiki.",
     "mailUnavailable": {"instance_disabled": "Mail is turned off for this instance.", "plan": "Mail is not part of this workspace’s plan."},
     "productKept": "Nothing is deleted",
-    "productKeptHint": "Tickets, mail and connections are kept while a product is off. Incoming email, calls and chat messages wait and resume when Tickets is back on.",
+    "productKeptHint": "Tickets, mail, pages and connections are kept while a product is off. Incoming email, calls and chat messages wait and resume when Tickets is back on.",
     "helpCenter": "Help center",
     "helpCenterHint": "A public site with your published knowledge base articles.",
     "publish": "Publish the help center",
@@ -384,6 +438,9 @@
     "gravatarHint": "Sends a hash of contact email addresses to Gravatar to look up their pictures.",
     "domainLogos": "Company logos",
     "domainLogosHint": "Fetches each company's logo from its website.",
+    "subjectNumber": "Ticket number in subjects",
+    "subjectNumberOn": "Emails to customers end their subject with the ticket number, like [#1042]. Replies are matched to their ticket by this tag as well as by the thread.",
+    "subjectNumberOff": "Subjects are sent without the ticket number, and replies are matched to their ticket by the thread. An email that starts the conversation, such as the first one on a ticket an agent opened, keeps the number when the mailbox sends in a way that changes the email's ID (Microsoft, some Google connections, Amazon SES), so the customer's answer always finds its ticket.",
     "reports": "Reports",
     "onlineTime": "Agents' online time",
     "onlineTimeOn": "Records the time each member has opendesk open with their status set to Online, for Reports → Agents. Turn it off where recording it needs your team's consent or a works council's agreement.",
@@ -596,6 +653,7 @@
       "tickets": "Tickets",
       "team": "Team",
       "mail": "Mail",
+      "wiki": "Wiki",
       "ai_billing": "AI and billing",
       "workspace": "Workspace"
     },
@@ -642,6 +700,10 @@
         "label": "SLA breaches",
         "hint": "A ticket assigned to you misses a target"
       },
+      "scheduled_reply_failed": {
+        "label": "Scheduled replies not sent",
+        "hint": "A reply you scheduled could not go out and is back in your drafts"
+      },
       "ai_handoff": {
         "label": "Handoffs to a person",
         "hint": "Ollie hands a conversation to the team"
@@ -653,6 +715,18 @@
       "collab_mention": {
         "label": "Mail comment mentions",
         "hint": "Someone mentions you in a comment on a mail conversation"
+      },
+      "wiki_mention": {
+        "label": "Wiki mentions",
+        "hint": "Someone mentions you on a wiki page or in a comment on one"
+      },
+      "wiki_comment": {
+        "label": "Wiki comments",
+        "hint": "New comments on pages you follow and in threads you wrote in"
+      },
+      "wiki_reminder": {
+        "label": "Wiki reminders",
+        "hint": "A reminder you set in a wiki page is due"
       },
       "team_joined": {
         "label": "Team changes",

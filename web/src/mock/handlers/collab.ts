@@ -23,15 +23,18 @@ import type {
   MailThreadAction,
   MailThreadDetail,
   SidebarPrefs,
+  UseForTicketsBody,
 } from "@/lib/api/types";
 import { collabFromName } from "@/lib/collab/identities";
 import { LABEL_TONES, toneHex, type LabelTone } from "@/lib/collab/labelTones";
-import { defaultSidebarPrefs, normalizePrefs } from "@/lib/collab/sidebarPrefs";
+import { defaultSidebarPrefs, normalizePrefs, SECTION_IDS } from "@/lib/collab/sidebarPrefs";
 import { COLLAB_FROM_VARS, fromNameProblem, hasFromVars } from "@/lib/fromname";
 import { db, me as meUser, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
+import { isEmoji } from "@/lib/botlook";
 import { del, get, HttpError, invalid, notFound, patch, post, put, respond, strArr, type Ctx } from "../router";
 import { escapeHtml, isRecord, nowIso, uuid } from "../util";
+import { mailbox as createMailbox } from "./resources";
 import { collabSignatureProblems, fillForSender } from "./templates";
 import { defaultChoice, newRule, parseCategories, parseSender, registerCollabCategories, resolveCategories, sortMail, type AccountChoice } from "./collabCategories";
 import { PRIMARY } from "@/lib/collab/categories";
@@ -617,6 +620,14 @@ export function ownMailAccounts(ws: WsData, uid: string): Pick<MailAccount, "id"
     .map((a) => ({ id: a.id, email: a.email, name: a.name, provider: a.provider }));
 }
 
+/** The workspace's mail accounts for the setup checklist: shared means shared with someone. */
+export function collabAccountsOf(ws: WsData): { shared: boolean }[] {
+  if (!status(ws).enabled) return [];
+  return state(ws).accounts.map((a) => ({
+    shared: a.visibility === "shared" && (a.shared_with.everyone || a.shared_with.team_ids.length > 0 || a.shared_with.user_ids.length > 0),
+  }));
+}
+
 /** Whether the workspace has Collab in the mock (`?mock_collab=off` turns it off). */
 export function collabOn(ws: WsData): boolean {
   return status(ws).enabled;
@@ -656,7 +667,7 @@ function status(ws: WsData): CollabStatus {
   const p = new URLSearchParams(location.search).get("mock_collab") ?? ws.collabOff ?? null;
   const workspaceOff = ws.workspace.settings.mail_enabled === false;
   const off = p === "off" || p === "plan" || p === "disabled" || workspaceOff;
-  return { enabled: !off, reason: workspaceOff && !p ? "workspace_disabled" : off ? (p === "plan" ? "plan" : "disabled") : null, providers: { google: true, microsoft: true, imap: true }, accounts: off ? 0 : visibleAccounts(ws).length, storage: storage() };
+  return { enabled: !off, reason: workspaceOff && !p ? "workspace_disabled" : off ? (p === "plan" ? "plan" : "disabled") : null, providers: { google: true, microsoft: true, imap: true }, google_client_id: "000000000000-opendesk-collab.apps.googleusercontent.com", accounts: off ? 0 : visibleAccounts(ws).length, storage: storage() };
 }
 
 /**
@@ -777,6 +788,7 @@ function accountOut(ws: WsData, a: Account): MailAccount {
     ...rest,
     owner: userRef(ownerId),
     can_manage: manage,
+    shared_with: manage ? a.shared_with : { ...a.shared_with, invited: undefined },
     unread: unreadInbox(ws, a.id),
     imap: manage ? a.imap : undefined,
     identities: identitiesOut(ws, a),
@@ -899,6 +911,8 @@ function threadOut(ws: WsData, t: ThreadMeta): MailThread {
     comment_count: t.comments.length,
     to_address: people.map((p) => p.email.toLowerCase()).find((e) => aliases.has(e)) ?? null,
     category: categoryOf(ws, t),
+    // The demo has no AI client drafting, so no conversation has an AI draft waiting.
+    ai_draft: null,
   };
 }
 
@@ -932,6 +946,8 @@ function detailOut(ws: WsData, t: ThreadMeta): MailThreadDetail {
     comments: t.comments,
     shares: t.shares,
     can_act: canActRole(ws, db.meId),
+    // The demo keeps no AI draft records once a draft is gone.
+    unused_ai_drafts: [],
   };
 }
 
@@ -989,6 +1005,9 @@ function listThreads(ws: WsData, ctx: Ctx) {
           return t.needs_action && s.accounts.some((a) => a.id === t.account_id && a.visibility === "shared" && a.handling_enabled) && inRole(s, t, "inbox");
         case "snoozed":
           return !!t.snoozed_until && s.accounts.some((a) => a.id === t.account_id && a.visibility === "shared" && a.handling_enabled) && inRole(s, t, "inbox");
+        case "ai_review":
+          // The demo has no AI client drafting, so nothing waits for review.
+          return false;
         default:
           return false;
       }
@@ -1087,6 +1106,10 @@ function counts(ws: WsData) {
   const assignedOpen = all.filter((t) => t.assignees.some((a) => a.id === me) && inRole(s, t, "inbox"));
   const assigned: Record<string, number> = {};
   for (const t of assignedOpen) assigned[t.account_id] = (assigned[t.account_id] ?? 0) + 1;
+  // Unread in spam by account, only accounts with some (contracts/collab.md "Spam beside Needs action").
+  const spamUnread = mine.filter((t) => t.unread && inRole(s, t, "spam"));
+  const spam: Record<string, number> = {};
+  for (const t of spamUnread) spam[t.account_id] = (spam[t.account_id] ?? 0) + 1;
   return {
     boxes: {
       inbox: inbox.filter((t) => t.unread).length,
@@ -1096,12 +1119,16 @@ function counts(ws: WsData) {
       drafts: mine.filter((t) => inRole(s, t, "drafts")).length,
       needs_action: mine.filter((t) => t.needs_action && s.accounts.some((a) => a.id === t.account_id && a.visibility === "shared" && a.handling_enabled) && inRole(s, t, "inbox")).length,
       snoozed: mine.filter((t) => !!t.snoozed_until && s.accounts.some((a) => a.id === t.account_id && a.visibility === "shared" && a.handling_enabled) && inRole(s, t, "inbox")).length,
+      ai_review: 0,
+      spam: spamUnread.length,
     },
     accounts,
     folders,
     addresses,
     assigned,
     categories,
+    ai_review: {},
+    spam,
   };
 }
 
@@ -1150,9 +1177,14 @@ function requireManage(ws: WsData, a: Account) {
   if (!((!!a.ownerId && a.ownerId === db.meId) || (a.visibility === "shared" && isAdmin(ws, db.meId)))) throw new HttpError(403, "forbidden", "Only whoever connected this account can change it.");
 }
 
-function audienceFrom(v: unknown): MailAudience {
+function audienceFrom(v: unknown, ws?: WsData): MailAudience {
   if (!isRecord(v)) return emptyAudience();
-  return { everyone: v.everyone === true, team_ids: strArr(v.team_ids) ?? [], user_ids: strArr(v.user_ids) ?? [] };
+  const out: MailAudience = { everyone: v.everyone === true, team_ids: strArr(v.team_ids) ?? [], user_ids: strArr(v.user_ids) ?? [] };
+  // Pending invitations an account is shared with (GH#447); dropped with Everyone, as on the server.
+  const invited = Array.isArray(v.invited) ? v.invited.filter(isRecord).map((x) => String(x.id)) : [];
+  const pending = ws && !out.everyone ? ws.invitations.filter((i) => invited.includes(i.id)).map((i) => ({ id: i.id, email: i.email })) : [];
+  if (pending.length) out.invited = pending;
+  return out;
 }
 
 function applyAction(ws: WsData, t: ThreadMeta, action: MailThreadAction, folderId?: string, until?: string) {
@@ -1172,6 +1204,11 @@ function applyAction(ws: WsData, t: ThreadMeta, action: MailThreadAction, folder
     t.needsAction = false;
     t.snoozedUntil = until;
     return;
+  }
+  // Out of Spam into the inbox of an account with handling on: in Needs action again, as new mail (contracts/collab.md "Conversations").
+  if ((action === "not_spam" || action === "inbox") && a.visibility === "shared" && a.handling_enabled && ms.some((m) => !m.draft && m.folder_ids.includes(rid("spam")))) {
+    t.needsAction = true;
+    t.snoozedUntil = undefined;
   }
   for (const m of ms) {
     switch (action) {
@@ -1273,7 +1310,7 @@ export function registerCollab() {
       owner: userRef(me),
       ownerId: me,
       visibility: b.visibility === "shared" ? "shared" : "private",
-      shared_with: b.visibility === "shared" ? audienceFrom(b.shared_with) : emptyAudience(),
+      shared_with: b.visibility === "shared" ? audienceFrom(b.shared_with, ctx.ws) : emptyAudience(),
       handling_enabled: false,
       reply_all: false,
       signature_html: "",
@@ -1348,12 +1385,27 @@ export function registerCollab() {
       a.defaultFrom = b.default_from.trim().toLowerCase() === a.email.toLowerCase() ? "" : b.default_from.trim().toLowerCase();
     }
     if (b.visibility === "private" || b.visibility === "shared") a.visibility = b.visibility;
+    const wasHandling = a.handling_enabled;
     if (typeof b.handling_enabled === "boolean") {
       if (a.visibility !== "shared") throw invalid("Handling state is available on shared accounts.");
       a.handling_enabled = b.handling_enabled;
     }
+    // Only with handling turning on: the inbox now, mail from the last 30 days, except what the account answered last (GH#430).
+    if (b.mark_inbox_needs_action === true) {
+      if (wasHandling || !a.handling_enabled) throw invalid("mark_inbox_needs_action goes with turning handling_enabled on.");
+      const s = state(ctx.ws);
+      const inbox = roleIdOf(s, a.id, "inbox");
+      const sent = roleIdOf(s, a.id, "sent");
+      for (const t of s.threads.values()) {
+        if (t.account_id !== a.id || t.needsAction || t.snoozedUntil) continue;
+        const ms = msgsOf(s, t.id).filter((m) => !m.draft);
+        const last = ms.at(-1);
+        const recent = !!last && Date.parse(last.sent_at) > Date.now() - 30 * DAY;
+        if (last && recent && ms.some((m) => !!inbox && m.folder_ids.includes(inbox)) && !(sent && last.folder_ids.includes(sent))) t.needsAction = true;
+      }
+    }
     if (typeof b.reply_all === "boolean") a.reply_all = b.reply_all;
-    if (b.shared_with !== undefined) a.shared_with = audienceFrom(b.shared_with);
+    if (b.shared_with !== undefined) a.shared_with = audienceFrom(b.shared_with, ctx.ws);
     if (a.visibility === "private") {
       a.shared_with = emptyAudience();
       a.handling_enabled = false;
@@ -1541,6 +1593,43 @@ export function registerCollab() {
     for (const [id, t] of s.threads) if (t.account_id === a.id) s.threads.delete(id);
     emit(ctx.ws, "collab.accounts", { account_id: a.id }, users);
     return respond(204);
+  });
+
+  // Like the API (contracts/collab.md "Using an account for tickets"): an admin makes a ticket
+  // inbox of an account they connected; anyone else's is not found, shared or not.
+  post("/v1/collab/accounts/:id/use-for-tickets", (ctx) => {
+    requireCollab(ctx.ws);
+    if (!isAdmin(ctx.ws, db.meId)) throw new HttpError(403, "forbidden", "Only workspace admins add ticket inboxes.");
+    const a = state(ctx.ws).accounts.find((x) => x.id === ctx.params.id);
+    if (!a || a.ownerId !== db.meId) throw notFound("Account");
+    if (ctx.ws.mailboxes.some((m) => m.email === a.email || m.aliases.includes(a.email))) throw new HttpError(409, "conflict", "A mailbox with that address already exists in this workspace.");
+    const b = ctx.body as UseForTicketsBody;
+    const kind = a.provider === "imap" ? "imap" : a.provider;
+    const name = (b.name ?? "").trim() || (a.name.includes("@") ? `${a.provider === "imap" ? "IMAP" : a.provider === "google" ? "Google" : "Microsoft"} mailbox` : a.name);
+    const team = typeof b.team_id === "string" && ctx.ws.teams.some((t) => t.id === b.team_id) ? b.team_id : null;
+    const m = createMailbox(ctx.ws, {
+      name,
+      email: a.email,
+      display_name: a.display_name ?? "",
+      inbound_kind: kind,
+      outbound_kind: kind === "imap" ? "smtp" : kind,
+      config: kind === "imap" ? { sync_start: "new" } : { oauth_email: a.email, oauth_grant: "api", oauth_client: "collab", sync_start: "new" },
+      team_id: team,
+    });
+    if (typeof b.brand_id === "string" && ctx.ws.brands.some((x) => x.id === b.brand_id)) m.brand_id = b.brand_id;
+    if (b.auto_reply_enabled) Object.assign(m, { auto_reply_enabled: true, auto_reply_subject: b.auto_reply_subject ?? "", auto_reply_html: b.auto_reply_html ?? "" });
+    if (b.signature_html) m.signature_html = b.signature_html;
+    publish(ctx.ws, "mailbox.created", { mailbox: m });
+    if (!b.keep_account) {
+      const users = audienceOf(ctx.ws, a.id, []);
+      const s = state(ctx.ws);
+      s.accounts = s.accounts.filter((x) => x.id !== a.id);
+      s.folders = s.folders.filter((f) => f.account_id !== a.id);
+      s.messages = s.messages.filter((x) => x.account_id !== a.id);
+      for (const [id, t] of s.threads) if (t.account_id === a.id) s.threads.delete(id);
+      emit(ctx.ws, "collab.accounts", { account_id: a.id }, users);
+    }
+    return respond(201, { mailbox_id: m.id, account_removed: !b.keep_account });
   });
 
   post("/v1/collab/accounts/:id/sync", (ctx) => {
@@ -2066,15 +2155,33 @@ export function registerCollab() {
   });
 
   put("/v1/collab/sidebar", (ctx) => {
-    if (JSON.stringify(ctx.body).length > 16 * 1024) throw invalid("Sidebar preferences are limited to 16 KB");
     const body = ctx.body as Partial<SidebarPrefs>;
+    // Like the API: the member's own sections are bounded apart (32 KB), the rest to 16 KB.
+    const own = JSON.stringify(body.sections ?? []).length;
+    if (JSON.stringify(ctx.body).length - own > 16 * 1024) throw invalid("Sidebar preferences are limited to 16 KB");
+    if (own > 32 * 1024) throw invalid("Your sections are too large.");
     const saved = state(ctx.ws).prefs[db.meId] ?? defaultSidebarPrefs();
-    // Like the API: a client that leaves out the numbers, the tabs or the pins added by themselves keeps them as saved.
-    const p = normalizePrefs({ ...body, badges: body.badges ?? saved.badges, mail_tabs: body.mail_tabs ?? saved.mail_tabs, auto_pins: body.auto_pins ?? saved.auto_pins });
+    // Like the API: a client that leaves out the numbers, the tabs, the pins added by themselves, its own sections, names, icons or the waiting chats row keeps them as saved.
+    const p = normalizePrefs({ ...body, badges: body.badges ?? saved.badges, mail_tabs: body.mail_tabs ?? saved.mail_tabs, auto_pins: body.auto_pins ?? saved.auto_pins, sections: body.sections ?? saved.sections, row_order: body.row_order ?? saved.row_order, names: body.names ?? saved.names, icons: body.icons ?? saved.icons, show_waiting_chats: body.show_waiting_chats ?? saved.show_waiting_chats });
+    const emoji = (v: string | undefined) => !v || isEmoji(v.trim());
+    for (const k of Object.keys(p.names)) if (!p.names[k].trim()) delete p.names[k];
+    if (Object.keys(p.names).length > 300 || Object.keys(p.icons).length > 300) throw invalid("At most 300 sections and rows can have a name or an icon of your own.");
+    if (Object.values(p.names).some((n) => n.trim().length > 64) || Object.values(p.icons).some((i) => !emoji(i))) throw invalid("A name is 64 characters or less, and an icon one emoji.");
+    if (p.sections.some((x) => !emoji(x.icon) || x.items.some((i) => !emoji(i.icon)))) throw invalid("An icon is one emoji.");
+    if (Object.entries(p.row_order).some(([k, rows]) => !(SECTION_IDS as readonly string[]).includes(k) || rows.length > 300 || new Set(rows).size !== rows.length || rows.some((r) => !r || r.length > 100)))
+      throw invalid("Each row in a section's order is 1 to 100 characters, once, in a built-in section.");
+    // A ticket inbox or team shown as a section of its own is named by its id.
+    if (p.order.some((k) => /^(mailbox|team):/.test(k) && !/^(mailbox:[0-9a-f-]{36}|team:(mine|[0-9a-f-]{36}))$/i.test(k)))
+      throw invalid("A ticket inbox or team shown as its own section is named by its id.");
+    if (p.sections.length > 20) throw invalid("The sidebar holds at most 20 sections of your own.");
+    if (p.sections.some((x) => x.items.length > 60) || p.sections.reduce((n, x) => n + x.items.length, 0) > 300) throw invalid("A section holds at most 60 rows, and your sections 300.");
+    if (new Set(p.sections.map((x) => x.id)).size !== p.sections.length || p.sections.some((x) => !/^[A-Za-z0-9_-]{1,40}$/.test(x.id) || x.title.trim().length > 40)) throw invalid("Each section needs an id once and a title of at most 40 characters.");
     if (p.pinned.length > 30) throw invalid("At most 30 favorites");
     if (Object.keys(p.badges).length > 300) throw invalid("Numbers can be chosen for at most 300 rows.");
     if (p.mail_tabs.length > 30) throw invalid("The folder bar holds at most 30 tabs.");
     state(ctx.ws).prefs[db.meId] = p;
+    // Like the API: the member's other tabs and devices follow.
+    publish(ctx.ws, "collab.sidebar", {}, { teamId: "__collab_private", topics: [`user:${db.meId}`] });
     return p;
   });
 }

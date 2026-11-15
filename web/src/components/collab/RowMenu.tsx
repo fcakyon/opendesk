@@ -5,7 +5,7 @@
 // or without Collab; with `enabled` false it holds the row's actions alone, and a row without
 // any is left as it is. Saved at once with PUT /v1/collab/sidebar.
 
-import { Ellipsis, EyeOff, Pin, PinOff, Settings, SlidersHorizontal } from "lucide-react";
+import { ArrowDown, ArrowUp, Ellipsis, EyeOff, Pencil, PencilRuler, Pin, PinOff, RotateCcw, Settings, SlidersHorizontal, SmilePlus } from "lucide-react";
 import { forwardRef, useRef, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Slot } from "radix-ui";
@@ -31,11 +31,17 @@ import {
   pickCount,
   setBadge,
   setHidden,
+  setIcon,
+  setName,
   togglePin,
   type BadgeKind,
   type BadgeNumbers,
 } from "@/lib/collab/sidebarPrefs";
+import { sidebarEdit } from "@/lib/collab/sidebarEdit";
 import { collabUi } from "@/lib/collab/ui";
+import { AddToSidebar } from "./AddToSidebar";
+import { useSidebarRow } from "./SidebarRow";
+import { ownSectionsUi, type OwnRow } from "@/lib/collab/ownSectionsUi";
 import { canColor, LABEL_TONES, toneHex, toneOf, useSetLabelColor } from "./labelColor";
 
 export type RowMenuProps = {
@@ -51,6 +57,8 @@ export type RowMenuProps = {
   rail?: boolean;
   /** The row's name, for the ⋯ button's label. */
   label?: string;
+  /** The row's own name, before the member's (Rename in sidebar resets to it). */
+  ownName?: string;
   /** A Gmail label or Outlook category: its colour is chosen here too. */
   labelColor?: { folder: MailFolder; provider: string };
   /** What the row needs done first (an account to reconnect), on top of the menu. */
@@ -68,19 +76,22 @@ type ChoiceProps = { children: ReactNode; checked: boolean; onSelect: () => void
 
 /** The menu's parts, so the right-click menu and the ⋯ dropdown list the same things. */
 type Parts = {
+  /** The right-click menu (its submenus are its own). */
+  context: boolean;
   Label: (p: { children: ReactNode }) => ReactNode;
   Choice: (p: ChoiceProps) => ReactNode;
   Item: (p: ItemProps) => ReactNode;
   Separator: () => ReactNode;
 };
-const contextParts: Parts = { Label: ContextMenuLabel, Choice: ContextMenuChoice, Item: ContextMenuItem, Separator: ContextMenuSeparator };
-const dropdownParts: Parts = { Label: MenuLabel, Choice: MenuChoice, Item: MenuItem, Separator: MenuSeparator };
+const contextParts: Parts = { context: true, Label: ContextMenuLabel, Choice: ContextMenuChoice, Item: ContextMenuItem, Separator: ContextMenuSeparator };
+const dropdownParts: Parts = { context: false, Label: MenuLabel, Choice: MenuChoice, Item: MenuItem, Separator: MenuSeparator };
 
 /** Forwards props and ref to its one child, so it can sit inside the rail's tooltip. */
-export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ enabled, prefs, badge, pin, hideId, rail, label, labelColor, action, items, settings, children, ...rest }, ref) {
+export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ enabled, prefs, badge, pin, hideId, rail, label, ownName, labelColor, action, items, settings, children, ...rest }, ref) {
   const { t } = useTranslation("collab");
   const save = useSaveSidebarPrefs();
   const setColor = useSetLabelColor();
+  const row = useSidebarRow();
   // A choice made with the pointer leaves focus off the ⋯ button, so the row shows its new number at once.
   const byPointer = useRef(false);
   if (!enabled && !items?.length)
@@ -94,9 +105,18 @@ export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ 
   const current = badge ? badgeFor(prefs, badge.key, badge.sections, badge.kind) : null;
   const own = badge ? prefs.badges[badge.key] : undefined;
   const pinned = pin ? isPinned(prefs, pin) : false;
+  // The row it is in (components/collab/SidebarRow.tsx): renamed and given an emoji where it is, moved up and down.
+  const nameKey = hideId ?? (pin ? `${pin.kind}:${pin.id}` : undefined);
+  const named = !!nameKey && (!!prefs.names[nameKey] || !!prefs.icons[nameKey]);
+  // The menu keeps the focus where it is on closing, so the field or picker opened on the row keeps it.
+  const later = (f: () => void) => () => {
+    byPointer.current = true;
+    setTimeout(f, 0);
+  };
+  const moves = row?.move ? ([-1, 1] as const).filter((d) => row.move!(d, true)) : [];
 
   // Collab's part: the number, the label colour, pin, hide, customize.
-  const prefsBody = ({ Label, Choice, Item, Separator }: Parts) => (
+  const prefsBody = ({ context, Label, Choice, Item, Separator }: Parts) => (
     <>
       {badge && (
         <>
@@ -134,13 +154,53 @@ export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ 
           <Separator />
         </>
       )}
+      {(row?.edit || nameKey) && (
+        <Item icon={<Pencil />} onSelect={row?.edit ? later(() => sidebarEdit.rename(row.id)) : () => ownSectionsUi.renameRow({ key: nameKey!, fallback: ownName ?? label ?? "" })}>
+          {t("edit.renameInSidebar")}
+        </Item>
+      )}
+      {row?.edit && (
+        <Item icon={<SmilePlus />} onSelect={later(() => sidebarEdit.pickIcon(row.id))}>
+          {t("edit.pickIcon")}
+        </Item>
+      )}
+      {named && (
+        <Item icon={<RotateCcw />} onSelect={() => change(setIcon(setName(prefs, nameKey!, ""), nameKey!, ""))}>
+          {t("edit.resetName")}
+        </Item>
+      )}
+      {moves.includes(-1) && (
+        <Item icon={<ArrowUp />} onSelect={() => row!.move!(-1)}>
+          {t("ownSections.moveUp")}
+        </Item>
+      )}
+      {moves.includes(1) && (
+        <Item icon={<ArrowDown />} onSelect={() => row!.move!(1)}>
+          {t("ownSections.moveDown")}
+        </Item>
+      )}
+      {(row?.edit || nameKey || moves.length > 0) && <Separator />}
       {pin && (
-        <Item icon={pinned ? <PinOff /> : <Pin />} disabled={!pinned && prefs.pinned.length >= MAX_PINS} onSelect={() => change(togglePin(prefs, pin))}>
+        <Item
+          icon={pinned ? <PinOff /> : <Pin />}
+          disabled={!pinned && prefs.pinned.length >= MAX_PINS}
+          onSelect={() => {
+            change(togglePin(prefs, pin));
+            if (pinned) toast.undo(t("edit.unpinned", { name: label ?? "" }), () => change(prefs), t("edit.undo"));
+          }}
+        >
           {pinned ? t("rowMenu.unpin") : t("rowMenu.pin")}
         </Item>
       )}
+      {pin && pin.kind !== "view_section" && <AddToSidebar item={pin as OwnRow} inContext={context} />}
       {hideId && (
-        <Item icon={<EyeOff />} onSelect={() => change(setHidden(prefs, hideId, true))}>
+        <Item
+          icon={<EyeOff />}
+          onSelect={() => {
+            change(setHidden(prefs, hideId, true));
+            toast.undo(t("edit.hidden", { name: label ?? "" }), () => change(setHidden(prefs, hideId, false)), t("edit.undo"));
+          }}
+        >
           {t("rowMenu.hide")}
         </Item>
       )}
@@ -150,13 +210,16 @@ export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ 
           {settings.label}
         </Item>
       )}
+      <Item icon={<PencilRuler />} onSelect={() => sidebarEdit.start()}>
+        {t("edit.title")}
+      </Item>
       <Item icon={<SlidersHorizontal />} onSelect={() => collabUi.customize(true)}>
         {t("rowMenu.customize")}
       </Item>
     </>
   );
 
-  const body = ({ Label, Choice, Item, Separator }: Parts) => (
+  const body = ({ context, Label, Choice, Item, Separator }: Parts) => (
     <>
       {action && (
         <>
@@ -172,7 +235,7 @@ export const RowMenu = forwardRef<HTMLElement, RowMenuProps>(function RowMenu({ 
         </Item>
       ))}
       {enabled && items?.length ? <Separator /> : null}
-      {enabled && prefsBody({ Label, Choice, Item, Separator })}
+      {enabled && prefsBody({ context, Label, Choice, Item, Separator })}
     </>
   );
 

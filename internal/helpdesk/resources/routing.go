@@ -35,6 +35,8 @@ type Assignment struct {
 	AutoAwayMinutes       int              `json:"auto_away_minutes" doc:"0 = off"`
 	NewTicketNotify       string           `json:"new_ticket_notify" enum:"auto,everyone,leads,off" doc:"Who is notified of a new ticket nobody is assigned to (settings.new_ticket_notify)"`
 	FollowUpKeepsAssignee bool             `json:"followup_keeps_assignee" doc:"A follow-up of a closed ticket goes to the closed ticket's assignee (settings.followup_keeps_assignee). Default false"`
+	ChatMode              string           `json:"chat_mode" enum:"none,round_robin,load_balanced" doc:"Live chats' own rule (settings.chat_assign): none leaves chats to the team, address and workspace rules. Default none"`
+	ChatSkillID           *string          `json:"chat_skill_id" doc:"The skill a member must hold to be given a chat (settings.chat_assign_skill_id); null for anyone in the pool"`
 }
 
 type assignmentPatch struct {
@@ -43,6 +45,8 @@ type assignmentPatch struct {
 	AutoAwayMinutes       *int              `json:"auto_away_minutes,omitempty" minimum:"0" maximum:"1440" doc:"0 or 10..1440"`
 	NewTicketNotify       *string           `json:"new_ticket_notify,omitempty" enum:"auto,everyone,leads,off"`
 	FollowUpKeepsAssignee *bool             `json:"followup_keeps_assignee,omitempty"`
+	ChatMode              *string           `json:"chat_mode,omitempty" enum:"none,round_robin,load_balanced"`
+	ChatSkillID           *string           `json:"chat_skill_id,omitempty" doc:"A skill of the workspace; empty for anyone in the pool"`
 }
 
 // TriageSettings is GET /v1/triage.
@@ -79,6 +83,9 @@ func loadAssignment(ctx context.Context, q db.Querier, wid uuid.UUID) (Assignmen
 		FollowUpKeepsAssignee: st.FollowUpKeepsAssignee, Rules: []AssignmentRule{}}
 	if !slices.Contains(assignModes, a.Mode) {
 		a.Mode = "none"
+	}
+	if err := loadChatAssignment(ctx, q, wid, &a); err != nil {
+		return Assignment{}, err
 	}
 	rows, err := q.Query(ctx, `SELECT CASE WHEN mailbox_id IS NULL THEN 'team' ELSE 'mailbox' END, COALESCE(mailbox_id, team_id), mode
 		FROM assignment_rules WHERE workspace_id = $1 ORDER BY created_at, COALESCE(mailbox_id, team_id)`, wid)
@@ -166,6 +173,9 @@ func registerRouting(d *deps.Deps, api huma.API) {
 			if b.FollowUpKeepsAssignee != nil {
 				patch["followup_keeps_assignee"] = *b.FollowUpKeepsAssignee
 			}
+			if err := chatAssignmentPatch(ctx, d.DB.Pool, p.WorkspaceID, b.ChatMode, b.ChatSkillID, patch); err != nil {
+				return nil, httpx.Wrap(err)
+			}
 			var a Assignment
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
 				if len(patch) > 0 {
@@ -185,7 +195,8 @@ func registerRouting(d *deps.Deps, api huma.API) {
 				}
 				return audit.Log(ctx, tx, p, p.WorkspaceID, "assignment.updated", "workspace", &p.WorkspaceID,
 					map[string]any{"mode": a.Mode, "rules": len(a.Rules), "auto_away_minutes": a.AutoAwayMinutes,
-						"new_ticket_notify": a.NewTicketNotify, "followup_keeps_assignee": a.FollowUpKeepsAssignee})
+						"new_ticket_notify": a.NewTicketNotify, "followup_keeps_assignee": a.FollowUpKeepsAssignee,
+						"chat_mode": a.ChatMode, "chat_skill_id": a.ChatSkillID})
 			})
 			if err != nil {
 				return nil, httpx.Wrap(err)

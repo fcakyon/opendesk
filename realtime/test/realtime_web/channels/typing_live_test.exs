@@ -41,7 +41,9 @@ defmodule RealtimeWeb.TypingLiveTest do
         forward(parent)
       end)
 
-    assert_receive {:joined, ^pid}
+    # Joining runs the channel's authorization; a busy CI runner can take longer than
+    # assert_receive's default 100 ms.
+    assert_receive {:joined, ^pid}, 2_000
     pid
   end
 
@@ -147,6 +149,30 @@ defmodule RealtimeWeb.TypingLiveTest do
       assert {:ok, _} = publish(c, "customer.typing", %{"team_id" => c.team})
       expected = %{"ticket_id" => c.tid, "contact_id" => c.cid}
       assert_receive {^member, %Message{event: "customer_typing", payload: ^expected}}
+      refute_receive {^outsider, %Message{}}, 100
+    end
+  end
+
+  describe "customer.presence" do
+    test "reaches agents as customer_presence {ticket_id, contact_id}, and not the visitor", c do
+      agent = agent_socket(c)
+      visitor = visitor_socket(c, nil)
+
+      assert {:ok, [ticket]} = publish(c, "customer.presence", %{})
+      assert ticket == c.ticket
+
+      expected = %{"ticket_id" => c.tid, "contact_id" => c.cid}
+      assert_receive {^agent, %Message{event: "customer_presence", payload: ^expected}}
+      refute_receive {^visitor, %Message{}}, 100
+    end
+
+    test "of a private team's chat reaches only the team", c do
+      member = member_socket(c)
+      outsider = agent_socket(c)
+
+      assert {:ok, _} = publish(c, "customer.presence", %{"team_id" => c.team})
+      expected = %{"ticket_id" => c.tid, "contact_id" => c.cid}
+      assert_receive {^member, %Message{event: "customer_presence", payload: ^expected}}
       refute_receive {^outsider, %Message{}}, 100
     end
   end

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { FileText, MessageCircle, Pencil, Ticket as TicketIcon, Trash2, UserRound } from "lucide-react";
+import { FileText, GitMerge, MessageCircle, Pencil, Ticket as TicketIcon, TicketPlus, Trash2, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dur, ease, springs } from "@/lib/motion";
@@ -31,8 +31,11 @@ import { useContactAvatar } from "@/lib/pictures";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { useProducts } from "@/lib/products";
-import { useStartChat } from "@/components/tickets/useNewTicket";
+import { useNewTicketFor, useStartChat } from "@/components/tickets/useNewTicket";
 import { CompanyPicker } from "./CompanyPicker";
+import { ContactEmails } from "./ContactEmails";
+import { MergeContactDialog } from "./MergeContactDialog";
+import { PortalAccessSection } from "./PortalAccess";
 import { CompanyGlyph, Detail, fieldLabel, fieldsOf, fieldText, MiniStat, none } from "./bits";
 import { RecordFields, RecordLabels, useRecordFields } from "./LabelsAndFields";
 import { dropContact, patchContact, restore, snapshot } from "./cache";
@@ -48,6 +51,7 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
   const canEdit = atLeast(useRole(), "agent");
   const { tickets: ticketsOn } = useProducts();
   const startChat = useStartChat();
+  const newTicket = useNewTicketFor();
   const [tab, setTab] = useState<Tab>("overview");
   const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -138,6 +142,12 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
                     <CopyButton value={c.email} label={t("drawer.copyEmail")} className="size-5" />
                   </span>
                 )}
+                {c.emails.map((extra) => (
+                  <span key={extra} className="mono flex min-w-0 items-center gap-0.5 text-xs text-fg-3" data-ph-mask>
+                    <span className="truncate">{extra}</span>
+                    <CopyButton value={extra} label={t("drawer.copyEmail")} className="size-5" />
+                  </span>
+                ))}
                 {c.company && (
                   <Link
                     to="/companies/{-$companyId}"
@@ -154,6 +164,11 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
                 <RecordLabels kind="contact" record={c} />
               </div>
             </div>
+            {canEdit && !editing && ticketsOn && (
+              <Button size="sm" variant="secondary" icon={<TicketPlus className="size-3.5" />} onClick={() => newTicket(c)}>
+                {t("drawer.newTicket")}
+              </Button>
+            )}
             {canEdit && !editing && ticketsOn && c.chat_reachable && (
               <Button size="sm" variant="secondary" icon={<MessageCircle className="size-3.5" />} onClick={() => startChat(c)}>
                 {t("drawer.startChat")}
@@ -175,8 +190,14 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
           <AnimatePresence mode="wait" initial={false}>
             {editing ? (
               <motion.div key="edit" {...(reduce ? {} : swap)}>
+                {/* Each change here is saved at once, apart from the form's Save. Extras sit beside a primary address. */}
+                {c.email && (
+                  <div className="border-b border-line-soft px-5 py-4">
+                    <ContactEmails c={c} />
+                  </div>
+                )}
                 <EditContact
-                  key={c.id + c.updated_at}
+                  key={c.id}
                   c={c}
                   onDirty={setDirty}
                   onDeleted={onClose}
@@ -201,7 +222,7 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
                     <Overview c={c} onEdit={canEdit ? () => setEditing(true) : undefined} />
                   </TabsContent>
                   <TabsContent value="tickets" className="flex-1 outline-none">
-                    <Tickets contactId={c.id} />
+                    <Tickets contactId={c.id} onNew={canEdit && ticketsOn ? () => newTicket(c) : undefined} />
                   </TabsContent>
                 </Tabs>
               </motion.div>
@@ -244,6 +265,8 @@ function Overview({ c, onEdit }: { c: Contact; onEdit?: () => void }) {
   const { t } = useTranslation("contacts");
   const { data: defs } = useRecordFields("contact");
   const fields = fieldsOf(c, new Set((defs ?? []).map((f) => f.key)));
+  // The customer portal is ticket work: it is offered only while Tickets is on.
+  const { tickets: ticketsOn } = useProducts();
   return (
     <div className="flex flex-col gap-6 px-5 py-4">
       <RecordFields kind="contact" record={c} />
@@ -261,6 +284,8 @@ function Overview({ c, onEdit }: { c: Contact; onEdit?: () => void }) {
           </Detail>
         ))}
       </dl>
+
+      {ticketsOn && <PortalAccessSection contact={c} canEdit={!!onEdit} />}
 
       <section>
         <div className="mb-2 flex items-center justify-between">
@@ -292,7 +317,7 @@ function Overview({ c, onEdit }: { c: Contact; onEdit?: () => void }) {
   );
 }
 
-function Tickets({ contactId }: { contactId: string }) {
+function Tickets({ contactId, onNew }: { contactId: string; onNew?: () => void }) {
   const { t } = useTranslation("contacts");
   useTranslation("indicators");
   const { data, isLoading } = useQuery(q.contactTickets(contactId));
@@ -303,7 +328,22 @@ function Tickets({ contactId }: { contactId: string }) {
         <Skeleton className="h-3 w-2/3" />
       </div>
     );
-  if (!data?.length) return <EmptyState compact lit={0} title={t("drawer.noTickets")} description={t("drawer.noTicketsHint")} />;
+  if (!data?.length)
+    return (
+      <EmptyState
+        compact
+        lit={0}
+        title={t("drawer.noTickets")}
+        description={t("drawer.noTicketsHint")}
+        action={
+          onNew && (
+            <Button size="sm" variant="secondary" icon={<TicketPlus className="size-3.5" />} onClick={onNew}>
+              {t("drawer.newTicket")}
+            </Button>
+          )
+        }
+      />
+    );
   return (
     <div role="list" className="py-1">
       <PresenceList>
@@ -352,6 +392,8 @@ function EditContact({ c, onDirty, onDeleted, onDone }: { c: Contact; onDirty: (
   const { t } = useTranslation("contacts");
   const qc = useQueryClient();
   const confirm = useConfirm();
+  const isAdmin = atLeast(useRole(), "admin");
+  const [merging, setMerging] = useState(false);
   const [name, setName] = useState(c.name);
   const [email, setEmail] = useState(c.email ?? "");
   const [phone, setPhone] = useState(c.phone);
@@ -359,6 +401,9 @@ function EditContact({ c, onDirty, onDeleted, onDone }: { c: Contact; onDirty: (
   const [company, setCompany] = useState<CompanyRef | null>(c.company);
   const [blocked, setBlocked] = useState(c.blocked);
   const [error, setError] = useState<string | null>(null);
+
+  // Another address made the primary one (ContactEmails) changes the email field under the form.
+  useEffect(() => setEmail(c.email ?? ""), [c.email]);
 
   const dirty =
     name !== c.name || email !== (c.email ?? "") || phone !== c.phone || notes !== c.notes || company?.id !== c.company?.id || blocked !== c.blocked;
@@ -404,57 +449,65 @@ function EditContact({ c, onDirty, onDeleted, onDone }: { c: Contact; onDirty: (
   });
 
   return (
-    <form
-      className="flex flex-col gap-4 px-5 py-5"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!name.trim() && !email.trim()) return setError(t("error.nameOrEmail"));
-        setError(null);
-        save.mutate();
-      }}
-    >
-      <Field label={t("field.name")}>{(p) => <TextInput {...p} data-autofocus autoFocus value={name} onChange={(e) => setName(e.target.value)} />}</Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label={t("field.email")}>{(p) => <TextInput {...p} type="email" className="mono" value={email} onChange={(e) => setEmail(e.target.value)} />}</Field>
-        <Field label={t("field.phone")}>{(p) => <TextInput {...p} value={phone} onChange={(e) => setPhone(e.target.value)} />}</Field>
-      </div>
-      <Field label={t("field.company")}>{({ id }) => <CompanyPicker id={id} value={company} onChange={setCompany} />}</Field>
-      <Field label={t("field.notes")} hint={t("field.notesHint")}>
-        {(p) => <Textarea {...p} rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} />}
-      </Field>
-      <div className="flex items-center justify-between gap-4 rounded-lg border border-line px-3.5 py-3">
-        <div>
-          <div className="text-[13px] font-medium">{t("field.block")}</div>
-          <div className="text-xs text-fg-3">{t("field.blockHint")}</div>
+    <>
+      <form
+        className="flex flex-col gap-4 px-5 py-5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!name.trim() && !email.trim()) return setError(t("error.nameOrEmail"));
+          setError(null);
+          save.mutate();
+        }}
+      >
+        <Field label={t("field.name")}>{(p) => <TextInput {...p} data-autofocus autoFocus value={name} onChange={(e) => setName(e.target.value)} />}</Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t("field.email")}>{(p) => <TextInput {...p} type="email" className="mono" value={email} onChange={(e) => setEmail(e.target.value)} />}</Field>
+          <Field label={t("field.phone")}>{(p) => <TextInput {...p} value={phone} onChange={(e) => setPhone(e.target.value)} />}</Field>
         </div>
-        <Switch checked={blocked} onCheckedChange={setBlocked} aria-label={t("field.block")} />
-      </div>
-      {error && (
-        <p role="alert" className="text-xs text-danger-fg">
-          {error}
-        </p>
-      )}
-      <div className="flex items-center gap-2 border-t border-line-soft pt-4">
-        <Button
-          variant="danger"
-          icon={<Trash2 className="size-3.5" />}
-          onClick={() =>
-            confirm.show(t("confirm.deleteBody"), () => remove.mutateAsync(), {
-              title: t("confirm.deleteTitle", { name: c.name || c.email || t("thisContact") }),
-              confirmLabel: t("confirm.deleteConfirm"),
-              danger: true,
-            })
-          }
-        >
-          {t("drawer.delete")}
-        </Button>
-        <Button variant="ghost" className="ml-auto" onClick={onDone}>
-          {t("cancel")}
-        </Button>
-        <Button variant="primary" type="submit" loading={save.isPending} disabled={!dirty}>
-          {t("drawer.save")}
-        </Button>
-      </div>
-    </form>
+        <Field label={t("field.company")}>{({ id }) => <CompanyPicker id={id} value={company} onChange={setCompany} />}</Field>
+        <Field label={t("field.notes")} hint={t("field.notesHint")}>
+          {(p) => <Textarea {...p} rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} />}
+        </Field>
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-line px-3.5 py-3">
+          <div>
+            <div className="text-[13px] font-medium">{t("field.block")}</div>
+            <div className="text-xs text-fg-3">{t("field.blockHint")}</div>
+          </div>
+          <Switch checked={blocked} onCheckedChange={setBlocked} aria-label={t("field.block")} />
+        </div>
+        {error && (
+          <p role="alert" className="text-xs text-danger-fg">
+            {error}
+          </p>
+        )}
+        <div className="flex items-center gap-2 border-t border-line-soft pt-4">
+          <Button
+            variant="danger"
+            icon={<Trash2 className="size-3.5" />}
+            onClick={() =>
+              confirm.show(t("confirm.deleteBody"), () => remove.mutateAsync(), {
+                title: t("confirm.deleteTitle", { name: c.name || c.email || t("thisContact") }),
+                confirmLabel: t("confirm.deleteConfirm"),
+                danger: true,
+              })
+            }
+          >
+            {t("drawer.delete")}
+          </Button>
+          {isAdmin && (
+            <Button variant="secondary" icon={<GitMerge className="size-3.5" />} onClick={() => setMerging(true)}>
+              {t("drawer.merge")}
+            </Button>
+          )}
+          <Button variant="ghost" className="ml-auto" onClick={onDone}>
+            {t("cancel")}
+          </Button>
+          <Button variant="primary" type="submit" loading={save.isPending} disabled={!dirty}>
+            {t("drawer.save")}
+          </Button>
+        </div>
+      </form>
+      <MergeContactDialog contact={c} open={merging} onOpenChange={setMerging} onMerged={onDeleted} />
+    </>
   );
 }

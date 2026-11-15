@@ -23,6 +23,7 @@ import { registerBots } from "./handlers/bots";
 import { registerChangelog } from "./handlers/changelog";
 import { registerCollab } from "./handlers/collab";
 import { registerWorkspaces } from "./handlers/workspaces";
+import { registerShortcuts } from "./handlers/shortcuts";
 import { registerDrafts, stageDraft } from "./handlers/drafts";
 import { registerKnowledge } from "./handlers/knowledge";
 import { registerProcedures } from "./handlers/procedures";
@@ -122,6 +123,7 @@ export function installMock(): void {
   registerTemplates();
   registerCollab();
   registerWorkspaces();
+  registerShortcuts();
   registerSpaces();
   registerWiki();
 

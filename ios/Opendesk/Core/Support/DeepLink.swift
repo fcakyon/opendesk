@@ -20,6 +20,11 @@ enum DeepLink: Hashable, Sendable {
     case changelog(String?)
     /// The wiki, optionally one page (`/wiki/<id>`).
     case wiki(String?)
+    /// Pages, optionally one page (`/pages/<id>`; contracts/pages.md "Routes").
+    case pages(String?)
+    /// One of an area's own views: `/pages/trash`, `/wiki/templates`, `/pages/graph`, `/pages/tags`,
+    /// or a teamspace's pages (`/pages?space=<team_id>`).
+    case wikiPlace(WikiArea, WikiPlace)
     case reports
 
     /// From a push or a link that names its server and workspace.
@@ -29,8 +34,9 @@ enum DeepLink: Hashable, Sendable {
         var workspaceID: String?
     }
 
-    /// An app path such as `/inbox/mine/<id>`, `/views/<view>/<id>`, `/inbox/open`, `/contacts/<id>`,
-    /// `/companies/<id>`, `/mail/<box>/<thread_id>`, `/kb/articles/<id>`, `/kb/changelog/<id>`, `/wiki/<id>` or `/reports`.
+    /// An app path such as `/inbox/mine/<id>`, `/views/<view>/<id>`, `/inbox/open`, `/inbox/unassigned?mailbox=<id>`, `/contacts/<id>`,
+    /// `/companies/<id>`, `/mail/<box>/<thread_id>`, `/kb/articles/<id>`, `/kb/changelog/<id>`, `/wiki/<id>`,
+    /// `/pages/<id>`, `/pages/trash` or `/reports`.
     static func parse(path raw: String) -> DeepLink? {
         let path = raw.split(separator: "?", maxSplits: 1).first.map(String.init) ?? raw
         let segments = path.split(separator: "/").map { String($0).removingPercentEncoding ?? String($0) }.filter { !$0.isEmpty }
@@ -38,6 +44,12 @@ enum DeepLink: Hashable, Sendable {
         switch head {
         case "inbox":
             let folder = segments.count > 1 ? Folder(rawValue: segments[1]) : nil
+            // One ticket inbox's folder (`/inbox/<folder>[/<ticket_id>]?mailbox=<id>`), Unassigned by default.
+            if let mailbox = URLComponents(string: raw)?.queryItems?.first(where: { $0.name == "mailbox" })?.value, !mailbox.isEmpty {
+                let scope = InboxScope.mailbox(mailbox, folder ?? .unassigned)
+                if segments.count >= 3, let id = segments.last { return .ticket(id: id, scope: scope) }
+                return .scope(scope)
+            }
             if segments.count >= 3, let id = segments.last {
                 return .ticket(id: id, scope: folder.map(InboxScope.folder))
             }
@@ -68,12 +80,36 @@ enum DeepLink: Hashable, Sendable {
             if segments.count >= 3, segments[1] == "articles" { return .article(segments[2]) }
             if segments.count >= 2, segments[1] == "changelog" { return .changelog(segments.count >= 3 ? segments[2] : nil) }
             return .kb
-        case "wiki":
-            return .wiki(segments.count > 1 ? segments[1] : nil)
+        case "wiki", "pages":
+            let area: WikiArea = head == "pages" ? .pages : .wiki
+            if segments.count > 1 {
+                if let place = WikiPlace(segment: segments[1]) { return .wikiPlace(area, place) }
+                return area == .pages ? .pages(segments[1]) : .wiki(segments[1])
+            }
+            if let team = URLComponents(string: raw)?.queryItems?.first(where: { $0.name == "space" })?.value, !team.isEmpty {
+                return .wikiPlace(area, .teamspace(team))
+            }
+            return area == .pages ? .pages(nil) : .wiki(nil)
         case "reports":
             return .reports
         default:
             return nil
+        }
+    }
+
+    /// The views of an area that are not a page (web `areaPath`), and a teamspace.
+    enum WikiPlace: Hashable, Sendable {
+        case trash, templates, graph, tags
+        case teamspace(String)
+
+        init?(segment: String) {
+            switch segment {
+            case "trash": self = .trash
+            case "templates": self = .templates
+            case "graph": self = .graph
+            case "tags": self = .tags
+            default: return nil
+            }
         }
     }
 

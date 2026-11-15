@@ -53,7 +53,7 @@ struct InboxRootView: View {
     }
 }
 
-/// The ticket list for a folder, view or team inbox: dense rows, swipe to solve,
+/// The ticket list for a folder, view, team inbox or ticket inbox: dense rows, swipe to solve,
 /// snooze or take, select many to change together, pull to refresh, all live.
 struct InboxListView: View {
     @Environment(AppEnvironment.self) private var env
@@ -80,7 +80,12 @@ struct InboxListView: View {
         case let .folder(folder): folder.title
         case let .view(id): directory.view(id)?.displayName ?? "View"
         case let .team(id, _): teamName(id)
+        case let .mailbox(id, _): mailboxName(id)
         }
+    }
+
+    private func mailboxName(_ id: String) -> String {
+        directory.mailbox(id).map(directory.inboxTitle) ?? "Ticket inbox"
     }
 
     private func teamName(_ id: String) -> String {
@@ -101,6 +106,10 @@ struct InboxListView: View {
         if inbox.scope.teamID != nil {
             return Text(["Team inbox", count].compactMap { $0 }.joined(separator: " · "))
         }
+        if let id = inbox.scope.mailboxID {
+            let address = directory.mailbox(id)?.email
+            return Text([address ?? "Ticket inbox", count].compactMap { $0 }.joined(separator: " · "))
+        }
         return count.map { Text($0) }
     }
 
@@ -110,7 +119,7 @@ struct InboxListView: View {
 
     /// The rows in order: in Unassigned's default order, chats waiting for a person come first.
     private var rows: [Ticket] {
-        guard inbox.scope == .folder(.unassigned), inbox.sort.isDefault, inbox.search.isEmpty else { return inbox.tickets }
+        guard inbox.scope.folder == .unassigned, inbox.sort.isDefault, inbox.search.isEmpty else { return inbox.tickets }
         let waiting = Set(waitingChats.map(\.id))
         guard !waiting.isEmpty else { return inbox.tickets }
         return inbox.tickets.filter { waiting.contains($0.id) } + inbox.tickets.filter { !waiting.contains($0.id) }
@@ -230,9 +239,20 @@ struct InboxListView: View {
 
     private var panel: some View {
         VStack(spacing: 0) {
+            if InboxSwitcherBar.shows(env), !selecting {
+                InboxSwitcherBar()
+                    .overlay(alignment: .bottom) { if inbox.scope.mailboxID == nil { Hairline() } }
+            }
             if case let .team(id, tab) = inbox.scope {
                 InboxTeamTabs(tab: tab, counts: id == InboxScope.myTeams ? directory.counts?.myTeams : directory.counts?.teams[id]) { next in
                     inbox.setTeamTab(next)
+                }
+                .overlay(alignment: .bottom) { Hairline() }
+                .disabled(selecting)
+            }
+            if case let .mailbox(id, folder) = inbox.scope {
+                InboxMailboxTabs(mailboxID: id, folder: folder, counts: directory.counts) { next in
+                    inbox.setMailboxFolder(next)
                 }
                 .overlay(alignment: .bottom) { Hairline() }
                 .disabled(selecting)
@@ -360,7 +380,7 @@ struct InboxListView: View {
                     ticket: ticket,
                     viewers: env.realtime.presence[ticket.id] ?? [],
                     agentOn: directory.ai.widgetAgentOn,
-                    hideAssignee: inbox.scope == .folder(.mine),
+                    hideAssignee: inbox.scope.folder == .mine,
                     replyingBot: env.realtime.live[ticket.id]?.bot
                 )
             }
@@ -427,6 +447,8 @@ struct InboxListView: View {
                 EmptyState(symbol: "square.stack", title: "Nothing matches this view", message: "No tickets match this view's filters right now.")
             case let .team(id, tab):
                 teamEmpty(teamName(id), tab: tab)
+            case let .mailbox(id, folder):
+                mailboxEmpty(mailboxName(id), folder: folder)
             }
         }
     }
@@ -439,6 +461,18 @@ struct InboxListView: View {
         case .all: "No tickets in \(team) yet"
         }
         return EmptyState(symbol: "person.3", title: title, message: "New conversations land here when an address, a widget or a routing rule sends them to this team.")
+    }
+
+    private func mailboxEmpty(_ name: String, folder: Folder) -> some View {
+        let title = switch folder {
+        case .unassigned: "Nothing unassigned in \(name)"
+        case .mine: "Nothing of yours in \(name)"
+        case .open: "Nothing open in \(name)"
+        case .pending: "Nothing pending in \(name)"
+        case .solved: "No solved tickets in \(name) yet"
+        case .spam: "No spam in \(name)"
+        }
+        return EmptyState(symbol: folder.symbol, title: title, message: "Mail written to this address becomes tickets here, and replies go out from it.")
     }
 
     // MARK: Selecting

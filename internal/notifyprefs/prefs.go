@@ -37,6 +37,8 @@ const (
 	GroupWorkspace = "workspace"
 	// GroupMail is Collab's conversations (contracts/collab.md "Notifications").
 	GroupMail = "mail"
+	// GroupWiki is the team's internal wiki (contracts/wiki.md).
+	GroupWiki = "wiki"
 )
 
 // Channels is where a notification goes besides the app.
@@ -71,11 +73,18 @@ var Types = []Type{
 	// Someone outside the team answered a third-party thread on a ticket assigned to you.
 	{Type: "thread_replied", Group: GroupTickets, Defaults: everywhere},
 	{Type: "sla_breached", Group: GroupTickets, Defaults: everywhere},
+	// A reply the member scheduled did not go out and stayed their draft (contracts/api.md "Reply drafts").
+	{Type: "scheduled_reply_failed", Group: GroupTickets, Defaults: everywhere},
 	{Type: "ai_handoff", Group: GroupTickets, Defaults: everywhere},
 	{Type: "team_joined", Group: GroupTeam, Defaults: quiet},
 	// Collab conversations assigned to the member or mentioning them (contracts/collab.md).
 	{Type: "collab_assigned", Group: GroupMail, Defaults: everywhere},
 	{Type: "collab_mention", Group: GroupMail, Defaults: everywhere},
+	// Wiki pages: a mention in a page or a comment, a comment on a page the member follows
+	// or in a thread they wrote in, and a reminder they set in a page (contracts/wiki.md).
+	{Type: "wiki_mention", Group: GroupWiki, Defaults: everywhere},
+	{Type: "wiki_comment", Group: GroupWiki, Defaults: Channels{Push: true, Desktop: true}},
+	{Type: "wiki_reminder", Group: GroupWiki, Defaults: everywhere},
 	{Type: "ai_cap_reached", Group: GroupAIBilling, Defaults: notPhone, Admins: true},
 	{Type: "ai_key_failed", Group: GroupAIBilling, Defaults: notPhone, Admins: true},
 	{Type: "ai_balance_low", Group: GroupAIBilling, Defaults: notPhone, Admins: true},
