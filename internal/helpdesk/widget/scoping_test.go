@@ -6,6 +6,8 @@ import (
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/crypto"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
+	"github.com/useopendesk/opendesk/internal/helpdesk/tickets"
+	"github.com/useopendesk/opendesk/internal/helpdesk/widget"
 	"github.com/useopendesk/opendesk/internal/ids"
 )
 
@@ -97,7 +99,8 @@ func TestWidgetSummary(t *testing.T) {
 
 // With show_team off (or a private team), visitor-facing messages withhold agent names and avatars.
 func TestWidgetWithholdsAgentIdentityWhenShowTeamOff(t *testing.T) {
-	e, ws := setup(t)
+	e := hdtest.New(t, widget.Register, tickets.Register)
+	ws := e.NewWorkspace()
 	s := start(t, e, map[string]any{"key": ws.WidgetKey})
 	conv := e.Do("POST", "/v1/widget/conversations", hdtest.Auth{Visitor: s.VisitorToken}, map[string]any{"body": "Hello"}).Want(t, 201).Map(t)
 	cid := conv["conversation"].(map[string]any)["id"].(string)
