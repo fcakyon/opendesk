@@ -115,6 +115,36 @@
       "on_hold": "En attente",
       "solved": "Résolu",
       "closed": "Fermé"
-    }
+    },
+    "sso": "Continuer avec l’authentification unique",
+    "or": "ou",
+    "sso_error": {
+      "email_unverified": "Votre fournisseur n’a pas confirmé votre adresse e-mail, nous ne pouvons donc pas vous connecter avec elle.",
+      "unknown_customer": "Nous n’avons trouvé aucun client avec cette adresse e-mail. Contactez l’équipe qui vous a donné l’accès.",
+      "blocked": "Ce compte ne peut pas se connecter. Contactez l’équipe pour obtenir de l’aide.",
+      "relink_required": "Votre compte chez le fournisseur a changé. Demandez à l’équipe d’autoriser une nouvelle connexion, puis réessayez.",
+      "identity_revoked": "Cette connexion a été supprimée. Contactez l’équipe pour obtenir de l’aide.",
+      "access_denied": "La connexion a été annulée.",
+      "provider_unavailable": "Nous n’avons pas pu joindre le fournisseur de connexion. Veuillez réessayer.",
+      "rate_limited": "Trop de tentatives. Patientez un instant et réessayez.",
+      "generic": "Nous n’avons pas pu vous connecter. Veuillez réessayer."
+    },
+    "new_request": "Nouvelle demande",
+    "new": {
+      "title": "Nouvelle demande",
+      "subject": "Objet",
+      "message": "Comment pouvons-nous vous aider ?",
+      "send": "Envoyer la demande",
+      "limit": "Vous avez envoyé plusieurs demandes à la suite. Patientez un moment et réessayez.",
+      "busy": "De nombreuses demandes arrivent en ce moment. Patientez un moment et réessayez.",
+      "attach": "Choisir des fichiers",
+      "drop": "Déposez des fichiers ici ou collez une capture d’écran.",
+      "remove": "Retirer {{name}}",
+      "too_big": "{{name}} dépasse 10 Mo.",
+      "max_files": "Vous pouvez joindre jusqu’à 5 fichiers.",
+      "upload_failed": "{{name}} n’a pas pu être téléversé.",
+      "uploading": "Téléversement…"
+    },
+    "attachments": "Pièces jointes"
   }
 }

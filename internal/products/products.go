@@ -14,6 +14,7 @@ import (
 const (
 	Tickets           = "tickets"
 	Mail              = "mail"
+	Pages             = "pages"
 	InstanceDisabled  = "instance_disabled"
 	Plan              = "plan"
 	WorkspaceDisabled = "workspace_disabled"
@@ -23,6 +24,7 @@ const (
 type Settings struct {
 	TicketsEnabled *bool `json:"tickets_enabled"`
 	MailEnabled    *bool `json:"mail_enabled"`
+	PagesEnabled   *bool `json:"pages_enabled"`
 }
 
 // State is effective availability, after instance configuration and entitlements.
@@ -30,6 +32,8 @@ type State struct {
 	Tickets            bool
 	Mail               bool
 	MailDisabledReason string
+	// Pages is the workspace's own flag: no instance option or plan turns it off.
+	Pages bool
 }
 
 // DisabledError means a direct operation needs a product that is unavailable.
@@ -47,6 +51,13 @@ func (s State) RequireTickets() error {
 	return nil
 }
 
+func (s State) RequirePages() error {
+	if !s.Pages {
+		return &DisabledError{Product: Pages, Reason: WorkspaceDisabled}
+	}
+	return nil
+}
+
 func (s State) RequireMail() error {
 	if !s.Mail {
 		return &DisabledError{Product: Mail, Reason: s.MailDisabledReason}
@@ -56,7 +67,8 @@ func (s State) RequireMail() error {
 
 // Evaluate applies instance, entitlement, then workspace precedence.
 func Evaluate(settings Settings, instanceCollab, entitled bool) State {
-	state := State{Tickets: settings.TicketsEnabled == nil || *settings.TicketsEnabled}
+	state := State{Tickets: settings.TicketsEnabled == nil || *settings.TicketsEnabled,
+		Pages: settings.PagesEnabled == nil || *settings.PagesEnabled}
 	switch {
 	case !instanceCollab:
 		state.MailDisabledReason = InstanceDisabled
@@ -106,13 +118,28 @@ func RequireMail(ctx context.Context, q db.Querier, service *plan.Service, insta
 
 // RequireTickets checks the current workspace flag without requiring Mail entitlement.
 func RequireTickets(ctx context.Context, q db.Querier, wid uuid.UUID) error {
-	var raw json.RawMessage
-	if err := q.QueryRow(ctx, `SELECT settings FROM workspaces WHERE id = $1`, wid).Scan(&raw); err != nil {
-		return err
-	}
-	var settings Settings
-	if err := json.Unmarshal(raw, &settings); err != nil {
+	settings, err := loadSettings(ctx, q, wid)
+	if err != nil {
 		return err
 	}
 	return Evaluate(settings, false, false).RequireTickets()
+}
+
+// RequirePages checks the workspace's Pages flag (contracts/pages.md).
+func RequirePages(ctx context.Context, q db.Querier, wid uuid.UUID) error {
+	settings, err := loadSettings(ctx, q, wid)
+	if err != nil {
+		return err
+	}
+	return Evaluate(settings, false, false).RequirePages()
+}
+
+func loadSettings(ctx context.Context, q db.Querier, wid uuid.UUID) (Settings, error) {
+	var raw json.RawMessage
+	if err := q.QueryRow(ctx, `SELECT settings FROM workspaces WHERE id = $1`, wid).Scan(&raw); err != nil {
+		return Settings{}, err
+	}
+	var settings Settings
+	err := json.Unmarshal(raw, &settings)
+	return settings, err
 }

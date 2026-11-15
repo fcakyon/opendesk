@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import type { Member, SavedReply } from "@/lib/api/types";
 import { q } from "@/lib/queries";
 import { cn } from "@/lib/cn";
-import { useHotkeys } from "@/lib/hotkeys";
+import { useShortcuts } from "@/lib/shortcuts";
 import { useDocumentTitle } from "@/app/RootLayout";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -42,7 +42,7 @@ export default function NewTicketPage() {
   const [panel, setPanel] = useState(readPanel);
   const editor = useRef<RichEditorHandle>(null);
   const note = draft.kind === "note";
-  const emailed = draft.kind === "reply" && !!draft.mailbox && !s.chat;
+  const emailed = draft.kind === "reply" && !!draft.mailbox && !s.chat && !s.log;
   const recipient = draft.to?.contact?.email ?? draft.to?.email;
   useDocumentTitle(tr("newTicket.title"));
 
@@ -70,7 +70,7 @@ export default function NewTicketPage() {
       savePanel(!p);
       return !p;
     });
-  useHotkeys({ escape: close, "]": togglePanel });
+  useShortcuts({ "tickets.escape": close, "ticket.panel": togglePanel });
 
   // The composer's suggestions: "/" saved replies (the ticket's team's and everyone's),
   // "@" teammates in a note, "{{" variables in an email, filled by the server when it is created.
@@ -88,6 +88,9 @@ export default function NewTicketPage() {
   membersRef.current = members ?? [];
   repliesRef.current = replies;
   kindRef.current = draft.kind;
+  // A logged request is the customer's own words: no variables are filled in it.
+  const fillsRef = useRef(false);
+  fillsRef.current = draft.kind === "reply" && !s.log;
   knownRef.current = catalog.loading ? null : catalog.known;
   varItemsRef.current = varItems;
   catalogRef.current = catalog;
@@ -105,7 +108,7 @@ export default function NewTicketPage() {
         known: () => knownRef.current,
         items: (query) => matchVars(varItemsRef.current, query, (g) => g),
         filters: () => catalogRef.current.filters,
-        enabled: () => kindRef.current === "reply",
+        enabled: () => fillsRef.current,
       }),
     ],
     [],
@@ -132,7 +135,7 @@ export default function NewTicketPage() {
           {draft.subject.trim() || tr("newTicket.title")}
         </h1>
         <Button variant="primary" size="sm" loading={s.create.isPending} onClick={submit}>
-          {draft.kind === "reply" ? tr("newTicket.createSend") : tr("newTicket.create")}
+          {draft.kind === "reply" && !s.log ? tr("newTicket.createSend") : tr("newTicket.create")}
         </Button>
         <Tooltip content={panel ? tr("detail.hideDetails") : tr("detail.showDetails")} shortcut="]">
           <Button
@@ -218,7 +221,7 @@ export default function NewTicketPage() {
                 ref={editor}
                 value={draft.body}
                 onChange={(body) => set({ body })}
-                placeholder={note ? tr("newTicket.bodyNote") : s.chat ? tr("newTicket.bodyChat") : tr("newTicket.bodyReply")}
+                placeholder={note ? tr("newTicket.bodyNote") : s.chat ? tr("newTicket.bodyChat") : s.log ? tr("newTicket.bodyLog") : tr("newTicket.bodyReply")}
                 extensions={extensions}
                 onSubmit={submit}
                 contentClassName="min-h-[240px]"

@@ -181,11 +181,13 @@ func TestEmailAgent(t *testing.T) {
 		t.Fatalf("activity %v", act)
 	}
 
-	// The agent hands off: nothing is sent, the ticket waits for the team.
+	// The agent hands off: nothing is sent, the ticket waits for the team. An email handoff
+	// needs no line first, unlike a chat's: one model call.
 	e.F.queue("email", "@tool handoff_to_human {\"reason\":\"refund\"}")
 	tid, mid = e.emailTicket(send, customerEmail(), "Refund", "I want my money back for last year")
+	before = e.F.calls()
 	e.emailAnswer(tid, mid)
-	if tk := e.loadTicket(tid); tk.Custom["ai_handoff"] != true || tk.Assignee != nil || len(publicMessages(e, tid)) != 1 {
+	if tk := e.loadTicket(tid); tk.Custom["ai_handoff"] != true || tk.Assignee != nil || len(publicMessages(e, tid)) != 1 || e.F.calls() != before+1 {
 		t.Fatalf("handoff %+v", tk.Custom)
 	}
 	if n := e.count(`SELECT count(*) FROM activities WHERE ticket_id = $1 AND type = 'ai_handoff' AND actor_type = 'ai'`, tid); n != 1 {

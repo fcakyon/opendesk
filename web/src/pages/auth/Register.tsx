@@ -124,7 +124,7 @@ export default function Register() {
         <AuthField label={a("workEmail")}>
           {(id) => (
             <div className="flex flex-col gap-1.5">
-              <TextInput id={id} inputSize="lg" type="email" autoComplete="email" readOnly={!!invite && !!search.email} placeholder="you@company.com" invalid={!!errors.email} {...register("email")} />
+              <TextInput id={id} inputSize="lg" type="email" autoComplete="username" readOnly={!!invite && !!search.email} placeholder="you@company.com" invalid={!!errors.email} {...register("email")} />
               <FieldError message={errors.email?.message} />
             </div>
           )}

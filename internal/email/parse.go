@@ -2,6 +2,7 @@ package email
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"mime"
 	"net/mail"
@@ -11,7 +12,10 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/google/uuid"
 	"github.com/jhillyerd/enmime/v2"
+
+	"github.com/useopendesk/opendesk/internal/db"
 )
 
 // parsedMail is the part of an inbound message the pipeline uses.
@@ -288,6 +292,18 @@ func subjectTicketNumber(subject string) (int64, bool) {
 	return n, err == nil && n > 0
 }
 
+// subjectTagSQL is whether the workspace puts "[#n]" in the subjects it sends (settings
+// ticket_number_in_subject, default true; contracts/api.md "Workspaces"). It expects alias
+// w (workspaces). Incoming mail is matched by its headers and address tag either way.
+const subjectTagSQL = `COALESCE((w.settings ->> 'ticket_number_in_subject')::boolean, true)`
+
+// subjectTagOn reports whether the workspace puts the ticket number in the subjects it sends.
+func subjectTagOn(ctx context.Context, q db.Querier, wid uuid.UUID) bool {
+	on := true
+	_ = q.QueryRow(ctx, `SELECT `+subjectTagSQL+` FROM workspaces w WHERE w.id = $1`, wid).Scan(&on)
+	return on
+}
+
 // plusTicketNumber reads "t123" from a "+t123" address tag.
 func plusTicketNumber(tag string) (int64, bool) {
 	if len(tag) < 2 || tag[0] != 't' {
@@ -306,13 +322,17 @@ func baseSubject(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// replySubject is "Re: <subject> [#n]".
-func replySubject(subject string, number int64, reply bool) string {
+// replySubject is "Re: <subject> [#n]", or without the tag when the workspace leaves the
+// ticket number out of subjects (tag false).
+func replySubject(subject string, number int64, reply, tag bool) string {
 	base := baseSubject(subject)
 	if base == "" {
 		base = "Your request"
 	}
-	out := fmt.Sprintf("%s [#%d]", base, number)
+	out := base
+	if tag {
+		out = fmt.Sprintf("%s [#%d]", base, number)
+	}
 	if reply {
 		out = "Re: " + out
 	}

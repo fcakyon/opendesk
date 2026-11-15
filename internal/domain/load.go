@@ -28,6 +28,9 @@ func Configure(publicAPIURL string, secret []byte) {
 	attachmentKey = append([]byte("attachment-url:"), secret...)
 }
 
+// APIURL is the public API base Configure set, without a trailing slash.
+func APIURL() string { return apiURL }
+
 // systemSending: mailboxes with outbound_kind "system" send through the platform mailer
 // (MAILBOX_SYSTEM_SEND).
 var systemSending = true
@@ -243,6 +246,9 @@ func ScanMessage(row pgx.Row) (Message, error) {
 	if collabAccount != nil {
 		m.FromAccount = &FromAccount{AccountID: *collabAccount, Email: m.FromEmail, ReplyTo: collabReplyTo}
 	}
+	if m.Direction == "inbound" && !m.AuthFailed {
+		m.ReplyAddress = ReplyAddress(m.FromEmail, m.ReplyTo)
+	}
 	if dID != nil {
 		m.DeletedBy = &UserRef{ID: *dID, Name: deref(dName), Email: deref(dEmail), AvatarURL: Avatar(deref(dAvatar))}
 	}
@@ -332,17 +338,22 @@ const HiddenMessageSQL = `(m.deleted_at IS NOT NULL OR m.sent_as_reply_id IS NOT
 var ContactSelect = `SELECT ct.id, ct.email, ct.name, ct.phone, ct.avatar_url, ct.avatar_source, ct.external_id, ct.notes, ct.custom,
 	ct.blocked, ct.created_at, ct.updated_at, co.id, co.name, co.domain, co.avatar_url,
 	(SELECT count(*) FROM tickets tk WHERE tk.contact_id = ct.id AND tk.deleted_at IS NULL),
-	ct.fields, ` + TagRefsSQL("contact_tags", "lt.contact_id = ct.id") + `, ` + ChatReachableSQL + `
+	ct.fields, ` + TagRefsSQL("contact_tags", "lt.contact_id = ct.id") + `, ` + ChatReachableSQL + `,
+	COALESCE((SELECT json_agg(e.email ORDER BY e.created_at, e.email) FROM contact_emails e WHERE e.workspace_id = ct.workspace_id AND e.contact_id = ct.id), '[]')
 FROM contacts ct LEFT JOIN companies co ON co.id = ct.company_id`
 
 func ScanContact(row pgx.Row) (Contact, error) {
 	var c Contact
 	var coID *uuid.UUID
 	var coName, coDomain, coAvatar *string
-	var tags []byte
+	var tags, emails []byte
 	err := row.Scan(&c.ID, &c.Email, &c.Name, &c.Phone, &c.AvatarURL, &c.AvatarSource, &c.ExternalID, &c.Notes, &c.Custom,
-		&c.Blocked, &c.CreatedAt, &c.UpdatedAt, &coID, &coName, &coDomain, &coAvatar, &c.TicketCount, &c.Fields, &tags, &c.ChatReachable)
+		&c.Blocked, &c.CreatedAt, &c.UpdatedAt, &coID, &coName, &coDomain, &coAvatar, &c.TicketCount, &c.Fields, &tags, &c.ChatReachable, &emails)
 	if err != nil {
+		return c, err
+	}
+	c.Emails = []string{}
+	if err := json.Unmarshal(emails, &c.Emails); err != nil {
 		return c, err
 	}
 	if c.Fields == nil {
@@ -391,7 +402,7 @@ func PublicMessage(m Message) Message {
 	m.To, m.Cc, m.Bcc = []string{}, []string{}, []string{}
 	m.DeliveryError = ""
 	m.MailboxID = nil
-	m.ReplyTo, m.AuthFailed, m.FormSender, m.ReceivedAt = "", false, "", ""
+	m.ReplyTo, m.ReplyAddress, m.AuthFailed, m.FormSender, m.ReceivedAt = "", "", false, "", ""
 	m.ThreadID = nil
 	m.FromAccount = nil
 	if m.Direction == "outbound" {

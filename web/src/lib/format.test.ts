@@ -1,6 +1,6 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { i18n, resetLocale, setLocale } from "@/i18n";
-import { bytes, clock, compact, currency, dayLabel, formatUsd, fullDate, minutes, number, percent, relLong, relShort, setClock, shortDate, timeOfDay, twelveHour, weekdayClock } from "./format";
+import { bytes, clock, compact, currency, dayLabel, formatUsd, fullDate, messageTime, minutes, number, percent, relLong, relShort, setClock, shortDate, timeOfDay, twelveHour, weekdayClock } from "./format";
 
 const NOW = Date.parse("2026-10-11T12:00:00Z");
 const ago = (ms: number) => new Date(NOW - ms).toISOString();
@@ -163,5 +163,63 @@ describe("stored times of day", () => {
     await setLocale("de", ["common"]);
     expect(twelveHour()).toBe(false);
     expect(timeOfDay("17:30")).toBe("17:30");
+  });
+});
+
+describe("message times", () => {
+  // Local times, so the day boundaries hold in any timezone.
+  const NOON = new Date(2026, 10, 9, 12, 0);
+  beforeAll(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOON);
+  });
+  afterEach(() => vi.setSystemTime(NOON));
+  afterAll(() => vi.useRealTimers());
+
+  it("reads only the time for today's messages", async () => {
+    await i18n.changeLanguage("en-US");
+    expect(sp(messageTime("2026-11-09T08:45:00"))).toBe("8:45 AM");
+    expect(sp(messageTime("2026-11-09T00:00:00"))).toBe("12:00 AM");
+    await i18n.changeLanguage("en");
+  });
+  it("adds the day to any other day's, from yesterday on", async () => {
+    await i18n.changeLanguage("en-US");
+    expect(sp(messageTime("2026-11-08T23:59:00"))).toBe("Nov 8 · 11:59 PM");
+    expect(sp(messageTime("2026-01-02T20:45:00"))).toBe("Jan 2 · 8:45 PM");
+    await i18n.changeLanguage("en");
+  });
+  it("adds the year outside this one", async () => {
+    await i18n.changeLanguage("en-US");
+    expect(sp(messageTime("2025-11-08T20:45:00"))).toBe("Nov 8, 2025 · 8:45 PM");
+    expect(sp(messageTime("2025-12-31T23:30:00"))).toBe("Dec 31, 2025 · 11:30 PM");
+    await i18n.changeLanguage("en");
+  });
+  it("follows the person's clock", async () => {
+    await i18n.changeLanguage("en-US");
+    setClock("24h");
+    expect(messageTime("2026-11-09T20:45:00")).toBe("20:45");
+    expect(sp(messageTime("2026-11-08T20:45:00"))).toBe("Nov 8 · 20:45");
+    await i18n.changeLanguage("de");
+    setClock("12h");
+    expect(sp(messageTime("2026-11-09T20:45:00"))).toBe("8:45 PM");
+    expect(sp(messageTime("2026-11-08T20:45:00"))).toBe("8. Nov. · 8:45 PM");
+    await i18n.changeLanguage("en");
+  });
+  it("writes the day in the app's language", async () => {
+    await i18n.changeLanguage("fr");
+    expect(messageTime("2026-11-09T20:45:00")).toBe("20:45");
+    expect(sp(messageTime("2026-11-08T20:45:00"))).toBe("8 nov. · 20:45");
+    expect(sp(messageTime("2025-11-08T20:45:00"))).toBe("8 nov. 2025 · 20:45");
+    await i18n.changeLanguage("de");
+    expect(sp(messageTime("2026-11-08T20:45:00"))).toBe("8. Nov. · 20:45");
+    expect(sp(messageTime("2025-11-08T20:45:00"))).toBe("8. Nov. 2025 · 20:45");
+    await i18n.changeLanguage("en");
+  });
+  it("turns at midnight, by the reader's calendar day", () => {
+    vi.setSystemTime(new Date(2026, 10, 10, 0, 1));
+    expect(messageTime("2026-11-09T23:59:00")).toMatch(/·/);
+    expect(messageTime("2026-11-10T00:00:00")).not.toMatch(/·/);
+    // The same "now", given rather than read from the clock.
+    expect(messageTime("2026-11-09T23:59:00", NOON.getTime())).not.toMatch(/·/);
   });
 });

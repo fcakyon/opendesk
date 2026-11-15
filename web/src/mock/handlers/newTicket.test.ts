@@ -45,6 +45,25 @@ describe("mock new ticket", () => {
     expect(msgs[0].attachments.map((a) => a.filename)).toEqual(["invoice.pdf"]);
   });
 
+  it("logs a customer's request as their own message on the email ticket, sending nothing", async () => {
+    const contact = ((await call("GET", "/v1/contacts?limit=5")).body.data as Contact[]).find((c) => c.email)!;
+    const box = ((await call("GET", "/v1/mailboxes")).body.data as Mailbox[]).find((m) => m.status === "active" && m.sending !== "system_off")!;
+    const req = { subject: "Phone call", contact_id: contact.id, channel: "email", mailbox_id: box.id, body_html: "<p>Printer is down</p>", kind: "reply", direction: "inbound", status: "open" };
+    const created = await call("POST", "/v1/tickets", req);
+    expect(created.status).toBe(201);
+    const t = created.body as Ticket;
+    expect(t).toMatchObject({ channel: "email", mailbox_id: box.id, status: "open", first_responded_at: null });
+    expect(t.waiting_since).toBeTruthy();
+    const msgs = (await call("GET", `/v1/tickets/${t.id}/messages`)).body.data as Message[];
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]).toMatchObject({ kind: "reply", direction: "inbound", delivery_status: "none" });
+    expect(msgs[0].author.type).toBe("contact");
+    // A note, copies, or no contact: refused, as by the API.
+    expect((await call("POST", "/v1/tickets", { ...req, kind: "note" })).status).toBe(422);
+    expect((await call("POST", "/v1/tickets", { ...req, cc: ["copy@example.com"] })).status).toBe(422);
+    expect((await call("POST", "/v1/tickets", { ...req, contact_id: undefined })).status).toBe(422);
+  });
+
   it("keeps copies off a ticket that starts as a note", async () => {
     const contact = ((await call("GET", "/v1/contacts?limit=5")).body.data as Contact[]).find((c) => c.email)!;
     const created = await call("POST", "/v1/tickets", { subject: "Call notes", contact_id: contact.id, channel: "api", body_html: "<p>x</p>", kind: "note", cc: ["copy@example.com"], status: "open" });

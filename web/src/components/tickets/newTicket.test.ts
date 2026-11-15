@@ -132,6 +132,35 @@ describe("createTicketBody", () => {
     expect(createTicketBody({ ...d, mailbox: undefined }, o)).not.toHaveProperty("bcc");
   });
 
+  it("logs a request as the customer's own message on an email ticket, and emails nothing", () => {
+    const log = draft({ kind: "reply", channel: "log", to: { contact }, subject: "Phone call", body: "<p>Printer is down</p>", mailbox: "m1", cc: ["b@example.com"] });
+    // It needs a recipient, a subject and a message, but never an address that can send now.
+    expect(newTicketProblem(log, true)).toBeNull();
+    expect(newTicketProblem({ ...log, subject: " " }, false)).toBe("needSubject");
+    expect(newTicketProblem({ ...log, body: "" }, false)).toBe("needBody");
+    // Inbound, so it is stored as the customer's and sent to no one; the address stays, so the
+    // team's replies go by email; no copies; open, since the team still has to answer it.
+    expect(wire(createTicketBody(log, o))).toEqual({
+      subject: "Phone call",
+      contact_id: "c1",
+      channel: "email",
+      mailbox_id: "m1",
+      body_html: "<p>Printer is down</p>",
+      kind: "reply",
+      direction: "inbound",
+      priority: "normal",
+      assignee_id: "u-me",
+      team_id: "t1",
+      status: "open",
+    });
+    // A workspace without an address logs it on an api ticket.
+    expect(createTicketBody({ ...log, mailbox: undefined }, o)).toMatchObject({ channel: "api", direction: "inbound", status: "open" });
+    // The same draft by email is sent from the address, as the team's.
+    const emailed = createTicketBody({ ...log, channel: "email" }, o);
+    expect(emailed).toMatchObject({ channel: "email", mailbox_id: "m1", cc: ["b@example.com"], status: "pending" });
+    expect(emailed).not.toHaveProperty("direction");
+  });
+
   it("opens a chat only with a contact on chat, without email's address and copies", () => {
     const onChat = { ...contact, chat_reachable: true } as Contact;
     const chat = draft({ kind: "reply", channel: "chat", to: { contact }, body: "<p>Hi</p>", mailbox: "m1", cc: ["b@example.com"] });

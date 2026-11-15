@@ -268,15 +268,15 @@ const Row = forwardRef<HTMLAnchorElement, RowProps>(function TicketRow(
           )}
         >
           {!t.assignee && (
-            <QuickButton label={tr("quick.assign", { number: t.number })} shortcut="i" onClick={() => onQuick(t, "assign")}>
+            <QuickButton label={tr("quick.assign", { number: t.number })} shortcut="tickets.assign" onClick={() => onQuick(t, "assign")}>
               <UserPlus className="size-3.5" />
             </QuickButton>
           )}
-          <QuickButton label={tr("quick.snooze", { number: t.number })} shortcut="h" onClick={() => onQuick(t, "snooze")}>
+          <QuickButton label={tr("quick.snooze", { number: t.number })} shortcut="tickets.snooze" onClick={() => onQuick(t, "snooze")}>
             <AlarmClock className="size-3.5" />
           </QuickButton>
           {!done && (
-            <QuickButton label={display.finishWords.quick(t.number)} shortcut="e" onClick={() => onQuick(t, "solve")}>
+            <QuickButton label={display.finishWords.quick(t.number)} shortcut="tickets.solve" onClick={() => onQuick(t, "solve")}>
               <Check className="size-3.5" />
             </QuickButton>
           )}

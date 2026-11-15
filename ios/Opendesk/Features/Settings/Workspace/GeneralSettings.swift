@@ -163,8 +163,11 @@ struct GeneralSettings: View {
         case "plan": "Mail is not part of this workspace\u{2019}s plan."
         default: "Members\u{2019} own mail accounts, synced with their inboxes."
         }
-        let ticketsLocked = store.draft.ticketsEnabled && (!store.draft.mailEnabled || !mailUsable)
-        let mailLocked = !mailUsable || (store.draft.mailEnabled && !store.draft.ticketsEnabled)
+        // At least one product stays on (contracts/pages.md "The product"): the last one on is locked.
+        let mailOn = store.draft.mailEnabled && mailUsable
+        let ticketsLocked = store.draft.ticketsEnabled && !mailOn && !store.draft.pagesEnabled
+        let mailLocked = !mailUsable || (mailOn && !store.draft.ticketsEnabled && !store.draft.pagesEnabled)
+        let pagesLocked = store.draft.pagesEnabled && !store.draft.ticketsEnabled && !mailOn
         return AccountSection(title: "Products", footer: "Choose what this workspace uses. At least one stays on.") {
             AccountToggleRow(
                 symbol: "tray", tone: .blue, title: "Tickets",
@@ -177,11 +180,17 @@ struct GeneralSettings: View {
                 isOn: Binding(get: { store.draft.mailEnabled && mailUsable }, set: { store.draft.mailEnabled = $0 }),
                 disabled: !admin || mailLocked
             )
-            if !store.draft.ticketsEnabled || !store.draft.mailEnabled {
+            AccountDivider()
+            AccountToggleRow(
+                symbol: "doc.richtext", tone: .violet, title: "Pages",
+                subtitle: "Your workspace\u{2019}s own pages, databases and canvases, beside the wiki.",
+                isOn: $store.draft.pagesEnabled, disabled: !admin || pagesLocked
+            )
+            if !store.draft.ticketsEnabled || !store.draft.mailEnabled || !store.draft.pagesEnabled {
                 AccountDivider()
                 AccountRow(
                     symbol: "checkmark.shield", tone: .green, title: "Nothing is deleted",
-                    subtitle: "Tickets, mail and connections are kept while a product is off. Incoming email, calls and chat messages wait and resume when Tickets is back on."
+                    subtitle: "Tickets, mail, pages and connections are kept while a product is off. Incoming email, calls and chat messages wait and resume when Tickets is back on."
                 )
             }
         }
@@ -545,6 +554,7 @@ final class GeneralSettingsStore {
         }
         put("tickets_enabled", d.ticketsEnabled, base.ticketsEnabled)
         put("mail_enabled", d.mailEnabled, base.mailEnabled)
+        put("pages_enabled", d.pagesEnabled, base.pagesEnabled)
         put("timezone", d.timezone, base.timezone)
         put("locale", d.locale, base.locale)
         put("locale_fixed", d.localeFixed, base.localeFixed)

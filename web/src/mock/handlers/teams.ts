@@ -37,6 +37,7 @@ import { parseHours, readUpload } from "./pictures";
 import { widgetPatch } from "./widget";
 import { checkBotId } from "./bots";
 import { forgetHelpDomain, registerHelpDomainRoutes } from "./helpDomains";
+import { registerPortalAuthRoutes, writePortalAuth } from "./portalAuth";
 import { removeBrandChangelog } from "./changelog";
 
 const TEAM_ROLES: TeamRole[] = ["lead", "member", "observer"];
@@ -324,6 +325,7 @@ function writeBrand(ctx: Ctx, b: Brand, creating: boolean) {
     b.color = c.toLowerCase();
   }
   if ("locale" in body) b.locale = (s(ctx, "locale") ?? "").slice(0, 20);
+  if (isRecord(body.portal_auth)) writePortalAuth(b, body.portal_auth);
   if (isRecord(body.help_center)) {
     const h = body.help_center;
     if ("enabled" in h) b.help_center.enabled = h.enabled === true;
@@ -336,6 +338,7 @@ const BRAND_SLOTS = ["logo", "help_center_logo", "help_center_favicon"] as const
 
 function registerBrandRoutes() {
   registerHelpDomainRoutes();
+  registerPortalAuthRoutes();
   get("/v1/brands", (ctx) => paginate(ctx, ctx.ws.brands.slice().sort((a, b) => a.position - b.position).map((b) => brandOut(ctx.ws, b)), 100));
   get("/v1/brands/:id", (ctx) => brandOut(ctx.ws, findBrand(ctx)));
 
@@ -348,6 +351,7 @@ function registerBrandRoutes() {
       name: "",
       slug: "",
       is_default: false,
+      portal_auth: { mode: "local" },
       color: "",
       locale: "",
       help_center: { enabled: false, title: "", url: "", default_url: "", domain: null },
@@ -793,6 +797,7 @@ export function seedDefaultBrand(ws: WsData) {
     name: ws.workspace.name,
     slug: ws.workspace.slug,
     is_default: true,
+    portal_auth: { mode: "local" },
     color: ws.workspace.settings.brand_color ?? "",
     locale: ws.workspace.settings.locale ?? "",
     help_center: { enabled: !!ws.workspace.settings.help_center_enabled, title: ws.workspace.settings.help_center_title || `${ws.workspace.name} Help`, url: "", default_url: "", domain: null },

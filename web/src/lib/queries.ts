@@ -3,9 +3,9 @@
 // its component reads.
 
 import { infiniteQueryOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
-import { scopeWorkspace } from "./api/client";
-import { api, rows, type ChangelogListQuery, type CollabThreadQuery, type TicketListQuery, type TicketSummaryQuery } from "./api/endpoints";
-import type { Page, ReportsQuery, ReportsRange, SpacesResponse } from "./api/types";
+import { isApiError, scopeWorkspace } from "./api/client";
+import { api, rows, type ChangelogListQuery, type CollabThreadQuery, type CompanyListQuery, type ContactListQuery, type TicketListQuery, type TicketSummaryQuery } from "./api/endpoints";
+import type { Page, ReportsQuery, ReportsRange, SpacesResponse, TicketCounts, WikiArea } from "./api/types";
 import { normalizeSpace, normalizeSpaces } from "./spaces/model";
 
 /** The changelog list's filters, as its key holds them. */
@@ -41,6 +41,9 @@ export function keyBody(key: readonly unknown[]): readonly unknown[] {
 /** The roots a user-level key may start with (src/lib/queryKeys.test.ts holds every literal key to it). */
 export const USER_ROOTS = new Set(["auth-config", "me", "public", "invitation-lookup", "oauth", "totp-setup", "customerPortal"]);
 
+/** Conversations per page of a Collab mail list. */
+export const MAIL_PAGE_SIZE = 50;
+
 export const qk = {
   /** Every key of one workspace (default: the one in scope). */
   scope: (wid?: string | null) => [scopeKey(wid === undefined ? scopeWorkspace() : wid)] as const,
@@ -48,6 +51,7 @@ export const qk = {
   of: <T extends readonly unknown[]>(...parts: T) => w(parts),
   /** How the person arranges their workspaces (contracts/api.md "Several workspaces"). */
   workspacePrefs: ["me", "workspace-prefs"] as const,
+  shortcuts: ["me", "shortcuts"] as const,
   /** Every workspace's sidebar numbers in one answer (GET /v1/me/overview). */
   overview: ["me", "overview"] as const,
   /** The person's Spaces (contracts/spaces.md): one list, the same in every workspace. */
@@ -79,17 +83,19 @@ export const qk = {
   suggestedReply: (id: string) => w(["tickets", "suggested-reply", id] as const),
   /** The ticket's shared draft (contracts/api.md "Drafts"). */
   ticketDraft: (id: string) => w(["tickets", "draft", id] as const),
+  replyDraft: (id: string) => w(["tickets", "reply-draft", id] as const),
   get contactLists() {
     return w(["contacts", "list"] as const);
   },
-  contacts: (q: { q?: string; company_id?: string }) => w(["contacts", "list", q] as const),
+  contacts: (q: Omit<ContactListQuery, "limit" | "cursor">) => w(["contacts", "list", q] as const),
   contact: (id: string) => w(["contacts", "detail", id] as const),
   contactTickets: (id: string) => w(["contacts", "tickets", id] as const),
+  contactPortal: (id: string) => w(["contacts", "portal", id] as const),
   contactPicker: (q: string) => w(["contacts", "picker", q] as const),
   get companyLists() {
     return w(["companies", "list"] as const);
   },
-  companies: (q: { q?: string }) => w(["companies", "list", q] as const),
+  companies: (q: Omit<CompanyListQuery, "limit" | "cursor">) => w(["companies", "list", q] as const),
   company: (id: string) => w(["companies", "detail", id] as const),
   get tags() {
     return w(["tags"] as const);
@@ -121,6 +127,7 @@ export const qk = {
   get mailboxes() {
     return w(["mailboxes"] as const);
   },
+  mailboxImapFolders: (id: string) => w(["mailboxes", id, "imap-folders"] as const),
   get members() {
     return w(["members"] as const);
   },
@@ -133,6 +140,7 @@ export const qk = {
   get brands() {
     return w(["brands"] as const);
   },
+  brandPortalAuth: (id: string) => w(["brands", "portal-auth", id] as const),
   get widgets() {
     return w(["widgets"] as const);
   },
@@ -195,9 +203,12 @@ export const qk = {
     return w(["imports"] as const);
   },
   ticketLinks: (id: string) => w(["tickets", "links", id] as const),
+  /** Wiki pages that mention a ticket (GET /v1/tickets/{id}/wiki). */
+  ticketWiki: (id: string) => w(["tickets", "wiki", id] as const),
   get auditLogs() {
     return w(["audit-logs"] as const);
   },
+  deletedTickets: (q: string) => w(["tickets", "deleted", q] as const),
   get notifications() {
     return w(["notifications"] as const);
   },
@@ -229,7 +240,7 @@ export const qk = {
     return w(["changelog", "categories"] as const);
   },
   search: (q: string) => w(["search", q] as const),
-  /** The wiki's tree: every page without its body (contracts/wiki.md). */
+  /** Both trees, the wiki's and Pages' (contracts/pages.md): every page without its body; each says its area. */
   get wikiTree() {
     return w(["wiki", "tree"] as const);
   },
@@ -237,6 +248,29 @@ export const qk = {
   wikiRevisions: (id: string) => w(["wiki", "revisions", id] as const),
   wikiRevision: (id: string, rid: string) => w(["wiki", "revision", id, rid] as const),
   wikiSearch: (q: string) => w(["wiki", "search", q] as const),
+  wikiBacklinks: (id: string) => w(["wiki", "backlinks", id] as const),
+  wikiMentions: (id: string) => w(["wiki", "mentions", id] as const),
+  get wikiGraph() {
+    return w(["wiki", "graph"] as const);
+  },
+  get wikiTrash() {
+    return w(["wiki", "trash"] as const);
+  },
+  get wikiTemplates() {
+    return w(["wiki", "templates"] as const);
+  },
+  get wikiFavorites() {
+    return w(["wiki", "favorites"] as const);
+  },
+  get wikiRecent() {
+    return w(["wiki", "recent"] as const);
+  },
+  wikiRecentOf: (area: WikiArea) => w(["wiki", "recent", area] as const),
+  wikiViews: (id: string) => w(["wiki", "views", id] as const),
+  wikiAnalytics: (id: string) => w(["wiki", "analytics", id] as const),
+  wikiComments: (id: string) => w(["wiki", "comments", id] as const),
+  wikiRows: (id: string) => w(["wiki", "rows", id] as const),
+  wikiDaily: (from: string, to: string, area: WikiArea) => w(["wiki", "daily", from, to, area] as const),
   reports: (r: ReportsQuery) => w(["reports", r] as const),
   reportAgents: (r: ReportsQuery) => w(["reports", "agents", r] as const),
   get widgetSettings() {
@@ -346,6 +380,26 @@ export const qk = {
 const list = <R>(key: readonly unknown[], fn: () => Promise<R[] | Page<R> | { data: R[] }>, opts: { staleTime?: number } = {}) =>
   queryOptions({ queryKey: key, queryFn: async () => rows(await fn()), ...opts });
 
+/**
+ * A list of the wiki's and Pages' together (contracts/pages.md), each item marked with its
+ * area: Pages' is empty while the workspace has Pages off, which the API answers with
+ * feature_disabled.
+ */
+async function bothAreas<R extends object>(fn: (area: WikiArea) => Promise<{ data: R[] }>, mark = true): Promise<{ data: R[] }> {
+  const [wiki, pages] = await Promise.all([
+    fn("wiki"),
+    fn("pages").catch((e: unknown) => {
+      if (isApiError(e, "feature_disabled")) return { data: [] as R[] };
+      throw e;
+    }),
+  ]);
+  if (!mark) return { data: [...wiki.data, ...pages.data] };
+  return { data: [...wiki.data, ...pages.data.map((n) => ({ ...n, area: "pages" as const }))] };
+}
+
+/** A workspace with Tickets off has no tickets to count. */
+const NO_TICKET_COUNTS: TicketCounts = { unassigned: 0, mine: 0, open: 0, pending: 0, on_hold: 0, solved: 0, spam: 0, views: {} };
+
 async function allPages<R>(fn: (q: { limit: number; cursor: string | null }) => Promise<Page<R>>) {
   const all: R[] = [];
   let cursor: string | null = null;
@@ -360,6 +414,7 @@ async function allPages<R>(fn: (q: { limit: number; cursor: string | null }) => 
 export const q = {
   authConfig: () => queryOptions({ queryKey: qk.authConfig, queryFn: api.auth.config, staleTime: 5 * 60_000 }),
   workspacePrefs: () => queryOptions({ queryKey: qk.workspacePrefs, queryFn: api.me.workspacePrefs, staleTime: 5 * 60_000 }),
+  shortcuts: () => queryOptions({ queryKey: qk.shortcuts, queryFn: api.me.shortcuts, staleTime: 5 * 60_000 }),
   overview: () => queryOptions({ queryKey: qk.overview, queryFn: async () => (await api.me.overview()).workspaces, staleTime: 30_000 }),
   /** The user's Spaces, every field present. No events announce changes, so focus refetches them. */
   spaces: () =>
@@ -376,7 +431,17 @@ export const q = {
   starter: () => queryOptions({ queryKey: qk.starter, queryFn: async () => normalizeSpace((await api.starterSpace.get())?.space), staleTime: 60_000 }),
   workspace: () => queryOptions({ queryKey: qk.workspace, queryFn: api.workspaces.current }),
   sessions: () => list(qk.sessions, api.me.sessions),
-  counts: () => queryOptions({ queryKey: qk.counts, queryFn: api.tickets.counts, staleTime: 30_000 }),
+  /** Sidebar ticket counts: all zero while the workspace has Tickets off, which the API answers with feature_disabled. */
+  counts: () =>
+    queryOptions({
+      queryKey: qk.counts,
+      queryFn: () =>
+        api.tickets.counts().catch((e: unknown) => {
+          if (isApiError(e, "feature_disabled")) return NO_TICKET_COUNTS;
+          throw e;
+        }),
+      staleTime: 30_000,
+    }),
   ticketSummary: (query: TicketSummaryQuery) => queryOptions({ queryKey: qk.ticketSummary(query), queryFn: () => api.tickets.summary(query), staleTime: 15_000 }),
   tickets: (query: TicketListQuery) =>
     infiniteQueryOptions({
@@ -393,7 +458,9 @@ export const q = {
   suggestedReply: (id: string) =>
     queryOptions({ queryKey: qk.suggestedReply(id), queryFn: async () => (await api.ai.suggestedReply.get(id)).suggested_reply }),
   ticketDraft: (id: string) => queryOptions({ queryKey: qk.ticketDraft(id), queryFn: async () => (await api.tickets.draft.get(id)).draft }),
-  contacts: (query: { q?: string; company_id?: string }) =>
+  replyDraft: (id: string) =>
+    queryOptions({ queryKey: qk.replyDraft(id), queryFn: async () => (await api.tickets.replyDraft.get(id)).draft, staleTime: 0, gcTime: 0 }),
+  contacts: (query: Omit<ContactListQuery, "limit" | "cursor">) =>
     infiniteQueryOptions({
       queryKey: qk.contacts(query),
       queryFn: ({ pageParam }) => api.contacts.search({ ...query, limit: 50, cursor: pageParam }),
@@ -402,7 +469,8 @@ export const q = {
     }),
   contact: (id: string) => queryOptions({ queryKey: qk.contact(id), queryFn: () => api.contacts.get(id) }),
   contactTickets: (id: string) => list(qk.contactTickets(id), () => api.contacts.tickets(id, { limit: 20 })),
-  companies: (query: { q?: string }) =>
+  contactPortal: (id: string) => queryOptions({ queryKey: qk.contactPortal(id), queryFn: () => api.contacts.portal(id) }),
+  companies: (query: Omit<CompanyListQuery, "limit" | "cursor">) =>
     infiniteQueryOptions({
       queryKey: qk.companies(query),
       queryFn: ({ pageParam }) => api.companies.search({ ...query, limit: 50, cursor: pageParam }),
@@ -454,10 +522,18 @@ export const q = {
     list(qk.supportChannelAvailableDestinations(id), () => api.supportChannels.availableDestinations(id), { staleTime: 30_000 }),
   imports: () => list(qk.imports, () => api.imports.list()),
   ticketLinks: (id: string) => list(qk.ticketLinks(id), () => api.tickets.links(id)),
+  ticketWiki: (id: string) => list(qk.ticketWiki(id), () => api.tickets.wiki(id)),
   ticketPanels: () => list(qk.ticketPanels, () => api.ticketPanels.list()),
   // The server keeps an answer for a minute too; reopening a ticket shows it at once.
   ticketPanel: (ticketId: string, panelId: string) =>
     queryOptions({ queryKey: qk.ticketPanel(ticketId, panelId), queryFn: () => api.tickets.panel(ticketId, panelId), staleTime: 60_000 }),
+  deletedTickets: (q = "") =>
+    infiniteQueryOptions({
+      queryKey: qk.deletedTickets(q),
+      queryFn: ({ pageParam }) => api.tickets.deleted({ limit: 50, before: pageParam, q }),
+      initialPageParam: null as string | null,
+      getNextPageParam: (last) => last.next_before ?? null,
+    }),
   auditLogs: () =>
     infiniteQueryOptions({
       queryKey: qk.auditLogs,
@@ -488,10 +564,22 @@ export const q = {
     }),
   changelogEntry: (id: string) => queryOptions({ queryKey: qk.changelogEntry(id), queryFn: () => api.changelog.entries.get(id) }),
   changelogCategories: () => list(qk.changelogCategories, () => api.changelog.categories()),
-  wikiTree: () => list(qk.wikiTree, () => api.wiki.tree()),
+  wikiTree: () => list(qk.wikiTree, () => bothAreas((area) => api.wiki.tree(area))),
   wikiPage: (id: string) => queryOptions({ queryKey: qk.wikiPage(id), queryFn: () => api.wiki.get(id) }),
   wikiRevisions: (id: string) => list(qk.wikiRevisions(id), () => api.wiki.revisions(id)),
   wikiRevision: (id: string, rid: string) => queryOptions({ queryKey: qk.wikiRevision(id, rid), queryFn: () => api.wiki.revision(id, rid), staleTime: Infinity }),
+  wikiBacklinks: (id: string) => list(qk.wikiBacklinks(id), () => api.wiki.backlinks(id)),
+  wikiMentions: (id: string) => list(qk.wikiMentions(id), () => api.wiki.mentions(id)),
+  wikiGraph: () => list(qk.wikiGraph, () => bothAreas((area) => api.wiki.graph(area), false)),
+  wikiTrash: () => list(qk.wikiTrash, () => bothAreas((area) => api.wiki.trashList(area))),
+  wikiTemplates: () => list(qk.wikiTemplates, () => api.wiki.templates()),
+  wikiFavorites: () => list(qk.wikiFavorites, () => api.wiki.favorites()),
+  wikiRecent: (area: WikiArea = "wiki") => list(qk.wikiRecentOf(area), () => api.wiki.recent(area)),
+  wikiViews: (id: string) => queryOptions({ queryKey: qk.wikiViews(id), queryFn: () => api.wiki.views(id) }),
+  wikiAnalytics: (id: string) => queryOptions({ queryKey: qk.wikiAnalytics(id), queryFn: () => api.wiki.analytics(id) }),
+  wikiComments: (id: string) => queryOptions({ queryKey: qk.wikiComments(id), queryFn: () => api.wiki.comments.list(id) }),
+  wikiRows: (id: string) => queryOptions({ queryKey: qk.wikiRows(id), queryFn: () => api.wiki.rows(id) }),
+  wikiDaily: (from: string, to: string, area: WikiArea = "wiki") => list(qk.wikiDaily(from, to, area), () => api.wiki.dailyNotes(from, to, area)),
   wikiSearch: (term: string) =>
     queryOptions({ queryKey: qk.wikiSearch(term), queryFn: async () => (await api.wiki.search(term)).data, enabled: term.trim().length > 0, staleTime: 5_000 }),
   search: (term: string) =>
@@ -553,7 +641,7 @@ export const q = {
   mailThreads: (query: CollabThreadQuery) =>
     infiniteQueryOptions({
       queryKey: qk.mailThreads(query),
-      queryFn: ({ pageParam }) => api.collab.threads.list({ ...query, limit: 50, cursor: pageParam }),
+      queryFn: ({ pageParam }) => api.collab.threads.list({ ...query, limit: MAIL_PAGE_SIZE, cursor: pageParam }),
       initialPageParam: null as string | null,
       getNextPageParam: (last) => last.next_cursor,
       staleTime: 15_000,

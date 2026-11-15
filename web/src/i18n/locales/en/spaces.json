@@ -120,8 +120,10 @@
       "teams": "Teams",
       "views": "Views",
       "mail": "Mail",
-      "pages": "Pages",
-      "everywhere": "Across your workspaces"
+      "pages": "Workspace",
+      "everywhere": "Across your workspaces",
+      "wiki": "Pages",
+      "teamspaces": "Teamspaces"
     },
     "wholeHint": "Kept up to date",
     "noCollab": "Collab is off in {{workspace}}, so its mail can't be added.",

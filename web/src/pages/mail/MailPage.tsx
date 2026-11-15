@@ -1,25 +1,56 @@
 // Collab mail: a box (or folder) across accounts or one, the conversation list
 // beside the open conversation. Every action shows at once and is undone if the
-// API refuses; archive, trash, spam and moves offer Undo. Keyboard first.
+// API refuses; archive, trash, spam, moves, labels and Done / Needs action offer
+// Undo. Keyboard first; a row's right click opens its menu, and rows drag onto the
+// sidebar's mail rows and the folder bar's tabs (GH#455).
 
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { AnimatePresence } from "motion/react";
-import { Archive, AtSign, Folder, Mail, MailOpen, PenSquare, RefreshCw, ShieldAlert, Star, Tag, Trash2, UserRound, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  AlarmClock,
+  Archive,
+  AtSign,
+  CircleCheck,
+  CircleDot,
+  ExternalLink,
+  Folder,
+  Forward,
+  Inbox,
+  Mail,
+  MailOpen,
+  PenSquare,
+  RefreshCw,
+  Reply,
+  ReplyAll,
+  ShieldAlert,
+  ShieldCheck,
+  Star,
+  Tag,
+  Trash2,
+  UserPlus,
+  UserRound,
+  Users,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { MailFolder, MailThread, MailThreadAction } from "@/lib/api/types";
+import type { AIDraftRef, MailFolder, MailThread, MailThreadAction } from "@/lib/api/types";
 import { api } from "@/lib/api/endpoints";
 import { inverseAction, leavesList, listPlace, UNDOABLE } from "@/lib/collab/actions";
-import { accountName, isMailBox, mailListQuery, type MailSearch } from "@/lib/collab/boxes";
+import { accountName, boxForRole, isMailBox, mailListQuery, type MailSearch } from "@/lib/collab/boxes";
 import { cachedFolders } from "@/lib/collab/cache";
 import { compose } from "@/lib/collab/compose";
 import { addressNumbers } from "@/lib/collab/badges";
 import { accountCategories, categoryTabs, PRIMARY, ruleSender } from "@/lib/collab/categories";
-import { useAllFolders, useCanAct, useMailAccounts, useSidebarPrefs, useThreadAction } from "@/lib/collab/hooks";
+import { assignChanges, useAllFolders, useAssignThreads, useCanAct, useMailAccounts, useSelectEvery, useSidebarPrefs, useThreadAction } from "@/lib/collab/hooks";
 import { type ComposeMode } from "@/lib/collab/recipients";
 import { identitiesOf, ownEmails as ownEmailsOf } from "@/lib/collab/identities";
-import { useHotkeys } from "@/lib/hotkeys";
+import { startThreadDrag, takeThreadDrops, type ThreadDropTarget } from "@/lib/collab/threadDrag";
+import { isTypingTarget } from "@/lib/hotkeys";
+import { openInNewTab, useHref } from "@/lib/links";
+import { useSession } from "@/lib/session";
+import { useShortcuts } from "@/lib/shortcuts";
 import { cn } from "@/lib/cn";
 import { qk, q } from "@/lib/queries";
 import { useDocumentTitle } from "@/app/RootLayout";
@@ -31,24 +62,37 @@ import { Select } from "@/components/ui/select";
 import { SkeletonRows } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
+import { AIDraftFeedbackDialog } from "@/components/collab/AIDraftFeedback";
 import { AccountDot, boxIcon, FolderGlyph } from "@/components/collab/bits";
 import { canOfferCategories, CategoryOffer, CategoryTabs, useCategorySettingsTarget } from "@/components/collab/CategoryTabs";
 import { FolderBar } from "@/components/collab/FolderBar";
-import { SearchCoverage, StorageFullBanner } from "@/components/collab/MailNotices";
-import { LabelsPicker, MovePicker, type MoveTarget } from "@/components/collab/pickers";
-import { ThreadRow } from "@/components/collab/ThreadRow";
+import { SearchCoverage, SpamBesideWork, StorageFullBanner } from "@/components/collab/MailNotices";
+import { AssignPicker, LabelsPicker, MovePicker, type MoveTarget } from "@/components/collab/pickers";
+import { ListShareDialog, SnoozeItems } from "@/components/collab/ThreadMenu";
+import { SelectAllBar } from "@/components/collab/SelectAllBar";
+import { ThreadRow, type AIDraftAction } from "@/components/collab/ThreadRow";
+import { SnoozeMenu } from "@/components/tickets/detail/SnoozeMenu";
+import { useConfirm } from "@/components/ui/confirm";
+import { ContextMenuItem, ContextMenuLabel, ContextMenuSeparator, ContextMenuSub } from "@/components/ui/context-menu";
 import { ThreadView, type ThreadViewHandle } from "@/components/collab/ThreadView";
+
+const NO_LABELS: MailFolder[] = [];
 
 type ActOpts = { folderId?: string; category?: string; label?: string; silent?: boolean; until?: string };
 
-const toastKey: Partial<Record<MailThreadAction, "archived" | "trashed" | "spammed" | "moved" | "inboxed" | "notSpam" | "snoozed">> = {
+const toastKey: Partial<Record<MailThreadAction, "archived" | "trashed" | "spammed" | "moved" | "inboxed" | "notSpam" | "snoozed" | "done" | "needsAction" | "labeled" | "starred">> = {
   snooze: "snoozed",
+  done: "done",
+  needs_action: "needsAction",
+  label: "labeled",
   archive: "archived",
   trash: "trashed",
   spam: "spammed",
   move: "moved",
   inbox: "inboxed",
   not_spam: "notSpam",
+  // Only a drop on Starred says so: the star button and s are silent.
+  star: "starred",
 };
 
 function BulkButton({ label, shortcut, onClick, children }: { label: string; shortcut?: string; onClick?: () => void; children: ReactNode }) {
@@ -92,6 +136,7 @@ export default function MailPage() {
   const prefs = useSidebarPrefs();
   const folderMap = useAllFolders(accounts);
   const action = useThreadAction();
+  const confirm = useConfirm();
 
   const account = search.account ? accounts?.find((a) => a.id === search.account) : undefined;
   const folder: MailFolder | undefined = search.folder ? Object.values(folderMap).flatMap((f) => f ?? []).find((f) => f.id === search.folder) : undefined;
@@ -203,6 +248,16 @@ export default function MailPage() {
     [threads],
   );
 
+  /** Every conversation of the box, folder, tab or search in view (the master checkbox's second step). */
+  const every = useSelectEvery(list, listKey, setSelected);
+  /** Clears the selection, and stops selecting every conversation so it never comes back. */
+  const clearSelection = () => {
+    every.stop();
+    setSelected(new Set());
+  };
+  /** The master checkbox: every loaded conversation, or none when any is selected or the rest is loading. */
+  const toggleAll = () => (selected.size || every.running ? clearSelection() : setSelected(new Set(threads.map((x) => x.id))));
+
   const move = (d: 1 | -1) => {
     const i = Math.max(0, Math.min(threads.length - 1, focusIdx + d));
     setFocusIdx(i);
@@ -264,7 +319,9 @@ export default function MailPage() {
   );
 
   const act = useCallback(
-    (items: MailThread[], a: MailThreadAction, opts: ActOpts = {}) => {
+    (all: MailThread[], a: MailThreadAction, opts: ActOpts = {}) => {
+      // Done and Needs action touch only conversations they change, so Undo puts back exactly those.
+      const items = a === "done" ? all.filter((x) => x.needs_action || x.snoozed_until) : a === "needs_action" ? all.filter((x) => !x.needs_action) : all;
       if (!canAct || !items.length) return;
       const ids = items.map((x) => x.id);
       const place = listPlace(query, cachedFolders(qc));
@@ -287,7 +344,7 @@ export default function MailPage() {
       const key = toastKey[a];
       if (opts.silent || !key) return;
       const msg = t(`toast.${key}`, { count: ids.length, folder: opts.label ?? "" });
-      const back = UNDOABLE.has(a) ? inverseAction(a, place) : null;
+      const back = UNDOABLE.has(a) ? inverseAction(a, place, opts.folderId) : null;
       if (back)
         toast.undo(
           msg,
@@ -303,7 +360,73 @@ export default function MailPage() {
     [canAct, query, qc, openId, threads, go, close, action, t, categorized],
   );
 
-  const onRowAction = useCallback((x: MailThread, a: MailThreadAction) => act([x], a, { silent: a !== "archive" && a !== "trash" }), [act]);
+  // The rows' callbacks read the latest act through a ref: act changes on every render, and
+  // a new callback would redraw every memoized row as the focus moves.
+  const actRef = useRef(act);
+  actRef.current = act;
+  const onRowAction = useCallback(
+    (x: MailThread, a: MailThreadAction) => actRef.current([x], a, { silent: a !== "archive" && a !== "trash" && a !== "done" && a !== "needs_action" }),
+    [],
+  );
+
+  // ── AI drafts in place (Ready for review and Needs action, GH#430) ─────────
+  // Send goes as saved; Edit opens the conversation with the draft in the composer;
+  // Discard asks first, as the composer does, since the draft is deleted at the provider too.
+  const draftsInRows = canAct && (box === "ai_review" || box === "needs_action");
+  const [editAI, setEditAI] = useState<string | null>(null);
+  // Only the conversation Edit opened takes the draft into its composer, once.
+  useEffect(() => setEditAI((id) => (id && id !== openId ? null : id)), [openId]);
+  const [draftBusy, setDraftBusy] = useState<Set<string>>(new Set());
+  // An AI draft just discarded from its row: feedback on it, offered from the toast, as the composer's discard does.
+  const [discardedAI, setDiscardedAI] = useState<{ draft: AIDraftRef; threadId: string } | null>(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const busyDraft = useCallback((id: string, on: boolean) => setDraftBusy((s) => {
+    const next = new Set(s);
+    if (on) next.add(id);
+    else next.delete(id);
+    return next;
+  }), []);
+  const onRowDraft = useCallback(
+    (x: MailThread, a: AIDraftAction) => {
+      const d = x.ai_draft;
+      if (!d) return;
+      if (a === "edit") {
+        setEditAI(x.id);
+        return open(x);
+      }
+      const run = (call: () => Promise<unknown>, done: () => void, failed: string) => {
+        busyDraft(x.id, true);
+        call().then(
+          () => {
+            busyDraft(x.id, false);
+            void qc.invalidateQueries({ queryKey: qk.mailThreadLists });
+            void qc.invalidateQueries({ queryKey: qk.mailThread(x.id) });
+            void qc.invalidateQueries({ queryKey: qk.mailCounts });
+            done();
+          },
+          (e) => {
+            busyDraft(x.id, false);
+            toast.error(e, failed);
+          },
+        );
+      };
+      if (a === "send") return run(() => api.collab.drafts.send(d.draft_id), () => toast.success(t("toast.sent", { email: accountsById.get(x.account_id)?.email ?? "" })), t("composer.sendFailed"));
+      const discarded = () => {
+        if (!d.record_id) return;
+        setFeedbackOpen(false);
+        setDiscardedAI({ draft: { id: d.record_id, client: d.drafted_by, outcome: "discarded", has_feedback: false }, threadId: x.id });
+        toast.success(t("aiFeedback.discardedToast", { name: d.drafted_by }), {
+          action: { label: t("aiFeedback.why"), onClick: () => setFeedbackOpen(true) },
+        });
+      };
+      confirm.show(t("composer.discardDraftConfirm"), () => run(() => api.collab.drafts.remove(d.draft_id), discarded, t("composer.discardFailed")), {
+        title: t("composer.discardDraftTitle"),
+        confirmLabel: t("composer.discard"),
+        danger: true,
+      });
+    },
+    [open, qc, t, accountsById, confirm, busyDraft],
+  );
   const onThreadAction = useCallback(
     (a: MailThreadAction, opts?: ActOpts) => {
       if (!openId) return;
@@ -325,10 +448,15 @@ export default function MailPage() {
     setIntent({ id: x.id, mode });
     open(x);
   };
+  // What the pickers act on: the conversations a row's menu picked them for, else the selection, else the focused one.
+  const [pickIds, setPickIds] = useState<string[] | null>(null);
+  // Where that menu opened: its picker shows there.
+  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
+  const pickTargets = () =>
+    pickIds ? threads.filter((x) => pickIds.includes(x.id)) : selected.size ? threads.filter((x) => selected.has(x.id)) : threads[focusIdx] ? [threads[focusIdx]] : [];
   // Move and labels act within one account.
   const targetAccount = (() => {
-    const ts = selected.size ? threads.filter((x) => selected.has(x.id)) : threads[focusIdx] ? [threads[focusIdx]] : [];
-    const ids = new Set(ts.map((x) => x.account_id));
+    const ids = new Set(pickTargets().map((x) => x.account_id));
     return ids.size === 1 ? [...ids][0] : null;
   })();
   const targetFolders = targetAccount ? (folderMap[targetAccount] ?? []) : [];
@@ -336,45 +464,324 @@ export default function MailPage() {
   // Labels: Gmail labels and Outlook categories (IMAP has folders only); moving to a label is Gmail's.
   const targetLabels = !!targetProvider && targetProvider !== "imap";
   const moveFolders = targetProvider === "google" ? targetFolders : targetFolders.filter((f) => f.kind !== "label");
-  const pickTargets = () => (selected.size ? threads.filter((x) => selected.has(x.id)) : threads[focusIdx] ? [threads[focusIdx]] : []);
   const appliedLabels = (() => {
     const ts = pickTargets();
     if (!ts.length) return [];
     return targetFolders.filter((f) => f.kind === "label" && !f.role && ts.every((x) => x.folder_ids.includes(f.id))).map((f) => f.id);
   })();
 
-  useHotkeys({
-    j: () => move(1),
-    k: () => move(-1),
+  // ── Triage from the list: Handling, assignees, the row menu and drops (GH#455) ──
+  /** Done, Needs action and Snooze are for shared accounts with Handling on (contracts/collab.md "Conversations"). */
+  const handlingOn = useCallback(
+    (x: MailThread) => {
+      const a = accountsById.get(x.account_id);
+      return !!a?.handling_enabled && a.visibility === "shared";
+    },
+    [accountsById],
+  );
+  const roles = useMemo(() => new Map(Object.values(folderMap).flatMap((fs) => (fs ?? []).map((f) => [f.id, f.role] as const))), [folderMap]);
+  const inRole = (x: MailThread, role: string) => x.folder_ids.some((id) => roles.get(id) === role);
+  const me = useSession((s) => s.user?.id);
+  const assign = useAssignThreads();
+  const assignFailed = (e: unknown) => toast.error(e, t("toast.failed"));
+  const commonAssignees = (ts: MailThread[]) => (ts.length ? ts[0].assignees.map((a) => a.id).filter((id) => ts.every((x) => x.assignees.some((a) => a.id === id))) : []);
+  /** The picker's choice for several conversations: who it added joins each, who it took off leaves each; the rest stay. */
+  const setAssignees = (ts: MailThread[], ids: string[]) => {
+    const before = commonAssignees(ts);
+    const added = ids.filter((id) => !before.includes(id));
+    const removed = before.filter((id) => !ids.includes(id));
+    const changes = assignChanges(ts, (cur) => [...cur.filter((id) => !removed.includes(id)), ...added.filter((id) => !cur.includes(id))]);
+    if (changes.length) assign.mutate(changes, { onError: assignFailed });
+  };
+  /** Dropped on Assigned to me: the member joins each conversation's assignees, with Undo. */
+  const assignMe = (ts: MailThread[]) => {
+    if (!me) return;
+    const changes = assignChanges(ts, (cur) => (cur.includes(me) ? cur : [...cur, me]));
+    if (!changes.length) return;
+    assign.mutate(changes, {
+      onError: assignFailed,
+      onSuccess: () =>
+        toast.undo(
+          t("toast.assignedToYou", { count: changes.length }),
+          () => assign.mutate(changes.map((c) => ({ id: c.id, before: c.ids, ids: c.before })), { onError: assignFailed }),
+          t("toast.undo"),
+        ),
+    });
+  };
+
+  // A picker or dialog opened from the row menu keeps the focus the menu would give back to the row.
+  const keepFocus = useRef(false);
+  const onMenuCloseFocus = useCallback((e: Event) => {
+    if (!keepFocus.current) return;
+    keepFocus.current = false;
+    e.preventDefault();
+  }, []);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [shareId, setShareId] = useState<string | null>(null);
+  const pickFor = (ts: MailThread[], open: () => void) => {
+    keepFocus.current = true;
+    setPickIds(ts.map((x) => x.id));
+    open();
+  };
+  /** A picker closed: the next one acts on the selection or the focused conversation again. */
+  const picked = (setOpen: (o: boolean) => void) => (o: boolean) => {
+    setOpen(o);
+    if (!o) {
+      setPickIds(null);
+      setAnchor(null);
+    }
+  };
+  const href = useHref();
+  const onPoint = useCallback((x: number, y: number) => setAnchor({ x, y }), []);
+
+  /** The row menu: the selection when the row is in it, else the row alone. */
+  const rowMenu = (row: MailThread) => {
+    const ts = selected.has(row.id) ? threads.filter((x) => selected.has(x.id)) : [row];
+    const one = ts.length === 1;
+    const accs = new Set(ts.map((x) => x.account_id));
+    const provider = accs.size === 1 ? accountsById.get(row.account_id)?.provider : undefined;
+    const anyInbox = ts.some((x) => inRole(x, "inbox"));
+    const allSpam = ts.every((x) => inRole(x, "spam"));
+    const handling = ts.every(handlingOn);
+    const item = (a: MailThreadAction, opts?: ActOpts) => () => act(ts, a, opts);
+    const reply = (mode: ComposeMode) => () => {
+      if (openId === row.id) return threadRef.current?.reply(mode);
+      setIntent({ id: row.id, mode });
+      open(row);
+    };
+    return (
+      <>
+        {!one && <ContextMenuLabel>{t("list.selected", { count: ts.length })}</ContextMenuLabel>}
+        {canAct && one && (
+          <>
+            <ContextMenuItem icon={<Reply />} onSelect={reply("reply")}>
+              {t("action.reply")}
+            </ContextMenuItem>
+            <ContextMenuItem icon={<ReplyAll />} onSelect={reply("reply_all")}>
+              {t("action.replyAll")}
+            </ContextMenuItem>
+            <ContextMenuItem icon={<Forward />} onSelect={reply("forward")}>
+              {t("action.forward")}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+        {canAct && (
+          <>
+            {(anyInbox || !allSpam) && (
+              <ContextMenuItem icon={<Archive />} onSelect={item("archive")}>
+                {t("action.archive")}
+              </ContextMenuItem>
+            )}
+            {!anyInbox && (
+              <ContextMenuItem icon={<Inbox />} onSelect={item("inbox")}>
+                {t("action.inbox")}
+              </ContextMenuItem>
+            )}
+            <ContextMenuItem icon={<Trash2 />} onSelect={item("trash")}>
+              {t("action.trash")}
+            </ContextMenuItem>
+            {allSpam ? (
+              <ContextMenuItem icon={<ShieldCheck />} onSelect={item("not_spam")}>
+                {t("action.notSpam")}
+              </ContextMenuItem>
+            ) : (
+              <ContextMenuItem icon={<ShieldAlert />} onSelect={item("spam")}>
+                {t("action.spam")}
+              </ContextMenuItem>
+            )}
+            <ContextMenuSeparator />
+            {ts.some((x) => x.unread) ? (
+              <ContextMenuItem icon={<MailOpen />} onSelect={item("read", { silent: true })}>
+                {t("action.read")}
+              </ContextMenuItem>
+            ) : (
+              <ContextMenuItem icon={<Mail />} onSelect={item("unread", { silent: true })}>
+                {t("action.unread")}
+              </ContextMenuItem>
+            )}
+            {ts.every((x) => x.starred) ? (
+              <ContextMenuItem icon={<Star />} onSelect={item("unstar", { silent: true })}>
+                {t("action.unstar")}
+              </ContextMenuItem>
+            ) : (
+              <ContextMenuItem icon={<Star />} onSelect={item("star", { silent: true })}>
+                {t("action.star")}
+              </ContextMenuItem>
+            )}
+            {handling && (
+              <>
+                {ts.every((x) => x.needs_action) ? (
+                  <ContextMenuItem icon={<CircleCheck />} onSelect={item("done")}>
+                    {t("action.done")}
+                  </ContextMenuItem>
+                ) : (
+                  <ContextMenuItem icon={<CircleDot />} onSelect={item("needs_action")}>
+                    {t("action.needsAction")}
+                  </ContextMenuItem>
+                )}
+                <ContextMenuSub label={t("action.snooze")} icon={<AlarmClock />}>
+                  <SnoozeItems onSnooze={(at) => act(ts, "snooze", { until: at.toISOString() })} />
+                </ContextMenuSub>
+              </>
+            )}
+            <ContextMenuSeparator />
+            <ContextMenuItem icon={<UserPlus />} onSelect={() => pickFor(ts, () => setAssignOpen(true))}>
+              {t("action.assignTo")}
+            </ContextMenuItem>
+            {one && (
+              <ContextMenuItem
+                icon={<Users />}
+                onSelect={() => {
+                  keepFocus.current = true;
+                  setShareId(row.id);
+                }}
+              >
+                {t("action.shareWith")}
+              </ContextMenuItem>
+            )}
+            {provider && (
+              <>
+                <ContextMenuSeparator />
+                <ContextMenuItem icon={<Folder />} onSelect={() => pickFor(ts, () => setPickMove(true))}>
+                  {t("action.moveTo")}
+                </ContextMenuItem>
+                {provider !== "imap" && (
+                  <ContextMenuItem icon={<Tag />} onSelect={() => pickFor(ts, () => setPickLabels(true))}>
+                    {t("action.labelAs")}
+                  </ContextMenuItem>
+                )}
+              </>
+            )}
+          </>
+        )}
+        {one && (
+          <>
+            {canAct && <ContextMenuSeparator />}
+            <ContextMenuItem icon={<ExternalLink />} onSelect={() => openInNewTab(href({ to: "/mail/$box/{-$threadId}", params: { box, threadId: row.id }, search: (prev: MailSearch) => prev }))}>
+              {t("action.newTab")}
+            </ContextMenuItem>
+          </>
+        )}
+      </>
+    );
+  };
+
+  // The rows get one callback for the life of the page, reading the latest menu when it opens,
+  // so moving the focus does not redraw every row (ThreadRow is memoized).
+  const rowMenuRef = useRef(rowMenu);
+  rowMenuRef.current = rowMenu;
+  const renderRowMenu = useCallback((row: MailThread) => rowMenuRef.current(row), []);
+
+  // The context-menu key and Shift+F10 open the focused conversation's menu where it is.
+  const menuKeyAt = useRef(0);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !(e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey))) return;
+      const el = e.target as Element | null;
+      if (isTypingTarget(el) || (el && el !== document.body && !listRef.current?.contains(el))) return;
+      const id = threads[focusIdx]?.id;
+      const row = id ? listRef.current?.querySelector<HTMLElement>(`[data-thread-id="${id}"]`) : null;
+      if (!row) return;
+      e.preventDefault();
+      menuKeyAt.current = Date.now();
+      const r = row.getBoundingClientRect();
+      row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: r.left + Math.min(64, r.width / 2), clientY: r.top + r.height / 2 }));
+    };
+    // The browser's own menu that the key also opens stays shut.
+    const onMenu = (e: MouseEvent) => {
+      if (e.isTrusted && Date.now() - menuKeyAt.current < 600) e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("contextmenu", onMenu, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("contextmenu", onMenu, true);
+    };
+  }, [threads, focusIdx]);
+
+  /** Dragging a row: the selection when the row is in it, else the row alone. */
+  const onDragOut = useCallback(
+    (x: MailThread, e: DragEvent) => {
+      const ids = selected.has(x.id) ? threads.filter((y) => selected.has(y.id)).map((y) => y.id) : [x.id];
+      startThreadDrag(e, ids, t("list.dragging", { count: ids.length }));
+    },
+    [selected, threads, t],
+  );
+
+  /** Conversations dropped on a sidebar row or a tab (lib/collab/threadDrag.ts): what that row's button or key would do. */
+  const dropRef = useRef<(ids: string[], to: ThreadDropTarget) => void>(() => {});
+  dropRef.current = (ids, to) => {
+    const items = threads.filter((x) => ids.includes(x.id));
+    if (!items.length) return;
+    const folderTo = to.box === "folder" && to.folder ? Object.values(folderMap).flatMap((fs) => fs ?? []).find((f) => f.id === to.folder) : undefined;
+    const accountId = folderTo?.account_id ?? to.account;
+    const its = accountId ? items.filter((x) => x.account_id === accountId) : items;
+    if (!its.length) return void toast.error(t("drop.otherAccount"));
+    if (to.box === "folder") {
+      if (!folderTo) return;
+      const box = boxForRole(folderTo.role);
+      if (box) return dropRef.current(ids, { box, account: folderTo.account_id });
+      const provider = accountsById.get(folderTo.account_id)?.provider;
+      // Gmail moves to a label as to a folder; an Outlook category is a label only.
+      if (folderTo.kind === "label" && provider !== "google") return act(its, "label", { folderId: folderTo.id, label: folderTo.name });
+      return act(its, "move", { folderId: folderTo.id, label: folderTo.name });
+    }
+    switch (to.box) {
+      case "inbox":
+      case "archive":
+      case "spam":
+      case "trash":
+        return act(its, to.box);
+      case "starred": {
+        // Only those it stars, so Undo unstars exactly those.
+        const ok = its.filter((x) => !x.starred);
+        return ok.length ? act(ok, "star") : undefined;
+      }
+      case "needs_action": {
+        const ok = its.filter(handlingOn);
+        if (!ok.length) return void toast.error(t("drop.noHandling"));
+        return act(ok, "needs_action");
+      }
+      case "assigned":
+        return assignMe(its);
+    }
+  };
+  useEffect(() => (canAct ? takeThreadDrops((ids, to) => dropRef.current(ids, to)) : undefined), [canAct]);
+
+  useShortcuts({
+    "mail.next": () => move(1),
+    "mail.previous": () => move(-1),
     // With a conversation open, the arrows and Enter are its own: they scroll it and press its buttons.
     ...(openId
       ? {}
       : {
-          arrowdown: () => move(1),
-          arrowup: () => move(-1),
-          enter: () => open(threads[focusIdx]),
+          "mail.down": () => move(1),
+          "mail.up": () => move(-1),
+          "mail.enter": () => open(threads[focusIdx]),
         }),
-    o: () => open(threads[focusIdx]),
-    x: () => threads[focusIdx] && toggle(threads[focusIdx], false),
-    e: () => act(targets(), "archive"),
-    "#": () => act(targets(), "trash"),
-    "!": () => act(targets(), "spam"),
-    s: (e) => !e.shiftKey && star(),
-    u: (e) => e.shiftKey && act(targets(), "unread", { silent: true }),
-    i: (e) => e.shiftKey && act(targets(), "read", { silent: true }),
-    m: () => (openId && !selected.size ? threadRef.current?.move() : canAct && targetAccount && setPickMove(true)),
-    l: () => (openId && !selected.size ? threadRef.current?.labels() : canAct && targetLabels && setPickLabels(true)),
-    r: () => answer("reply"),
-    a: () => answer("reply_all"),
-    f: () => answer("forward"),
-    c: (e) => (e.shiftKey ? openId && threadRef.current?.comment() : compose.open({ accountId: account?.id ?? folderAccount?.id })),
-    "]": () => openId && threadRef.current?.people(),
-    "/": () => searchRef.current?.focus(),
-    escape: () => {
-      if (selected.size) setSelected(new Set());
+    "mail.open": () => open(threads[focusIdx]),
+    "mail.select": () => threads[focusIdx] && toggle(threads[focusIdx], false),
+    "mail.archive": () => act(targets(), "archive"),
+    "mail.trash": () => act(targets(), "trash"),
+    "mail.spam": () => act(targets(), "spam"),
+    "mail.star": () => star(),
+    "mail.unread": () => act(targets(), "unread", { silent: true }),
+    "mail.read": () => act(targets(), "read", { silent: true }),
+    "mail.move": () => (openId && !selected.size ? threadRef.current?.move() : canAct && targetAccount && setPickMove(true)),
+    "mail.label": () => (openId && !selected.size ? threadRef.current?.labels() : canAct && targetLabels && setPickLabels(true)),
+    "mail.reply": () => answer("reply"),
+    "mail.replyAll": () => answer("reply_all"),
+    "mail.forward": () => answer("forward"),
+    "global.new": () => compose.open({ accountId: account?.id ?? folderAccount?.id }),
+    "mail.comment": () => openId && threadRef.current?.comment(),
+    "mail.people": () => openId && threadRef.current?.people(),
+    "mail.search": () => searchRef.current?.focus(),
+    "mail.escape": () => {
+      if (selected.size || every.running) clearSelection();
       else if (openId) close();
     },
-    "mod+a": () => !openId && setSelected(new Set(threads.map((x) => x.id))),
+    "mail.selectAll": () => !openId && setSelected(new Set(threads.map((x) => x.id))),
   });
 
   // Infinite scroll.
@@ -395,6 +802,8 @@ export default function MailPage() {
   }, [focusIdx, threads, prefetch]);
 
   const selecting = selected.size > 0;
+  const selectedThreads = selecting ? threads.filter((x) => selected.has(x.id)) : [];
+  const selectionHandling = selecting && selectedThreads.every(handlingOn);
   const idx = threads.findIndex((x) => x.id === openId);
   const phone = usePhone();
   const split = !!openId;
@@ -403,11 +812,16 @@ export default function MailPage() {
 
   // Off the inbox's tabs (a search, another box), a conversation sorted out of Primary says where to.
   const categoryOf = (x: MailThread) => (x.category && x.category !== PRIMARY ? accountCategories(accountsById.get(x.account_id)).find((c) => c.key === x.category) : undefined);
-  const labelsFor = (x: MailThread): MailFolder[] => {
-    const fs = folderMap[x.account_id];
-    if (!fs) return [];
-    return fs.filter((f) => f.kind === "label" && !f.role && f.id !== search.folder && x.folder_ids.includes(f.id));
-  };
+  // Each row's labels kept between renders while nothing they come from changes, so the row's memo holds.
+  const rowLabels = useMemo(() => {
+    const out = new Map<string, MailFolder[]>();
+    for (const x of threads) {
+      const fs = folderMap[x.account_id]?.filter((f) => f.kind === "label" && !f.role && f.id !== search.folder && x.folder_ids.includes(f.id));
+      if (fs?.length) out.set(x.id, fs);
+    }
+    return out;
+  }, [threads, folderMap, search.folder]);
+  const labelsFor = (x: MailThread): MailFolder[] => rowLabels.get(x.id) ?? NO_LABELS;
 
   const empty = (() => {
     if (search.q)
@@ -426,6 +840,7 @@ export default function MailPage() {
     if (box === "inbox" && !folder) return <EmptyState art="solved" title={t("list.empty.inbox")} description={t("list.empty.inboxHint")} />;
     if (box === "shared") return <EmptyState art="inbox" title={t("list.empty.shared")} description={t("list.empty.sharedHint")} />;
     if (box === "assigned") return <EmptyState art="mine" title={t("list.empty.assigned")} description={t("list.empty.assignedHint")} />;
+    if (box === "ai_review") return <EmptyState art="solved" title={t("list.empty.aiReview")} description={t("list.empty.aiReviewHint")} />;
     if (box === "starred") return <EmptyState art="generic" title={t("list.empty.starred")} description={t("list.empty.starredHint")} tips={[{ label: t("shortcuts.star"), kbd: "s" }]} />;
     return <EmptyState art="generic" title={t("list.empty.generic")} description={t("list.empty.genericHint")} />;
   })();
@@ -499,6 +914,7 @@ export default function MailPage() {
         {tabs.length > 0 && category && <CategoryTabs tabs={tabs} active={category} search={search} settings={settingsTarget} />}
         {offer && <CategoryOffer account={offer} />}
         {!noAccounts && <StorageFullBanner />}
+        {(box === "needs_action" || box === "ai_review") && accounts && <SpamBesideWork accounts={account ? [account] : accounts} counts={counts} />}
         {search.q && !noAccounts && <SearchCoverage accounts={scopeAccount ? [scopeAccount] : (accounts ?? [])} />}
         {(addresses.length > 1 || search.to) && (
           <div className="flex h-9 shrink-0 items-center gap-2 border-b border-line-soft px-4 text-[11.5px] text-fg-3">
@@ -559,30 +975,61 @@ export default function MailPage() {
           </div>
         )}
 
-        {canAct && targetAccount && (
-          <div className="pointer-events-none absolute left-4 top-12 h-0 w-0">
-            <MovePicker
-              accountId={targetAccount}
-              folders={moveFolders}
-              categories={accountCategories(accountsById.get(targetAccount))}
-              current={category}
-              open={pickMove}
-              onOpenChange={setPickMove}
-              onMove={(m: MoveTarget) => act(pickTargets(), m.action, { folderId: m.folderId, category: m.category, label: m.label })}
-              trigger={<span aria-hidden className="block h-0 w-0" />}
-            />
-            {targetLabels && (
+        {/* The pickers m, l and the row menu open: by the list's title, or where the menu was. */}
+        {canAct && (targetAccount || assignOpen) && (
+          <div
+            className={cn("pointer-events-none h-0 w-0", pickIds && anchor ? "fixed z-10" : "absolute left-4 top-12")}
+            style={pickIds && anchor ? { left: anchor.x, top: anchor.y } : undefined}
+          >
+            {targetAccount && (
+              <MovePicker
+                accountId={targetAccount}
+                folders={moveFolders}
+                categories={accountCategories(accountsById.get(targetAccount))}
+                current={category}
+                open={pickMove}
+                onOpenChange={picked(setPickMove)}
+                onMove={(m: MoveTarget) => act(pickTargets(), m.action, { folderId: m.folderId, category: m.category, label: m.label })}
+                trigger={<span aria-hidden className="block h-0 w-0" />}
+              />
+            )}
+            {targetAccount && targetLabels && (
               <LabelsPicker
                 accountId={targetAccount}
                 folders={targetFolders}
                 applied={appliedLabels}
                 open={pickLabels}
-                onOpenChange={setPickLabels}
+                onOpenChange={picked(setPickLabels)}
                 onToggle={(id, on) => act(pickTargets(), on ? "label" : "unlabel", { folderId: id, silent: true })}
                 trigger={<span aria-hidden className="block h-0 w-0" />}
               />
             )}
+            {assignOpen && (
+              <AssignPicker
+                align="start"
+                value={commonAssignees(pickTargets())}
+                onChange={(ids) => setAssignees(pickTargets(), ids)}
+                open
+                onOpenChange={picked(setAssignOpen)}
+                trigger={<span aria-hidden className="block h-0 w-0" />}
+              />
+            )}
           </div>
+        )}
+        {shareId && <ListShareDialog threadId={shareId} onClose={() => setShareId(null)} />}
+
+        {discardedAI && <AIDraftFeedbackDialog draft={discardedAI.draft} threadId={discardedAI.threadId} open={feedbackOpen} onOpenChange={setFeedbackOpen} defaultReason="should_not_answer" />}
+        {canAct && !noAccounts && threads.length > 0 && (
+          <SelectAllBar
+            loaded={threads.length}
+            selected={selected.size}
+            hasMore={!!list.hasNextPage}
+            loading={every.running}
+            scope={category ? (tabs.find((c) => c.key === category)?.name ?? title) : title}
+            matching={!!query.q}
+            onToggle={toggleAll}
+            onSelectEvery={() => void every.start()}
+          />
         )}
 
         <div ref={listRef} role="listbox" aria-label={t("list.label")} aria-multiselectable className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -627,6 +1074,13 @@ export default function MailPage() {
                       onToggle={toggle}
                       onHover={prefetch}
                       onAction={canAct ? onRowAction : undefined}
+                      handling={handlingOn(x)}
+                      onDragOut={canAct ? onDragOut : undefined}
+                      onDraft={draftsInRows ? onRowDraft : undefined}
+                      draftBusy={draftBusy.has(x.id)}
+                      menu={renderRowMenu}
+                      onMenuPoint={onPoint}
+                      onMenuCloseFocus={onMenuCloseFocus}
                     />
                   );
                 })}
@@ -662,6 +1116,34 @@ export default function MailPage() {
             <BulkButton label={t("action.star")} shortcut="s" onClick={star}>
               <Star />
             </BulkButton>
+            {selectionHandling && (
+              <>
+                <span aria-hidden className="mx-1 h-4 w-px bg-line" />
+                {selectedThreads.every((x) => x.needs_action) ? (
+                  <BulkButton label={t("action.done")} onClick={() => act(targets(), "done")}>
+                    <CircleCheck />
+                  </BulkButton>
+                ) : (
+                  <BulkButton label={t("action.needsAction")} onClick={() => act(targets(), "needs_action")}>
+                    <CircleDot />
+                  </BulkButton>
+                )}
+                <SnoozeMenu onSnooze={(at) => act(targets(), "snooze", { until: at.toISOString() })} />
+              </>
+            )}
+            <AssignPicker
+              align="start"
+              value={commonAssignees(selectedThreads)}
+              onChange={(ids) => setAssignees(selectedThreads, ids)}
+              trigger={
+                <span className="flex">
+                  <BulkButton label={t("action.assignTo")}>
+                    <UserPlus />
+                  </BulkButton>
+                </span>
+              }
+            />
+            <span aria-hidden className="mx-1 h-4 w-px bg-line" />
             {targetAccount && (
               <BulkButton label={t("action.move")} shortcut="m" onClick={() => setPickMove(true)}>
                 <Folder />
@@ -673,7 +1155,7 @@ export default function MailPage() {
               </BulkButton>
             )}
             <span className="flex-1" />
-            <BulkButton label={t("list.clear")} shortcut="escape" onClick={() => setSelected(new Set())}>
+            <BulkButton label={t("list.clear")} shortcut="escape" onClick={clearSelection}>
               <X />
             </BulkButton>
           </div>
@@ -693,7 +1175,7 @@ export default function MailPage() {
             onAction={onThreadAction}
             markReadOnOpen={prefs.mark_read_on_open}
             intent={intent?.id === openId ? intent.mode : null}
-            openDraft={box === "drafts"}
+            openDraft={box === "drafts" || editAI === openId}
             onOpenThread={(id) => go(id)}
             onShowPerson={(email) =>
               void navigate({ to: "/mail/$box/{-$threadId}", params: { box: "all", threadId: openId }, search: { with: email } })

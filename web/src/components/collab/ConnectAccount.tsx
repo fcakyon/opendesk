@@ -205,7 +205,8 @@ export function ConnectAccountDialog({ open, onOpenChange, status }: { open: boo
   };
 
   const shared = visibility === "shared" ? (audience.everyone ? { everyone: true, team_ids: [], user_ids: [] } : audience) : undefined;
-  const audienceOk = visibility === "private" || !audienceIsEmpty(audience);
+  // Shared with no one yet is allowed: the teammates may not have joined, and the owner adds them later.
+  const nobodyYet = visibility === "shared" && audienceIsEmpty(audience);
 
   const oauth = useMutation({
     mutationFn: (p: "google" | "microsoft") => startOAuth(p, { visibility, shared_with: shared, email: hint.trim() || undefined, history: connectHistory(scope) }),
@@ -247,6 +248,15 @@ export function ConnectAccountDialog({ open, onOpenChange, status }: { open: boo
   });
 
   const offered = (["google", "microsoft", "imap"] as const).filter((p) => status.providers[p]);
+  // A self-host offering some providers but not Google or Microsoft: say why, and what turns them on.
+  const missing = (["google", "microsoft"] as const).filter((p) => !status.providers[p]);
+  const missingNote =
+    offered.length > 0 && missing.length > 0
+      ? t("connect.missing", {
+          providers: missing.map((p) => t(`connect.${p}`)).join(" / "),
+          vars: missing.map((p) => `COLLAB_${p.toUpperCase()}_CLIENT_ID`).join(", "),
+        })
+      : null;
   const providerName = provider ? t(`connect.${provider}`) : "";
 
   const footer =
@@ -256,12 +266,12 @@ export function ConnectAccountDialog({ open, onOpenChange, status }: { open: boo
           {t("connect.back")}
         </Button>
         {step === "audience" && provider !== "imap" && provider && (
-          <Button variant="primary" loading={oauth.isPending} disabled={!audienceOk} onClick={() => oauth.mutate(provider as "google" | "microsoft")}>
+          <Button variant="primary" loading={oauth.isPending} onClick={() => oauth.mutate(provider as "google" | "microsoft")}>
             {t("connect.continueWith", { provider: providerName })}
           </Button>
         )}
         {step === "audience" && provider === "imap" && (
-          <Button variant="primary" disabled={!audienceOk} onClick={() => setStep("imap")}>
+          <Button variant="primary" onClick={() => setStep("imap")}>
             {t("connect.continue")}
           </Button>
         )}
@@ -298,6 +308,7 @@ export function ConnectAccountDialog({ open, onOpenChange, status }: { open: boo
           ) : (
             <p className="rounded-md bg-sunken px-3 py-2.5 text-[12.5px] text-fg-3">{t("connect.none")}</p>
           ))}
+        {step === "provider" && missingNote && <p className="rounded-md bg-sunken px-3 py-2.5 text-[12px] leading-[18px] text-fg-3">{missingNote}</p>}
 
         {step === "audience" && (
           <>
@@ -307,7 +318,7 @@ export function ConnectAccountDialog({ open, onOpenChange, status }: { open: boo
                 <SharedAudience value={audience} onChange={setAudience} exclude={me} />
               </ChoiceCard>
             </div>
-            {visibility === "shared" && !audienceOk && <p className="text-[11.5px] text-danger-fg">{t("audience.needSomeone")}</p>}
+            <p className="text-[11.5px] text-fg-3">{nobodyYet ? t("audience.nobodyYet") : t("audience.changeLater")}</p>
             <Field label={t("connect.history")} hint={t("connect.historyHint")} className="mt-1">
               {(p) => (
                 <Select<ConnectScope>

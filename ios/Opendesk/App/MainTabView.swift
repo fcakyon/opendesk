@@ -73,6 +73,7 @@ struct MainTabView: View {
         .onChange(of: router.demoAction, initial: true) { _, action in DemoProducts.run(action, env: env) }
         #endif
         .environment(tabBar)
+        .shortcutKeys()
         .sheet(isPresented: $router.showOllie) {
             AssistantView(context: router.assistantContext)
                 .presentationDetents([.large])

@@ -410,7 +410,11 @@ func (s *service) preview(ctx context.Context, p *auth.Principal, b previewBody)
 	body := templates.SanitizeDesign(b.BodyHTML)
 	out := &TemplatePreview{Problems: []templates.Problem{}}
 	number := tc.Values.Text["ticket.number"]
-	subject := "Re: " + firstNonEmpty(tc.Values.Text["ticket.subject"], "Your request") + " [#" + number + "]"
+	tag := subjectTagOn(ctx, s.d.DB.Pool, wid)
+	subject := "Re: " + firstNonEmpty(tc.Values.Text["ticket.subject"], "Your request")
+	if tag {
+		subject += " [#" + number + "]"
+	}
 	content := tc.Fill(sampleContent)
 	signature := tc.Signature()
 	var history []templates.HistoryItem
@@ -443,7 +447,7 @@ func (s *service) preview(ctx context.Context, p *auth.Principal, b previewBody)
 		tc.PersonalSignature = ""
 		signature = tc.Signature()
 		content = tc.Fill(body)
-		subject = autoSubject(tc.FillText(b.Subject), tc.Values.Text["ticket.subject"], number)
+		subject = autoSubject(tc.FillText(b.Subject), tc.Values.Text["ticket.subject"], number, tag)
 		history = nil
 	case templates.KindLayout:
 		o, custom := design.Layout, design.CustomHTML
@@ -470,7 +474,7 @@ func (s *service) preview(ctx context.Context, p *auth.Principal, b previewBody)
 		buttons, _ := templates.SurveyButtons(s.d.Cfg.AppURL+"/csat#t=preview&score=", accent)
 		tc.Values.HTML["survey"] = buttons
 		content = tc.Fill(body)
-		subject = autoSubject(tc.FillText(subj), "", number)
+		subject = autoSubject(tc.FillText(subj), "", number, tag)
 		history = nil
 	default:
 		return nil, httpx.Validation("kind must be reply, signature, personal_signature, auto_reply, layout or csat")
@@ -482,12 +486,16 @@ func (s *service) preview(ctx context.Context, p *auth.Principal, b previewBody)
 
 // autoSubject is an automatic email's subject: as written with the ticket number tag, or
 // the ticket's reply subject.
-func autoSubject(subject, ticketSubject, number string) string {
+func autoSubject(subject, ticketSubject, number string, tag bool) string {
 	subject = strings.TrimSpace(subject)
 	if subject == "" {
-		return "Re: " + firstNonEmpty(ticketSubject, "Your request") + " [#" + number + "]"
+		subject = "Re: " + firstNonEmpty(ticketSubject, "Your request")
+		if tag {
+			subject += " [#" + number + "]"
+		}
+		return subject
 	}
-	if _, ok := subjectTicketNumber(subject); !ok {
+	if _, ok := subjectTicketNumber(subject); !ok && tag {
 		subject += " [#" + number + "]"
 	}
 	return subject

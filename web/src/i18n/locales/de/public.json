@@ -113,6 +113,36 @@
       "on_hold": "In der Warteschleife",
       "solved": "Gelöst",
       "closed": "Geschlossen"
-    }
+    },
+    "sso": "Weiter mit Single Sign-on",
+    "or": "oder",
+    "sso_error": {
+      "email_unverified": "Ihr Anbieter hat Ihre E-Mail-Adresse nicht bestätigt, daher können wir Sie damit nicht anmelden.",
+      "unknown_customer": "Wir haben keinen Kunden mit dieser E-Mail-Adresse gefunden. Wenden Sie sich an das Team, das Ihnen Zugang gegeben hat.",
+      "blocked": "Dieses Konto kann sich nicht anmelden. Wenden Sie sich für Hilfe an das Team.",
+      "relink_required": "Ihr Konto beim Anbieter hat sich geändert. Bitten Sie das Team, eine neue Anmeldung zu erlauben, und versuchen Sie es dann erneut.",
+      "identity_revoked": "Diese Anmeldung wurde entfernt. Wenden Sie sich für Hilfe an das Team.",
+      "access_denied": "Die Anmeldung wurde abgebrochen.",
+      "provider_unavailable": "Wir konnten den Anmeldeanbieter nicht erreichen. Bitte versuchen Sie es erneut.",
+      "rate_limited": "Zu viele Versuche. Warten Sie einen Moment und versuchen Sie es erneut.",
+      "generic": "Wir konnten Sie nicht anmelden. Bitte versuchen Sie es erneut."
+    },
+    "new_request": "Neue Anfrage",
+    "new": {
+      "title": "Neue Anfrage",
+      "subject": "Betreff",
+      "message": "Wie können wir helfen?",
+      "send": "Anfrage senden",
+      "limit": "Sie haben mehrere Anfragen hintereinander gesendet. Warten Sie eine Weile und versuchen Sie es erneut.",
+      "busy": "Gerade gehen viele Anfragen ein. Warten Sie eine Weile und versuchen Sie es erneut.",
+      "attach": "Dateien auswählen",
+      "drop": "Dateien hierher ziehen oder einen Screenshot einfügen.",
+      "remove": "{{name}} entfernen",
+      "too_big": "{{name}} ist größer als 10 MB.",
+      "max_files": "Sie können bis zu 5 Dateien anhängen.",
+      "upload_failed": "{{name}} konnte nicht hochgeladen werden.",
+      "uploading": "Wird hochgeladen…"
+    },
+    "attachments": "Anhänge"
   }
 }

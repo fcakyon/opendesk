@@ -222,6 +222,30 @@ export function replyAddresses(ctx: TeamsCtx, t: Pick<Ticket, "brand_id">): Mail
 }
 
 /**
+ * The address a chat reply is emailed from once the visitor has left, as the server picks it
+ * (contracts/teams.md "Chat follow-up"): the ticket's reply address, else the brand's address
+ * whose default team is the ticket's, else the brand's oldest one that is not another private
+ * team's. Never a disabled one. Null when the brand has none, and no email goes.
+ */
+export function followUpMailbox(ctx: TeamsCtx, t: Pick<Ticket, "mailbox_id" | "brand_id" | "team_id">): Mailbox | null {
+  const own = ctx.mailbox(t.mailbox_id);
+  if (own && own.status !== "disabled") return own;
+  const brand = ctx.mailboxes
+    .filter((m) => m.brand_id === t.brand_id && m.status !== "disabled")
+    .sort((a, b) => Number(b.status === "active") - Number(a.status === "active") || Date.parse(a.created_at) - Date.parse(b.created_at) || (a.id < b.id ? -1 : 1));
+  return (
+    (t.team_id ? brand.find((m) => m.team_id === t.team_id) : undefined) ??
+    brand.find((m) => !m.team_id || m.team_id === t.team_id || !m.private) ??
+    null
+  );
+}
+
+/** A chat that emails replies to its visitor once they leave: they left an email, and the widget's follow-up is not off. */
+export function chatFollowUpByEmail(ctx: TeamsCtx, t: Pick<Ticket, "channel" | "widget_id" | "contact">): boolean {
+  return t.channel === "chat" && !!t.contact?.email && ctx.widget(t.widget_id)?.settings.email_follow_up !== false;
+}
+
+/**
  * Moving a ticket to another team switches its reply address when the current
  * address's default team is the old team (or none) and the brand has an address
  * whose default team is the new team. Otherwise it stays.

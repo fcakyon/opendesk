@@ -542,6 +542,10 @@ func TestFolderCounts(t *testing.T) {
 			deleted_at = CASE WHEN $7 THEN now() END WHERE id = $1`, id, c.status, c.spam, priority, c.assignee, c.team, c.deleted)
 	}
 
+	// One reply address holds t1, t2, t6, t10 and t13: its folders count them as the inbox does.
+	mb := addMailbox(t, e, ws)
+	e.Exec(`UPDATE tickets SET mailbox_id = $2 WHERE workspace_id = $1 AND subject IN ('t1', 't2', 't6', 't10', 't13')`, ws.ID, mb)
+
 	type folders struct{ Unassigned, Mine, Open, Pending, OnHold, Solved, Spam, MyTeams, MyTeamsUnassigned int }
 	type urgent struct{ Unassigned, Mine, Open, Pending, MyTeams int }
 	cases := []struct {
@@ -549,6 +553,7 @@ func TestFolderCounts(t *testing.T) {
 		as      hdtest.Auth
 		folders folders
 		urgent  urgent
+		mailbox tickets.MailboxCount
 	}{
 		// The agent: t13, t14 and t15 are a private team's; t16, t17 and t18 are theirs.
 		{"agent", ws.Agent.As(ws),
@@ -557,7 +562,8 @@ func TestFolderCounts(t *testing.T) {
 				Solved: 3, Spam: 4, // t6 t7 t17; t10 t11 t12 t18
 				MyTeams: 2, MyTeamsUnassigned: 1, // t4 t5; t4
 			},
-			urgent{Unassigned: 2, Mine: 1, Open: 1, Pending: 2}}, // t1 t3; t16; t1; t3 t16
+			urgent{Unassigned: 2, Mine: 1, Open: 1, Pending: 2},                // t1 t3; t16; t1; t3 t16
+			tickets.MailboxCount{Unassigned: 1, Mine: 1, Open: 1, Pending: 1}}, // t1; t2; t1; t2 (t13 is the private team's)
 		// The private team's lead counts its tickets too.
 		{"lead", ws.Admin.As(ws),
 			folders{
@@ -565,7 +571,8 @@ func TestFolderCounts(t *testing.T) {
 				Solved: 4, Spam: 5, // t6 t7 t14 t17; t10 t11 t12 t15 t18
 				MyTeams: 2, MyTeamsUnassigned: 1, // t13 t16; t13
 			},
-			urgent{Unassigned: 3, Open: 2, Pending: 2, MyTeams: 2}}, // t1 t3 t13; t1 t13; t3 t16; t13 t16
+			urgent{Unassigned: 3, Open: 2, Pending: 2, MyTeams: 2},    // t1 t3 t13; t1 t13; t3 t16; t13 t16
+			tickets.MailboxCount{Unassigned: 2, Open: 2, Pending: 1}}, // t1 t13; t1 t13; t2
 	}
 	for _, c := range cases {
 		var got tickets.TicketCounts
@@ -577,6 +584,13 @@ func TestFolderCounts(t *testing.T) {
 		if u := (urgent{got.Stats["ticket_folder:unassigned"].Urgent, got.Stats["ticket_folder:mine"].Urgent,
 			got.Stats["ticket_folder:open"].Urgent, got.Stats["ticket_folder:pending"].Urgent, got.Stats["team:mine"].Urgent}); u != c.urgent {
 			t.Errorf("%s urgent: got %+v want %+v", c.who, u, c.urgent)
+		}
+		if m := got.Mailboxes[mb.String()]; m != c.mailbox {
+			t.Errorf("%s mailbox: got %+v want %+v", c.who, m, c.mailbox)
+		}
+		// t1 and t13 are urgent: each unassigned ticket of the address is.
+		if u := got.Stats["mailbox:"+mb.String()+":unassigned"].Urgent; u != c.mailbox.Unassigned {
+			t.Errorf("%s mailbox urgent: got %d want %d", c.who, u, c.mailbox.Unassigned)
 		}
 	}
 }

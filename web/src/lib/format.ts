@@ -132,6 +132,16 @@ export function clock(iso: string): string {
   return dtf({ hour: "numeric", minute: "2-digit" }).format(new Date(iso));
 }
 
+/** A message's time in a conversation: the time of day for today's ("2:05 PM"), with the day for
+ * any other ("Nov 8 · 2:05 PM", "8 nov. · 14:05"), and the year outside this one ("Nov 8, 2025 · 2:05 PM"). */
+export function messageTime(iso: string, now = Date.now()): string {
+  const d = new Date(iso);
+  const today = new Date(now);
+  if (startOfDay(d) === startOfDay(today)) return clock(iso);
+  const year = sameYear(d, today) ? {} : { year: "numeric" as const };
+  return `${dtf({ month: "short", day: "numeric", ...year }).format(d)} · ${clock(iso)}`;
+}
+
 /** Weekday and time of day: "Mon 9:00 AM" / "Mon 09:00", for times within the coming week. */
 export function weekdayClock(d: Date | string): string {
   return dtf({ weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(d));

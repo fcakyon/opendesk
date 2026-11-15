@@ -1,103 +1,291 @@
 ---
 title: Keyboard shortcuts
-description: Most things in opendesk work without a mouse.
+description: Every shortcut in opendesk, and how to change them to keys you like.
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
 import Callout from '../../../components/Callout.astro';
 import Fold from '../../../components/Fold.astro';
 
-Most things in opendesk work without a mouse. Press <kbd>?</kbd> anywhere in the app, outside a text box, to see every shortcut.
+Almost everything in opendesk works without a mouse. Press <kbd>?</kbd> anywhere in the app, outside a text box, to see every shortcut. The sheet lists the shortcuts of the page you are on first, and you can search it.
 
-<Screenshot src="/guides/shortcuts/sheet" alt="The Keyboard shortcuts sheet with three lists: General, Ticket list and Ticket, each action next to its keys" />
+<Screenshot src="/guides/shortcuts/sheet" alt="The Keyboard shortcuts sheet with a search box, the shortcuts of the page you are on first, then every other group" />
 
-You can also open the sheet from the account menu: click your name at the bottom of the sidebar, then **Keyboard shortcuts**.
-
-<Screenshot src="/guides/shortcuts/menu" alt="The account menu open from the bottom of the sidebar, with Keyboard shortcuts and its ? key ringed as 1" />
+Menus and tooltips show the keys of their action too, and the command menu (<kbd>mod</kbd> <kbd>k</kbd>) can run any shortcut by name: type what you want to do.
 
 <Callout type="note" title="Reading the keys">
 
-<kbd>mod</kbd> is <kbd>⌘</kbd> on macOS and <kbd>Ctrl</kbd> elsewhere. Two keys joined by "then" are pressed one after the other: <kbd>g</kbd> then <kbd>i</kbd> means press <kbd>g</kbd>, let go, then press <kbd>i</kbd>.
+<kbd>mod</kbd> is <kbd>⌘</kbd> on macOS and <kbd>Ctrl</kbd> elsewhere. Two keys joined by "then" are pressed one after the other: <kbd>g</kbd> then <kbd>p</kbd> means press <kbd>g</kbd>, let go, then press <kbd>p</kbd>. Single-key shortcuts are paused while you type, so <kbd>r</kbd> in a message is just a letter.
 
 </Callout>
 
-## General
+## Change your shortcuts
 
+Open **Settings › Shortcuts**, or press <kbd>g</kbd> then <kbd>?</kbd>.
+
+1. Find the shortcut: search by its name, its keys or where it works.
+2. Click its keys and press the new ones. A key then another, like <kbd>g</kbd> then <kbd>o</kbd>, works too.
+3. If another shortcut already uses those keys where both work, opendesk says which one and keeps the old keys.
+
+Each shortcut has **Reset**, to go back to its default keys, and **Turn off**. **Reset all** puts every shortcut back. Your keys are yours: they follow you to every workspace and every device you sign in on, and nobody else's change.
+
+The keys of the editor and the canvas, like <kbd>mod</kbd> <kbd>b</kbd> for bold, are listed for reference and can't be changed.
+
+{/* The tables below list every shortcut in web/src/lib/shortcuts.ts with its default keys;
+    web/src/lib/shortcutsDoc.test.ts fails when one is missing or its keys differ. */}
+
+## Anywhere
+
+{/* scope: global */}
 | Keys | Action |
 | --- | --- |
-| <kbd>mod</kbd> <kbd>k</kbd> | Command menu: search tickets, contacts, articles and settings |
-| <kbd>mod</kbd> <kbd>j</kbd> | Ask Ollie (in a ticket's reply box, Ollie drafts a reply instead) |
-| <kbd>/</kbd> | Search tickets |
-| <kbd>c</kbd> | New ticket |
+| <kbd>mod</kbd> <kbd>k</kbd> | Command menu: search, go anywhere and run any shortcut |
 | <kbd>?</kbd> | Keyboard shortcuts |
-| <kbd>g</kbd> then <kbd>i</kbd> | Go to inbox |
+| <kbd>mod</kbd> <kbd>j</kbd> | Ask Ollie (in a ticket's reply box, Ollie drafts a reply instead) |
+| <kbd>c</kbd> | New ticket, or new mail on the mail pages |
+| <kbd>mod</kbd> <kbd>[</kbd> | Back |
+| <kbd>mod</kbd> <kbd>]</kbd> | Forward |
+| <kbd>g</kbd> then <kbd>i</kbd> | Go to the inbox |
 | <kbd>g</kbd> then <kbd>m</kbd> | Go to my tickets |
-| <kbd>g</kbd> then <kbd>t</kbd> | Switch team, when the workspace has teams |
-| <kbd>g</kbd> then <kbd>c</kbd> | Go to contacts |
-| <kbd>g</kbd> then <kbd>k</kbd> | Go to knowledge base |
-| <kbd>g</kbd> then <kbd>r</kbd> | Go to reports |
+| <kbd>g</kbd> then <kbd>a</kbd> | Go to mail |
+| <kbd>g</kbd> then <kbd>p</kbd> | Go to [Pages](/guides/pages/) |
+| <kbd>g</kbd> then <kbd>d</kbd> | Open today's note |
+| <kbd>g</kbd> then <kbd>g</kbd> | Open the graph |
 | <kbd>g</kbd> then <kbd>w</kbd> | Go to the wiki |
+| <kbd>g</kbd> then <kbd>c</kbd> | Go to contacts |
+| <kbd>g</kbd> then <kbd>k</kbd> | Go to the knowledge base |
+| <kbd>g</kbd> then <kbd>r</kbd> | Go to reports |
 | <kbd>g</kbd> then <kbd>s</kbd> | Go to settings |
-| <kbd>b</kbd> | Toggle sidebar |
+| <kbd>g</kbd> then <kbd>?</kbd> | Change shortcuts |
+| <kbd>g</kbd> then <kbd>t</kbd> | Switch team, when the workspace has teams |
+| <kbd>b</kbd> | Show or hide the sidebar |
+| <kbd>g</kbd> then <kbd>e</kbd> | Edit the sidebar |
+| <kbd>g</kbd> then <kbd>b</kbd> | Move to the sidebar |
 | <kbd>mod</kbd> <kbd>alt</kbd> <kbd>1</kbd> to <kbd>9</kbd> | Open workspace 1 to 9 |
+| <kbd>alt</kbd> <kbd>1</kbd> to <kbd>9</kbd> | Open Space 1 to 9 |
+
+## Sidebar
+
+After <kbd>g</kbd> then <kbd>b</kbd>, or a click on a row, these work on the row that has the focus. See [Your sidebar](/guides/sidebar/).
+
+{/* scope: sidebar */}
+| Keys | Action |
+| --- | --- |
+| <kbd>↓</kbd> | Next row |
+| <kbd>↑</kbd> | Previous row |
+| <kbd>f2</kbd> | Rename the row |
+| <kbd>mod</kbd> <kbd>shift</kbd> <kbd>↑</kbd> | Move the row up |
+| <kbd>mod</kbd> <kbd>shift</kbd> <kbd>↓</kbd> | Move the row down |
+| <kbd>p</kbd> | Pin or unpin the row in Favorites |
+| <kbd>h</kbd> | Hide the row |
+| <kbd>del</kbd> | Remove the row from your section or Favorites |
+| <kbd>esc</kbd> | Finish editing the sidebar |
 
 ## Ticket list
 
+{/* scope: tickets */}
 | Keys | Action |
 | --- | --- |
-| <kbd>j</kbd> | Next ticket |
-| <kbd>k</kbd> | Previous ticket |
-| <kbd>enter</kbd> | Open the focused ticket, unless a button or link has the focus: then <kbd>enter</kbd> presses it |
+| <kbd>j</kbd> or <kbd>↓</kbd> | Next ticket |
+| <kbd>k</kbd> or <kbd>↑</kbd> | Previous ticket |
+| <kbd>o</kbd> or <kbd>enter</kbd> | Open the focused ticket. <kbd>enter</kbd> presses a focused button or link instead |
 | <kbd>x</kbd> | Select ticket, for [bulk changes](/guides/inbox-and-tickets/#work-on-many-tickets-at-once) |
+| <kbd>mod</kbd> <kbd>a</kbd> | Select every ticket |
 | <kbd>e</kbd> | Solve the focused ticket |
 | <kbd>r</kbd> | Open the focused ticket and reply |
+| <kbd>i</kbd> | Assign the focused ticket to me |
+| <kbd>h</kbd> | Snooze the focused ticket |
+| <kbd>shift</kbd> <kbd>s</kbd> | Mark the focused ticket as spam |
+| <kbd>/</kbd> | Search tickets |
 | <kbd>esc</kbd> | Close ticket or clear selection |
 
 ## Ticket
 
+{/* scope: ticket */}
 | Keys | Action |
 | --- | --- |
 | <kbd>r</kbd> | Reply |
 | <kbd>n</kbd> | Add a note |
 | <kbd>a</kbd> | Assign |
+| <kbd>i</kbd> | Assign to me |
 | <kbd>s</kbd> | Change status |
 | <kbd>p</kbd> | Change priority |
 | <kbd>t</kbd> | Move to team |
 | <kbd>h</kbd> | Snooze |
 | <kbd>e</kbd> | Solve |
+| <kbd>shift</kbd> <kbd>s</kbd> | Mark as spam |
+| <kbd>]</kbd> | Show or hide details |
 | <kbd>mod</kbd> <kbd>enter</kbd> | Send |
-| <kbd>mod</kbd> <kbd>shift</kbd> <kbd>enter</kbd> | Send and mark solved |
+| <kbd>mod</kbd> <kbd>shift</kbd> <kbd>enter</kbd> | Send and solve |
 | <kbd>mod</kbd> <kbd>j</kbd> | Draft a reply with Ollie, while you are in the reply box |
+
+## Pages
+
+On a page of [Pages](/guides/pages/) or the [wiki](/guides/wiki/), outside its text:
+
+{/* scope: page */}
+| Keys | Action |
+| --- | --- |
+| <kbd>n</kbd> | New page |
+| <kbd>shift</kbd> <kbd>n</kbd> | New subpage |
+| <kbd>u</kbd> | Go to the parent page |
+| <kbd>s</kbd> | Add to or remove from favorites |
+| <kbd>shift</kbd> <kbd>d</kbd> | Duplicate the page |
+| <kbd>m</kbd> | Move the page |
+| <kbd>l</kbd> | Copy the link |
+| <kbd>mod</kbd> <kbd>\\</kbd> | Open a page beside |
+| <kbd>mod</kbd> <kbd>shift</kbd> <kbd>;</kbd> | Show or hide the page panel: outline, links, graph, comments and info |
+| <kbd>/</kbd> | Search pages |
+| <kbd>shift</kbd> <kbd>h</kbd> | Page history |
+| <kbd>shift</kbd> <kbd>p</kbd> | Publish to the help center |
+| <kbd>shift</kbd> <kbd>e</kbd> | Export |
+| <kbd>shift</kbd> <kbd>l</kbd> | Lock or unlock the page |
+| <kbd>mod</kbd> <kbd>p</kbd> | Print or save as PDF |
+| <kbd>mod</kbd> <kbd>s</kbd> | Save now |
+
+## Writing on a page
+
+{/* scope: editor */}
+| Keys | Action |
+| --- | --- |
+| <kbd>/</kbd> | Insert a block, at the start of a line |
+| <kbd>[</kbd> then <kbd>[</kbd> | Link a page |
+| <kbd>@</kbd> | Mention someone, a page, a date or a ticket |
+| <kbd>#</kbd> | Mention a ticket, by number or words |
+| <kbd>:</kbd> | Emoji |
+| <kbd>space</kbd> | Ask Ollie to write, on an empty line |
+| <kbd>mod</kbd> <kbd>j</kbd> | Ask Ollie about the selection |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>m</kbd> | Comment on the selection |
+| <kbd>mod</kbd> <kbd>b</kbd> | Bold |
+| <kbd>mod</kbd> <kbd>i</kbd> | Italic |
+| <kbd>mod</kbd> <kbd>u</kbd> | Underline |
+| <kbd>mod</kbd> <kbd>shift</kbd> <kbd>s</kbd> | Strikethrough |
+| <kbd>mod</kbd> <kbd>e</kbd> | Inline code |
+| <kbd>mod</kbd> <kbd>shift</kbd> <kbd>h</kbd> | Highlight |
+| <kbd>mod</kbd> <kbd>k</kbd> | Add a link |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>0</kbd> | Turn into text |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>1</kbd> | Turn into heading 1 |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>2</kbd> | Turn into heading 2 |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>3</kbd> | Turn into heading 3 |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>4</kbd> | Turn into a to-do list |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>5</kbd> | Turn into a bulleted list |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>6</kbd> | Turn into a numbered list |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>7</kbd> | Turn into a toggle |
+| <kbd>mod</kbd> <kbd>alt</kbd> <kbd>8</kbd> | Turn into code |
+| <kbd>mod</kbd> <kbd>shift</kbd> <kbd>b</kbd> | Turn into a quote |
+| <kbd>mod</kbd> <kbd>shift</kbd> <kbd>↑</kbd> | Move the block up |
+| <kbd>mod</kbd> <kbd>shift</kbd> <kbd>↓</kbd> | Move the block down |
+| <kbd>mod</kbd> <kbd>d</kbd> | Duplicate the block |
+| <kbd>mod</kbd> <kbd>enter</kbd> | Tick or untick the to-do; in a comment, send it |
+
+Markdown works as you type, too: see [Markdown shortcuts and paste](/guides/wiki/#markdown-shortcuts-and-paste).
+
+## Databases
+
+On a database's own page:
+
+{/* scope: database */}
+| Keys | Action |
+| --- | --- |
+| <kbd>r</kbd> | New row |
+| <kbd>v</kbd> | Next view |
+| <kbd>shift</kbd> <kbd>v</kbd> | Previous view |
+| <kbd>f</kbd> | Filter |
+| <kbd>o</kbd> | Sort |
+| <kbd>shift</kbd> <kbd>f</kbd> | Search the rows |
+
+In a database's calendar, <kbd>alt</kbd> and an arrow key moves the focused row a day or a week.
+
+## Canvas
+
+{/* scope: canvas */}
+| Keys | Action |
+| --- | --- |
+| <kbd>space</kbd> | Hold to pan |
+| <kbd>+</kbd> | Zoom in |
+| <kbd>-</kbd> | Zoom out |
+| <kbd>mod</kbd> <kbd>0</kbd> | Zoom to 100% |
+| <kbd>shift</kbd> <kbd>1</kbd> | Fit everything |
+| <kbd>shift</kbd> <kbd>2</kbd> | Fit the selection |
+| <kbd>mod</kbd> <kbd>a</kbd> | Select everything |
+| <kbd>mod</kbd> <kbd>d</kbd> | Duplicate |
+| <kbd>mod</kbd> <kbd>g</kbd> | Group |
+| <kbd>del</kbd> | Delete |
+| <kbd>↑</kbd> | Move the selection (arrows) |
+| <kbd>enter</kbd> | Open or edit the card |
+| <kbd>mod</kbd> <kbd>z</kbd> | Undo |
+| <kbd>mod</kbd> <kbd>shift</kbd> <kbd>z</kbd> | Redo |
+
+<Fold>
+
+## Mail
+
+In Mail, the list and an open conversation:
+
+{/* scope: mail */}
+| Keys | Action |
+| --- | --- |
+| <kbd>j</kbd> or <kbd>↓</kbd> | Next conversation |
+| <kbd>k</kbd> or <kbd>↑</kbd> | Previous conversation |
+| <kbd>o</kbd> or <kbd>enter</kbd> | Open conversation |
+| <kbd>x</kbd> | Select conversation |
+| <kbd>mod</kbd> <kbd>a</kbd> | Select every conversation |
+| <kbd>e</kbd> | Archive |
+| <kbd>#</kbd> | Move to trash |
+| <kbd>!</kbd> | Mark as spam |
+| <kbd>s</kbd> | Star |
+| <kbd>shift</kbd> <kbd>u</kbd> | Mark as unread |
+| <kbd>shift</kbd> <kbd>i</kbd> | Mark as read |
+| <kbd>m</kbd> | Move to a folder |
+| <kbd>l</kbd> | Label |
+| <kbd>r</kbd> | Reply |
+| <kbd>a</kbd> | Reply all |
+| <kbd>f</kbd> | Forward |
+| <kbd>shift</kbd> <kbd>c</kbd> | Comment |
+| <kbd>]</kbd> | Show the people |
+| <kbd>/</kbd> | Search mail |
+| <kbd>esc</kbd> | Close or clear selection |
+
+</Fold>
+
+<Fold>
+
+## AI bots
+
+In a bot's look editor:
+
+{/* scope: bots */}
+| Keys | Action |
+| --- | --- |
+| <kbd>n</kbd> | New bot |
+| <kbd>r</kbd> | Shuffle the look |
+| <kbd>z</kbd> | Undo the last look |
+
+</Fold>
 
 <Fold>
 
 ## In the reply box
 
 - Type <kbd>/</kbd> to insert a [saved reply](/guides/saved-replies-and-views/), and <kbd>@</kbd> in a note to mention a teammate.
-- <kbd>mod</kbd> <kbd>j</kbd> asks Ollie to draft a reply. Outside the reply box the same keys open Ollie.
 - <kbd>enter</kbd> picks the highlighted item in those lists, <kbd>esc</kbd> closes them.
 - A click in a link places the cursor to edit it; <kbd>mod</kbd> click opens it in a new tab, to check where it goes before sending.
-- Single-key shortcuts are paused while you type, so <kbd>r</kbd> or <kbd>e</kbd> in a message is just a letter.
 
 </Fold>
 
 <Fold>
 
-## In the command menu
+## In the command menu, menus and pickers
 
-Use the arrow keys to move to a ticket, contact, article or page and <kbd>enter</kbd> to open it, or <kbd>mod</kbd> <kbd>enter</kbd> to open it in a new tab with the menu left open. Results are links, like the rows of a ticket list and your notifications, so a right click, a <kbd>mod</kbd> click or a middle click opens them in a new tab too.
+Use the arrow keys to move and <kbd>enter</kbd> to choose, or <kbd>mod</kbd> <kbd>enter</kbd> to open a result in a new tab with the command menu left open. <kbd>esc</kbd> closes without changing anything. Results are links, so a right click, a <kbd>mod</kbd> click or a middle click opens them in a new tab too.
 
-</Fold>
-
-<Fold>
-
-## In menus and pickers
-
-Use the arrow keys to move through a menu or picker, <kbd>enter</kbd> to choose, and <kbd>esc</kbd> to close without changing anything. In a picker with a search box, type to narrow the list.
+In the wiki's own page list, the arrow keys move between pages, <kbd>→</kbd> and <kbd>←</kbd> open and close a page's subpages, and <kbd>enter</kbd> opens one. <kbd>alt</kbd> with an arrow key moves the focused page. In the graph, the arrow keys move it, <kbd>+</kbd> and <kbd>-</kbd> zoom and <kbd>0</kbd> fits it.
 
 </Fold>
 
 ## Related
 
+- [Your sidebar](/guides/sidebar/)
 - [Inbox and tickets](/guides/inbox-and-tickets/)
+- [Pages](/guides/pages/)
 - [Desktop app](/guides/desktop-app/)

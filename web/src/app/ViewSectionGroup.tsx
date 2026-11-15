@@ -1,13 +1,16 @@
 // A view section in the sidebar (lib/viewSections): a header row that folds its views and,
 // folded, shows what they would. It sits under Views and, once pinned, under Favorites
 // (contracts/collab.md SidebarPrefs.pinned, kind view_section); each place folds on its own,
-// per member, in this browser. The rail shows every view, a hairline above the section.
+// per member, in this browser. The section's icon, when it has one, sits between the chevron
+// and the name. The rail shows every view, a hairline above the section, with its icon in
+// the middle when it has one.
 
 import { useRouterState } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { Fragment, useId, useState, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { View } from "@/lib/api/types";
+import { ViewIcon, viewName } from "@/components/tickets/ViewIcon";
+import type { View, ViewIcon as ViewIconValue } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { useSession } from "@/lib/session";
 import { readFolded, writeFolded, type FoldPlace } from "@/lib/viewSections";
@@ -45,6 +48,7 @@ export function useFoldedSections(place: FoldPlace): [ReadonlySet<string>, (key:
 
 export function ViewSectionGroup({
   name,
+  icon = null,
   views,
   rail,
   folded,
@@ -57,6 +61,8 @@ export function ViewSectionGroup({
   menu,
 }: {
   name: string;
+  /** The section's icon (lib/viewSections); none shows none. */
+  icon?: ViewIconValue | null;
   views: View[];
   rail: boolean;
   folded: boolean;
@@ -91,7 +97,9 @@ export function ViewSectionGroup({
       className={cn(rowBase, rowShape(rail), rowIdle, "font-semibold", current && "text-fg")}
     >
       <ChevronRight className={cn("transition-transform duration-150 motion-reduce:transition-none", !shut && "rotate-90")} />
-      <Label rail={rail}>{name}</Label>
+      {icon && <ViewIcon icon={icon} />}
+      {/* A name that starts with the section's own emoji does not show it twice. */}
+      <Label rail={rail}>{viewName({ name, icon })}</Label>
       {current && <span className="sr-only">{t("nav.viewSectionCurrent")}</span>}
       {/* Folded away: what its views would show, here. */}
       {shut && <WaitingBadge n={views.reduce((a, v) => a + waiting(v), 0)} rail={rail} />}
@@ -100,7 +108,21 @@ export function ViewSectionGroup({
   );
   return (
     <div role="group" aria-label={t("nav.viewSection", { name })} className="flex flex-col gap-px">
-      {rail ? divider && <div aria-hidden className="mx-4 my-1 h-px bg-chrome-line" /> : menu ? menu(header) : header}
+      {rail ? (
+        icon ? (
+          <div aria-hidden data-section-mark="" title={name} className="mx-3 my-1 flex items-center gap-1 text-fg-4">
+            <span className="h-px flex-1 bg-chrome-line" />
+            <ViewIcon icon={icon} size={12} className="size-3" />
+            <span className="h-px flex-1 bg-chrome-line" />
+          </div>
+        ) : (
+          divider && <div aria-hidden className="mx-4 my-1 h-px bg-chrome-line" />
+        )
+      ) : menu ? (
+        menu(header)
+      ) : (
+        header
+      )}
       <div id={listId} className="flex flex-col gap-px">
         {!shut && views.map((v) => <Fragment key={v.id}>{row(v)}</Fragment>)}
       </div>

@@ -1,4 +1,5 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
 import { Slot } from "radix-ui";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/cn";
@@ -82,5 +83,17 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         )
       )}
     </Comp>
+  );
+});
+
+/** A filter's trigger: what it is set to, with a chevron, outlined darker while it filters. */
+export const FilterButton = forwardRef<HTMLButtonElement, { icon: ReactNode; label: ReactNode; active: boolean } & ButtonHTMLAttributes<HTMLButtonElement>>(function FilterButton(
+  { icon, label, active, className, ...rest },
+  ref,
+) {
+  return (
+    <Button ref={ref} {...rest} icon={icon} iconRight={<ChevronDown className="size-3 text-fg-4" />} className={cn("max-w-[200px]", active && "border-fg-3", className)}>
+      <span className="min-w-0 truncate">{label}</span>
+    </Button>
   );
 });

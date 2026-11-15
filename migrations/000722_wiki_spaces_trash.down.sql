@@ -1,0 +1,24 @@
+DROP TABLE IF EXISTS wiki_visits;
+DROP TABLE IF EXISTS wiki_favorites;
+DROP INDEX IF EXISTS wiki_pages_daily_idx;
+DROP INDEX IF EXISTS wiki_pages_journal_idx;
+DROP INDEX IF EXISTS wiki_pages_verified_by_idx;
+DROP INDEX IF EXISTS wiki_pages_deleted_by_idx;
+DROP INDEX IF EXISTS wiki_pages_trash_idx;
+DROP INDEX IF EXISTS wiki_pages_team_idx;
+DROP INDEX IF EXISTS wiki_pages_private_idx;
+ALTER TABLE wiki_pages
+    DROP CONSTRAINT IF EXISTS wiki_pages_journal_private,
+    DROP CONSTRAINT IF EXISTS wiki_pages_daily_private,
+    DROP CONSTRAINT IF EXISTS wiki_pages_one_space,
+    DROP COLUMN IF EXISTS verified_until,
+    DROP COLUMN IF EXISTS verified_at,
+    DROP COLUMN IF EXISTS verified_by,
+    DROP COLUMN IF EXISTS daily_date,
+    DROP COLUMN IF EXISTS journal,
+    DROP COLUMN IF EXISTS template,
+    DROP COLUMN IF EXISTS trashed_with,
+    DROP COLUMN IF EXISTS deleted_by,
+    DROP COLUMN IF EXISTS deleted_at,
+    DROP COLUMN IF EXISTS team_id,
+    DROP COLUMN IF EXISTS private_to;

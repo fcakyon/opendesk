@@ -55,7 +55,8 @@ func (w *WidgetAnswerWorker) Work(ctx context.Context, job *river.Job[jobs.AIWid
 	err := w.S.WidgetAnswer(ctx, job.Args)
 	if err != nil && skippable(err) {
 		w.S.d.Log.Info("widget answer skipped", "ticket_id", job.Args.TicketID, "reason", errReason(err))
-		return nil
+		// The agent stays silent (no balance, the provider failing): the chat waits for the team.
+		return w.S.assignWaitingChat(ctx, job.Args.WorkspaceID, job.Args.TicketID)
 	}
 	return err
 }
@@ -193,11 +194,8 @@ func (s *Service) WidgetAnswer(ctx context.Context, a jobs.AIWidgetAnswerArgs) e
 	if last.ID != a.MessageID || last.Direction != "inbound" {
 		return nil // the visitor wrote again (that job replies) or someone replied
 	}
-	if ac.replies >= max(ac.set.WidgetMaxReplies, 1) {
-		return s.handoff(ctx, a.WorkspaceID, a.TicketID, a.MessageID, handoffBot(ac.bot))
-	}
-	if wantsPerson.MatchString(messageText(last)) {
-		return s.handoff(ctx, a.WorkspaceID, a.TicketID, a.MessageID, handoffBot(ac.bot))
+	if ac.replies >= max(ac.set.WidgetMaxReplies, 1) || wantsPerson.MatchString(messageText(last)) {
+		return s.handoffWithLine(ctx, ac, a)
 	}
 	if capped, err := s.agentCapped(ctx, a.WorkspaceID, ac.set); err != nil || capped {
 		if capped {
@@ -381,6 +379,9 @@ func (s *Service) replyAndPost(ctx context.Context, in agentInput, trigger uuid.
 		live.end(nil, nil, false)
 		return err
 	}
+	if in.handOver {
+		res.Handoff, res.Action = true, nil
+	}
 	messageID, actionID, err := s.postReply(ctx, in, trigger, res)
 	if errors.Is(err, errStale) {
 		live.end(nil, nil, false)
@@ -461,8 +462,12 @@ func (s *Service) postReply(ctx context.Context, in agentInput, trigger uuid.UUI
 				}
 				actionID = &aid
 			}
-			if _, err := tx.Exec(ctx, `UPDATE ai_widget_answers SET reply_id = $2 WHERE message_id = $1`, trigger, m.ID); err != nil {
-				return err
+			// A handoff the visitor or the reply limit asked for is not the agent's miss: its line
+			// stays out of the review queue, as the handoff alone did.
+			if !in.handOver {
+				if _, err := tx.Exec(ctx, `UPDATE ai_widget_answers SET reply_id = $2 WHERE message_id = $1`, trigger, m.ID); err != nil {
+					return err
+				}
 			}
 			tools := res.ToolsUsed
 			if tools == nil {
@@ -487,7 +492,34 @@ func (s *Service) postReply(ctx context.Context, in agentInput, trigger uuid.UUI
 func (s *Service) decline(ctx context.Context, wid, tid, mid uuid.UUID) error {
 	_, err := s.d.DB.Pool.Exec(ctx, `INSERT INTO ai_widget_answers (message_id, workspace_id, ticket_id, answered) VALUES ($1, $2, $3, false)
 		ON CONFLICT DO NOTHING`, mid, wid, tid)
-	return err
+	if err != nil {
+		return err
+	}
+	return s.assignWaitingChat(ctx, wid, tid)
+}
+
+// assignWaitingChat gives a chat the agent leaves unanswered to a member who takes chats.
+func (s *Service) assignWaitingChat(ctx context.Context, wid, tid uuid.UUID) error {
+	return s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+		_, err := hd.AssignChat(ctx, tx, wid, tid)
+		return err
+	})
+}
+
+// handoffWithLine hands the conversation off with the agent's line to the visitor first: a
+// person will reply here, and what the team will need. Past the monthly cap, or when the
+// model fails, it hands off without a reply.
+func (s *Service) handoffWithLine(ctx context.Context, ac *agentConv, a jobs.AIWidgetAnswerArgs) error {
+	if capped, err := s.agentCapped(ctx, a.WorkspaceID, ac.set); err == nil && !capped {
+		in := ac.input(a.WorkspaceID, a.TicketID, a.PageURL)
+		in.handOver = true
+		if err := s.replyAndPost(ctx, in, a.MessageID); err != nil {
+			s.d.Log.Warn("handoff line failed; handing off without it", "ticket_id", a.TicketID, "err", err)
+		}
+	}
+	// A no-op when the reply handed off; otherwise (capped, failed, or the conversation moved
+	// on while the model ran) the handoff alone.
+	return s.handoff(ctx, a.WorkspaceID, a.TicketID, a.MessageID, handoffBot(ac.bot))
 }
 
 // handoffBot is the bot as a handoff records it.

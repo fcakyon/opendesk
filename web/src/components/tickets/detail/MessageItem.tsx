@@ -10,7 +10,7 @@ import { q, qk } from "@/lib/queries";
 import { atLeast, useRole, useSession } from "@/lib/session";
 import { isBlankHtml } from "@/lib/collab/html";
 import { loadImagesFor, useAlwaysShowImages, useImagesLoadedFor } from "@/lib/alwaysShowImages";
-import { bytes, clock, fullDate } from "@/lib/format";
+import { bytes, fullDate, messageTime } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -176,7 +176,7 @@ function SentAsReply({ m, name, admin }: { m: Message; name: string; admin: bool
         <span className="min-w-0 flex-1">{t("message.sentAsReply", { name })}</span>
         <Tooltip content={fullDate(m.created_at)}>
           <time dateTime={m.created_at} className="mono shrink-0 text-[11px] text-fg-4">
-            {clock(m.created_at)}
+            {messageTime(m.created_at)}
           </time>
         </Tooltip>
         {admin && !m.purged_at && (
@@ -243,7 +243,7 @@ function DeletedMessage({ m, name, admin }: { m: Message; name: string; admin: b
         {m.deleted_at && (
           <Tooltip content={fullDate(m.deleted_at)}>
             <time dateTime={m.deleted_at} className="mono shrink-0 text-[11px] text-fg-4">
-              {clock(m.deleted_at)}
+              {messageTime(m.deleted_at)}
             </time>
           </Tooltip>
         )}
@@ -658,7 +658,7 @@ export const MessageItem = memo(function MessageItem({
         {seen !== undefined && <Seen seen={seen} at={seenAt} />}
         <Tooltip content={fullDate(m.created_at)}>
           <time dateTime={m.created_at} className="mono shrink-0 text-[11px] text-fg-4">
-            {clock(m.created_at)}
+            {messageTime(m.created_at)}
           </time>
         </Tooltip>
         {note && m.edited_at && <span className="shrink-0 text-[10.5px] text-fg-4">{t("message.edited")}</span>}
@@ -726,7 +726,11 @@ export const MessageItem = memo(function MessageItem({
               </span>
             )}
             {replyTo && (
-              <Tooltip content={t("message.replyToHint")}>
+              <Tooltip
+                content={
+                  m.reply_address ? t("message.replyToUsed") : t("message.replyToOther", { address: m.from_email })
+                }
+              >
                 <span className="flex min-w-0 items-center gap-1.5">
                   <Reply className="size-3 shrink-0 text-fg-4" />
                   <span className="min-w-0 truncate">

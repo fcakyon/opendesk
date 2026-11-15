@@ -14,6 +14,7 @@
     "connectAnApp": "Connectez une application",
     "createAWorkspace": "Créez un espace de travail",
     "connectAMailbox": "Connectez une boîte mail",
+    "whatIsItFor": "À quoi sert-il ?",
     "inbox": "Boîte de réception",
     "view": "Vue",
     "tickets": "Tickets",
@@ -48,6 +49,7 @@
     "notifications": "Notifications",
     "agentToAgent": "Agent à agent",
     "workspaces": "Espaces de travail",
+    "shortcuts": "Raccourcis",
     "general": "Général",
     "members": "Membres",
     "teams": "Équipes",
@@ -68,6 +70,7 @@
     "aiClients": "Clients IA",
     "webhooks": "Webhooks",
     "auditLog": "Journal d’audit",
+    "trash": "Corbeille",
     "ai": "IA",
     "aiAgent": "Agent IA",
     "agentBehaviour": "Comportement de l’agent",
@@ -83,7 +86,14 @@
     "myTeams": "Mes équipes",
     "newTicket": "Nouveau ticket",
     "phone": "Téléphone",
-    "print": "Imprimer"
+    "print": "Imprimer",
+    "wikiGraph": "Graphe",
+    "wikiTags": "Tags",
+    "wikiTemplates": "Modèles",
+    "wikiTrash": "Corbeille",
+    "pages": "Pages",
+    "pagesPage": "Page",
+    "pagesSettings": "Pages"
   },
   "folders": {
     "unassigned": "Non attribués",
@@ -108,6 +118,7 @@
     "notifications": "Notifications",
     "agentToAgent": "Agent à agent",
     "workspaces": "Espaces de travail",
+    "shortcuts": "Raccourcis",
     "general": "Général",
     "members": "Membres",
     "teams": "Équipes",
@@ -143,7 +154,9 @@
     "aiClients": "Clients IA",
     "webhooks": "Webhooks",
     "auditLog": "Journal d’audit",
-    "phone": "Téléphone"
+    "trash": "Corbeille",
+    "phone": "Téléphone",
+    "pages": "Pages"
   },
   "settingsPage": "Page des paramètres",
   "command": {
@@ -177,7 +190,9 @@
     "aiKnowledge": "Connaissances de l’agent IA",
     "aiTools": "Outils de l’agent IA",
     "aiPlayground": "Espace d’essai de l’agent IA",
-    "importHistory": "Importer l’historique depuis Zendesk, Help Scout, Freshdesk, Intercom, Front ou un fichier CSV"
+    "importHistory": "Importer l’historique depuis Zendesk, Help Scout, FreeScout, Freshdesk, Intercom, Front ou un fichier CSV",
+    "pages": "Pages",
+    "newPage": "Nouvelle page"
   },
   "shortcuts": {
     "general": "Général",

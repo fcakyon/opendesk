@@ -141,11 +141,12 @@ A tool is offered only when the key, or the OAuth connection together with your 
 | --- | --- | --- | --- |
 | `search_tickets` | `tickets:read` | Finds tickets by text, status, priority, severity, assignee, team, label, channel, contact or creation date. At most 50 per call. | No |
 | `get_ticket` | `tickets:read` | Reads a ticket with its thread as plain text, internal notes included. | No |
+| `list_custom_fields` | `tickets:read` | Lists the custom fields: key, name, type, options and whether a ticket needs the field set to be solved. Filter by `entity` (`ticket`, `contact` or `company`); archived fields only with `include_archived`. | No |
 | `reply_to_ticket` | `tickets:write` | Sends a public reply (markdown). The customer receives it. Can set the status after sending. | Yes |
 | `draft_reply` | `tickets:write` | Stages a reply (markdown) on the ticket without sending it. Every teammate who opens the ticket finds it in their composer, to edit and send as their own reply. Staging again replaces it; a reply going out clears it. | Yes |
 | `add_note` | `tickets:write` | Adds an internal note the customer never sees. | Yes |
-| `update_ticket` | `tickets:write` | Changes status, priority, severity, assignee, team or labels. | Yes |
-| `create_ticket` | `tickets:write` | Creates a ticket for a contact email. With a mailbox, the first reply is emailed to the contact. | Yes |
+| `update_ticket` | `tickets:write` | Changes status, priority, severity, assignee, team, labels or custom fields. | Yes |
+| `create_ticket` | `tickets:write` | Creates a ticket for a contact email, optionally with custom field values. With a mailbox, the first reply is emailed to the contact. | Yes |
 | `search_contacts` | `contacts:read` | Finds contacts by name, email, phone or field value. | No |
 | `get_contact` | `contacts:read` | Reads a contact by id or email, with their latest tickets when the key also has `tickets:read`. | No |
 | `search_knowledge` | `kb:read` | Searches knowledge base articles and knowledge sources; the top matches come with their full text. | No |
@@ -157,6 +158,8 @@ A tool is offered only when the key, or the OAuth connection together with your 
 | `get_report` | `settings:read` and `tickets:read` | Reads the overview report for a date range. | No |
 
 Tickets are referenced by number (`#123`) or id. Assigning by email or moving to a team by name looks the teammate or team up, which needs `settings:read`; with user and team ids it does not.
+
+`create_ticket` and `update_ticket` take custom field values in `fields`, an object keyed by the field keys `list_custom_fields` returns, for example `{"customer": "Acme", "plan": "pro"}`. A select takes an option id, a multi-select a list of them, a date `YYYY-MM-DD` and a user field a user id. On update only the keys you pass change, and `null` clears a field. Values are checked as in the API ([Labels and custom fields](/api/resources/labels-fields/)): an unknown key or a value that does not fit the field is refused.
 
 Tools carry MCP annotations, so clients can tell read-only tools from ones that change data and ask you before running them. Results are compact JSON text.
 

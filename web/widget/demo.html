@@ -21,11 +21,13 @@
       wk_closed / wk_offline (closed, default or own offline message and chat intro), wk_press (another
       brand). ?od_closed closes any of them, ?od_lang=ar for a language, ?od_open=1 to open it,
       ?od_welcome=0 to open new chats without the greeting and intro, ?od_fixed_lang=tr for a
-      workspace that fixes its language.
+      workspace that fixes its language, ?od_history for a returning visitor with open and finished
+      conversations, some months old.
 
       The agent: tap a suggestion, or ask about an order with a number and street ("Send order #4821
-      to 22 Baker Street") for a tool step and an action card, SSO for an answer with sources, or a
-      person for a handoff. Hover a reply to rate it. Helpers: ?od_demo=thread, send, order, handoff.
+      to 22 Baker Street") for a tool step and an action card, SSO for an answer with sources, a return
+      for an answer that writes out a web address and an email, or a person for a handoff. Hover a
+      reply to rate it. Helpers: ?od_demo=thread, send, order, return, handoff.
     -->
     <script>
       window.opendesk = window.opendesk || function () { (window.opendesk.q = window.opendesk.q || []).push(arguments); };
@@ -41,8 +43,10 @@
       document.body.appendChild(s);
       // Screenshot helpers: ?od_demo=thread opens the past conversation, ?od_demo=send sends a message,
       // ?od_demo=order asks the agent to change an order (tool step and action card),
+      // ?od_demo=return asks how to return an item (addresses written out, shown as short links),
       // ?od_demo=handoff sends one and then asks for a person.
       var order = "Can you send order #4821 to my new address? It's 22 Baker Street, London.";
+      var ret = "Hi! How do I return a notebook I bought last week?";
       var texts = {
         en: "Hi! Our team can't log in with SSO since this morning. Is something down?",
         ja: "こんにちは。今朝からチーム全員がSSOでログインできません。障害でしょうか？",
@@ -58,14 +62,14 @@
           if (demo === "thread") {
             var c = root.querySelector(".conv");
             if (c) { c.click(); clearInterval(t); }
-          } else if (demo === "send" || demo === "handoff" || demo === "order") {
+          } else if (demo === "send" || demo === "handoff" || demo === "order" || demo === "return") {
             var p = root.querySelector(".primary");
             if (!p) return;
             p.click();
             clearInterval(t);
             setTimeout(function () {
               var ta = root.querySelector("textarea");
-              ta.value = demo === "order" ? order : texts[params.get("od_lang")] || texts.en;
+              ta.value = demo === "order" ? order : demo === "return" ? ret : texts[params.get("od_lang")] || texts.en;
               ta.dispatchEvent(new Event("input", { bubbles: true }));
               setTimeout(function () { root.querySelector(".send").click(); }, 100);
               if (demo === "handoff") {

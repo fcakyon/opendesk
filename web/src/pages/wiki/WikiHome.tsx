@@ -1,17 +1,23 @@
-// The wiki's home (/wiki). A new workspace gets a first-run state with starter pages;
-// otherwise the pages edited lately and the top-level pages to start from.
+// The wiki's home (/wiki). A new workspace gets a first-run state with starter pages (or an
+// import); otherwise the pages edited lately and the top-level pages to start from, and a menu
+// to import pages or export the wiki.
 
-import { Link } from "@tanstack/react-router";
-import { ChevronRight, Plus } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { ChevronRight, FileUp, Hash, MoreHorizontal, Network, Plus, Shuffle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useDocumentTitle } from "@/app/RootLayout";
 import { Button } from "@/components/ui/button";
 import { EmptyState, GhostList } from "@/components/ui/empty";
 import { Kbd } from "@/components/ui/kbd";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PageIcon } from "@/components/wiki/WikiTree";
-import { useCreatePage, useTitle, useWikiTree } from "@/components/wiki/hooks";
-import { TEMPLATES, templatePage, type TemplateId } from "@/components/wiki/templates";
+import { Tooltip } from "@/components/ui/tooltip";
+import { PageIcon } from "@/components/wiki/PageTree";
+import { useAreaTree, useCreatePage, useTitle } from "@/components/wiki/hooks";
+import { FIRST_RUN, TEMPLATES, templatePage } from "@/components/wiki/templates";
+import { StarterTemplates } from "@/components/wiki/TemplateCards";
+import { ExportWikiItems } from "@/components/wiki/Export";
+import { openImport } from "@/app/quickAdd";
 import { relLong, fullDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { atLeast, useRole } from "@/lib/session";
@@ -20,20 +26,65 @@ import { PagesButton } from "./WikiLayout";
 
 export default function WikiHome() {
   const { t } = useTranslation("wiki");
-  const { tree, data, isLoading } = useWikiTree();
+  const { tree, data, isLoading } = useAreaTree();
   const canEdit = atLeast(useRole(), "agent");
   const create = useCreatePage();
   const title = useTitle();
   useDocumentTitle(t("title"));
+  const navigate = useNavigate();
+  // Obsidian's random note: a page to read when you don't know where to start.
+  const openRandom = () => {
+    const pages = data ?? [];
+    const pick = pages[Math.floor(Math.random() * pages.length)];
+    if (pick) void navigate({ to: "/wiki/$pageId", params: { pageId: pick.id } });
+  };
 
   const header = (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4">
       <PagesButton />
       <h1 className="text-[13.5px] font-semibold tracking-[-0.01em] text-fg">{t("title")}</h1>
-      {canEdit && !!data?.length && (
-        <Button variant="primary" size="sm" className="ml-auto" icon={<Plus />} loading={create.isPending} onClick={() => create.mutate({})}>
-          {t("tree.newPage")}
-        </Button>
+      {!!data?.length && (
+        <div className="ml-auto flex items-center gap-0.5">
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/wiki/graph">
+              <Network className="size-3.5" />
+              {t("graph.title")}
+            </Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/wiki/tags">
+              <Hash className="size-3.5" />
+              {t("tags.title")}
+            </Link>
+          </Button>
+          <Tooltip content={t("home.random")}>
+            <Button variant="ghost" size="sm" square aria-label={t("home.random")} onClick={openRandom}>
+              <Shuffle className="size-4" />
+            </Button>
+          </Tooltip>
+          <Menu>
+            <Tooltip content={t("home.more")}>
+              <MenuTrigger asChild>
+                <Button variant="ghost" size="sm" square aria-label={t("home.more")}>
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </MenuTrigger>
+            </Tooltip>
+            <MenuContent align="end">
+              {canEdit && (
+                <MenuItem icon={<FileUp />} onSelect={() => openImport()}>
+                  {t("import.action")}
+                </MenuItem>
+              )}
+              <ExportWikiItems />
+            </MenuContent>
+          </Menu>
+          {canEdit && (
+            <Button variant="primary" size="sm" className="ml-1.5" icon={<Plus />} loading={create.isPending} onClick={() => create.mutate({})}>
+              {t("tree.newPage")}
+            </Button>
+          )}
+        </div>
       )}
     </header>
   );
@@ -68,9 +119,16 @@ export default function WikiHome() {
                 </Button>
               ) : undefined
             }
+            secondary={
+              canEdit ? (
+                <Button icon={<FileUp />} onClick={() => openImport()}>
+                  {t("import.pages")}
+                </Button>
+              ) : undefined
+            }
             tips={canEdit ? [{ label: t("empty.tipNest") }, { label: t("empty.tipOllie") }] : undefined}
           />
-          {canEdit && <Templates onPick={(id) => create.mutate(templatePage(t, id))} busy={create.isPending} />}
+          {canEdit && <StarterTemplates ids={FIRST_RUN} onPick={(id) => create.mutate(templatePage(t, id))} busy={create.isPending} />}
         </div>
       </div>
     );
@@ -127,40 +185,12 @@ export default function WikiHome() {
             })}
           </div>
 
-          {canEdit && <Templates onPick={(id) => create.mutate(templatePage(t, id))} busy={create.isPending} compact />}
+          {canEdit && <StarterTemplates ids={TEMPLATES.slice(0, 6).map((x) => x.id)} onPick={(id) => create.mutate(templatePage(t, id))} busy={create.isPending} compact more />}
           <p className="mt-10 text-xs text-fg-4">
             {t("home.paletteHint")} <Kbd>mod k</Kbd>
           </p>
         </div>
       </div>
     </div>
-  );
-}
-
-function Templates({ onPick, busy, compact }: { onPick: (id: TemplateId) => void; busy: boolean; compact?: boolean }) {
-  const { t } = useTranslation("wiki");
-  return (
-    <section className={cn("w-full", compact ? "mt-10" : "relative z-10 mt-6 max-w-[640px]")} aria-labelledby="wiki-templates">
-      <h2 id="wiki-templates" className={cn("label-caps mb-2", !compact && "text-center")}>
-        {t("templates.heading")}
-      </h2>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        {TEMPLATES.map((tpl) => (
-          <button
-            key={tpl.id}
-            type="button"
-            disabled={busy}
-            onClick={() => onPick(tpl.id)}
-            className="group flex flex-col items-start gap-1.5 rounded-lg border border-line bg-surface p-3 text-left shadow-xs outline-none transition-[border-color,box-shadow,transform] hover:border-line-strong active:scale-[0.99] disabled:opacity-60 focus-visible:shadow-[0_0_0_2px_var(--focus)] motion-reduce:transition-none"
-          >
-            <span className="text-[18px] leading-none" aria-hidden>
-              {tpl.icon}
-            </span>
-            <span className="text-[13px] font-medium text-fg">{t(`templates.${tpl.id}.title`)}</span>
-            <span className="text-xs leading-[17px] text-fg-3">{t(`templates.${tpl.id}.hint`)}</span>
-          </button>
-        ))}
-      </div>
-    </section>
   );
 }

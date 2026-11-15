@@ -11,6 +11,7 @@ import type {
   SlaPolicy,
   TagRef,
   Ticket,
+  MailboxCount,
   TicketCounts,
   TicketListSummary,
   TicketStats,
@@ -27,6 +28,7 @@ import { canSeeTicket, defaultBrand, teamRole } from "./teams";
 import { applyLabels, checkRequiredOnSolve, fieldDefs, fieldFiltersFromQuery, fieldsText, fieldSortValue, matchFields, mergeFields, type FieldFilterIn } from "./labels";
 import { MIN, nowIso, parseUUID, preview, stripHtml, uuid } from "./util";
 import { botForTicket, botRefFor } from "./bots";
+import { replyRecipient } from "@/components/tickets/detail/replyRecipient";
 
 export const OPENISH: TicketStatus[] = ["open", "pending", "on_hold"];
 
@@ -236,8 +238,23 @@ export function counts(ws: WsData, meId: string): TicketCounts {
   };
   for (const id of Object.keys(teams)) stats[`team:${id}`] = ticketStats(ns.filter((t) => t.team_id === id && (t.status === "open" || t.status === "pending")));
   for (const v of ws.views) stats[`view:${v.id}`] = ticketStats(live.filter((t) => matches(ws, t, { view_id: v.id }, meId)));
+  // Each reply address's folders, for a ticket inbox shown as a section of its own.
+  const mailboxes: Record<string, MailboxCount> = {};
+  for (const m of ws.mailboxes) {
+    const its = ns.filter((t) => t.mailbox_id === m.id && OPENISH.includes(t.status));
+    if (!its.length) continue;
+    const parts = {
+      unassigned: its.filter((t) => !t.assignee),
+      mine: its.filter((t) => t.assignee?.id === meId),
+      open: its.filter((t) => t.status === "open"),
+      pending: its.filter((t) => t.status === "pending" || t.status === "on_hold"),
+    };
+    mailboxes[m.id] = { unassigned: parts.unassigned.length, mine: parts.mine.length, open: parts.open.length, pending: parts.pending.length };
+    for (const [f, list] of Object.entries(parts)) stats[`mailbox:${m.id}:${f}`] = ticketStats(list);
+  }
   return {
     teams,
+    mailboxes,
     stats,
     my_teams: teamCount(ns.filter((t) => !!t.team_id && mine.has(t.team_id))),
     unassigned: ns.filter((t) => OPENISH.includes(t.status) && !t.assignee).length,
@@ -390,7 +407,7 @@ export function applyPatch(ws: WsData, t: Ticket, patch: TicketPatch, actor: Use
     changes.push("assignee_id");
     act("assigned", { from, to: t.assignee });
     if (t.assignee && actor?.id !== t.assignee.id && t.assignee.id === db.meId) {
-      notify(ws, "assigned", t, { actor });
+      notify(ws, "assigned", t, { actor, channel: t.channel });
     }
   }
   if (patch.brand_id !== undefined && patch.brand_id !== t.brand_id && ws.brands.some((b) => b.id === patch.brand_id)) {
@@ -504,6 +521,8 @@ export type NewMessage = {
   ai_rating?: Message["ai_rating"];
   /** Inbound email: the Reply-To it named when that differs from From. */
   reply_to?: string;
+  /** Outbound email: who it goes to; left out, the customer's reply address. */
+  to?: string[];
   /** Inbound email: its From failed DMARC; it does not reopen the ticket. */
   auth_failed?: boolean;
   /** Inbound email: the trusted contact form it came through (the contact is the visitor). */
@@ -542,7 +561,7 @@ export function buildMessage(ws: WsData, t: Ticket, m: NewMessage): Message {
     from_email: inbound ? (contact?.email ?? "") : sentFrom ? sendAs(t, sentFrom) : "",
     from_name: inbound ? (contact?.name ?? "") : sentFrom ? fromName(ws, t, sentFrom, botLabel ?? m.user?.name ?? null) : (botLabel ?? m.user?.name ?? brand),
     // Inbound: the address it was written to (an alias or the mailbox's own).
-    to: inbound ? (isEmail && (t.received_at || mailbox) ? [t.received_at || mailbox!.email] : []) : contact?.email ? [contact.email] : [],
+    to: inbound ? (isEmail && (t.received_at || mailbox) ? [t.received_at || mailbox!.email] : []) : (m.to ?? (contact?.email ? [replyRecipient(contact.email, ws.messages.filter((x) => x.ticket_id === t.id))] : [])),
     // Inbound: where it arrived (email only); outbound: the address it went from.
     mailbox_id: inbound ? (isEmail ? (t.origin_mailbox_id ?? t.mailbox_id) : null) : (sentFrom?.id ?? null),
     cc: m.cc ?? [],
@@ -551,6 +570,7 @@ export function buildMessage(ws: WsData, t: Ticket, m: NewMessage): Message {
     delivery_status: m.kind === "note" || inbound || !isEmail ? "none" : (m.delivery ?? "sent"),
     delivery_error: m.delivery_error ?? "",
     reply_to: inbound && isEmail ? (m.reply_to ?? "") : "",
+    reply_address: inbound && isEmail && !m.auth_failed && m.reply_to && sameOrg(contact?.email ?? "", m.reply_to) ? m.reply_to : "",
     received_at: inbound && isEmail ? (t.received_at || mailbox?.email || "").toLowerCase() : "",
     auth_failed: inbound && isEmail && !!m.auth_failed,
     form_sender: inbound && isEmail ? (m.form_sender ?? "") : "",
@@ -559,6 +579,12 @@ export function buildMessage(ws: WsData, t: Ticket, m: NewMessage): Message {
   };
   if (msg.delivery_status === "failed" && !msg.delivery_error) msg.delivery_error = "550 5.1.1 Recipient address rejected";
   return msg;
+}
+
+/** Whether two addresses share a registrable domain; the mock reads the last two labels. */
+function sameOrg(a: string, b: string): boolean {
+  const org = (x: string) => x.toLowerCase().split("@")[1]?.split(".").slice(-2).join(".") ?? "";
+  return !!org(a) && org(a) === org(b);
 }
 
 /** Whether a message is one Ticket.last_note shows: a member's or an API key's note on the ticket itself, not Ollie's. */

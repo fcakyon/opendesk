@@ -14,6 +14,7 @@ type Column struct {
 // Columns is every sealed column. A new one goes here in the same change that adds it;
 // TestRegistryCoversEveryByteaColumn fails until it is here or in NotSealed.
 var Columns = []Column{
+	{"brands", "id", "portal_oidc_client_secret_enc"},        // customer portal OIDC client secrets
 	{"users", "id", "totp_secret_enc"},                       // TOTP secrets
 	{"workspaces", "id", "widget_secret_enc"},                // the first widget's identity secret, from before widgets had rows
 	{"widgets", "id", "secret_enc"},                          // widget identity secrets

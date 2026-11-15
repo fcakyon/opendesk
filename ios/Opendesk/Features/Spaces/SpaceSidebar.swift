@@ -44,6 +44,8 @@ struct SpaceRowModel: Identifiable {
         case team(id: String, name: String)
         case view(ViewIcon?)
         case account(String)
+        /// The member's own emoji, or a page's.
+        case emoji(String)
     }
 
     var id: String
@@ -107,6 +109,23 @@ struct SpaceRowBuilder {
 
     func accounts(_ workspace: String) -> [MailAccount] { spaces.data[workspace]?.accounts ?? [] }
 
+    func mailboxes(_ workspace: String) -> [InboxMailbox] {
+        if isOpen(workspace), env.directory.loaded { return env.directory.mailboxes }
+        return spaces.data[workspace]?.mailboxes ?? []
+    }
+
+    func pages(_ workspace: String) -> [SpacePage] { spaces.data[workspace]?.pages ?? [] }
+
+    func pagesOn(_ workspace: String) -> Bool {
+        isOpen(workspace) ? env.products.pages : spaces.data[workspace]?.pagesOn ?? false
+    }
+
+    /// A team whose pages the person sees, as a teamspace.
+    func teamspace(_ id: String, in workspace: String) -> Team? {
+        guard pages(workspace).contains(where: { $0.teamID == id }) else { return nil }
+        return teams(workspace).first { $0.id == id }
+    }
+
     func myTeams(_ workspace: String) -> [Team] {
         guard let me = env.session.user?.id else { return [] }
         return teams(workspace).filter { $0.memberIDs?.contains(me) == true }
@@ -134,11 +153,12 @@ struct SpaceRowBuilder {
                 loose = []
             }
             for item in section.items where usable(item) {
-                if item.kind == .section {
+                if item.kind == .section || item.kind == .wikiSpace {
                     let rows = sectionRows(item)
                     guard !rows.isEmpty else { continue }
                     closeLoose()
-                    groups.append(SpaceRowGroup(id: item.id, title: sectionTitle(item.itemID, workspace: item.workspaceID), workspaceID: item.workspaceID, rows: rows))
+                    let title: String? = item.kind == .wikiSpace ? (item.name ?? teamspace(item.itemID, in: item.workspaceID)?.name) : sectionTitle(item.itemID, workspace: item.workspaceID)
+                    groups.append(SpaceRowGroup(id: item.id, title: title, workspaceID: item.workspaceID, rows: rows))
                 } else if let row = row(item) {
                     loose.append(row)
                 }
@@ -166,6 +186,7 @@ struct SpaceRowBuilder {
         case "teams": "Teams"
         case "views": "Views"
         case "favorites": "Favorites"
+        case "pages": "Pages"
         default: "Workspace"
         }
     }
@@ -174,6 +195,7 @@ struct SpaceRowBuilder {
     func row(_ item: SpaceItem) -> SpaceRowModel? {
         guard var model = base(item.kind, item.itemID, in: item.workspaceID) else { return nil }
         if let name = item.name { model.title = name }
+        if let icon = item.icon { model.mark = .emoji(icon) }
         if item.hidesNumber { model.count = nil }
         model.id = item.id
         return model
@@ -182,6 +204,17 @@ struct SpaceRowBuilder {
     /// A whole built-in section, kept up to date: the rows its workspace's own sidebar has.
     func sectionRows(_ item: SpaceItem) -> [SpaceRowModel] {
         let workspace = item.workspaceID
+        if item.kind == .wikiSpace {
+            // A teamspace is its tree's top pages.
+            guard teamspace(item.itemID, in: workspace) != nil else { return [] }
+            let all = pages(workspace).filter { $0.teamID == item.itemID }
+            let tops = all.filter { page in !all.contains { $0.id == page.parentID } }
+            return tops.compactMap { page in
+                guard var model = base(.wikiPage, page.id, in: workspace) else { return nil }
+                model.id = "\(item.id)/wiki_page:\(page.id)"
+                return model
+            }
+        }
         let entries: [(SpaceItemKind, String)]
         switch item.itemID {
         case "inbox":
@@ -195,6 +228,17 @@ struct SpaceRowBuilder {
             entries = [(.box, "inbox"), (.box, "shared"), (.box, "assigned")] + accounts(workspace).map { (.account, $0.id) }
         case "workspace":
             entries = ["contacts", "knowledge", "wiki", "reports"].filter { $0 != "reports" || ticketsOn(workspace) }.map { (.page, $0) }
+        case "favorites":
+            // The open workspace's favorites, as the member pinned them.
+            guard isOpen(workspace) else { return [] }
+            let pinnable: [SpaceItemKind] = [.ticketFolder, .team, .view, .box, .account, .folder]
+            entries = SidebarStore.shared.prefs.pinned.compactMap { pin -> (SpaceItemKind, String)? in
+                let kind = SpaceItemKind(rawValue: pin.kind)
+                return pinnable.contains(kind) ? (kind, pin.id) : nil
+            }
+        case "pages":
+            // The pages at the top of Pages' tree, outside teamspaces.
+            entries = pages(workspace).filter { $0.area == "pages" && $0.parentID == nil && $0.teamID == nil }.map { (.wikiPage, $0.id) }
         default:
             entries = []
         }
@@ -251,6 +295,19 @@ struct SpaceRowBuilder {
             }
             guard let page else { return nil }
             return model(page.title, .symbol(page.symbol), nil, .area(page), area == page)
+        case .wikiPage:
+            guard let page = pages(workspace).first(where: { $0.id == id }) else { return nil }
+            let mark: SpaceRowModel.Mark = page.icon.map { .emoji($0) } ?? .symbol(page.symbol)
+            return model(page.displayTitle, mark, nil, .path(page.path), env.router.inboxPath.last == .wikiPage(id))
+        case .wikiSpace:
+            guard let team = teamspace(id, in: workspace) else { return nil }
+            let inPages = pages(workspace).contains { $0.teamID == id && $0.area == "pages" }
+            return model(team.name, .team(id: team.id, name: team.name), nil, .path((inPages ? "/pages?space=" : "/wiki?space=") + id), false)
+        case .mailbox:
+            guard let mailbox = mailboxes(workspace).first(where: { $0.id == id }) else { return nil }
+            let title = open ? SidebarStore.shared.inboxTitle(mailbox) : mailbox.title
+            return model(title, .symbol("tray.2"), Folder.unassigned.count(in: counts, mailbox: id), .path("/inbox/unassigned?mailbox=" + id),
+                         area == .tickets && env.inbox.scope.mailboxID == id)
         case .everywhere:
             guard workspace.isEmpty, let list = EverywhereList(rawValue: id) else { return nil }
             return SpaceRowModel(id: "everywhere:\(id)", title: list.title, mark: .symbol(list.symbol), count: EverywhereStore.shared.count(list),
@@ -265,16 +322,19 @@ struct SpaceRowBuilder {
     /// How the editor names an item, even before its workspace's data has loaded.
     func describe(_ item: SpaceItem) -> (title: String, mark: SpaceRowModel.Mark) {
         if item.kind == .section {
-            return (item.name ?? sectionTitle(item.itemID, workspace: item.workspaceID), .symbol("rectangle.stack"))
+            return (item.name ?? sectionTitle(item.itemID, workspace: item.workspaceID), item.icon.map { .emoji($0) } ?? .symbol("rectangle.stack"))
         }
         if let model = base(item.kind, item.itemID, in: item.workspaceID) {
-            return (item.name ?? model.title, model.mark)
+            return (item.name ?? model.title, item.icon.map { .emoji($0) } ?? model.mark)
         }
         let fallback: (String, String) = switch item.kind {
         case .team: ("A team", "person.3")
         case .view: ("A view", "square.stack")
         case .account: ("A mail account", "envelope")
         case .folder: ("A mail folder", "folder")
+        case .wikiPage: ("A page", "doc.text")
+        case .wikiSpace: ("A teamspace", "person.3")
+        case .mailbox: ("A ticket inbox", "tray.2")
         default: ("Something no longer here", "questionmark.circle")
         }
         return (item.name ?? fallback.0, .symbol(fallback.1))
@@ -298,6 +358,8 @@ struct SpaceRowMarkView: View {
             ViewIconMark(icon: icon, size: 15, tint: selected ? Theme.fg : Theme.fg3)
         case let .account(color):
             MailAccountDot(color: color, size: 8)
+        case let .emoji(emoji):
+            Text(emoji).font(.system(size: 15))
         }
     }
 }
@@ -393,6 +455,7 @@ struct SpaceSidebar: View {
             store.setCollapsed(!section.collapsed, section: section.id, in: space.id)
         } label: {
             HStack(spacing: 6) {
+                if let icon = section.icon { Text(icon).font(.system(size: 12.5)) }
                 Text(section.title)
                     .font(ODFont.sans(12.5, weight: .medium))
                     .foregroundStyle(Theme.fg3)

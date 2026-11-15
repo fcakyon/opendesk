@@ -141,6 +141,23 @@
     "you": "Du",
     "noMatch": "Keine passenden Mitglieder",
     "noMatchHint": "Versuche einen anderen Namen oder eine andere E-Mail-Adresse.",
+    "filter": {
+      "label": "Mitglieder filtern",
+      "allRoles": "Alle Rollen",
+      "roleLabel": "Rolle: {{value}}",
+      "searchRoles": "Rollen suchen",
+      "allTeams": "Alle Teams",
+      "noTeam": "Kein Team",
+      "unknownTeam": "Unbekanntes Team",
+      "teamLabel": "Team: {{value}}",
+      "searchTeams": "Teams suchen",
+      "anyStatus": "Jeder Status",
+      "statusLabel": "Status: {{value}}",
+      "searchStatuses": "Status suchen",
+      "shown": "{{shown}} von {{total}}",
+      "clear": "Filter zurücksetzen",
+      "noMatchHint": "Versuche andere Filter, oder setze sie zurück, um alle zu sehen."
+    },
     "emptyTitle": "Bisher nur du",
     "emptyHint": "Lade Teammitglieder ein, um den Posteingang zu teilen.",
     "columns": {
@@ -321,6 +338,41 @@
       "saved": "Zeitformat gespeichert"
     }
   },
+  "pages": {
+    "title": "Seiten",
+    "description": "Die eigenen Seiten, Datenbanken und Leinwände deines Teams. Sie stehen neben dem Wiki, in der Seitenleiste und unter Seiten.",
+    "product": "Produkt",
+    "productHint": "Schalte Seiten aus, um es für alle auszublenden. Nichts wird gelöscht, und alles kommt zurück, sobald du es wieder einschaltest.",
+    "use": "Seiten verwenden",
+    "useOn": "Seiten ist an: Mitglieder sehen es in der Seitenleiste und können Seiten anlegen.",
+    "useOff": "Seiten ist aus: Es ist ausgeblendet, und seine Seiten bleiben erhalten.",
+    "lastProduct": "Seiten ist das einzige aktive Produkt",
+    "lastProductHint": "Schalte zuerst unter Allgemein Tickets oder Mail ein: Ein Produkt bleibt immer an.",
+    "saved": "Gespeichert",
+    "saveFailed": "Die Änderung konnte nicht gespeichert werden",
+    "teamspaces": "Teambereiche",
+    "teamspacesHint": "Jedes Team hat einen Bereich für seine Seiten. Die Seiten eines privaten Teams sehen nur seine Mitglieder.",
+    "manageTeams": "Teams verwalten",
+    "privateTeam": "Privates Team",
+    "privateTeamHint": "Nur seine Mitglieder sehen seine Seiten",
+    "pageCount_one": "{{count}} Seite",
+    "pageCount_other": "{{count}} Seiten",
+    "noTeams": "Noch keine Teams",
+    "noTeamsHint": "Lege ein Team an, um ihm einen Bereich zu geben.",
+    "port": "Import und Export",
+    "portHint": "Hole Seiten aus Notion, Obsidian und anderen Tools, oder nimm sie mit.",
+    "import": "Seiten importieren",
+    "importHint": "Ein Notion- oder Obsidian-Export oder Markdown-, HTML-, CSV- und Textdateien.",
+    "importAction": "Importieren",
+    "export": "Seiten exportieren",
+    "exportHint": "Alle Seiten, die du sehen kannst, als Markdown-Vault oder HTML in einer ZIP-Datei.",
+    "exportAction": "Exportieren",
+    "trash": "Papierkorb",
+    "trashHint": "Seiten bleiben 30 Tage im Papierkorb und werden dann endgültig gelöscht.",
+    "inTrash_one": "{{count}} Seite im Papierkorb",
+    "inTrash_other": "{{count}} Seiten im Papierkorb",
+    "openTrash": "Papierkorb öffnen"
+  },
   "saveBar": {
     "region": "Ungespeicherte Änderungen",
     "message": "Du hast ungespeicherte Änderungen",
@@ -348,9 +400,11 @@
     "productTicketsHint": "Gemeinsame Postfächer, Live-Chat, Hilfecenter und Berichte. Ausgeschaltet werden sie ausgeblendet und neue Ticketarbeit pausiert.",
     "productMail": "Mail",
     "productMailHint": "Die eigenen Mailkonten der Mitglieder, mit ihren Postfächern synchronisiert.",
+    "productPages": "Seiten",
+    "productPagesHint": "Die eigenen Seiten, Datenbanken und Leinwände deines Teams, getrennt vom Wiki.",
     "mailUnavailable": {"instance_disabled": "Mail ist für diese Instanz ausgeschaltet.", "plan": "Mail gehört nicht zum Tarif dieses Arbeitsbereichs."},
     "productKept": "Nichts wird gelöscht",
-    "productKeptHint": "Tickets, Mails und Verbindungen bleiben erhalten, solange ein Produkt aus ist. Eingehende E-Mails, Anrufe und Chatnachrichten warten und werden fortgesetzt, sobald Tickets wieder an ist.",
+    "productKeptHint": "Tickets, Mails, Seiten und Verbindungen bleiben erhalten, solange ein Produkt aus ist. Eingehende E-Mails, Anrufe und Chatnachrichten warten und werden fortgesetzt, sobald Tickets wieder an ist.",
     "helpCenter": "Hilfecenter",
     "helpCenterHint": "Eine öffentliche Website mit den veröffentlichten Artikeln deiner Wissensdatenbank.",
     "publish": "Hilfecenter veröffentlichen",
@@ -384,6 +438,9 @@
     "gravatarHint": "Sendet einen Hash der E-Mail-Adressen von Kontakten an Gravatar, um deren Bilder abzurufen.",
     "domainLogos": "Unternehmenslogos",
     "domainLogosHint": "Lädt das Logo jedes Unternehmens von dessen Website.",
+    "subjectNumber": "Ticketnummer im Betreff",
+    "subjectNumberOn": "E-Mails an Kunden enden im Betreff mit der Ticketnummer, etwa [#1042]. Antworten werden über diese Kennung und über den Verlauf dem Ticket zugeordnet.",
+    "subjectNumberOff": "Betreffs werden ohne Ticketnummer gesendet, und Antworten werden über den Verlauf dem Ticket zugeordnet. Eine E-Mail, die das Gespräch beginnt, etwa die erste eines Tickets, das ein Agent eröffnet hat, behält die Nummer, wenn das Postfach so sendet, dass sich die Kennung der E-Mail ändert (Microsoft, manche Google-Verbindungen, Amazon SES). So findet die Antwort des Kunden immer ihr Ticket.",
     "reports": "Berichte",
     "onlineTime": "Online-Zeit der Agents",
     "onlineTimeOn": "Erfasst die Zeit, in der jedes Mitglied opendesk mit dem Status Online geöffnet hat, für Berichte → Agents. Schalte sie aus, wo ihre Erfassung die Zustimmung des Teams oder eine Betriebsvereinbarung braucht.",
@@ -596,6 +653,7 @@
       "tickets": "Tickets",
       "team": "Team",
       "mail": "E-Mail",
+      "wiki": "Wiki",
       "ai_billing": "KI und Abrechnung",
       "workspace": "Workspace"
     },
@@ -642,6 +700,10 @@
         "label": "SLA-Überschreitungen",
         "hint": "Ein dir zugewiesenes Ticket verfehlt ein Ziel"
       },
+      "scheduled_reply_failed": {
+        "label": "Nicht gesendete geplante Antworten",
+        "hint": "Eine Antwort, die du geplant hast, konnte nicht gesendet werden und liegt wieder in deinen Entwürfen"
+      },
       "ai_handoff": {
         "label": "Übergaben an eine Person",
         "hint": "Ollie übergibt eine Unterhaltung an das Team"
@@ -653,6 +715,18 @@
       "collab_mention": {
         "label": "Erwähnungen in E-Mail-Kommentaren",
         "hint": "Jemand erwähnt dich in einem Kommentar zu einer E-Mail-Unterhaltung"
+      },
+      "wiki_mention": {
+        "label": "Erwähnungen im Wiki",
+        "hint": "Jemand erwähnt dich auf einer Wiki-Seite oder in einem Kommentar dazu"
+      },
+      "wiki_comment": {
+        "label": "Wiki-Kommentare",
+        "hint": "Neue Kommentare auf Seiten, denen du folgst, und in Diskussionen, in denen du geschrieben hast"
+      },
+      "wiki_reminder": {
+        "label": "Wiki-Erinnerungen",
+        "hint": "Eine Erinnerung, die du auf einer Wiki-Seite gesetzt hast, ist fällig"
       },
       "team_joined": {
         "label": "Teamänderungen",

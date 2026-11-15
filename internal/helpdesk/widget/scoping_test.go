@@ -5,6 +5,7 @@ import (
 
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/crypto"
+	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
 	"github.com/useopendesk/opendesk/internal/ids"
 )
@@ -99,25 +100,29 @@ func TestWidgetSummary(t *testing.T) {
 func TestWidgetWithholdsAgentIdentityWhenShowTeamOff(t *testing.T) {
 	e, ws := setup(t)
 	s := start(t, e, map[string]any{"key": ws.WidgetKey})
-	conv := e.Do("POST", "/v1/widget/conversations", visitor(s.VisitorToken), map[string]any{"body": "Hello"}).Want(t, 201).Map(t)
+	va := hdtest.Auth{Visitor: s.VisitorToken}
+	conv := e.Do("POST", "/v1/widget/conversations", va, map[string]any{"body": "Hello"}).Want(t, 201).Map(t)
 	cid := conv["conversation"].(map[string]any)["id"].(string)
 	e.Do("POST", "/v1/tickets/"+cid+"/messages", ws.Agent.As(ws), map[string]any{"kind": "reply", "body_html": "<p>Hi from agent</p>"}).Want(t, 201)
 
 	e.SetWidgetSettings(ws, ws.WidgetID, map[string]any{"show_team": false})
-	out := e.Do("GET", "/v1/widget/conversations/"+cid+"/messages", visitor(s.VisitorToken), nil).Want(t, 200).Map(t)
+	out := e.Do("GET", "/v1/widget/conversations/"+cid+"/messages", va, nil).Want(t, 200).Map(t)
 	msgs := out["data"].([]any)
 	reply := msgs[len(msgs)-1].(map[string]any)
 	author := reply["author"].(map[string]any)
 	if author["type"] != "user" || author["user"] != nil {
 		t.Fatalf("expected user identity withheld, got %+v", author)
 	}
-	resumed := start(t, e, map[string]any{"key": ws.WidgetKey, "visitor_token": s.VisitorToken})
+	var resumed struct {
+		UnreadLatest *domain.Message `json:"unread_latest"`
+	}
+	e.Do("POST", "/v1/widget/session", hdtest.Auth{}, map[string]any{"key": ws.WidgetKey, "visitor_token": s.VisitorToken}).Want(t, 200).JSON(t, &resumed)
 	if resumed.UnreadLatest == nil || resumed.UnreadLatest.Author.User != nil {
 		t.Fatalf("expected unread_latest user identity withheld, got %+v", resumed.UnreadLatest)
 	}
 
 	e.SetWidgetSettings(ws, ws.WidgetID, map[string]any{"show_team": true})
-	out = e.Do("GET", "/v1/widget/conversations/"+cid+"/messages", visitor(s.VisitorToken), nil).Want(t, 200).Map(t)
+	out = e.Do("GET", "/v1/widget/conversations/"+cid+"/messages", va, nil).Want(t, 200).Map(t)
 	msgs = out["data"].([]any)
 	reply = msgs[len(msgs)-1].(map[string]any)
 	author = reply["author"].(map[string]any)

@@ -1,5 +1,6 @@
 // The fields a new ticket starts from, the same in the dialog and on the page:
-// email, chat or log internally, who it goes to, and the address or widget it goes from.
+// email, chat, log the customer's request or log internally, who it goes to, and the
+// address or widget it goes from.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -22,7 +23,7 @@ export function NewTicketKind({ s }: { s: NewTicketState }) {
   const { data: widgets } = useQuery(q.widgets());
   // Chat is offered once the workspace has a widget to open it in.
   const hasWidget = (widgets ?? []).some((w) => w.settings.enabled !== false);
-  const value = s.draft.kind === "note" ? "note" : s.chat ? "chat" : "email";
+  const value = s.draft.kind === "note" ? "note" : s.chat ? "chat" : s.log ? "log" : "email";
   return (
     <Segmented
       value={value}
@@ -30,6 +31,7 @@ export function NewTicketKind({ s }: { s: NewTicketState }) {
       options={[
         { value: "email", label: tr("newTicket.email") },
         ...(hasWidget || s.chat ? [{ value: "chat" as const, label: tr("newTicket.chat") }] : []),
+        { value: "log" as const, label: tr("newTicket.log") },
         { value: "note", label: tr("newTicket.internal") },
       ]}
     />
@@ -105,7 +107,7 @@ export function NewTicketFrom({ s }: { s: NewTicketState }) {
   const { t: tr } = useTranslation("inbox");
   if (s.chat) return <NewTicketWidget s={s} />;
   return (
-    <Field label={tr("newTicket.from")} error={s.noSender ? tr("newTicket.cannotSend") : undefined}>
+    <Field label={tr("newTicket.from")} hint={s.log ? tr("newTicket.logHint") : undefined} error={s.noSender ? tr("newTicket.cannotSend") : undefined}>
       {({ id }) => (
         <Select
           id={id}

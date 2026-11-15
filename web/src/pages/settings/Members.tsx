@@ -7,10 +7,11 @@ import { SettingsPage, Section, ListRow } from "@/components/layout";
 import { ListSkeleton, RolePill, roleTone, StatePill, SummaryStrip } from "@/components/settings2/bits";
 import { MemberProfileFields, profileChanges, profileDirty, profileOf, useSaveProfile } from "@/components/settings2/MemberProfileFields";
 import { MemberTeams } from "@/components/settings2/memberTeams";
+import { MemberFilterBar, useMemberFilters } from "@/components/settings2/MemberFilterBar";
+import { useTeams } from "@/components/settings2/teams";
 import { MotionList, MotionRow } from "@/components/settings2/motion";
 import { EmptyState } from "@/components/ui/empty";
 import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
-import { SearchInput } from "@/components/ui/input";
 import { tone as tones } from "@/lib/tones";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import { relLong, shortDate } from "@/lib/format";
 import { q, qk, removeFromList } from "@/lib/queries";
 import { atLeast, reloadSession, useRole, useSession } from "@/lib/session";
 import { cn } from "@/lib/cn";
+import { filterMembers, memberCounts } from "@/lib/memberFilters";
 import { PlanLimitHint, showLimit } from "@/components/billing/PlanLimit";
 import { useLimit } from "@/components/billing/hooks";
 import { useVarSuggest } from "@/components/templates/extension";
@@ -86,7 +88,8 @@ export default function Members() {
 
 function MembersList({ onInvite }: { onInvite?: () => void }) {
   const { t } = useTranslation("settings");
-  const [query, setQuery] = useState("");
+  const filter = useMemberFilters();
+  const { teams } = useTeams();
   const qc = useQueryClient();
   const confirm = useConfirm();
   const navigate = useNavigate();
@@ -160,33 +163,39 @@ function MembersList({ onInvite }: { onInvite?: () => void }) {
       { title: "Leave this workspace?", confirmLabel: "Leave", danger: true },
     );
 
-  const term = query.trim().toLowerCase();
-  const sorted = [...(data ?? [])]
-    .filter((m) => !term || m.user.name.toLowerCase().includes(term) || m.user.email.toLowerCase().includes(term))
-    .sort((a, b) => {
-      const r = { owner: 0, admin: 1, agent: 2, viewer: 3 } as const;
-      return r[a.role] - r[b.role] || a.user.name.localeCompare(b.user.name);
-    });
+  const all = data ?? [];
+  const counts = useMemo(() => memberCounts(data ?? [], teams), [data, teams]);
+  const sorted = filterMembers(all, filter.filters, teams).sort((a, b) => {
+    const r = { owner: 0, admin: 1, agent: 2, viewer: 3 } as const;
+    return r[a.role] - r[b.role] || a.user.name.localeCompare(b.user.name);
+  });
+  // Filters are for longer lists; a link with filters set shows them whatever the size.
+  const showFilters = all.length > 6 || filter.active;
+  const onlySearch = !filter.filters.roles.length && !filter.filters.team && !filter.filters.statuses.length;
 
   return (
     <Section
       flush
       title={data ? t("members.count", { count: data.length }) : t("members.title")}
       actions={
-        <>
-          {(data?.length ?? 0) > 6 && <SearchInput value={query} onChange={setQuery} placeholder={t("members.search")} className="w-[220px]" />}
-          {role !== "owner" && (
-            <Button size="sm" variant="ghost" icon={<LogOut className="size-3.5" />} onClick={leave}>
-              {t("members.leave")}
-            </Button>
-          )}
-        </>
+        role !== "owner" && (
+          <Button size="sm" variant="ghost" icon={<LogOut className="size-3.5" />} onClick={leave}>
+            {t("members.leave")}
+          </Button>
+        )
       }
     >
+      {!isLoading && showFilters && <MemberFilterBar state={filter} counts={counts} teams={teams} shown={sorted.length} total={all.length} />}
       {isLoading ? (
         <ListSkeleton rows={5} />
-      ) : !sorted.length && term ? (
-        <EmptyState compact lit={3} title={t("members.noMatch")} description={t("members.noMatchHint")} />
+      ) : !sorted.length && filter.active ? (
+        <EmptyState
+          compact
+          lit={3}
+          title={t("members.noMatch")}
+          description={onlySearch ? t("members.noMatchHint") : t("members.filter.noMatchHint")}
+          action={<Button onClick={filter.clear}>{t("members.filter.clear")}</Button>}
+        />
       ) : !sorted.length ? (
         <SettingsEmpty
           art="contacts"

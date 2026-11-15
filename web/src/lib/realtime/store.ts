@@ -25,6 +25,7 @@ export type LiveReply = {
 
 type RealtimeState = {
   status: ConnectionStatus;
+  /** Presence by key: a ticket's id, or `wikiPresenceKey(page id)`. */
   presence: Record<string, PresenceState>;
   typing: Record<string, Typing[]>;
   customerTyping: Record<string, number>;
@@ -61,14 +62,17 @@ export function unmarkHidden(ticketId: string) {
   });
 }
 
-export function setPresence(ticketId: string, state: PresenceState) {
-  useRealtime.setState((s) => ({ presence: { ...s.presence, [ticketId]: state } }));
+/** The presence key of a wiki page; a ticket's is its id. */
+export const wikiPresenceKey = (pageId: string) => `wiki_page:${pageId}`;
+
+export function setPresence(key: string, state: PresenceState) {
+  useRealtime.setState((s) => ({ presence: { ...s.presence, [key]: state } }));
 }
 
-export function clearPresence(ticketId: string) {
+export function clearPresence(key: string) {
   useRealtime.setState((s) => {
     const next = { ...s.presence };
-    delete next[ticketId];
+    delete next[key];
     return { presence: next };
   });
 }

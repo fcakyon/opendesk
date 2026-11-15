@@ -144,6 +144,23 @@
     "you": "Vous",
     "noMatch": "Aucun membre correspondant",
     "noMatchHint": "Essayez un autre nom ou une autre adresse e-mail.",
+    "filter": {
+      "label": "Filtrer les membres",
+      "allRoles": "Tous les rôles",
+      "roleLabel": "Rôle : {{value}}",
+      "searchRoles": "Rechercher un rôle",
+      "allTeams": "Toutes les équipes",
+      "noTeam": "Sans équipe",
+      "unknownTeam": "Équipe inconnue",
+      "teamLabel": "Équipe : {{value}}",
+      "searchTeams": "Rechercher une équipe",
+      "anyStatus": "Tous les statuts",
+      "statusLabel": "Statut : {{value}}",
+      "searchStatuses": "Rechercher un statut",
+      "shown": "{{shown}} sur {{total}}",
+      "clear": "Effacer les filtres",
+      "noMatchHint": "Essayez d’autres filtres, ou effacez-les pour voir tout le monde."
+    },
     "emptyTitle": "Vous êtes seul pour le moment",
     "emptyHint": "Invitez des collègues à partager la boîte de réception.",
     "columns": {
@@ -311,6 +328,43 @@
       "system": "Système"
     }
   },
+  "pages": {
+    "title": "Pages",
+    "description": "Les pages, bases de données et canevas de votre équipe. Ils vivent à côté du wiki, dans la barre latérale et dans Pages.",
+    "product": "Produit",
+    "productHint": "Désactivez Pages pour le masquer à tous. Rien n’est supprimé, et tout revient quand vous le réactivez.",
+    "use": "Utiliser Pages",
+    "useOn": "Pages est activé : les membres le voient dans la barre latérale et peuvent ajouter des pages.",
+    "useOff": "Pages est désactivé : il est masqué et ses pages sont conservées.",
+    "lastProduct": "Pages est le seul produit activé",
+    "lastProductHint": "Activez d’abord Tickets ou Mail dans Général : un produit reste toujours activé.",
+    "saved": "Enregistré",
+    "saveFailed": "Impossible d’enregistrer la modification",
+    "teamspaces": "Espaces d’équipe",
+    "teamspacesHint": "Chaque équipe a un espace pour ses pages. Les pages d’une équipe privée ne sont visibles que par ses membres.",
+    "manageTeams": "Gérer les équipes",
+    "privateTeam": "Équipe privée",
+    "privateTeamHint": "Seuls ses membres voient ses pages",
+    "pageCount_one": "{{count}} page",
+    "pageCount_many": "{{count}} pages",
+    "pageCount_other": "{{count}} pages",
+    "noTeams": "Aucune équipe pour l’instant",
+    "noTeamsHint": "Ajoutez une équipe pour lui donner un espace.",
+    "port": "Importer et exporter",
+    "portHint": "Importez des pages depuis Notion, Obsidian et d’autres outils, ou emportez-les.",
+    "import": "Importer des pages",
+    "importHint": "Un export Notion ou Obsidian, ou des fichiers Markdown, HTML, CSV et texte.",
+    "importAction": "Importer",
+    "export": "Exporter Pages",
+    "exportHint": "Toutes les pages que vous voyez, en coffre Markdown ou en HTML, dans un zip.",
+    "exportAction": "Exporter",
+    "trash": "Corbeille",
+    "trashHint": "Les pages restent 30 jours dans la corbeille, puis sont supprimées définitivement.",
+    "inTrash_one": "{{count}} page dans la corbeille",
+    "inTrash_many": "{{count}} pages dans la corbeille",
+    "inTrash_other": "{{count}} pages dans la corbeille",
+    "openTrash": "Ouvrir la corbeille"
+  },
   "saveBar": {
     "region": "Modifications non enregistrées",
     "message": "Vous avez des modifications non enregistrées",
@@ -338,9 +392,11 @@
     "productTicketsHint": "Boîtes partagées, chat en direct, centre d’aide et rapports. Désactivé, il les masque et met en pause le travail sur les nouveaux tickets.",
     "productMail": "Mail",
     "productMailHint": "Les comptes mail personnels des membres, synchronisés avec leurs boîtes.",
+    "productPages": "Pages",
+    "productPagesHint": "Les pages, bases de données et canevas de votre équipe, à part du wiki.",
     "mailUnavailable": {"instance_disabled": "Mail est désactivé pour cette instance.", "plan": "Mail ne fait pas partie de l’offre de cet espace de travail."},
     "productKept": "Rien n’est supprimé",
-    "productKeptHint": "Les tickets, les mails et les connexions sont conservés tant qu’un produit est désactivé. Les e-mails, appels et messages de chat reçus attendent et reprennent quand Tickets est réactivé.",
+    "productKeptHint": "Les tickets, les mails, les pages et les connexions sont conservés tant qu’un produit est désactivé. Les e-mails, appels et messages de chat reçus attendent et reprennent quand Tickets est réactivé.",
     "helpCenter": "Centre d’aide",
     "helpCenterHint": "Un site public regroupant les articles publiés de votre base de connaissances.",
     "publish": "Publier le centre d’aide",
@@ -393,6 +449,9 @@
     "gravatarHint": "Envoie à Gravatar une empreinte des adresses e-mail des contacts pour rechercher leurs images.",
     "domainLogos": "Logos des entreprises",
     "domainLogosHint": "Récupère le logo de chaque entreprise sur son site web.",
+    "subjectNumber": "Numéro du ticket dans l’objet",
+    "subjectNumberOn": "Les e-mails aux clients terminent leur objet par le numéro du ticket, comme [#1042]. Les réponses sont associées à leur ticket par cette balise et par le fil de discussion.",
+    "subjectNumberOff": "Les objets sont envoyés sans le numéro du ticket, et les réponses sont associées à leur ticket par le fil de discussion. Un e-mail qui ouvre la conversation, comme le premier d’un ticket ouvert par un agent, garde le numéro quand la boîte envoie d’une façon qui change l’identifiant de l’e-mail (Microsoft, certaines connexions Google, Amazon SES) : la réponse du client retrouve ainsi toujours son ticket.",
     "reports": "Rapports",
     "onlineTime": "Temps en ligne des agents",
     "onlineTimeOn": "Enregistre le temps où chaque membre a opendesk ouvert avec le statut En ligne, pour Rapports → Agents. Désactivez-le là où son enregistrement demande le consentement de l’équipe ou l’accord d’un conseil d’entreprise.",
@@ -578,6 +637,7 @@
       "tickets": "Tickets",
       "team": "Équipe",
       "mail": "Courrier",
+      "wiki": "Wiki",
       "ai_billing": "IA et facturation",
       "workspace": "Espace de travail"
     },
@@ -619,6 +679,10 @@
         "label": "Non-respect des SLA",
         "hint": "Un ticket qui vous est attribué dépasse un délai cible"
       },
+      "scheduled_reply_failed": {
+        "label": "Réponses programmées non envoyées",
+        "hint": "Une réponse que vous avez programmée n’a pas pu partir et se retrouve dans vos brouillons"
+      },
       "ai_handoff": {
         "label": "Transferts à une personne",
         "hint": "Ollie transmet une conversation à l’équipe"
@@ -630,6 +694,18 @@
       "collab_mention": {
         "label": "Mentions dans les commentaires de courrier",
         "hint": "Quelqu’un vous mentionne dans un commentaire d’une conversation par e-mail"
+      },
+      "wiki_mention": {
+        "label": "Mentions dans le wiki",
+        "hint": "Quelqu’un vous mentionne sur une page du wiki ou dans un commentaire de celle-ci"
+      },
+      "wiki_comment": {
+        "label": "Commentaires du wiki",
+        "hint": "Nouveaux commentaires sur les pages que vous suivez et dans les discussions où vous avez écrit"
+      },
+      "wiki_reminder": {
+        "label": "Rappels du wiki",
+        "hint": "Un rappel que vous avez placé dans une page du wiki arrive à échéance"
       },
       "team_joined": {
         "label": "Changements dans l’équipe",

@@ -23,7 +23,7 @@ import { useConfirm } from "@/components/ui/confirm";
 // does not pull the same one back in, and a replaced draft waits instead of overwriting edits.
 const seeded = new Map<string, string>();
 
-export function SharedDraftBar({ ticket, html, onUse, onClear }: { ticket: Ticket; html: string; onUse: (html: string) => void; onClear: () => void }) {
+export function SharedDraftBar({ ticket, html, onUse, onClear, hold }: { ticket: Ticket; html: string; onUse: (html: string) => void; onClear: () => void; hold?: boolean }) {
   const { t } = useTranslation("inbox");
   const qc = useQueryClient();
   const reduced = useReducedMotion();
@@ -33,12 +33,12 @@ export function SharedDraftBar({ ticket, html, onUse, onClear }: { ticket: Ticke
   const inComposer = !!draft && seeded.get(ticket.id) === draft.updated_at;
   const now = useNow(!!draft);
 
-  // An empty composer takes the draft as it arrives.
+  // An empty composer takes the draft as it arrives, once my own saved reply (hold) has had its turn.
   useEffect(() => {
-    if (!draft || html || inComposer) return;
+    if (!draft || html || inComposer || hold) return;
     seeded.set(ticket.id, draft.updated_at);
     onUse(draft.body_html);
-  }, [draft, html, inComposer, ticket.id, onUse]);
+  }, [draft, html, inComposer, hold, ticket.id, onUse]);
 
   const discard = useMutation({
     mutationFn: () => api.tickets.draft.discard(ticket.id),

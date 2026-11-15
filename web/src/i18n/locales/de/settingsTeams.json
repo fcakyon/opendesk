@@ -650,5 +650,41 @@
     "precWorkspace": "Workspace-Standard",
     "precWorkspaceHint": "Alles andere, wie oben gewählt.",
     "precElse": "sonst"
+  },
+  "portalAuth": {
+    "title": "Anmeldung im Portal",
+    "hint": "So melden sich Kunden im Support-Portal von {{name}} an.",
+    "mode": "Anmeldemethode",
+    "modeHint": "Kunden melden sich immer mit ihrer eigenen E-Mail-Adresse an. Lege fest, ob das mit einem Passwort, über deinen Identitätsanbieter oder beidem geschieht.",
+    "modes": {
+      "local": "Passwort",
+      "local_and_oidc": "Passwort oder Identitätsanbieter",
+      "oidc": "Nur Identitätsanbieter"
+    },
+    "issuer": "Issuer",
+    "issuerHint": "Die HTTPS-Adresse des Issuers deines Anbieters. Beim Speichern lesen wir sein Discovery-Dokument.",
+    "clientId": "Client-ID",
+    "secret": "Client-Secret",
+    "secretHint": "Verschlüsselt gespeichert und nie wieder angezeigt.",
+    "secretSaved": "Gespeichert. Leer lassen, um es zu behalten.",
+    "callback": "Redirect-URI",
+    "callbackHint": "Trage sie bei deinem Anbieter als erlaubte Redirect-URI ein. Die Scopes sind openid, email und profile.",
+    "copy": "Redirect-URI kopieren",
+    "create": "Kontakte bei der ersten Anmeldung anlegen",
+    "createOn": "Wer sich über deinen Anbieter anmeldet, erhält einen Kontakt.",
+    "createOff": "Nur Personen, die bereits Kontakte sind, können sich anmelden.",
+    "save": "Anmeldeeinstellungen speichern",
+    "saved": "Portal-Anmeldung gespeichert",
+    "saveFailed": "Die Anmeldeeinstellungen konnten nicht gespeichert werden",
+    "invalid": "Wir konnten diesen Anbieter nicht lesen. Verwende die HTTPS-Adresse des Issuers und die Client-ID, die er dir gegeben hat.",
+    "secretRequired": "Gib das Client-Secret für diesen Anbieter ein.",
+    "relink": "Neue Anmeldung erlauben",
+    "relinkHint": "Ändert sich das Konto eines Kunden beim Anbieter, kann seine nächste Anmeldung die alte Verknüpfung ersetzen. Das gilt 15 Minuten und nur einmal.",
+    "relinkEmail": "E-Mail-Adresse des Kunden",
+    "relinkAction": "Erlauben",
+    "relinkDone": "{{email}} kann sich in den nächsten 15 Minuten mit einem neuen Konto anmelden.",
+    "relinkNone": "Kein Kontakt hat diese E-Mail-Adresse.",
+    "relinkReauth": "Melde dich erneut an, um das zu tun.",
+    "relinkFailed": "Die Anmeldung konnte nicht erlaubt werden"
   }
 }

@@ -150,19 +150,23 @@ func TestParseTransfers(t *testing.T) {
 }
 
 func TestParseIntelligenceAndIgnored(t *testing.T) {
-	ai := recorded(t, "intelligence")
-	rec := parse(t, ai[0])
-	if rec.Kind != provider.KindCall || rec.Call == nil || !rec.Call.Recording || rec.Call.Direction != "" || rec.Call.RecordingURL != "" {
-		t.Fatalf("recording %+v %+v", rec, rec.Call)
-	}
-	// The notification's own text is never taken: it is fetched from Voys.
-	tr := parse(t, ai[1])
-	if tr.Kind != provider.KindTranscript || tr.Transcript != "" || tr.CallID != "ua9-grq-prd-1793095200.1001" {
-		t.Fatalf("transcript %+v", tr)
-	}
-	sum := parse(t, ai[2])
-	if sum.Kind != provider.KindSummary || sum.Summary != "" {
-		t.Fatalf("summary %+v", sum)
+	// Voys sends these events without a status, as documented, or with one
+	// (recording_created, transcript_created, summary_created), as some accounts get them.
+	for _, name := range []string{"intelligence", "intelligence_status"} {
+		ai := recorded(t, name)
+		rec := parse(t, ai[0])
+		if rec.Kind != provider.KindCall || rec.Call == nil || !rec.Call.Recording || rec.Call.Direction != "" || rec.Call.RecordingURL != "" {
+			t.Fatalf("%s: recording %+v %+v", name, rec, rec.Call)
+		}
+		// The notification's own text is never taken: it is fetched from Voys.
+		tr := parse(t, ai[1])
+		if tr.Kind != provider.KindTranscript || tr.Transcript != "" || tr.CallID != "ua9-grq-prd-1793095200.1001" {
+			t.Fatalf("%s: transcript %+v", name, tr)
+		}
+		sum := parse(t, ai[2])
+		if sum.Kind != provider.KindSummary || sum.Summary != "" {
+			t.Fatalf("%s: summary %+v", name, sum)
+		}
 	}
 	for _, name := range []string{"internal"} {
 		for _, b := range recorded(t, name) {

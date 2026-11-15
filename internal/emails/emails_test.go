@@ -57,6 +57,9 @@ func TestNotificationSubjects(t *testing.T) {
 	if got := one(Note{Type: "ai_balance_out", Data: map[string]any{"remaining_usd": 0.0}}); got != "Your AI balance is used up in Margin" {
 		t.Errorf("billing: %q", got)
 	}
+	if got := one(Note{Type: "wiki_mention", Data: map[string]any{"page_title": "Onboarding", "comment_id": "c1", "actor": map[string]any{"name": "Maya"}}}); got != "Maya mentioned you in a comment on Onboarding" {
+		t.Errorf("wiki mention: %q", got)
+	}
 	// A long preview is cut to a short excerpt.
 	m := Notifications(s, Batch{WorkspaceID: uuid.New(), Workspace: "Margin", Notes: []Note{{Type: "mentioned", TicketID: &tid, TicketNumber: 1, TicketSubject: "x",
 		Data: map[string]any{"preview": long}}}})
@@ -102,6 +105,21 @@ func TestWebPushText(t *testing.T) {
 	_, body, _ = WebPush(s, wid, Note{Type: "collab_mention", TicketSubject: "Quarterly\nnumbers"})
 	if body != "Quarterly numbers" {
 		t.Errorf("collab: %q", body)
+	}
+	// A wiki notification opens its page, at the comment's thread when it is about one.
+	page, thread := uuid.New(), uuid.New()
+	title, body, link = WebPush(s, wid, Note{Type: "wiki_comment", TicketSubject: "Onboarding",
+		Data: map[string]any{"page_id": page.String(), "page_title": "Onboarding", "thread_id": thread.String(), "actor": map[string]any{"name": "Maya Chen"}}})
+	if title != "Maya Chen commented on Onboarding" || body != "Onboarding" ||
+		link != "https://app.example/wiki/"+page.String()+"?comment="+thread.String()+"&ws="+wid.String() {
+		t.Errorf("wiki comment: %q %q %q", title, body, link)
+	}
+	title, _, link = WebPush(s, wid, Note{Type: "wiki_reminder", Data: map[string]any{"page_id": page.String(), "page_title": "Onboarding", "label": "Renew the cert"}})
+	if title != "Your reminder on Onboarding is due" || link != "https://app.example/wiki/"+page.String()+"?ws="+wid.String() {
+		t.Errorf("wiki reminder: %q %q", title, link)
+	}
+	if _, _, link = WebPush(s, wid, Note{Type: "wiki_mention"}); link != "https://app.example/wiki?ws="+wid.String() {
+		t.Errorf("wiki without a page: %q", link)
 	}
 }
 

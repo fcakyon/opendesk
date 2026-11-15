@@ -1,0 +1,150 @@
+---
+title: Wiki, tickets and Ollie
+description: Mention tickets and contacts in wiki pages, list a view's tickets in a page, see the pages that mention a ticket, publish a page to the help center, and write with Ollie.
+---
+
+import Steps from '../../../components/Steps.astro';
+import Step from '../../../components/Step.astro';
+import Callout from '../../../components/Callout.astro';
+import Fold from '../../../components/Fold.astro';
+
+The wiki sits next to your help desk. A runbook can name the tickets it was written for, an incident review can list the open tickets of a view, and a ticket shows the pages that mention it. A page that answers customers' questions well can become a help article. Ollie, the assistant, writes with you in a page and answers questions from the wiki.
+
+Whatever a page mentions, each reader sees only what their own access shows them: a mention never opens a ticket to someone who can't see it.
+
+Writing pages is covered in the [wiki guide](/guides/wiki/).
+
+## Mention tickets and contacts
+
+- **A ticket**: type <kbd>#</kbd> and its number (`#1042`), or <kbd>#</kbd> and words from its subject (`#refund`), and pick it. **Mention a ticket** in the <kbd>/</kbd> menu does the same. <kbd>@</kbd> followed by two letters or more also finds tickets.
+- **A contact**: type <kbd>@</kbd> and two letters or more of their name or email, and pick them under **Contacts**.
+
+A mentioned ticket shows live: its status, number and subject as they are now. Rest the pointer on it for a card with its status, assignee and last update; click it to open the ticket. Someone who can't see the ticket, such as a member outside a private team, reads **A ticket you can't see**, without its subject. A contact shows with their initial and name, and opens the contact.
+
+## List a view's tickets
+
+<Steps>
+<Step title="Add a ticket list">
+
+Type <kbd>/</kbd> and pick **Ticket list**, under **Help desk**.
+
+</Step>
+<Step title="Choose a view">
+
+Pick one of your [saved views](/guides/saved-replies-and-views/). Its open tickets show in the page, as compact rows: number, subject, status, assignee and last update. With no views yet, save one from the inbox first.
+
+</Step>
+<Step title="Set how many">
+
+**List options** shows 5, 10 or 25 tickets. **Open view** and **See every ticket in this view** open the whole view in the inbox.
+
+</Step>
+</Steps>
+
+The list stays current as tickets change, like the inbox. Each reader sees the tickets of that view they may see. If the view is deleted, the block asks for another one.
+
+## A ticket's wiki pages
+
+A ticket's details show a **Wiki** section with the pages that mention it, last edited first. Click one to open it. Nothing shows until a page mentions the ticket, and you see only the pages you can see: not someone else's private pages, nor a private team's pages you are not on.
+
+In a page, the **Links** tab of the page panel lists its **Tickets mentioned**. See [Links, tags and the graph](/guides/wiki-links/#the-page-panel).
+
+## Publish a page to the help center
+
+A page your team wrote for itself can be the start of a help article.
+
+<Steps>
+<Step title="Open the page's menu">
+
+In the page's **More actions** menu, choose **Publish to help center**. It is there on pages, not on templates, daily notes, the journal or databases.
+
+</Step>
+<Step title="Pick where it goes">
+
+Check the **Article title**, pick a **Collection** (or **No collection**) and, with several [brands](/guides/brands-and-widgets/), a **Brand**. An article in a collection of one brand belongs to that brand.
+
+</Step>
+<Step title="Create the draft">
+
+Click **Create draft**. The article is a draft in the knowledge base; click **Open** to go to it, check it and publish it from there.
+
+</Step>
+</Steps>
+
+The article is a copy. Later edits of the page never change it, and editing the article never changes the page.
+
+- Headings, lists, quotes, code, links and images from the web come across. Callouts become quotes, toggles a bold line and their text, tables lines of text, and equations code.
+- Mentions of teammates, tickets and contacts, and links to other wiki pages, keep only their text.
+- Files and images uploaded to the wiki, databases and subpages stay in the wiki. The message after publishing counts them, such as "2 files or databases stayed in the wiki".
+
+Agents, admins and owners publish pages. Nothing is shown to customers until someone publishes the article itself. See [Knowledge base and help center](/guides/knowledge-base/).
+
+## Write with Ollie
+
+With AI on in the workspace, Ollie writes with agents, admins and owners in any page they can edit.
+
+### Edit selected text
+
+Select text and click **Ask Ollie** in the toolbar, or press <kbd>mod</kbd> <kbd>j</kbd>. Under **Edit or review**, pick one:
+
+| Option | What Ollie does |
+| --- | --- |
+| **Improve writing** | Makes it clearer and smoother, keeping what it says |
+| **Fix spelling and grammar** | Corrects mistakes only |
+| **Make shorter**, **Make longer** | Tightens it, or adds detail |
+| **Simplify** | Plainer words and shorter sentences |
+| **Make more formal**, **Make friendlier** | Changes the tone |
+| **Summarize** | A short summary of it |
+| **Find action items** | The things to do in it, as a to-do list |
+| **Explain** | What it means, in plain words |
+
+Or type what you want in **Tell Ollie what to do with it**, such as "turn this into a numbered list", and press <kbd>enter</kbd>.
+
+### Write at the cursor
+
+On an empty line, press <kbd>space</kbd>, or pick **Ask Ollie to write** in the <kbd>/</kbd> menu. Under **Write from this page**:
+
+- **Continue writing**: picks up from what comes before the cursor.
+- **Summarize this page**: a summary of the whole page.
+
+Or type in **Ask Ollie to write something**, such as "a checklist for refunds over 100 euros", and press <kbd>enter</kbd>. Ollie reads the page around the cursor to fit in.
+
+### Keep or drop it
+
+Ollie writes into a preview under the text, and **Stop** halts it. Nothing changes in the page until you choose:
+
+- **Replace** the selected text with it, or **Insert below** it. At the cursor, **Insert**.
+- **Try again** for another version.
+- **Discard** to drop it.
+
+<Callout>
+
+Each option shows about what it costs. On opendesk Cloud, edits of selected text cost about what a [rewrite](/guides/ai/#typical-costs-with-the-default-models) does, on the fast model; writing from the page and your own requests run on the main model and cost a little more. They are listed as **Write in the wiki** in the AI usage. See [AI features](/guides/ai/).
+
+</Callout>
+
+## Ask Ollie about the wiki
+
+[Ollie](/guides/ollie/), the assistant, reads the wiki as you: the workspace's pages, your teams' pages and your own private pages, never anyone else's.
+
+- Ask "What's our escalation process?" or "How do we refund a duplicate charge?" Ollie searches the wiki, reads the pages it needs and links the ones its answer comes from.
+- On a wiki page, ask it to "Summarize this page", one of its quick asks there.
+- Ask it to write or change a page, and it prepares the change for your approval, like any other change.
+
+Ollie never uses the wiki to answer customers: the AI agent in the chat widget and email, suggested replies and anything else customers see leave it out.
+
+<Fold>
+
+## Wiki pages in agent procedures
+
+An admin writing a [procedure](/guides/procedures/) for the AI agent can copy a page's steps into it with **Copy from a wiki page**. The text is copied once: later edits of the page never reach the agent.
+
+</Fold>
+
+## Related
+
+- [Wiki](/guides/wiki/)
+- [Knowledge base and help center](/guides/knowledge-base/)
+- [Ollie, the assistant](/guides/ollie/)
+- [Saved replies and views](/guides/saved-replies-and-views/)
+- [Wiki API](/api/resources/wiki/#tickets-and-the-help-center)

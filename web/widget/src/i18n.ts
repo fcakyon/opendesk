@@ -17,6 +17,9 @@ export const en = {
   unavailableHint: "Check your connection and try again later.",
   sendMessage: "Send us a message",
   yourConversations: "Your conversations",
+  olderConversations: "See older conversations",
+  allConversations: "All your conversations",
+  backHome: "Back",
   conversation: "Conversation",
   newConversation: "New conversation",
   typing: "{name} is typing…",
@@ -92,7 +95,7 @@ export const en = {
 export type Dict = typeof en;
 export type Key = keyof Dict;
 
-export const SUPPORTED = ["en", "es", "fr", "de", "pt", "it", "nl", "pl", "ja", "zh-CN", "ko", "tr", "az", "ar"] as const;
+export const SUPPORTED = ["en", "es", "fr", "de", "pt", "it", "nl", "pl", "cs", "ja", "zh-CN", "ko", "tr", "az", "ar"] as const;
 export type Locale = (typeof SUPPORTED)[number];
 const RTL = new Set<string>(["ar"]);
 

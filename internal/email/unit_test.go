@@ -74,11 +74,20 @@ func TestSubjects(t *testing.T) {
 			t.Errorf("baseSubject(%q) = %q", in, got)
 		}
 	}
-	if got := replySubject("Re: Printer [#12]", 12, true); got != "Re: Printer [#12]" {
+	if got := replySubject("Re: Printer [#12]", 12, true, true); got != "Re: Printer [#12]" {
 		t.Errorf("replySubject %q", got)
 	}
-	if got := replySubject("", 3, false); got != "Your request [#3]" {
+	if got := replySubject("", 3, false, true); got != "Your request [#3]" {
 		t.Errorf("replySubject %q", got)
+	}
+	if got := replySubject("Re: Printer [#12]", 12, true, false); got != "Re: Printer" {
+		t.Errorf("replySubject without the tag %q", got)
+	}
+	if got := autoSubject("", "Printer", "12", false); got != "Re: Printer" {
+		t.Errorf("autoSubject without the tag %q", got)
+	}
+	if got := autoSubject("We got it", "Printer", "12", false); got != "We got it" {
+		t.Errorf("autoSubject written %q", got)
 	}
 	if n, ok := subjectTicketNumber("Re: help [#77]"); !ok || n != 77 {
 		t.Errorf("subjectTicketNumber %d %v", n, ok)

@@ -39,7 +39,7 @@ import { sameJSON } from "@/lib/sameJSON";
 type DisplaySettings = { status_labels?: Overrides<TicketStatus>; priority_labels?: Overrides<Priority>; send_and_finish_button?: boolean; severity_enabled?: boolean };
 type Draft = {
   name: string;
-  settings: Required<Pick<WS, "tickets_enabled" | "mail_enabled" | "timezone" | "help_center_enabled" | "help_center_title" | "csat_enabled" | "gravatar" | "domain_logos" | "undo_send_seconds" | "undo_send_chat_seconds" | "message_delete" | "collab_ticket_replies" | "collab_ticket_reply_to" | "agent_online_time" | "snooze_presets">> & {
+  settings: Required<Pick<WS, "tickets_enabled" | "mail_enabled" | "pages_enabled" | "timezone" | "help_center_enabled" | "help_center_title" | "csat_enabled" | "gravatar" | "domain_logos" | "undo_send_seconds" | "undo_send_chat_seconds" | "message_delete" | "collab_ticket_replies" | "collab_ticket_reply_to" | "agent_online_time" | "snooze_presets" | "ticket_number_in_subject">> & {
     brand_color: string;
     locale: string;
     locale_fixed: boolean;
@@ -60,6 +60,7 @@ function toDraft(w: Workspace): Draft {
     settings: {
       tickets_enabled: w.settings.tickets_enabled ?? true,
       mail_enabled: w.settings.mail_enabled ?? true,
+      pages_enabled: w.settings.pages_enabled ?? true,
       timezone: w.settings.timezone ?? "UTC",
       help_center_enabled: w.settings.help_center_enabled ?? false,
       help_center_title: w.settings.help_center_title ?? "",
@@ -75,6 +76,7 @@ function toDraft(w: Workspace): Draft {
       collab_ticket_replies: w.settings.collab_ticket_replies ?? true,
       collab_ticket_reply_to: w.settings.collab_ticket_reply_to ?? "address",
       agent_online_time: w.settings.agent_online_time ?? true,
+      ticket_number_in_subject: w.settings.ticket_number_in_subject ?? true,
       snooze_presets: [...snoozePresets(w.settings)],
     },
   };
@@ -153,6 +155,8 @@ export default function WorkspaceSettings() {
       qc.setQueryData(qk.workspace, w);
       updateWorkspace(w);
       void qc.invalidateQueries({ queryKey: qk.collabStatus });
+      // Tickets turned back on: the counts read while it was off are all zero.
+      void qc.invalidateQueries({ queryKey: qk.counts });
       toast.success(t("workspace.saved"));
     },
   });
@@ -167,6 +171,9 @@ export default function WorkspaceSettings() {
   }
 
   const mailUsable = ws.mail_disabled_reason !== "instance_disabled" && ws.mail_disabled_reason !== "plan";
+  // At least one product stays on (422 at_least_one_product_required): the last one on can't be turned off.
+  const live = { tickets: draft.settings.tickets_enabled, mail: draft.settings.mail_enabled && mailUsable, pages: draft.settings.pages_enabled };
+  const lastOn = (k: keyof typeof live) => live[k] && Object.entries(live).every(([x, on]) => x === k || !on);
   const base = toDraft(ws);
   const dirty = !sameJSON(base, draft);
   const set = <K extends keyof Draft["settings"]>(k: K, v: Draft["settings"][K]) => setDraft({ ...draft, settings: { ...draft.settings, [k]: v } });
@@ -242,7 +249,7 @@ export default function WorkspaceSettings() {
               aria-label={t("workspace.productTickets")}
               checked={draft.settings.tickets_enabled}
               onCheckedChange={(v) => set("tickets_enabled", v)}
-              disabled={!canEdit || (draft.settings.tickets_enabled && (!draft.settings.mail_enabled || !mailUsable))}
+              disabled={!canEdit || lastOn("tickets")}
             />
           </Row>
           <Row
@@ -253,10 +260,18 @@ export default function WorkspaceSettings() {
               aria-label={t("workspace.productMail")}
               checked={draft.settings.mail_enabled && mailUsable}
               onCheckedChange={(v) => set("mail_enabled", v)}
-              disabled={!canEdit || !mailUsable || (draft.settings.mail_enabled && !draft.settings.tickets_enabled)}
+              disabled={!canEdit || !mailUsable || lastOn("mail")}
             />
           </Row>
-          {(!draft.settings.tickets_enabled || !draft.settings.mail_enabled) && (
+          <Row label={t("workspace.productPages")} description={t("workspace.productPagesHint")}>
+            <Switch
+              aria-label={t("workspace.productPages")}
+              checked={draft.settings.pages_enabled}
+              onCheckedChange={(v) => set("pages_enabled", v)}
+              disabled={!canEdit || lastOn("pages")}
+            />
+          </Row>
+          {(!draft.settings.tickets_enabled || !draft.settings.mail_enabled || !draft.settings.pages_enabled) && (
             <Row label={t("workspace.productKept")} description={t("workspace.productKeptHint")} />
           )}
         </Section>
@@ -310,6 +325,9 @@ export default function WorkspaceSettings() {
         <Section title={t("workspace.conversations")}>
           <Row label={t("workspace.csat")} description={t("workspace.csatHint")}>
             <Switch aria-label={t("workspace.csat")} checked={draft.settings.csat_enabled} onCheckedChange={(v) => set("csat_enabled", v)} disabled={!canEdit} />
+          </Row>
+          <Row label={t("workspace.subjectNumber")} description={draft.settings.ticket_number_in_subject ? t("workspace.subjectNumberOn") : t("workspace.subjectNumberOff")}>
+            <Switch aria-label={t("workspace.subjectNumber")} checked={draft.settings.ticket_number_in_subject} onCheckedChange={(v) => set("ticket_number_in_subject", v)} disabled={!canEdit} />
           </Row>
           <Row label={t("workspace.undoSend")} description={t("workspace.undoSendHint")}>
             <Segmented

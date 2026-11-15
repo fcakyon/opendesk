@@ -4,7 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { i18n, loadAgentCatalogs } from "@/i18n";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { Mailbox, Team, Ticket, Workspace } from "@/lib/api/types";
+import type { Mailbox, Member, Team, Ticket, Workspace } from "@/lib/api/types";
+import { api } from "@/lib/api/endpoints";
 import { qk } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { TicketProperties, TicketPropertiesBar, type PropPicker } from "./TicketProperties";
@@ -84,7 +85,7 @@ afterEach(async () => {
 });
 
 /** Renders with the workspace's teams and addresses known, and nothing fetched. */
-async function render(node: ReactNode, role: "agent" | "viewer" = "agent", settings: Workspace["settings"] = {}) {
+async function render(node: ReactNode, role: "agent" | "viewer" = "agent", settings: Workspace["settings"] = {}, data: { members?: Member[]; teams?: Team[] } = {}) {
   useSession.setState({
     user: { id: "u9", name: "Lea Martin", email: "lea@margin.test" } as never,
     memberships: [{ workspace: { id: "w" }, role }] as never,
@@ -92,10 +93,10 @@ async function render(node: ReactNode, role: "agent" | "viewer" = "agent", setti
   });
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, enabled: false } } });
   qc.setQueryData<Workspace>(qk.workspace, { id: "w", name: "Acme", mail_available: true, settings } as Workspace);
-  qc.setQueryData(qk.teams, [team]);
+  qc.setQueryData(qk.teams, data.teams ?? [team]);
   qc.setQueryData(qk.brands, []);
   qc.setQueryData(qk.mailboxes, [mailbox]);
-  qc.setQueryData(qk.members, []);
+  qc.setQueryData(qk.members, data.members ?? []);
   await act(async () =>
     root.render(
       <QueryClientProvider client={qc}>
@@ -213,5 +214,61 @@ describe("the ticket header", () => {
     await render(<HeaderPills t={ticket({ spam: true })} bar />);
     const pills = host.querySelector("[data-header-pills]")!;
     expect(pills.textContent).toBe("Spam");
+  });
+});
+
+describe("assign to me in the assignee picker", () => {
+  const member = (id: string, name: string): Member =>
+    ({ user: { id, name, email: `${name.split(" ")[0].toLowerCase()}@margin.test`, avatar_url: null }, role: "agent", presence: "online" }) as Member;
+  // Lea Martin (u9) is the member signed in.
+  const members = [member("u9", "Lea Martin"), member("u2", "Sam Okafor")];
+  const rows = () => [...document.querySelectorAll<HTMLElement>("[cmdk-item]")];
+  const labels = () => rows().map((r) => r.querySelector(".truncate")?.textContent);
+  const open = (t: Ticket) => render(<TicketPropertiesBar t={t} picker="assignee" onPicker={() => {}} />, "agent", {}, { members });
+  const type = async (text: string) => {
+    const input = document.querySelector<HTMLInputElement>("[cmdk-input]")!;
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      set.call(input, text);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+
+  it("comes first, above Unassigned and the members, with the i shortcut", async () => {
+    await open(ticket({ assignee: null }));
+    expect(labels()).toEqual(["Assign to me", "Unassigned", "Lea Martin", "Sam Okafor"]);
+    expect(rows()[0].querySelector("kbd")?.textContent).toBe("I");
+  });
+
+  it("assigns the ticket to the member signed in", async () => {
+    const update = vi.spyOn(api.tickets, "update").mockResolvedValue(ticket());
+    await open(ticket({ assignee: { id: "u2", name: "Sam Okafor", email: "sam@margin.test", avatar_url: null } }));
+    await act(async () => rows()[0].click());
+    expect(update).toHaveBeenCalledWith("t1", { assignee_id: "u9" });
+    update.mockRestore();
+  });
+
+  it("is not offered on a ticket that is already the member's", async () => {
+    await open(ticket());
+    expect(labels()).toEqual(["Unassigned", "Lea Martin", "Sam Okafor"]);
+  });
+
+  it("is not offered on a private team's ticket the member can't take", async () => {
+    const billing = { ...team, id: "team2", name: "Billing", private: true, member_ids: ["u2"] } as Team;
+    await render(<TicketPropertiesBar t={ticket({ assignee: null, team_id: "team2" })} picker="assignee" onPicker={() => {}} />, "agent", {}, { members, teams: [team, billing] });
+    expect(labels()).toEqual(["Unassigned", "Sam Okafor"]);
+  });
+
+  it("leaves when a name is typed, so Enter picks that member, and stays for its own words", async () => {
+    await open(ticket({ assignee: null }));
+    // "sam" is a fuzzy match for "Assign to me" too; the row still goes.
+    await type("sam");
+    expect(labels()).toEqual(["Sam Okafor"]);
+    await type("lea");
+    expect(labels()).toEqual(["Lea Martin"]);
+    await type("assign");
+    expect(labels()[0]).toBe("Assign to me");
+    await type("");
+    expect(labels()).toEqual(["Assign to me", "Unassigned", "Lea Martin", "Sam Okafor"]);
   });
 });

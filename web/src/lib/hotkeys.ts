@@ -43,9 +43,10 @@ export function keyName(e: KeyboardEvent): string {
   const parts: string[] = [];
   if (e.metaKey || e.ctrlKey) parts.push("mod");
   if (e.altKey) parts.push("alt");
-  let k = e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase();
+  let k = e.key.toLowerCase();
   if (k === " ") k = "space";
-  if (e.shiftKey && k.length > 1) parts.push("shift");
+  // Shift is its own key with a letter ("shift+u") and with named keys; a symbol carries it ("?", "#").
+  if (e.shiftKey && (k.length > 1 || /[a-z]/.test(k))) parts.push("shift");
   parts.push(k);
   return parts.join("+");
 }

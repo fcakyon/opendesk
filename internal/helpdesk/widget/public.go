@@ -255,14 +255,24 @@ type widgetSessionInput struct {
 	Origin    string `header:"Origin"`
 	UserAgent string `header:"User-Agent"`
 	Body      struct {
-		Key          string `json:"key" maxLength:"200"`
-		VisitorToken string `json:"visitor_token,omitempty" maxLength:"200"`
-		Email        string `json:"email,omitempty" maxLength:"254"`
-		Name         string `json:"name,omitempty" maxLength:"200"`
-		UserID       string `json:"user_id,omitempty" maxLength:"200"`
-		UserHash     string `json:"user_hash,omitempty" maxLength:"128"`
-		AvatarURL    string `json:"avatar_url,omitempty" maxLength:"2000" doc:"https picture of the signed-in user; used only with a valid user_hash"`
+		Key          string         `json:"key" maxLength:"200"`
+		VisitorToken string         `json:"visitor_token,omitempty" maxLength:"200"`
+		Email        string         `json:"email,omitempty" maxLength:"254"`
+		Name         string         `json:"name,omitempty" maxLength:"200"`
+		UserID       string         `json:"user_id,omitempty" maxLength:"200"`
+		UserHash     string         `json:"user_hash,omitempty" maxLength:"128"`
+		AvatarURL    string         `json:"avatar_url,omitempty" maxLength:"2000" doc:"https picture of the signed-in user; used only with a valid user_hash"`
+		Company      *widgetCompany `json:"company,omitempty" doc:"The signed-in user's account in your product; used only with a valid user_hash"`
+		Fields       map[string]any `json:"fields,omitempty" doc:"Contact custom fields to set, by key; used only with a valid user_hash, and only fields whose key starts with widget_ (anything else is ignored)"`
 	}
+}
+
+// widgetCompany is the account a signed-in user belongs to in the host product. Only the id
+// is read; other keys a page sends along (a name, a domain) are accepted and ignored, so the
+// session never fails over them.
+type widgetCompany struct {
+	_  struct{} `additionalProperties:"true"`
+	ID string   `json:"id" maxLength:"200" doc:"Your own id for the account. The contact is linked to the workspace's company with this external_id; an unknown id links nothing. A company is never created or changed from here"`
 }
 
 type widgetSession struct {
@@ -515,6 +525,11 @@ func (h *handler) session(ctx context.Context, in *widgetSessionInput) (*widgetS
 				return err
 			}
 		}
+		if verified {
+			if err := syncProfile(ctx, tx, wid, contactID, b.Company, b.Fields); err != nil {
+				return err
+			}
+		}
 		c, err := domain.LoadContact(ctx, tx, wid, contactID)
 		if err != nil {
 			return err
@@ -548,12 +563,14 @@ func (h *handler) session(ctx context.Context, in *widgetSessionInput) (*widgetS
 	if err != nil {
 		return nil, httpx.Wrap(err)
 	}
+	VisitorSeen(h.d)(ctx, wid, out.Body.Contact.ID)
 	return out, nil
 }
 
 func emailTaken(ctx context.Context, tx pgx.Tx, wid uuid.UUID, email string, except uuid.UUID) (bool, error) {
 	var taken bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM contacts WHERE workspace_id = $1 AND email = $2 AND id <> $3)`,
+	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM contacts WHERE workspace_id = $1 AND email = $2 AND id <> $3)
+		OR EXISTS (SELECT 1 FROM contact_emails WHERE workspace_id = $1 AND email = $2 AND contact_id <> $3)`,
 		wid, email, except).Scan(&taken)
 	return taken, err
 }

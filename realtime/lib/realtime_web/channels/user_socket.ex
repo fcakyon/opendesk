@@ -20,6 +20,7 @@ defmodule RealtimeWeb.UserSocket do
   channel "team:*", RealtimeWeb.TeamChannel
   channel "user:*", RealtimeWeb.UserChannel
   channel "ticket:*", RealtimeWeb.TicketChannel
+  channel "wiki_page:*", RealtimeWeb.WikiPageChannel
 
   @impl true
   def connect(params, socket, connect_info),

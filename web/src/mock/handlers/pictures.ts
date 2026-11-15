@@ -25,6 +25,7 @@ import { HttpError, del, forbidden, get, invalid, notFound, patch, post, put, re
 import { isRecord, nowIso, uuid } from "../util";
 import { aiOff, decisionEngine } from "./ai";
 import { agentSetup } from "./aiClients";
+import { collabAccountsOf } from "./collab";
 import { memberOut } from "./workspace";
 
 const MAX_BYTES = 5 << 20;
@@ -90,6 +91,8 @@ function assignment(ws: WsData): Assignment {
     auto_away_minutes: ws.routing.autoAwayMinutes,
     new_ticket_notify: notify && NEW_TICKET_NOTIFY.includes(notify) ? notify : "auto",
     followup_keeps_assignee: ws.workspace.settings.followup_keeps_assignee ?? false,
+    chat_mode: ws.workspace.settings.chat_assign ?? "none",
+    chat_skill_id: ws.workspace.settings.chat_assign_skill_id ?? null,
   };
 }
 
@@ -142,7 +145,11 @@ export function parseHours(body: Record<string, unknown>): Omit<BusinessHours, "
 
 export function onboarding(ws: WsData): Onboarding {
   const row = ws.members.find((m) => m.user_id === db.meId);
+  const mail = ws.workspace.mail_available !== false;
+  const accounts = mail ? collabAccountsOf(ws) : [];
   const done: Record<OnboardingStep["id"], boolean> = {
+    connect_mail_account: accounts.length > 0,
+    share_mail_account: accounts.some((a) => a.shared),
     connect_mailbox: ws.mailboxes.length > 0,
     invite_teammate: ws.members.length > 1 || ws.invitations.length > 0,
     upload_photo: !!me().avatar_url,
@@ -153,6 +160,21 @@ export function onboarding(ws: WsData): Onboarding {
     try_ollie: ws.aiUsage.some((u) => u.user_id !== null),
     setup_ai_agent: agentSetup(ws).complete,
   };
+  // The steps follow the products (contracts/api.md "Onboarding").
+  if (ws.workspace.settings.tickets_enabled === false) {
+    const mailSteps: OnboardingStep[] = mail
+      ? [
+          { id: "connect_mail_account", title: "Connect a mail account", description: "Bring a Gmail, Outlook or IMAP inbox in. Keep it private or share it.", done: done.connect_mail_account, href: "/settings/mail-accounts", requires: "agent" },
+          { id: "share_mail_account", title: "Share an inbox with your team", description: "Everyone you add sees its mail and can reply, assign and comment.", done: done.share_mail_account, href: "/settings/mail-accounts", requires: "agent" },
+        ]
+      : [];
+    const steps: OnboardingStep[] = [
+      ...mailSteps,
+      { id: "invite_teammate", title: "Invite a teammate", description: "Work together and share the load.", done: done.invite_teammate, href: "/settings/members", requires: "admin" },
+      { id: "upload_photo", title: "Upload your photo", description: "Teammates see who is replying.", done: done.upload_photo, href: "/settings/profile", requires: "agent" },
+    ];
+    return { steps, done_count: steps.filter((s) => s.done).length, total: steps.length, dismissed: !!row?.onboarding_dismissed };
+  }
   const steps: OnboardingStep[] = [
     { id: "connect_mailbox", title: "Connect a mailbox", description: "Bring your support email in so messages become tickets.", done: done.connect_mailbox, href: "/settings/mailboxes", requires: "admin" },
     { id: "invite_teammate", title: "Invite a teammate", description: "Answer tickets together and share the load.", done: done.invite_teammate, href: "/settings/members", requires: "admin" },
@@ -323,6 +345,15 @@ export function registerPictures() {
     if ("followup_keeps_assignee" in b) {
       if (typeof b.followup_keeps_assignee !== "boolean") throw invalid("followup_keeps_assignee must be true or false");
       ctx.ws.workspace.settings = { ...ctx.ws.workspace.settings, followup_keeps_assignee: b.followup_keeps_assignee };
+    }
+    if ("chat_mode" in b) {
+      if (!MODES.includes(b.chat_mode as AssignMode)) throw invalid("chat_mode must be none, round_robin or load_balanced");
+      ctx.ws.workspace.settings = { ...ctx.ws.workspace.settings, chat_assign: b.chat_mode as AssignMode };
+    }
+    if ("chat_skill_id" in b) {
+      const id = b.chat_skill_id;
+      if (id && !ctx.ws.skills.some((s) => s.id === id && !s.archived)) throw invalid("chat_skill_id must be a skill of this workspace");
+      ctx.ws.workspace.settings = { ...ctx.ws.workspace.settings, chat_assign_skill_id: typeof id === "string" && id ? id : null };
     }
     if ("auto_away_minutes" in b) {
       const n = b.auto_away_minutes;

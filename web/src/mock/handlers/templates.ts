@@ -269,7 +269,8 @@ function preview(ws: WsData, b: Record<string, unknown>): TemplatePreview {
   const body = typeof b.body_html === "string" ? b.body_html : "";
   const subjectIn = typeof b.subject === "string" ? b.subject : "";
   const number = vals.text["ticket.number"];
-  let subject = `Re: ${vals.text["ticket.subject"]} [#${number}]`;
+  const tag = ws.workspace.settings.ticket_number_in_subject !== false ? ` [#${number}]` : "";
+  let subject = `Re: ${vals.text["ticket.subject"]}${tag}`;
   let content = fill(SAMPLE_CONTENT, vals);
   let signature = vals.html["agent.signature"];
   let probs: TemplateProblem[];
@@ -291,7 +292,7 @@ function preview(ws: WsData, b: Record<string, unknown>): TemplatePreview {
       content = fill(body, vals);
       signature = "";
       history = "";
-      subject = subjectIn.trim() ? `${fill(subjectIn, vals)}${/\[#\d+\]/.test(subjectIn) ? "" : ` [#${number}]`}` : subject;
+      subject = subjectIn.trim() ? `${fill(subjectIn, vals)}${/\[#\d+\]/.test(subjectIn) ? "" : tag}` : subject;
       break;
     case "layout":
       if (isRecord(b.options)) o = { ...o, ...(b.options as Partial<EmailLayoutOptions>) };
@@ -305,7 +306,7 @@ function preview(ws: WsData, b: Record<string, unknown>): TemplatePreview {
       probs = [...problems(src, "csat"), ...problems(subj, "subject")];
       vals.html.survey = surveyButtons(o.accent || brand.color);
       content = fill(src, vals);
-      subject = `${fill(subj, vals)} [#${number}]`;
+      subject = `${fill(subj, vals)}${tag}`;
       history = "";
       break;
     }

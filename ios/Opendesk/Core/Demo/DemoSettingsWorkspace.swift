@@ -24,7 +24,7 @@ struct DemoWorkspaceSettings: Sendable {
         let margin = ws.id == DemoSeed.marginID
         var settings = (DemoSeed.json(ws.workspace.settings).object ?? [:]).filter { !$0.value.isNull }
         let extras: [String: JSONValue] = [
-            "tickets_enabled": .bool(true), "mail_enabled": .bool(true), "locale": .string("en"), "locale_fixed": .bool(false),
+            "tickets_enabled": .bool(true), "mail_enabled": .bool(true), "pages_enabled": .bool(true), "locale": .string("en"), "locale_fixed": .bool(false),
             "help_center_enabled": .bool(true), "help_center_title": .string(margin ? "Margin help" : ""),
             "csat_enabled": .bool(margin), "undo_send_seconds": .number(5), "undo_send_chat_seconds": .number(0),
             "message_delete": .string("own"), "gravatar": .bool(false), "domain_logos": .bool(true),

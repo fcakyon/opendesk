@@ -262,10 +262,14 @@ var summaryLabels = map[string][2]string{
 	"customer_replied":          {"reply", "replies"},
 	"thread_replied":            {"side conversation answer", "side conversation answers"},
 	"sla_breached":              {"missed target", "missed targets"},
+	"scheduled_reply_failed":    {"scheduled reply not sent", "scheduled replies not sent"},
 	"ai_handoff":                {"handoff", "handoffs"},
 	"team_joined":               {"team change", "team changes"},
 	"collab_assigned":           {"conversation assigned", "conversations assigned"},
 	"collab_mention":            {"comment mention", "comment mentions"},
+	"wiki_mention":              {"wiki mention", "wiki mentions"},
+	"wiki_comment":              {"wiki comment", "wiki comments"},
+	"wiki_reminder":             {"wiki reminder", "wiki reminders"},
 	"import_finished":           {"import", "imports"},
 	"support_channel_unhealthy": {"support channel alert", "support channel alerts"},
 	"ai_billing":                {"AI or billing notice", "AI or billing notices"},
@@ -292,7 +296,7 @@ func summary(notes []Note, now time.Time, loc *time.Location, clock string) stri
 		count[k]++
 	}
 	var parts []string
-	for _, k := range []string{"assigned", "new_ticket", "mentioned", "customer_replied", "thread_replied", "sla_breached", "ai_handoff", "collab_assigned", "collab_mention", "team_joined", "import_finished", "support_channel_unhealthy", "ai_billing", "other"} {
+	for _, k := range []string{"assigned", "new_ticket", "mentioned", "customer_replied", "thread_replied", "sla_breached", "scheduled_reply_failed", "ai_handoff", "collab_assigned", "collab_mention", "wiki_mention", "wiki_comment", "wiki_reminder", "team_joined", "import_finished", "support_channel_unhealthy", "ai_billing", "other"} {
 		n := count[k]
 		if n == 0 {
 			continue
@@ -494,6 +498,10 @@ func describe(n Note) copyOf {
 		short := strings.Replace(what, "The ", "", 1)
 		return copyOf{title: capitalize(short) + " missed", subject: capitalize(short) + " missed on", heading: capitalize(short) + " missed",
 			intro: []string{what + " of a ticket assigned to you has passed."}, meta: "Assigned to you"}
+	case "scheduled_reply_failed":
+		return copyOf{title: "Your scheduled reply was not sent", subject: "Your scheduled reply was not sent on", heading: "Your scheduled reply was not sent",
+			intro: []string{scheduledReplyReason(str(n.Data, "reason")), "It is back in your reply box as a draft, with its words and files."},
+			meta:  "Kept as your draft", cta: "Open opendesk", subjectTail: true}
 	case "ai_handoff":
 		if str(n.Data, "via") == "contact" {
 			who := or(contact, "A customer")
@@ -556,6 +564,8 @@ func describe(n Note) copyOf {
 			cta: "Open billing", subjectTail: true}
 	case "collab_assigned", "collab_mention":
 		return collabCopy(n, actor)
+	case "wiki_mention", "wiki_comment", "wiki_reminder":
+		return wikiCopy(n, actor)
 	case "import_finished":
 		return importCopy(n.Data)
 	case "support_channel_unhealthy":
@@ -579,10 +589,14 @@ var TypeLabels = map[string]string{
 	"customer_replied":          "customer replies",
 	"thread_replied":            "answers in your side conversations",
 	"sla_breached":              "SLA breaches",
+	"scheduled_reply_failed":    "scheduled replies that were not sent",
 	"ai_handoff":                "handoffs to a person",
 	"team_joined":               "team changes",
 	"collab_assigned":           "conversations assigned to you",
 	"collab_mention":            "mentions in conversation comments",
+	"wiki_mention":              "mentions on wiki pages",
+	"wiki_comment":              "comments on wiki pages you follow",
+	"wiki_reminder":             "wiki reminders",
 	"ai_cap_reached":            "the chat agent's monthly cap",
 	"ai_key_failed":             "AI key problems",
 	"ai_balance_low":            "a low AI balance",
@@ -608,7 +622,7 @@ func WebPush(s Site, wid uuid.UUID, n Note) (title, body, link string) {
 	case n.TicketID != nil:
 		body = clip(fmt.Sprintf("#%d %s", n.TicketNumber, subject), 120)
 	case subject != "":
-		body = clip(subject, 120) // a Collab conversation's subject
+		body = clip(subject, 120) // a Collab conversation's subject or a wiki page's title
 	}
 	return describe(n).heading, body, noteURL(s, wid, n)
 }
@@ -637,6 +651,17 @@ func noteURL(s Site, wid uuid.UUID, n Note) string {
 			return s.App("/mail/"+box+"/"+id.String(), "ws", ws)
 		}
 		return s.App("/mail/"+box, "ws", ws)
+	case "wiki_mention", "wiki_comment", "wiki_reminder":
+		id, err := uuid.Parse(str(n.Data, "page_id"))
+		if err != nil {
+			return s.App("/wiki", "ws", ws)
+		}
+		// A comment's thread opens beside the page.
+		thread := ""
+		if t, err := uuid.Parse(str(n.Data, "thread_id")); err == nil {
+			thread = t.String()
+		}
+		return s.App("/wiki/"+id.String(), "ws", ws, "comment", thread)
 	case "import_finished":
 		id := ""
 		if u, err := uuid.Parse(str(n.Data, "import_id")); err == nil {
@@ -666,7 +691,7 @@ func toneOf(n Note) string {
 		return "#14B8A6"
 	case "new_ticket":
 		return "#22C55E"
-	case "sla_breached", "ai_balance_out", "auto_recharge_failed", "ai_key_failed", "support_channel_unhealthy":
+	case "sla_breached", "scheduled_reply_failed", "ai_balance_out", "auto_recharge_failed", "ai_key_failed", "support_channel_unhealthy":
 		return "#EF4444"
 	case "ai_handoff", "ai_cap_reached":
 		return "#8B5CF6"
@@ -676,8 +701,12 @@ func toneOf(n Note) string {
 		return "#06B6D4"
 	case "collab_assigned":
 		return "#3B82F6"
-	case "collab_mention":
+	case "collab_mention", "wiki_mention":
 		return "#6366F1"
+	case "wiki_comment":
+		return "#14B8A6"
+	case "wiki_reminder":
+		return "#F59E0B"
 	case "import_finished":
 		switch str(n.Data, "status") {
 		case "completed":
@@ -707,6 +736,36 @@ func collabCopy(n Note, actor string) copyOf {
 		intro = append(intro, "“"+sn+"”")
 	}
 	return copyOf{title: who + " mentioned you in a comment", heading: who + " mentioned you" + on, intro: intro, cta: "Open conversation"}
+}
+
+// wikiCopy names who mentioned the member or commented, or the reminder that is due, and
+// the wiki page it is on (contracts/wiki.md).
+func wikiCopy(n Note, actor string) copyOf {
+	who, title := or(actor, "A teammate"), clip(str(n.Data, "page_title"), 80)
+	page, the := "a wiki page", "a wiki page"
+	if title != "" {
+		page, the = title, "the wiki page "+title
+	}
+	quote := func(intro string) []string {
+		if sn := snippet(n); sn != "" {
+			return []string{intro, "“" + sn + "”"}
+		}
+		return []string{intro}
+	}
+	switch n.Type {
+	case "wiki_mention":
+		if str(n.Data, "comment_id") != "" {
+			return copyOf{title: who + " mentioned you in a comment on " + page, heading: who + " mentioned you in a comment on " + page,
+				intro: quote(who + " mentioned you in a comment on " + the + "."), cta: "Open comment"}
+		}
+		return copyOf{title: who + " mentioned you on " + page, heading: who + " mentioned you on " + page,
+			intro: quote(who + " mentioned you on " + the + "."), cta: "Open page"}
+	case "wiki_comment":
+		return copyOf{title: who + " commented on " + page, heading: who + " commented on " + page,
+			intro: quote(who + " commented on " + the + "."), cta: "Open comment"}
+	}
+	return copyOf{title: "Reminder on " + page, heading: "Your reminder on " + page + " is due",
+		intro: quote("A reminder you set on " + the + " is due."), cta: "Open page"}
 }
 
 // importCopy says how a history import ended (contracts/imports.md): done, waiting for new
@@ -798,11 +857,30 @@ func providerName(p string) string {
 	return "AI provider"
 }
 
+// scheduledReplyReason says why a scheduled reply did not go out (its draft's send_error).
+func scheduledReplyReason(code string) string {
+	switch code {
+	case "merged":
+		return "The ticket was merged into another, so the reply was not sent."
+	case "not_visible":
+		return "The ticket is gone or you can no longer see it, so the reply was not sent."
+	case "cannot_send_from":
+		return "You can no longer send from the address it was to go out from, so the reply was not sent."
+	case "member_gone":
+		return "You can no longer reply on this ticket, so the reply was not sent."
+	case "refused":
+		return "The reply could no longer be sent as it was written when it was due."
+	}
+	return "The reply could not be sent when it was due."
+}
+
 // snippet is the notification's short plain-text excerpt, when it has one.
 func snippet(n Note) string {
 	switch n.Type {
-	case "mentioned", "customer_replied", "collab_mention", "thread_replied":
+	case "mentioned", "customer_replied", "collab_mention", "thread_replied", "wiki_mention", "wiki_comment":
 		return clip(str(n.Data, "preview"), SnippetRunes)
+	case "wiki_reminder":
+		return clip(str(n.Data, "label"), SnippetRunes)
 	}
 	return ""
 }

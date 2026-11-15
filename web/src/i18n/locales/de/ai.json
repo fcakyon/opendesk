@@ -15,7 +15,8 @@
     "kb_draft": "Hilfeartikel entwerfen",
     "assistant": "Nachrichten an den Assistenten",
     "assistant_peer": "Ollie fragt beim Ollie eines Teammitglieds nach",
-    "procedure": "Einen Ablauf aus einer Automatisierung ausführen"
+    "procedure": "Einen Ablauf aus einer Automatisierung ausführen",
+    "wiki_write": "Im Wiki schreiben"
   },
   "sentiment": {
     "positive": "Positiv",

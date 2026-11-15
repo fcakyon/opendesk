@@ -104,7 +104,7 @@ func registerDrafts(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			tid, err := resolveVisible(ctx, d.DB.Pool, p, in.ID)
+			tid, err := domain.ResolveVisibleTicket(ctx, d.DB.Pool, p, in.ID)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -137,7 +137,7 @@ func registerDrafts(d *deps.Deps, api huma.API) {
 			}
 			var out TicketDraft
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				tid, err := resolveVisible(ctx, tx, p, in.ID)
+				tid, err := domain.ResolveVisibleTicket(ctx, tx, p, in.ID)
 				if err != nil {
 					return err
 				}
@@ -169,7 +169,7 @@ func registerDrafts(d *deps.Deps, api huma.API) {
 				return nil, httpx.Wrap(err)
 			}
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				tid, err := resolveVisible(ctx, tx, p, in.ID)
+				tid, err := domain.ResolveVisibleTicket(ctx, tx, p, in.ID)
 				if err != nil {
 					return err
 				}

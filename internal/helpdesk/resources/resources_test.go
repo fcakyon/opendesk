@@ -347,13 +347,14 @@ func TestSavedReplies(t *testing.T) {
 }
 
 type view struct {
-	ID       string         `json:"id"`
-	Name     string         `json:"name"`
-	Shared   bool           `json:"shared"`
-	Filters  map[string]any `json:"filters"`
-	Position int            `json:"position"`
-	Section  *string        `json:"section"`
-	Icon     *viewIcon      `json:"icon"`
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Shared      bool           `json:"shared"`
+	Filters     map[string]any `json:"filters"`
+	Position    int            `json:"position"`
+	Section     *string        `json:"section"`
+	Icon        *viewIcon      `json:"icon"`
+	SectionIcon *viewIcon      `json:"section_icon"`
 }
 
 type viewIcon struct {

@@ -395,7 +395,12 @@ func (r *procedureRun) call(ctx context.Context, name string, in json.RawMessage
 		}
 		return renderPassages(ps, 1), false, nil
 	case "search_wiki":
-		hits, err := wiki.Search(ctx, r.s.d.DB.Pool, wid, clip(text("query"), 200), 8)
+		// A procedure reads what the whole workspace shares: no private pages, no private team's.
+		v, err := wiki.WorkspaceViewer(ctx, r.s.d.DB.Pool, wid)
+		if err != nil {
+			return "", false, err
+		}
+		hits, err := wiki.Search(ctx, r.s.d.DB.Pool, v, wid, clip(text("query"), 200), "", 8)
 		if err != nil {
 			return "", false, err
 		}
@@ -412,7 +417,11 @@ func (r *procedureRun) call(ctx context.Context, name string, in json.RawMessage
 		if err != nil {
 			return "No wiki page has this id.", true, nil
 		}
-		pg, err := wiki.LoadPage(ctx, r.s.d.DB.Pool, wid, id)
+		v, err := wiki.WorkspaceViewer(ctx, r.s.d.DB.Pool, wid)
+		if err != nil {
+			return "", false, err
+		}
+		pg, err := wiki.LoadPage(ctx, r.s.d.DB.Pool, v, wid, id)
 		if db.IsNotFound(err) {
 			return "No wiki page has this id.", true, nil
 		}

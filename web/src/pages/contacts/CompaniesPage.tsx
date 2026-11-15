@@ -12,6 +12,11 @@ import { Field, SearchInput, TextInput } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import { DirectoryBulkBar } from "@/components/contacts/DirectoryBulkBar";
+import { DirectoryFilters } from "@/components/contacts/DirectoryFilters";
+import { HeaderCheck, RowCheck } from "@/components/contacts/RowCheck";
+import { useSelection } from "@/components/contacts/useSelection";
+import { companyFilter, isFiltered } from "@/lib/directorySort";
 import { DirectoryNav } from "@/components/contacts/DirectoryNav";
 import { CompanyDrawer } from "@/components/contacts/CompanyDrawer";
 import { CompanyGlyph, Labels, labelsOf } from "@/components/contacts/bits";
@@ -26,9 +31,9 @@ import { atLeast, useRole } from "@/lib/session";
 
 const route = getRouteApi("/app/companies/{-$companyId}");
 const colsLabels =
-  "grid items-center gap-4 grid-cols-[minmax(0,1fr)_72px] md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_72px_72px] xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_72px_88px_72px]";
+  "grid items-center gap-4 grid-cols-[24px_minmax(0,1fr)_72px] md:grid-cols-[24px_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_72px_72px] xl:grid-cols-[24px_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_72px_88px_72px]";
 const colsPlain =
-  "grid items-center gap-4 grid-cols-[minmax(0,1fr)_72px] md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_72px_72px] xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_72px_88px_72px]";
+  "grid items-center gap-4 grid-cols-[24px_minmax(0,1fr)_72px] md:grid-cols-[24px_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_72px_72px] xl:grid-cols-[24px_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_72px_88px_72px]";
 const md = "hidden md:block";
 const xl = "hidden xl:flex";
 const xlLabels = (on: boolean) => (on ? "hidden xl:flex" : "hidden");
@@ -45,15 +50,20 @@ export default function CompaniesPage() {
 
   useEffect(() => {
     if ((debounced || undefined) === search.q) return;
-    void navigate({ search: (s) => ({ ...s, q: debounced || undefined }), replace: true });
-  }, [debounced, search.q, navigate]);
+    void navigate({ search: { ...search, q: debounced || undefined }, replace: true });
+  }, [debounced, search, navigate]);
 
-  const list = useInfiniteQuery(q.companies({ q: search.q }));
+  const filter = companyFilter(search);
+  const filtered = isFiltered(search);
+  const list = useInfiniteQuery(q.companies({ ...filter, sort: search.sort }));
   const rows = list.data?.pages.flatMap((p) => p.data) ?? [];
+  // A selection belongs to this list: another search or filter drops it.
+  const selection = useSelection(JSON.stringify(filter));
+  const allTicked = rows.length > 0 && rows.every((r) => selection.has(r.id));
   const sentinel = useSentinel(() => {
     if (list.hasNextPage && !list.isFetchingNextPage) void list.fetchNextPage();
   }, !!list.hasNextPage);
-  const open = (id: string | undefined) => navigate({ to: "/companies/{-$companyId}", params: { companyId: id }, search: (s) => s });
+  const open = (id: string | undefined) => navigate({ to: "/companies/{-$companyId}", params: { companyId: id }, search });
 
   // People and ticket totals per company, from the directory's first page of contacts.
   // Ticket totals only show when every contact is loaded, so they are never partial.
@@ -80,7 +90,7 @@ export default function CompaniesPage() {
   ) : undefined;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col">
       <PageHeader title={t("title")} icon={<Building2 />} actions={newButton}>
         <DirectoryNav current="companies" />
         <div className="ml-auto hidden w-[280px] sm:block">
@@ -89,9 +99,11 @@ export default function CompaniesPage() {
       </PageHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        <DirectoryFilters scope="companies" search={search} onSearch={(next) => void navigate({ search: next })} />
+
         {!list.isLoading && rows.length > 0 && (
           <StatStrip>
-            <Stat label={t("stat.companies")} value={<><AnimatedNumber value={rows.length} />{list.hasNextPage ? "+" : ""}</>} sub={search.q ? t("stat.matching") : t("stat.inDirectory")} />
+            <Stat label={t("stat.companies")} value={<><AnimatedNumber value={rows.length} />{list.hasNextPage ? "+" : ""}</>} sub={filtered ? t("stat.matching") : t("stat.inDirectory")} />
             <Stat label={t("stat.linkedPeople")} value={<AnimatedNumber value={linked} />} sub={t("stat.linkedHint")} />
             <Stat label={t("stat.withDomain")} value={<AnimatedNumber value={withDomain} />} sub={t("stat.withDomainHint")} />
             <Stat
@@ -103,6 +115,9 @@ export default function CompaniesPage() {
         )}
 
         <div className={`${cols} sticky top-0 z-10 h-9 border-b border-line bg-surface px-4 md:px-5`}>
+          <span className="flex items-center">
+            {canEdit && <HeaderCheck checked={allTicked ? true : selection.ids.length > 0 ? "indeterminate" : false} onChange={() => selection.togglePage(rows.map((r) => r.id))} />}
+          </span>
           <span className="label-caps">{t("col.company")}</span>
           <span className={`label-caps ${md}`}>{t("col.domain")}</span>
           <span className={`label-caps ${md}`}>{t("col.people")}</span>
@@ -116,13 +131,22 @@ export default function CompaniesPage() {
         ) : list.error ? (
           <EmptyState lit={3} title={t("error.companiesTitle")} description={errorMessage(list.error)} action={<Button onClick={() => void list.refetch()}>{t("retry")}</Button>} />
         ) : rows.length === 0 ? (
-          search.q ? (
+          filtered ? (
             <EmptyState
               art="search"
               ghost={<GhostList variant="table" />}
               title={t("empty.noCompanyMatch")}
-              description={t("empty.noMatchFor", { q: search.q })}
-              action={<Button onClick={() => setTerm("")}>{t("clearSearch")}</Button>}
+              description={search.q ? t("empty.noMatchFor", { q: search.q }) : t("empty.noMatchHint")}
+              action={
+                <Button
+                  onClick={() => {
+                    setTerm("");
+                    void navigate({ search: { sort: search.sort } });
+                  }}
+                >
+                  {search.tag || search.fields ? t("clearFilters") : t("clearSearch")}
+                </Button>
+              }
               tips={[{ label: t("tips.spelling") }, { label: t("tips.tryDomain") }]}
             />
           ) : (
@@ -146,10 +170,11 @@ export default function CompaniesPage() {
                     <Link
                       to="/companies/{-$companyId}"
                       params={{ companyId: c.id }}
-                      search={(s) => s}
+                      search={search}
                       data-active={companyId === c.id || undefined}
                       className={`${cols} h-11 border-b border-line-soft px-4 text-[13px] transition-colors duration-100 hover:bg-sunken data-[active]:bg-hover md:px-5`}
                     >
+                      <span className="flex items-center">{canEdit && <RowCheck checked={selection.allMatching || selection.has(c.id)} onChange={() => selection.toggle(c.id)} name={c.name} />}</span>
                       <span className="flex min-w-0 items-center gap-2.5">
                         <CompanyGlyph name={c.name} src={c.avatar_url} />
                         <span className="truncate font-medium">{c.name}</span>
@@ -185,6 +210,10 @@ export default function CompaniesPage() {
           {list.isFetchingNextPage && <Spinner className="size-3.5 text-fg-4" />}
         </div>
       </div>
+
+      {canEdit && (
+        <DirectoryBulkBar scope="companies" selection={selection} query={filter} canSelectMore={allTicked && (!!list.hasNextPage || filtered)} matching={list.hasNextPage ? undefined : rows.length} />
+      )}
 
       <CompanyDrawer companyId={companyId ?? null} onClose={() => void open(undefined)} />
       <NewCompanyDialog open={creating} onOpenChange={setCreating} onCreated={(id) => void open(id)} />

@@ -47,6 +47,16 @@ Pick a folder or a view in the sidebar, then click a ticket in the list. Use the
 
 Click **Send**, or press <kbd>mod</kbd> <kbd>enter</kbd>. The arrow next to it sends and sets the status in the same step: **Send and mark pending**, **Send and mark on hold**, or **Send and mark solved** (<kbd>mod</kbd> <kbd>shift</kbd> <kbd>enter</kbd>). An admin can put **Send and solve** on a button of its own next to **Send**, in **Settings**, under **Workspace**, **Statuses and priorities**; with **solved** labelled **Closed** it is **Send and close** (or **Send and mark as** your finish label). On a narrow reply box the formatting buttons fold into one to keep it in view. Each reply then shows its delivery status: pending, sent, failed or bounced.
 
+To send an email reply later, open the arrow beside **Send** and choose **Send later**.
+Pick a date and time in your device's timezone, from a minute to a year ahead, then click
+**Schedule reply**. The banner shows when it will go out. Use **Send now** to send immediately,
+**Change time** to move it, or **Cancel schedule** to keep it as an editable draft. The reply
+gets its timestamp when it is actually sent. If it can no longer be sent, for example because
+the ticket was merged into another, its text and files stay in your draft with the reason, and
+you get a notification.
+
+<Screenshot src="/guides/inbox/scheduled-reply" alt="A scheduled reply with its send time and actions to send now, change time or cancel the schedule" />
+
 Once a send finishes the ticket, or sets a status that takes it out of the list you opened it from, the next ticket of that list opens, as the next button would, with the list's filters and sort; after the last one the list shows again. Undoing the reply brings you back to the ticket, with the reply in the reply box. To stay on the ticket instead, turn off **Open the next ticket after "Send and solve"** in **Settings → Profile → Appearance**. It applies to the browser you set it in.
 
 </Step>
@@ -98,6 +108,17 @@ If your team ranks tickets by priority alone, an admin can turn **Severity** off
 
 A workspace can also assign new tickets automatically, by round robin or by load, in **Settings**, under **Assignment**, and [automations](/guides/automations/) can assign by rule. See [Triage and assignment](/guides/triage-and-assignment/).
 
+## Create a ticket for a customer
+
+Click **New ticket** and pick how it starts:
+
+- **Email the customer** sends your first message from one of your addresses.
+- **Start a chat** opens a chat in the customer's widget (see [Live chat](/guides/live-chat/)).
+- **Log request** records a request that came in somewhere else, such as a phone call or a conversation. The ticket starts with what you write as the customer's own message, as if they had emailed it, and nothing is emailed. It waits for an answer like any new request, its response targets start as usual, and your replies go to the customer by email from the address you picked.
+- **Log internally** starts the ticket with a note only your team sees.
+
+Use **Log request** when the customer asked and the ticket should read that way; use **Log internally** for something you noticed yourself.
+
 ## Snooze, merge, spam and delete
 
 **Snooze** hides a ticket until a time you pick: in an hour, in four hours, tomorrow, next week, or a date and time of your own. A snoozed ticket is on hold until then.
@@ -111,6 +132,8 @@ The **⋯** menu holds the rest: **Merge into another ticket**, **Copy link**, *
 **Merge into another ticket** first offers the customer's other tickets, closed ones included, and leaves out those already merged elsewhere; type to search every ticket. Merging into a solved or closed ticket reopens it when the ticket you merge is still open, pending or on hold, so the customer's new message is not left in a finished conversation. Apart from changing its status, this is the only way a closed ticket opens again. If the ticket you pick was itself merged, the merge goes into the ticket it went into, and that is the ticket that opens.
 
 <Screenshot src="/guides/inbox/more-actions" alt="The More actions button ringed as 1 and its menu ringed as 2: Merge into another ticket, Copy link, Mark as spam and Delete ticket" />
+
+**Delete ticket** (here or from the bulk bar) takes the ticket out of every list, view and search. It is not gone: an admin finds it in **Settings → Trash**, with who deleted it and when, and **Restore** brings it back as it was, conversation included. A ticket that was merged into another stays there; its conversation is on the ticket it went into.
 
 ## Print or save as PDF
 
@@ -183,6 +206,8 @@ A ticket's timeline holds its messages and its activity:
 - **Side conversations** are email conversations with someone outside your team, such as a supplier or a payment provider. See [Ask someone outside your team](#ask-someone-outside-your-team).
 - **Activity** records status, priority, severity, assignment, team, label, SLA, merge and CSAT changes, with who made them.
 
+An email reply goes to the customer's address, or to the `Reply-To` their latest email asked for when that address is at their own organisation (`alerts@updates.example.com` asking for answers at `ana@example.com`). To send it somewhere else, click **To** above the reply box and change the addresses; the customer's address and the `Reply-To` they named are one click away. The ticket's contact stays the same.
+
 On a busy ticket, **⋯ → Hide ticket history** keeps the messages and calls only; **Show ticket history** brings the activity back. It applies to the browser you set it in, and the history shows by default.
 
 To read a ticket like a chat, turn on **Conversation layout** in **Settings → Profile → Appearance**: the customer's messages sit on the left, and your team's replies and internal notes, Ollie's and automations' included, on the right. Activity stays full width, and on a narrow screen every message does. It applies to the browser you set it in.
@@ -192,6 +217,10 @@ On a wide screen the conversation and the reply box keep to a width that reads e
 A web address written as plain text in a message or a note, like one an integration posts through the API, opens as a link in a new tab. Only how it shows changes: the message keeps its text as it was sent.
 
 An email you receive keeps its remote images hidden until you click **Load images**, so opening it tells the sender nothing. To show them at once in every email, turn on **Always show images** in **Settings → Profile → Appearance**. The sender's server can then tell when the email was opened. It applies to the browser you set it in.
+
+### Your unsent reply is saved
+
+What you write in the reply box is saved as you go, on the server. Close the tab, refresh, or open the same ticket on another device, and your reply is back in the box with its files. It is yours alone: teammates don't see it, and it is cleared when you send the reply or empty the box. A draft you don't touch for 30 days is removed. A reply a teammate or an AI agent staged for the ticket waits as a separate banner while you have your own text in the box.
 
 ### Take back, turn into a note or delete
 
@@ -238,6 +267,26 @@ To pass on one email as it is, choose **Forward** in the menu of that message (a
 ## Contacts and companies
 
 Every customer is a **contact**, matched by email address, or by your own user id when the chat widget is [verified](/guides/live-chat/identity-verification/). Contacts can belong to a **company**, carry notes and custom fields, and be blocked. A contact's page lists all of their tickets. Open **Contacts** in the sidebar to browse them.
+
+Beside the search, the **People** and **Companies** lists have a **Label** filter, a **Field** filter for your custom fields and a sort menu. A field with options, people or yes and no filters on the values you tick; any other field on whether it **Has a value** or **Is empty**. People can also be filtered to one **Company** (or **No company**) and to those who are **Blocked** or **Not blocked**, and sorted by name, by when they were added or last updated, or by how many tickets they have; companies by name, age, last update or how many people they have. Each filter shows as a chip you can clear. The filters and sort are in the page's address, so you can share a filtered list.
+
+Tick rows to act on many at once: add or remove a label, set or clear a custom field, set a company (People), or delete. **Select everyone who matches** extends the selection to every record the search and filters find, up to 1000. Deleting a person keeps their tickets, without a customer; deleting a company keeps its people, without a company. A deletion cannot be undone.
+
+### Invite people to the customer portal
+
+Customers can follow and answer their requests in the customer portal of a brand whose help center is on. Instead of waiting for them to find it, invite them: open the contact, and under **Customer portal** click **Invite to portal**. They get an email with a link to choose a password, which works for 7 days and once. When more than one brand has a help center, choose the brand first.
+
+**Customer portal** shows where each person stands: **No access**, **Invited** with when the link stops working, or **Has access** with their last sign-in. **Send a new link** sends another invitation, and **Remove access** signs them out of the portal, removes their password and closes open links. They can still ask for a new link on the portal's sign-in page, so block the contact to keep them out.
+
+To invite several people at once, tick them in **People** and choose **Invite to portal**. People without an email address, blocked people and people who already have access are skipped, and the message says how many. A brand whose customers sign in through your identity provider needs no invitation: they sign in there.
+
+### Several email addresses
+
+When someone writes from a work and a private address, keep them as one contact: open the contact, choose **Edit**, and add the other address under **Other email addresses**. Mail from it then goes to the same contact, and a search finds them by it. **Make primary** swaps an address with the main one, which replies and the customer portal use. An address belongs to one contact, so adding one that another contact has is refused. Blocking a contact blocks all their addresses.
+
+### Merge duplicates
+
+When the same person already exists as two contacts, an admin can merge them: open the contact to remove, choose **Edit**, then **Merge into…** and pick the one that stays. Its tickets, messages and email addresses move to the contact you picked and the first one is removed. The contact that stays keeps its own name, phone, company and main address, and takes the other's where it has none. A blocked and a not blocked contact can't be merged, nor two contacts with different external ids. A merge can't be undone.
 
 </Fold>
 

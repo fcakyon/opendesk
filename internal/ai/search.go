@@ -194,7 +194,7 @@ func (s *Service) Search(ctx context.Context, p *auth.Principal, q string) (*AIS
 	}
 	if allowed(auth.ScopeContactsRead) {
 		like := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(strings.ToLower(q)) + "%"
-		cond := `ct.search @@ websearch_to_tsquery('simple', $2) OR lower(ct.email::text) LIKE $3 OR lower(ct.name) LIKE $3`
+		cond := `ct.search @@ websearch_to_tsquery('simple', $2) OR lower(ct.email::text) LIKE $3 OR lower(ct.name) LIKE $3 OR ` + domain.ExtraEmailLikeSQL("$3")
 		cargs := []any{wid, q, like}
 		if tsq != "" {
 			cond += ` OR ct.search @@ to_tsquery('simple', $4)`

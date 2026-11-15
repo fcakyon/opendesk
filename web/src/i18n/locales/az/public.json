@@ -113,6 +113,36 @@
       "on_hold": "Gözlənilir",
       "solved": "Həll edildi",
       "closed": "Bağlandı"
-    }
+    },
+    "sso": "Vahid giriş ilə davam et",
+    "or": "və ya",
+    "sso_error": {
+      "email_unverified": "Provayderiniz e-poçt ünvanınızı təsdiqləməyib, buna görə sizi onunla daxil edə bilmirik.",
+      "unknown_customer": "Bu e-poçt ünvanı ilə müştəri tapmadıq. Sizə giriş verən komanda ilə əlaqə saxlayın.",
+      "blocked": "Bu hesab daxil ola bilmir. Kömək üçün komanda ilə əlaqə saxlayın.",
+      "relink_required": "Provayderdəki hesabınız dəyişib. Komandadan yeni girişə icazə verməsini xahiş edin və yenidən cəhd edin.",
+      "identity_revoked": "Bu giriş silinib. Kömək üçün komanda ilə əlaqə saxlayın.",
+      "access_denied": "Giriş ləğv edildi.",
+      "provider_unavailable": "Giriş provayderinə qoşula bilmədik. Yenidən cəhd edin.",
+      "rate_limited": "Çox cəhd. Bir az gözləyin və yenidən cəhd edin.",
+      "generic": "Sizi daxil edə bilmədik. Yenidən cəhd edin."
+    },
+    "new_request": "Yeni sorğu",
+    "new": {
+      "title": "Yeni sorğu",
+      "subject": "Mövzu",
+      "message": "Sizə necə kömək edə bilərik?",
+      "send": "Sorğunu göndər",
+      "limit": "Ardıcıl bir neçə sorğu göndərdiniz. Bir az gözləyin və yenidən cəhd edin.",
+      "busy": "Hazırda çoxlu sorğu daxil olur. Bir az gözləyin və yenidən cəhd edin.",
+      "attach": "Fayl seç",
+      "drop": "Faylları bura buraxın və ya ekran görüntüsü yapışdırın.",
+      "remove": "{{name}} faylını sil",
+      "too_big": "{{name}} 10 MB-dan böyükdür.",
+      "max_files": "Ən çox 5 fayl əlavə edə bilərsiniz.",
+      "upload_failed": "{{name}} yüklənə bilmədi.",
+      "uploading": "Yüklənir…"
+    },
+    "attachments": "Əlavələr"
   }
 }

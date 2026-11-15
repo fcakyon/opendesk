@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { Plus, Users, X } from "lucide-react";
+import { Plus, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PageHeader, Stat, StatStrip } from "@/components/layout";
@@ -13,6 +13,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
+import { DirectoryBulkBar } from "@/components/contacts/DirectoryBulkBar";
+import { DirectoryFilters } from "@/components/contacts/DirectoryFilters";
+import { HeaderCheck, RowCheck } from "@/components/contacts/RowCheck";
+import { useSelection } from "@/components/contacts/useSelection";
+import { isFiltered, NO_COMPANY, peopleFilter } from "@/lib/directorySort";
 import { DirectoryNav } from "@/components/contacts/DirectoryNav";
 import { ContactDrawer } from "@/components/contacts/ContactDrawer";
 import { CompanyPicker } from "@/components/contacts/CompanyPicker";
@@ -30,9 +35,9 @@ const route = getRouteApi("/app/contacts/{-$contactId}");
 
 // Name and tickets always; email, company and updated from md; labels and created from xl.
 const colsLabels =
-  "grid items-center gap-4 grid-cols-[minmax(0,1fr)_64px] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_64px_72px] xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_64px_88px_72px]";
+  "grid items-center gap-4 grid-cols-[24px_minmax(0,1fr)_64px] md:grid-cols-[24px_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_64px_72px] xl:grid-cols-[24px_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_64px_88px_72px]";
 const colsPlain =
-  "grid items-center gap-4 grid-cols-[minmax(0,1fr)_64px] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_64px_72px] xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_64px_88px_72px]";
+  "grid items-center gap-4 grid-cols-[24px_minmax(0,1fr)_64px] md:grid-cols-[24px_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_64px_72px] xl:grid-cols-[24px_minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_64px_88px_72px]";
 const md = "hidden md:block";
 const xl = "hidden xl:flex";
 const xlLabels = (on: boolean) => (on ? "hidden xl:flex" : "hidden");
@@ -49,17 +54,22 @@ export default function ContactsPage() {
 
   useEffect(() => {
     if ((debounced || undefined) === search.q) return;
-    void navigate({ search: (s) => ({ ...s, q: debounced || undefined }), replace: true });
-  }, [debounced, search.q, navigate]);
+    void navigate({ search: { ...search, q: debounced || undefined }, replace: true });
+  }, [debounced, search, navigate]);
 
-  const list = useInfiniteQuery(q.contacts({ q: search.q, company_id: search.company }));
-  const company = useQuery({ ...q.company(search.company ?? ""), enabled: !!search.company });
+  const filter = peopleFilter(search);
+  const list = useInfiniteQuery(q.contacts({ ...filter, sort: search.sort }));
+  const company = useQuery({ ...q.company(search.company ?? ""), enabled: !!search.company && search.company !== NO_COMPANY });
   const rows = list.data?.pages.flatMap((p) => p.data) ?? [];
+  // A selection belongs to this list: other filters or another search drop it.
+  const selection = useSelection(JSON.stringify(filter));
+  const allTicked = rows.length > 0 && rows.every((r) => selection.has(r.id));
   const sentinel = useSentinel(() => {
     if (list.hasNextPage && !list.isFetchingNextPage) void list.fetchNextPage();
   }, !!list.hasNextPage);
 
-  const open = (id: string | undefined) => navigate({ to: "/contacts/{-$contactId}", params: { contactId: id }, search: (s) => s });
+  const filtered = isFiltered(search);
+  const open = (id: string | undefined) => navigate({ to: "/contacts/{-$contactId}", params: { contactId: id }, search });
 
   const companies = new Set(rows.map((c) => c.company?.id).filter(Boolean)).size;
   const tickets = rows.reduce((a, c) => a + c.ticket_count, 0);
@@ -76,7 +86,7 @@ export default function ContactsPage() {
   ) : undefined;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col">
       <PageHeader title={t("title")} icon={<Users />} actions={newButton}>
         <DirectoryNav current="contacts" />
         <div className="ml-auto hidden w-[280px] sm:block">
@@ -85,34 +95,21 @@ export default function ContactsPage() {
       </PageHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        <DirectoryFilters scope="contacts" search={search} onSearch={(next) => void navigate({ search: next })} />
+
         {!list.isLoading && rows.length > 0 && (
           <StatStrip>
-            <Stat label={t("stat.people")} value={<><AnimatedNumber value={rows.length} flash />{more}</>} sub={search.q || search.company ? t("stat.matching") : t("stat.inDirectory")} />
+            <Stat label={t("stat.people")} value={<><AnimatedNumber value={rows.length} flash />{more}</>} sub={filtered ? t("stat.matching") : t("stat.inDirectory")} />
             <Stat label={t("stat.companies")} value={<AnimatedNumber value={companies} />} sub={t("stat.represented")} />
             <Stat label={t("stat.tickets")} value={<AnimatedNumber value={tickets} />} sub={t("stat.fromThesePeople")} />
             <Stat label={t("stat.blocked")} value={<AnimatedNumber value={blocked} />} sub={t("stat.blockedHint")} />
           </StatStrip>
         )}
 
-        {search.company && (
-          <div className="flex h-10 items-center gap-2 border-b border-line-soft px-4 md:px-5">
-            <span className="text-xs text-fg-3">{t("filteredBy")}</span>
-            <span className="inline-flex h-6 items-center gap-1.5 rounded-sm bg-hover pl-1 pr-0.5 text-xs">
-              <CompanyGlyph name={company.data?.name ?? "?"} src={company.data?.avatar_url} size="xs" />
-              {company.data?.name ?? t("company")}
-              <button
-                type="button"
-                aria-label={t("clearCompany")}
-                onClick={() => void navigate({ search: (s) => ({ ...s, company: undefined }) })}
-                className="flex size-5 items-center justify-center rounded-sm text-fg-4 transition-colors hover:bg-active hover:text-fg"
-              >
-                <X className="size-3" />
-              </button>
-            </span>
-          </div>
-        )}
-
         <div className={`${cols} sticky top-0 z-10 h-9 border-b border-line bg-surface px-4 md:px-5`}>
+          <span className="flex items-center">
+            {canEdit && <HeaderCheck checked={allTicked ? true : selection.ids.length > 0 ? "indeterminate" : false} onChange={() => selection.togglePage(rows.map((r) => r.id))} />}
+          </span>
           <span className="label-caps">{t("col.name")}</span>
           <span className={`label-caps ${md}`}>{t("col.email")}</span>
           <span className={`label-caps ${md}`}>{t("col.company")}</span>
@@ -127,7 +124,7 @@ export default function ContactsPage() {
         ) : list.error ? (
           <EmptyState lit={3} title={t("error.listTitle")} description={errorMessage(list.error)} action={<Button onClick={() => void list.refetch()}>{t("retry")}</Button>} />
         ) : rows.length === 0 ? (
-          search.q || search.company ? (
+          filtered ? (
             <EmptyState
               art="search"
               ghost={<GhostList variant="people" />}
@@ -137,7 +134,7 @@ export default function ContactsPage() {
                 <Button
                   onClick={() => {
                     setTerm("");
-                    void navigate({ search: (s) => ({ ...s, q: undefined, company: undefined }) });
+                    void navigate({ search: { sort: search.sort } });
                   }}
                 >
                   {t("clearFilters")}
@@ -164,10 +161,11 @@ export default function ContactsPage() {
                   <Link
                     to="/contacts/{-$contactId}"
                     params={{ contactId: c.id }}
-                    search={(s) => s}
+                    search={search}
                     data-active={contactId === c.id || undefined}
                     className={`${cols} h-11 border-b border-line-soft px-4 text-[13px] transition-colors duration-100 hover:bg-sunken data-[active]:bg-hover md:px-5`}
                   >
+                    <span className="flex items-center">{canEdit && <RowCheck checked={selection.allMatching || selection.has(c.id)} onChange={() => selection.toggle(c.id)} name={c.name || c.email || ""} />}</span>
                     <span className="flex min-w-0 items-center gap-2.5">
                       <Avatar name={c.name || c.email || "?"} src={c.avatar_url} size="md" />
                       <span className="truncate font-medium" data-ph-mask>
@@ -209,6 +207,16 @@ export default function ContactsPage() {
           {list.isFetchingNextPage && <Spinner className="size-3.5 text-fg-4" />}
         </div>
       </div>
+
+      {canEdit && (
+        <DirectoryBulkBar
+          scope="contacts"
+          selection={selection}
+          query={filter}
+          canSelectMore={allTicked && (!!list.hasNextPage || filtered)}
+          matching={list.hasNextPage ? undefined : rows.length}
+        />
+      )}
 
       <ContactDrawer contactId={contactId ?? null} onClose={() => void open(undefined)} />
       <NewContactDialog open={creating} onOpenChange={setCreating} onCreated={(id) => void open(id)} defaultCompany={company.data ?? null} />

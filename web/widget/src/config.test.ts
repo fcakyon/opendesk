@@ -181,17 +181,19 @@ describe("widget config", () => {
 
   it("maps appearance onto host CSS variables", () => {
     const v = hostVars(resolveConfig({ workspace_name: "A", brand_color: "#ffd43b", greeting: "", help_center_url: null, require_email: false, radius: "round", offset_x: 32 }));
-    expect(v["--brand"]).toBe("#ffd43b");
-    expect(v["--brand-fg"]).toBe("#0a0a0a");
+    expect(v["--brand"]).toBe("var(--opendesk-brand, #ffd43b)");
+    expect(v["--brand-fg"]).toBe("var(--opendesk-brand-text, #0a0a0a)");
     expect(v["--r-launcher"]).toBe("999px");
-    expect(v["--ox"]).toBe("32px");
-    expect(v["--oz"]).toBe("2147483000");
-    expect(hostVars(resolveConfig(null))["--brand"]).toBeUndefined();
+    expect(v["--ox"]).toBe("var(--opendesk-offset-x, 32px)");
+    expect(v["--oy"]).toBe("var(--opendesk-offset-y, 20px)");
+    expect(v["--oz"]).toBe("var(--opendesk-z-index, 2147483000)");
+    // No workspace colour: the page's own, else the widget's neutral.
+    expect(hostVars(resolveConfig(null))["--brand"]).toBe("var(--opendesk-brand)");
   });
 
   it("stacks at the workspace's z_index, else above the page", () => {
     const base = { workspace_name: "A", brand_color: null, greeting: "", help_center_url: null, require_email: false };
-    expect(hostVars(resolveConfig({ ...base, z_index: 40 }))["--oz"]).toBe("40");
+    expect(hostVars(resolveConfig({ ...base, z_index: 40 }))["--oz"]).toBe("var(--opendesk-z-index, 40)");
     expect(resolveConfig({ ...base, z_index: -5 }).z_index).toBe(0);
     expect(resolveConfig({ ...base, z_index: 1e12 }).z_index).toBe(2147483647);
     expect(resolveConfig({ ...base, z_index: "9" as never }).z_index).toBe(0);

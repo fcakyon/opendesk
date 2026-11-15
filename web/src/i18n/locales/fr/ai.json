@@ -14,7 +14,8 @@
     "playground": "Tester l’agent dans l’espace de test",
     "kb_draft": "Rédiger un article d’aide",
     "assistant": "Messages de l’assistant",
-    "procedure": "Exécuter une procédure depuis une automatisation"
+    "procedure": "Exécuter une procédure depuis une automatisation",
+    "wiki_write": "Écrire dans le wiki"
   },
   "sentiment": {
     "positive": "Positif",

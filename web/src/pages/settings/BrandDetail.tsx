@@ -12,6 +12,7 @@ import { BackLink, NoAccess, Row, Section, SettingsPage } from "@/components/lay
 import { SaveBar } from "@/components/settings/SaveBar";
 import { StatePill } from "@/components/settings2/bits";
 import { HelpDomainSection } from "@/components/settings2/helpDomain";
+import { PortalSignInSection } from "@/components/settings2/portalSignIn";
 import { MotionList, MotionRow } from "@/components/settings2/motion";
 import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
 import { BrandMark, Note, TeamChip, TeamPick, useTeams } from "@/components/settings2/teams";
@@ -568,6 +569,7 @@ function HelpCenter({ brand, draft, setDraft, base }: { brand: Brand; draft: Dra
         </Row>
       </Section>
       <HelpDomainSection brand={brand} />
+      <PortalSignInSection brand={brand} />
       <Section title={t("help.look")} description={t("help.lookHint")}>
         <BrandImageRow
           brand={brand}

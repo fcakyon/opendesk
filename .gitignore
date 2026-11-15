@@ -17,3 +17,7 @@ site/docs/screenshots/
 # Local Cloudflare and Wrangler caches
 .cloudflare/
 .wrangler/
+
+# Agent working notes
+.superpowers/
+docs/superpowers/

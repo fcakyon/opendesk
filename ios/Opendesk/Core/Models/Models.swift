@@ -132,6 +132,8 @@ struct WorkspaceSettings: Codable, Hashable, Sendable {
     var undoSendChatSeconds: Int?
     /// Ticketing is on for the workspace (default true); off, the app is Mail only.
     var ticketsEnabled: Bool?
+    /// Pages, the workspace's own pages, databases and canvases, is on (default true; contracts/pages.md).
+    var pagesEnabled: Bool?
 
     enum CodingKeys: String, CodingKey {
         case brandColor = "brand_color"
@@ -144,6 +146,7 @@ struct WorkspaceSettings: Codable, Hashable, Sendable {
         case undoSendSeconds = "undo_send_seconds"
         case undoSendChatSeconds = "undo_send_chat_seconds"
         case ticketsEnabled = "tickets_enabled"
+        case pagesEnabled = "pages_enabled"
     }
 }
 
@@ -160,6 +163,7 @@ extension WorkspaceSettings {
         undoSendSeconds = c.lenient(Int.self, forKey: .undoSendSeconds)
         undoSendChatSeconds = c.lenient(Int.self, forKey: .undoSendChatSeconds)
         ticketsEnabled = c.lenient(Bool.self, forKey: .ticketsEnabled)
+        pagesEnabled = c.lenient(Bool.self, forKey: .pagesEnabled)
     }
 }
 
@@ -181,10 +185,12 @@ struct Workspace: Codable, Hashable, Sendable, Identifiable {
     }
 }
 
-/// What the workspace offers (contracts/api.md, `tickets_enabled` and `mail_available`): both until it says otherwise.
+/// What the workspace offers (contracts/api.md, `tickets_enabled`, `mail_available` and
+/// `pages_enabled`): each until it says otherwise.
 extension Workspace {
     var ticketsOn: Bool { settings?.ticketsEnabled != false }
     var mailOn: Bool { mailAvailable != false }
+    var pagesOn: Bool { settings?.pagesEnabled != false }
 }
 
 struct Membership: Codable, Hashable, Sendable, Identifiable {
@@ -618,14 +624,42 @@ struct TicketCounts: Codable, Hashable, Sendable {
     /// Open and unassigned tickets per team the caller can see, and summed over the caller's teams.
     var teams: [String: TeamCount] = [:]
     var myTeams: TeamCount?
+    /// The folders of each ticket inbox (reply address) with tickets the caller can see, for an
+    /// inbox shown as a section of its own; an address without such tickets is left out.
+    var mailboxes: [String: MailboxCount] = [:]
 
     struct TeamCount: Codable, Hashable, Sendable {
         var open: Int
         var unassigned: Int
     }
 
+    /// One inbox's folders, `pending` with on hold.
+    struct MailboxCount: Codable, Hashable, Sendable {
+        var unassigned = 0
+        var mine = 0
+        var open = 0
+        var pending = 0
+
+        enum CodingKeys: String, CodingKey { case unassigned, mine, open, pending }
+
+        init(unassigned: Int = 0, mine: Int = 0, open: Int = 0, pending: Int = 0) {
+            self.unassigned = unassigned
+            self.mine = mine
+            self.open = open
+            self.pending = pending
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            unassigned = c.lenient(Int.self, forKey: .unassigned) ?? 0
+            mine = c.lenient(Int.self, forKey: .mine) ?? 0
+            open = c.lenient(Int.self, forKey: .open) ?? 0
+            pending = c.lenient(Int.self, forKey: .pending) ?? 0
+        }
+    }
+
     enum CodingKeys: String, CodingKey {
-        case unassigned, mine, open, pending, solved, spam, views, teams
+        case unassigned, mine, open, pending, solved, spam, views, teams, mailboxes
         case onHold = "on_hold"
         case myTeams = "my_teams"
     }
@@ -642,6 +676,7 @@ struct TicketCounts: Codable, Hashable, Sendable {
         views = c.lenient([String: Int].self, forKey: .views) ?? [:]
         teams = c.lenient([String: TeamCount].self, forKey: .teams) ?? [:]
         myTeams = c.lenient(TeamCount.self, forKey: .myTeams)
+        mailboxes = c.lenient([String: MailboxCount].self, forKey: .mailboxes) ?? [:]
     }
 }
 
@@ -1112,6 +1147,7 @@ enum NotificationKind: String, CaseIterable, Sendable, Identifiable {
     case mentioned
     case customerReplied = "customer_replied"
     case slaBreached = "sla_breached"
+    case scheduledReplyFailed = "scheduled_reply_failed"
     case aiHandoff = "ai_handoff"
     case aiCapReached = "ai_cap_reached"
     case aiKeyFailed = "ai_key_failed"
@@ -1124,6 +1160,9 @@ enum NotificationKind: String, CaseIterable, Sendable, Identifiable {
     case threadReplied = "thread_replied"
     case collabAssigned = "collab_assigned"
     case collabMention = "collab_mention"
+    case wikiMention = "wiki_mention"
+    case wikiComment = "wiki_comment"
+    case wikiReminder = "wiki_reminder"
 
     var id: String { rawValue }
 
@@ -1135,6 +1174,7 @@ enum NotificationKind: String, CaseIterable, Sendable, Identifiable {
         case .mentioned: "Mentions"
         case .customerReplied: "Customer replies"
         case .slaBreached: "SLA breaches"
+        case .scheduledReplyFailed: "Scheduled replies not sent"
         case .aiHandoff: "Handoffs from the AI agent"
         case .aiCapReached: "Ollie's monthly spending cap"
         case .aiKeyFailed: "AI provider key problems"
@@ -1147,6 +1187,9 @@ enum NotificationKind: String, CaseIterable, Sendable, Identifiable {
         case .threadReplied: "Side conversation answers"
         case .collabAssigned: "Mail assigned to you"
         case .collabMention: "Mail comment mentions"
+        case .wikiMention: "Wiki mentions"
+        case .wikiComment: "Wiki comments"
+        case .wikiReminder: "Wiki reminders"
         }
     }
 
@@ -1157,6 +1200,7 @@ enum NotificationKind: String, CaseIterable, Sendable, Identifiable {
         case .mentioned: "Someone @mentions you in a note"
         case .customerReplied: "A customer answers on a ticket you own"
         case .slaBreached: "A ticket you own misses its target"
+        case .scheduledReplyFailed: "A reply you scheduled could not go out"
         case .aiHandoff: "A customer asks for a person"
         case .aiCapReached: "Owners and admins"
         case .aiKeyFailed: "Owners and admins"
@@ -1169,6 +1213,9 @@ enum NotificationKind: String, CaseIterable, Sendable, Identifiable {
         case .threadReplied: "Someone outside your team answers a side conversation on your ticket"
         case .collabAssigned: "A teammate assigns you a mail conversation"
         case .collabMention: "Someone mentions you in a comment on a mail conversation"
+        case .wikiMention: "Someone mentions you on a wiki page or in a comment on one"
+        case .wikiComment: "New comments on pages you follow and in threads you wrote in"
+        case .wikiReminder: "A reminder you set in a wiki page is due"
         }
     }
 
@@ -1179,6 +1226,7 @@ enum NotificationKind: String, CaseIterable, Sendable, Identifiable {
         case .mentioned: "at"
         case .customerReplied: "arrowshape.turn.up.left"
         case .slaBreached: "clock.badge.exclamationmark"
+        case .scheduledReplyFailed: "clock.arrow.circlepath"
         case .aiHandoff: "hand.raised"
         case .aiCapReached, .aiKeyFailed: "sparkles"
         case .aiBalanceLow, .aiBalanceOut, .autoRechargeFailed: "creditcard"
@@ -1188,6 +1236,9 @@ enum NotificationKind: String, CaseIterable, Sendable, Identifiable {
         case .threadReplied: "bubble.left.and.bubble.right"
         case .collabAssigned: "envelope.badge.person.crop"
         case .collabMention: "at"
+        case .wikiMention: "at"
+        case .wikiComment: "text.bubble"
+        case .wikiReminder: "alarm"
         }
     }
 
@@ -1240,6 +1291,7 @@ struct AppNotification: Codable, Hashable, Sendable, Identifiable {
         case .mentioned: return who.map { "\($0) mentioned you" } ?? "You were mentioned in a note"
         case .customerReplied: return (data["contact"]?["name"]?.string).map { "\($0) replied" } ?? "The customer replied"
         case .slaBreached: return "SLA breached"
+        case .scheduledReplyFailed: return "Your scheduled reply was not sent"
         case .aiHandoff:
             return (data["contact"]?["name"]?.string).map { "\($0) asked for a person" } ?? "A customer asked for a person"
         case .aiCapReached: return "Ollie reached this month's agent spending cap"
@@ -1255,6 +1307,14 @@ struct AppNotification: Codable, Hashable, Sendable, Identifiable {
             return from.map { "\($0) answered your side conversation" } ?? "Someone answered your side conversation"
         case .collabAssigned: return who.map { "\($0) assigned you a conversation" } ?? "A conversation was assigned to you"
         case .collabMention: return who.map { "\($0) mentioned you in a comment" } ?? "You were mentioned in a comment"
+        case .wikiMention:
+            if data["comment_id"]?.string.map({ !$0.isEmpty }) == true {
+                return who.map { "\($0) mentioned you in a wiki comment" } ?? "You were mentioned in a wiki comment"
+            }
+            return who.map { "\($0) mentioned you on a wiki page" } ?? "You were mentioned on a wiki page"
+        case .wikiComment: return who.map { "\($0) commented on a wiki page" } ?? "New comment on a wiki page"
+        case .wikiReminder:
+            return data["label"]?.string.flatMap { $0.isEmpty ? nil : "Reminder: \($0)" } ?? "Your wiki reminder is due"
         case .teamJoined:
             let joiner = data["user"]?["name"]?.string.flatMap { $0.isEmpty ? nil : $0 } ?? "Someone"
             guard let team = data["team"]?["name"]?.string, !team.isEmpty else { return "\(joiner) joined a team you lead" }

@@ -4,10 +4,16 @@ import { useMatches } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { folderById } from "@/lib/folders";
 import { q } from "@/lib/queries";
-import { useCrumbStore } from "./shellStore";
+import { useCrumbStore, type TrailCrumb } from "./shellStore";
 import { useCollab } from "@/lib/collab/hooks";
 
 export type Crumb = { label: string; to?: string; params?: Record<string, string | undefined> };
+
+/** A deep path keeps its first crumb and last two; the ones between fold into a menu. */
+export function foldCrumbs(crumbs: Crumb[]): (Crumb | { fold: Crumb[] })[] {
+  if (crumbs.length <= 4) return crumbs;
+  return [crumbs[0], { fold: crumbs.slice(1, -2) }, ...crumbs.slice(-2)];
+}
 
 /** A page names the last header crumb (a ticket subject, an article) while it is mounted. */
 export function usePageCrumb(label: string | null | undefined) {
@@ -18,11 +24,25 @@ export function usePageCrumb(label: string | null | undefined) {
   }, [label]);
 }
 
+/**
+ * A page's parents as header crumbs between the section and the page's own crumb, while
+ * it is mounted: a wiki page's path, so the way back up is in the header too.
+ */
+export function usePageTrail(trail: TrailCrumb[] | null) {
+  const key = trail?.length ? JSON.stringify(trail) : "";
+  useEffect(() => {
+    if (!key) return;
+    useCrumbStore.setState({ trail: JSON.parse(key) as TrailCrumb[] });
+    return () => useCrumbStore.setState({ trail: [] });
+  }, [key]);
+}
+
 /** Header breadcrumbs for the current route: section, then page, then the page's own crumb. */
 export function useBreadcrumbs(): Crumb[] {
   const { t } = useTranslation("navigation");
   const matches = useMatches();
   const extra = useCrumbStore((s) => s.label);
+  const trail = useCrumbStore((s) => s.trail);
   const { data: views } = useQuery(q.views());
   const { data: teams } = useQuery(q.teams());
   const collab = useCollab();
@@ -62,7 +82,10 @@ export function useBreadcrumbs(): Crumb[] {
     }
   } else if (path.startsWith("/wiki")) {
     crumbs.push({ label: t("titles.wiki"), to: "/wiki" });
-    if (params.pageId) crumbs.push({ label: t("titles.wikiPage") });
+    if (params.pageId) crumbs.push(...trail, { label: t("titles.wikiPage") });
+  } else if (path.startsWith("/pages")) {
+    crumbs.push({ label: t("titles.pages"), to: "/pages" });
+    if (params.pageId) crumbs.push(...trail, { label: t("titles.pagesPage") });
   } else if (path.startsWith("/reports")) {
     crumbs.push({ label: t("titles.reports"), to: "/reports" });
   } else if (path.startsWith("/settings")) {

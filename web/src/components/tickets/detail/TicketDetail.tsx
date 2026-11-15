@@ -9,7 +9,7 @@ import { api } from "@/lib/api/endpoints";
 import { isApiError } from "@/lib/api/client";
 import { realtime } from "@/lib/realtime/manager";
 import { useRealtime } from "@/lib/realtime/store";
-import { useHotkeys } from "@/lib/hotkeys";
+import { useShortcuts } from "@/lib/shortcuts";
 import { useAI } from "@/lib/ai";
 import { useTranslation } from "react-i18next";
 import { AiIcon } from "@/components/ai/bits";
@@ -50,6 +50,7 @@ import { PrintDialog } from "./PrintDialog";
 import { TicketTeamChips, useTeamsCtx } from "../teams";
 import { SnoozeMenu } from "./SnoozeMenu";
 import { readPanel, savePanel } from "./panel";
+import { useVisitorPresence, VisitorPresenceBar } from "./VisitorPresence";
 
 const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
@@ -263,18 +264,19 @@ export default function TicketDetail({
     setTimeout(() => setPicker(p), panel ? 0 : 60);
   };
 
-  useHotkeys(
+  useShortcuts(
     {
-      r: () => composer.current?.focus("reply"),
-      n: () => composer.current?.focus("note"),
-      a: () => openPicker("assignee"),
-      s: (e: KeyboardEvent) => (e.shiftKey ? spam() : openPicker("status")),
-      h: () => setSnoozeOpen(true),
-      p: () => openPicker("priority"),
-      t: () => teamsCtx.hasTeams && openPicker("team"),
-      e: solve,
-      i: () => assignMe(),
-      "]": togglePanel,
+      "ticket.reply": () => composer.current?.focus("reply"),
+      "ticket.note": () => composer.current?.focus("note"),
+      "ticket.assign": () => openPicker("assignee"),
+      "ticket.status": () => openPicker("status"),
+      "ticket.spam": spam,
+      "ticket.snooze": () => setSnoozeOpen(true),
+      "ticket.priority": () => openPicker("priority"),
+      "ticket.team": () => teamsCtx.hasTeams && openPicker("team"),
+      "ticket.solve": solve,
+      "ticket.assignMe": () => assignMe(),
+      "ticket.panel": togglePanel,
       // mod+J drafts a reply from inside the composer (Composer.tsx); elsewhere it opens Ollie.
     },
     !!t && canEdit,
@@ -347,10 +349,10 @@ export default function TicketDetail({
           <Button variant="ghost" size="sm" square aria-label={indicatorText("tickets.closeTicket")} icon={<X className="size-4" />} onClick={onClose} />
         </Tooltip>
         <div className="hidden items-center sm:flex">
-          <Tooltip content={tr("detail.previous")} shortcut="k">
+          <Tooltip content={tr("detail.previous")} shortcut="tickets.previous">
             <Button variant="ghost" size="sm" square aria-label={indicatorText("tickets.previousTicket")} disabled={!onPrev} onClick={onPrev} icon={<ChevronUp className="size-4" />} />
           </Tooltip>
-          <Tooltip content={tr("detail.next")} shortcut="j">
+          <Tooltip content={tr("detail.next")} shortcut="tickets.next">
             <Button variant="ghost" size="sm" square aria-label={indicatorText("tickets.nextTicket")} disabled={!onNext} onClick={onNext} icon={<ChevronDown className="size-4" />} />
           </Tooltip>
           {position && (
@@ -430,7 +432,7 @@ export default function TicketDetail({
               <MenuContent align="end" className="w-[210px]">
                 {canEdit && (
                   <>
-                    <MenuItem icon={<UserRound />} shortcut="i" onSelect={assignMe}>
+                    <MenuItem icon={<UserRound />} shortcut="ticket.assignMe" onSelect={assignMe}>
                       {tr("commands.assignMe")}
                     </MenuItem>
                     <MenuItem icon={<GitMerge />} onSelect={() => setMergeOpen(true)}>
@@ -467,7 +469,7 @@ export default function TicketDetail({
             </Menu>
           </div>
         )}
-        <Tooltip content={panel ? tr("detail.hideDetails") : tr("detail.showDetails")} shortcut="]">
+        <Tooltip content={panel ? tr("detail.hideDetails") : tr("detail.showDetails")} shortcut="ticket.panel">
           <Button variant="ghost" size="sm" square aria-label={indicatorText("tickets.toggleDetails")} aria-pressed={panel} onClick={togglePanel} icon={<PanelRight className="size-4" />} className={cn("hidden lg:inline-flex", panel && "text-fg")} />
         </Tooltip>
       </header>
@@ -483,6 +485,7 @@ export default function TicketDetail({
           </div>
         ))}
 
+      {t?.channel === "chat" && <ChatPresence ticket={t} />}
       <div ref={rowRef} className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           <Timeline
@@ -619,4 +622,9 @@ function HeaderSeverity({ t }: { t: Ticket }) {
       </span>
     </Tooltip>
   );
+}
+
+/** Whether a chat's visitor is on the page, above the conversation. */
+function ChatPresence({ ticket }: { ticket: Ticket }) {
+  return <VisitorPresenceBar p={useVisitorPresence(ticket)} />;
 }

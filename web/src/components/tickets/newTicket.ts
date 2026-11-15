@@ -13,8 +13,8 @@ export type NewTicketDraft = {
   subject: string;
   body: string;
   kind: "reply" | "note";
-  /** A reply goes by email, or opens a chat in the contact's widget. */
-  channel?: "email" | "chat";
+  /** A reply goes by email, opens a chat in the contact's widget, or logs the customer's own request: nothing is sent. */
+  channel?: "email" | "chat" | "log";
   /** Chat: the widget it opens in; undefined lets the server pick the contact's latest. */
   widgetId?: string;
   /** The address it goes from; set to the brand's first one that can send until someone picks. */
@@ -83,6 +83,9 @@ export function pageOnlyCount(d: NewTicketDraft): number {
 /** A reply that opens a chat in the contact's widget instead of going by email. */
 export const isChat = (d: NewTicketDraft) => d.kind === "reply" && d.channel === "chat";
 
+/** The customer's own request, logged by the team (a call, a conversation): stored as their message, nothing is sent. */
+export const isLog = (d: NewTicketDraft) => d.kind === "reply" && d.channel === "log";
+
 /** What is missing before it can be created, as an inbox `newTicket.*` key. */
 export function newTicketProblem(d: NewTicketDraft, noSender: boolean): "needTo" | "needSubject" | "needBody" | "cannotSend" | "notOnChat" | null {
   if (!d.to) return "needTo";
@@ -92,7 +95,7 @@ export function newTicketProblem(d: NewTicketDraft, noSender: boolean): "needTo"
   }
   if (!d.subject.trim()) return "needSubject";
   if (!d.body) return "needBody";
-  if (noSender) return "cannotSend";
+  if (noSender && !isLog(d)) return "cannotSend";
   return null;
 }
 
@@ -126,7 +129,10 @@ export function createTicketBody(
     if (o.attachmentIds?.length) chat.attachment_ids = o.attachmentIds;
     return chat;
   }
-  const emailed = d.kind === "reply" && !!d.mailbox;
+  // A logged request is the customer's own message: stored as theirs and sent to no one, on a
+  // ticket whose later replies go by email from its address like any other.
+  const logged = isLog(d);
+  const emailed = d.kind === "reply" && !!d.mailbox && !logged;
   const body: CreateTicketBody = {
     subject: d.subject.trim(),
     contact_id: d.to?.contact?.id,
@@ -139,8 +145,10 @@ export function createTicketBody(
     priority: d.priority,
     assignee_id: assignee ?? undefined,
     team_id: o.hasTeams && o.teamId ? o.teamId : undefined,
-    status: d.kind === "reply" ? "pending" : "open",
+    // The team still has to answer a logged request.
+    status: d.kind === "reply" && !logged ? "pending" : "open",
   };
+  if (logged) body.direction = "inbound";
   if (d.severity) body.severity = d.severity;
   if (d.tags.length) body.tags = d.tags;
   if (Object.keys(d.fields).length) body.fields = d.fields;

@@ -29,6 +29,8 @@ export type WorkspaceSettings = {
   tickets_enabled?: boolean;
   /** Whether Mail is enabled for this workspace. Defaults to true; effective availability is Workspace.mail_available. */
   mail_enabled?: boolean;
+  /** Whether Pages is enabled for this workspace (contracts/pages.md). Defaults to true; no instance option or plan turns it off. */
+  pages_enabled?: boolean;
   brand_color?: string;
   timezone?: string;
   help_center_enabled?: boolean;
@@ -40,6 +42,9 @@ export type WorkspaceSettings = {
   new_ticket_notify?: NewTicketNotify;
   /** Where Assignment's followup_keeps_assignee is stored; read and set it through Assignment. Default false. */
   followup_keeps_assignee?: boolean;
+  /** Where Assignment's chat_mode and chat_skill_id are stored; read and set them through Assignment. */
+  chat_assign?: AssignMode;
+  chat_assign_skill_id?: string | null;
   /** Look up contact pictures on Gravatar. Default false. */
   gravatar?: boolean;
   /** Fetch company logos from the company's website. Default true. */
@@ -65,6 +70,8 @@ export type WorkspaceSettings = {
   send_and_finish_button?: boolean;
   /** Heartbeats count toward each member's online time, shown in the agents report. Default true; false records and shows none. */
   agent_online_time?: boolean;
+  /** Emails to customers carry the ticket number in their subject as "[#n]". Default true; false leaves it out and replies thread by their headers, except that an email starting a ticket's conversation keeps it where the mailbox's sending changes or hides its Message-ID. */
+  ticket_number_in_subject?: boolean;
   /** Tickets have a severity beside their priority. Default true; false leaves it out of the app, and AI never sets it. The API still reads and writes it. */
   severity_enabled?: boolean;
   /** Display-only names and colours for the fixed statuses and priorities. */
@@ -172,12 +179,33 @@ export type HelpDomain = {
 };
 export type HelpDomainProblem = "" | "txt_missing" | "cname_missing" | "domain_taken" | "certificate_pending" | "certificate_failed" | "provider_error";
 export type HelpDomainRecord = { type: "TXT" | "CNAME"; name: string; value: string; ok: boolean };
+/** How customers sign in to a brand's portal: a password, the company's identity provider, or either. */
+export type PortalAuthMode = "local" | "oidc" | "local_and_oidc";
+/** What GET /v1/brands/{id}/portal/auth returns (admin). The client secret is never returned. */
+export type PortalAuthSettings = { mode: PortalAuthMode; issuer: string; client_id: string; secret_configured: boolean; create_contacts: boolean };
+/** A brand whose help center is on: where a portal invitation can lead (contracts/customer-portal.md "Invitations"). */
+export type PortalBrand = { id: string; name: string; slug: string; auth_mode: PortalAuthMode; default: boolean };
+/** A contact's customer portal access, as members see it. */
+export type PortalAccess = {
+  /** active: a password or a provider sign-in; invited: a password link that is still open; none: neither. */
+  status: "none" | "invited" | "active";
+  password: boolean;
+  sso: boolean;
+  invited_at: string | null;
+  invite_expires_at: string | null;
+  last_sign_in_at: string | null;
+  brands: PortalBrand[];
+};
+/** What one bulk invitation did: skipped counts by reason (no_email, blocked, active, rate_limited, not_found). */
+export type PortalBulkInvite = { sent: number; skipped: Partial<Record<"no_email" | "blocked" | "active" | "rate_limited" | "not_found", number>> };
+export type PortalRelinkAuthorization = { id: string; brand_id: string; contact_id: string; expires_at: string };
 export type Brand = {
   id: string;
   name: string;
   /** Names the help center's default address: <slug>.<HELP_DOMAIN>, or <base>/help/<slug> (APP_URL or API_URL). */
   slug: string;
   is_default: boolean;
+  portal_auth: { mode: PortalAuthMode };
   /** "#rrggbb", or "" for the workspace brand colour. */
   color: string;
   locale: string;
@@ -269,6 +297,8 @@ export type CompanyRef = { id: string; name: string; domain: string; avatar_url?
 export type Contact = {
   id: string;
   email: string | null;
+  /** Extra addresses beside the primary `email`: mail from them lands on this contact. */
+  emails: string[];
   name: string;
   phone: string;
   avatar_url: string | null;
@@ -291,6 +321,8 @@ export type Company = {
   id: string;
   name: string;
   domain: string;
+  /** The workspace's own id for the account; the widget's verified identify links people by it. */
+  external_id: string | null;
   /** The company logo. */
   avatar_url: string | null;
   avatar_source: "upload" | "domain" | null;
@@ -503,6 +535,8 @@ export type Message = {
   mailbox_id?: string | null;
   /** Inbound email: the Reply-To it named when that differs from from_email, else "". Agents only. */
   reply_to?: string;
+  /** Inbound email: where replies to it go instead of from_email (its reply_to, at the sender's own organisation), else "". Agents only. */
+  reply_address?: string;
   /** Inbound email: its From failed DMARC at a trusted receiving server. Shown as unverified. Agents only. */
   auth_failed?: boolean;
   /** Inbound email: the trusted contact form address it came through; from_email is then the visitor. Agents only. */
@@ -558,6 +592,8 @@ export type ActivityType =
   | "tagged"
   | "untagged"
   | "sla_breached"
+  /** data: {message_id, reason: "no_mailbox"}. A chat reply was not emailed to the visitor who left. */
+  | "follow_up_skipped"
   | "merged"
   | "csat_received"
   /** data: {key, name, from, to} with FieldValue | null values. */
@@ -621,9 +657,13 @@ export type SavedReply = {
   body_html: string;
   /** Offered only on this team's tickets; null is everyone. */
   team_id?: string | null;
+  /** Applied to the ticket when a message using it is sent. */
+  actions?: SavedReplyActions;
   created_at: string;
   updated_at: string;
 };
+/** What a saved reply does to the ticket once a message using it is sent. */
+export type SavedReplyActions = { add_tags?: string[]; remove_tags?: string[]; team_id?: string | null; assignee_id?: string | null };
 export type TicketFilters = {
   status?: TicketStatus[];
   priority?: Priority[];
@@ -658,7 +698,9 @@ export type TicketFilters = {
   /** Custom field filters, ANDed (max 20). */
   fields?: FieldFilter[];
 };
-export type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number; /** Shared with this team. */ team_id?: string | null; /** The sidebar heading it shows under (lib/viewSections). */ section?: string | null; /** What the sidebar shows beside the name; none shows the layers icon. */ icon?: ViewIcon | null };
+export type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number; /** Shared with this team. */ team_id?: string | null; /** The sidebar heading it shows under (lib/viewSections). */ section?: string | null; /** What the sidebar shows beside the name; none shows the layers icon. */ icon?: ViewIcon | null; /** Its section's icon (PATCH /v1/view-sections), the same on every view of the section; none shows none. */ section_icon?: ViewIcon | null };
+/** A view section as PATCH /v1/view-sections leaves it: `views` is how many of the views the caller sees name it. */
+export type ViewSection = { name: string; icon: ViewIcon | null; views: number };
 /** emoji: one emoji; icon: a name of the app's list (viewIcons.ts); text: one or two letters or digits. `color` tints an icon or text (a Tone), never an emoji. */
 export type ViewIcon = { kind: "emoji" | "icon" | "text"; value: string; color: string | null };
 export type SlaPolicy = {
@@ -689,6 +731,10 @@ export type Assignment = {
   new_ticket_notify: NewTicketNotify;
   /** settings.followup_keeps_assignee: an email that answers a closed ticket opens a follow-up assigned to that ticket's assignee. Default false. */
   followup_keeps_assignee: boolean;
+  /** settings.chat_assign: live chats' own rule, apart from the team, address and workspace rules; none leaves chats to them. Default none. */
+  chat_mode: AssignMode;
+  /** settings.chat_assign_skill_id: the skill a member must hold to be given a chat; null for anyone in the pool. Set "" to clear. */
+  chat_skill_id: string | null;
 };
 export type TriageField = "priority" | "severity" | "labels" | "team";
 /** The decision engine behind triage (contracts/api.md). Jev is TypeSafe's decision model. */
@@ -715,7 +761,7 @@ export type BusinessHours = {
 };
 export type OnboardingStepId =
   | "connect_mailbox" | "invite_teammate" | "upload_photo" | "install_widget" | "publish_article" | "setup_triage" | "create_label" | "try_ollie"
-  | "setup_ai_agent";
+  | "setup_ai_agent" | "connect_mail_account" | "share_mail_account";
 export type OnboardingStep = {
   id: OnboardingStepId;
   title: string;
@@ -928,6 +974,17 @@ export type ProviderSendAs = {
 export type AliasSettingsInput = { display_name?: string; signature_html?: string; brand_id?: string | null; send_as?: AliasSendAs };
 /** accounts: any of the member's addresses, shared accounts only, or addresses at the mailbox's own domains. */
 export type MailboxPersonalReplies = { enabled: boolean | null; reply_to: "address" | "mailbox" | null; accounts: "any" | "shared" | "domain" };
+/** A folder on a mailbox's IMAP server it can read (GET /v1/mailboxes/{id}/imap-folders). */
+export type ImapFolder = {
+  /** The folder's name on the server, as imap_folders takes it. */
+  name: string;
+  /** The name with / between levels, for showing. */
+  path: string;
+  /** What the server says the folder is for (SPECIAL-USE), or "". */
+  special: "" | "inbox" | "sent" | "drafts" | "trash" | "junk" | "archive" | "all" | "flagged" | "important";
+};
+export type ImapFolders = { folders: ImapFolder[]; selected: string[] };
+
 export type Mailbox = {
   id: string;
   name: string;
@@ -967,6 +1024,12 @@ export type Mailbox = {
   personal_replies?: MailboxPersonalReplies;
   /** Website contact forms (exact addresses or "@domain"); their authenticated mail is from the visitor in Reply-To. Admins only. */
   trusted_form_senders?: string[];
+  /** Mail marked automatic (Auto-Submitted, Precedence: bulk) is taken in instead of dropped; nothing automatic answers it. */
+  keep_automatic_mail?: boolean;
+  /** The IMAP folders a mailbox that reads over IMAP takes mail from; empty reads INBOX alone (admins only). */
+  imap_folders?: string[];
+  /** The IMAP folder a copy of each email the mailbox sends over SMTP or through opendesk is kept in; "" keeps none (admins only). */
+  imap_sent_folder?: string;
   signature_html: string;
   auto_reply_enabled: boolean;
   auto_reply_subject: string;
@@ -1012,6 +1075,8 @@ export type KbArticle = {
   views: number;
   published_at: string | null;
   updated_at: string;
+  /** Its address on a help center, after the help center's own: /c/<collection slug>/<slug>, or /a/<slug> in no collection. */
+  path: string;
 };
 
 /** A product update the help center publishes at /changelog (contracts/api.md "Changelog"). */
@@ -1413,6 +1478,23 @@ export type WebhookDelivery = {
   duration_ms: number | null;
   created_at: string;
 };
+/** A row of the trash (GET /v1/tickets/deleted): a deleted ticket, who deleted it and when. */
+export type DeletedTicket = {
+  id: string;
+  number: number;
+  subject: string;
+  status: TicketStatus;
+  channel: string;
+  contact: { id: string; name: string; email?: string } | null;
+  message_count: number;
+  deleted_at: string;
+  /** The member who deleted it; null for an API key, an automation, or a ticket deleted before this was recorded. */
+  deleted_by: { id: string; name: string; email?: string } | null;
+  deleted_by_api_key: { id: string; name: string } | null;
+  /** Set when the ticket was merged into another: its conversation lives there, and it is not restored. */
+  merged_into_number: number | null;
+};
+
 export type AuditLog = {
   id: string;
   actor: { type: "user" | "api_key" | "system"; user: UserRef | null; api_key_id: string | null };
@@ -1423,12 +1505,13 @@ export type AuditLog = {
   ip: string;
   created_at: string;
 };
-export type NotificationType = "assigned" | "new_ticket" | "mentioned" | "customer_replied" | "thread_replied" | "sla_breached" | "ai_handoff" | "ai_cap_reached" | "ai_balance_low" | "ai_balance_out" | "auto_recharge_failed" | "ai_key_failed" | "team_joined" | "import_finished" | "support_channel_unhealthy" | "collab_assigned" | "collab_mention";
+export type NotificationType = "assigned" | "new_ticket" | "mentioned" | "customer_replied" | "thread_replied" | "sla_breached" | "scheduled_reply_failed" | "ai_handoff" | "ai_cap_reached" | "ai_balance_low" | "ai_balance_out" | "auto_recharge_failed" | "ai_key_failed" | "team_joined" | "import_finished" | "support_channel_unhealthy" | "collab_assigned" | "collab_mention" | "wiki_mention" | "wiki_comment" | "wiki_reminder";
 /** `ai_cap_reached`: data `{cap_usd}`, ticket null; the widget agent reached `widget_monthly_cap_usd` (once a month, owners and admins).
  * `ai_balance_low` / `ai_balance_out`: data `{remaining_usd}` (US dollars); `auto_recharge_failed`: data `{reason: AutoRechargeFailure}` (billing, owners and admins, ticket null).
  * `ai_key_failed`: data `{provider: AIKeyKind, reason: "rejected" | "no_funds"}`; the workspace's own AI key failed (at most hourly, owners and admins, ticket null).
  * `thread_replied`: data `{message_id, thread_id, subject, preview, from: {name, email}}`; someone outside the team answered a third-party thread on a ticket assigned to you.
  * `team_joined`: data `{team_id, team: {id, name, private}, user: {id, name}, by}`; an admin joined a team you lead (ticket null).
+ * `scheduled_reply_failed`: data `{reason: ScheduledReplyError}`; a reply you scheduled did not go out and is your draft again (ticket null when you can no longer see it).
  * `support_channel_unhealthy`: data `{connection_id, name, provider, status, detail}`; a provider connection stayed unhealthy for 15 minutes (owners and admins, ticket null).
  * `import_finished`: data `{import_id, source, source_name, account, status: "completed" | "failed" | "needs_credentials", tickets, updated, articles, failed, error}`;
  * a history import you started ended or paused for new credentials (contracts/imports.md, ticket null). */
@@ -1444,7 +1527,7 @@ export type Notification = {
 /** Where a notification can reach someone besides the bell: email, their phones (`push`) and the desktop app or browser (`desktop`). */
 export type NotificationChannels = { email: boolean; push: boolean; desktop: boolean };
 export type NotificationChannel = keyof NotificationChannels;
-export type NotificationGroup = "tickets" | "team" | "mail" | "ai_billing" | "workspace";
+export type NotificationGroup = "tickets" | "team" | "mail" | "wiki" | "ai_billing" | "workspace";
 /** `urgent`: may be emailed sooner than the cooldown (contracts/api.md "Notification preferences and emails"). */
 export type NotificationTypePrefs = NotificationChannels & { type: NotificationType; group: NotificationGroup; defaults: NotificationChannels; urgent: boolean };
 /** How the server paces notification emails for this person. */
@@ -1569,9 +1652,26 @@ export type TicketCounts = {
   /** Every team the caller can see. */
   teams?: Record<string, { open: number; unassigned: number }>;
   my_teams?: { open: number; unassigned: number };
-  /** Per sidebar row id (ticket_folder:<id>, team:<id>, team:mine, view:<id>), over the row's own tickets. */
+  /** Each reply address's folders, for a ticket inbox shown as a section of its own. */
+  mailboxes?: Record<string, MailboxCount>;
+  /** Per sidebar row id (ticket_folder:<id>, team:<id>, team:mine, view:<id>, mailbox:<id>:<folder>), over the row's own tickets. */
   stats?: Record<string, TicketStats>;
 };
+
+/** POST /v1/collab/accounts/{id}/use-for-tickets: how the ticket inbox starts. */
+export type UseForTicketsBody = {
+  name?: string;
+  team_id?: string | null;
+  brand_id?: string | null;
+  signature_html?: string;
+  auto_reply_enabled?: boolean;
+  auto_reply_subject?: string;
+  auto_reply_html?: string;
+  keep_account?: boolean;
+};
+
+/** A ticket inbox's folder counts (pending with on hold), as TicketCounts counts the whole inbox's. */
+export type MailboxCount = { unassigned: number; mine: number; open: number; pending: number };
 
 /** A sidebar row's tickets awaiting a reply (the customer wrote last), urgent, and overdue. */
 export type TicketStats = { awaiting: number; urgent: number; overdue: number };
@@ -1602,12 +1702,297 @@ export type WikiNode = {
   updated_at: string;
   /** Who created it; null for an API key or a deleted account. */
   created_by_id: string | null;
+  /** The #tags in its text, lower case (contracts/wiki.md "Links and tags"). */
+  tags: string[];
+  /** Yours alone (contracts/wiki.md "Private pages and teamspaces"). */
+  private?: boolean;
+  /** The teamspace it is in. */
+  team_id?: string | null;
+  /** Your journal: your daily notes are under it. */
+  journal?: boolean;
+  /** A daily note's day, YYYY-MM-DD. */
+  daily_date?: string;
+  /** A template (or a page of one); only in GET /v1/wiki/templates. */
+  template?: boolean;
+  /** Verified, and not past the day it was verified until. */
+  verified?: boolean;
+  /** "database": its subpages are its rows (contracts/wiki.md "Databases"); "canvas": cards on a board ("Canvas"). */
+  kind?: WikiKind;
+  /** Other names the page goes by (contracts/wiki.md "Aliases"); left out when it has none. */
+  aliases?: string[];
+  /** Whose tree it is in (contracts/pages.md); "wiki" when left out. */
+  area?: WikiArea;
 };
+
+export type WikiKind = "page" | "database" | "canvas";
+/** The wiki's tree, or Pages' (contracts/pages.md). */
+export type WikiArea = "wiki" | "pages";
+
+// ─── Wiki canvases (contracts/wiki.md "Canvas") ──────────────────────────────
+
+/** A preset tone "1".."6" (red, orange, yellow, green, cyan, purple) or "#rrggbb". */
+export type CanvasColor = string;
+export type CanvasSide = "top" | "right" | "bottom" | "left";
+export type CanvasEnd = "none" | "arrow";
+
+type CanvasNodeBase = { id: string; x: number; y: number; width: number; height: number; color?: CanvasColor };
+export type CanvasTextNode = CanvasNodeBase & { type: "text"; html: string };
+export type CanvasPageNode = CanvasNodeBase & { type: "page"; page_id: string };
+export type CanvasLinkNode = CanvasNodeBase & { type: "link"; url: string; title?: string; description?: string; image?: string };
+export type CanvasFileNode = CanvasNodeBase & { type: "file"; src: string; name: string };
+export type CanvasGroupNode = CanvasNodeBase & { type: "group"; label?: string };
+export type CanvasNode = CanvasTextNode | CanvasPageNode | CanvasLinkNode | CanvasFileNode | CanvasGroupNode;
+
+export type CanvasEdge = {
+  id: string;
+  fromNode: string;
+  fromSide?: CanvasSide;
+  /** Default "none". */
+  fromEnd?: CanvasEnd;
+  toNode: string;
+  toSide?: CanvasSide;
+  /** Default "arrow". */
+  toEnd?: CanvasEnd;
+  color?: CanvasColor;
+  label?: string;
+};
+
+/** A canvas page's cards (in z order, later above) and connections. */
+export type Canvas = { nodes: CanvasNode[]; edges: CanvasEdge[] };
+
+// ─── Wiki databases (contracts/wiki.md "Databases") ─────────────────────────
+
+export type DbPropType =
+  | "title"
+  | "text"
+  | "number"
+  | "select"
+  | "multi_select"
+  | "status"
+  | "date"
+  | "person"
+  | "checkbox"
+  | "url"
+  | "email"
+  | "phone"
+  | "files"
+  | "relation"
+  | "rollup"
+  | "formula"
+  | "created_time"
+  | "created_by"
+  | "edited_time"
+  | "edited_by"
+  | "unique_id"
+  | "ticket";
+
+export type DbTone = "gray" | "brown" | "orange" | "yellow" | "green" | "blue" | "purple" | "pink" | "red";
+export type DbOption = { id: string; name: string; color: DbTone };
+export type DbStatusGroup = { id: "todo" | "doing" | "done"; option_ids: string[] };
+export type DbRollupFn =
+  | "show_original"
+  | "count"
+  | "count_values"
+  | "count_unique"
+  | "count_empty"
+  | "count_not_empty"
+  | "percent_empty"
+  | "percent_not_empty"
+  | "sum"
+  | "avg"
+  | "median"
+  | "min"
+  | "max"
+  | "range"
+  | "earliest"
+  | "latest"
+  | "checked"
+  | "unchecked"
+  | "percent_checked";
+export type DbNumberFormat = "number" | "comma" | "percent" | "usd" | "eur" | "gbp" | "jpy" | "chf" | "cad" | "aud" | "inr" | "brl" | "huf" | "pln";
+
+export type DbProperty = {
+  /** [a-z0-9_]{1,24}, stable; the first property is the title ("title"). */
+  id: string;
+  name: string;
+  type: DbPropType;
+  options?: DbOption[];
+  groups?: DbStatusGroup[];
+  number_format?: DbNumberFormat;
+  /** A date's values have a time of day. */
+  date_time?: boolean;
+  /** A relation's database. */
+  database_id?: string;
+  rollup?: { relation: string; property: string; fn: DbRollupFn };
+  formula?: string;
+  /** A unique id's letters (TASK-12). */
+  prefix?: string;
+  description?: string;
+};
+
+export type DbViewType = "table" | "board" | "list" | "gallery" | "calendar" | "timeline" | "chart" | "form";
+export type DbView = { id: string; name: string; type: DbViewType; settings?: DbViewSettings };
+
+export type DbFilterRule = { property: string; op: string; value?: unknown };
+export type DbFilterGroup = { op: "and" | "or"; rules: (DbFilterRule | DbFilterGroup)[] };
+export type DbSort = { property: string; dir: "asc" | "desc" };
+export type DbCalc =
+  | "none"
+  | "count"
+  | "count_values"
+  | "count_unique"
+  | "count_empty"
+  | "count_not_empty"
+  | "percent_empty"
+  | "percent_not_empty"
+  | "sum"
+  | "avg"
+  | "median"
+  | "min"
+  | "max"
+  | "range"
+  | "earliest"
+  | "latest"
+  | "checked"
+  | "unchecked"
+  | "percent_checked";
+
+/** A view's own way of showing the rows; the API keeps it as written. */
+export type DbViewSettings = {
+  filter?: DbFilterGroup;
+  sorts?: DbSort[];
+  /** Board columns; groups in a table or list. */
+  group_by?: string;
+  hide_empty_groups?: boolean;
+  collapsed_groups?: string[];
+  /** Property ids hidden in this view. */
+  hidden?: string[];
+  /** Property ids in this view's order. */
+  order?: string[];
+  widths?: Record<string, number>;
+  wrap?: boolean;
+  /** Calendar and timeline: the date property, and the timeline's end. */
+  date_property?: string;
+  end_property?: string;
+  timeline_scale?: "day" | "week" | "month" | "quarter";
+  card_preview?: "none" | "cover" | "content";
+  card_size?: "small" | "medium" | "large";
+  card_fit?: boolean;
+  calculations?: Record<string, DbCalc>;
+  chart?: { kind: "bar" | "column" | "donut" | "line"; x: string; y?: { property: string; fn: "count" | "sum" | "avg" } };
+  /** A linked view shows rows of this database but filters on its own (the block's). */
+  open_in?: "peek" | "page";
+  /** A form: what it asks, in order, and what it says. */
+  form?: DbFormSettings;
+};
+
+/** A question of a form: a property, whether it must be answered, and a hint under it. */
+export type DbFormField = { property: string; required?: boolean; help?: string };
+export type DbFormSettings = { title?: string; description?: string; fields: DbFormField[]; submitted?: string };
+
+export type Database = {
+  properties: DbProperty[];
+  views: DbView[];
+  next_id: number;
+  /** Rows nest under a parent item: two relations of the database to itself, kept in step by the app. */
+  sub_items?: { parent: string; children: string };
+  /** Rows wait on other rows: two relations of the database to itself, kept in step by the app. */
+  dependencies?: { blocked_by: string; blocking: string };
+};
+
+export type DbDate = { start: string; end?: string };
+export type DbFile = { url: string; name: string };
+/** A row's stored value of a property, by its type. */
+export type DbValue = string | number | boolean | string[] | DbDate | DbFile[] | null;
+
+export type DbRow = WikiNode & {
+  props: Record<string, DbValue>;
+  cover: string;
+  cover_y: number;
+  excerpt: string;
+  created_at: string;
+  created_by: UserRef | null;
+  updated_by: UserRef | null;
+};
+
+export type DbRows = { data: DbRow[]; templates: WikiNode[] };
+
+/** Where a top-level page lives. */
+export type WikiSpace = "workspace" | "private" | "team";
+
+export type WikiVerification = { by: UserRef | null; at: string; until: string | null; expired: boolean };
+
+export type WikiTrashed = WikiNode & { deleted_at: string; deleted_by: UserRef | null; purge_at: string; subpages: number; path: WikiRef[] };
+
+export type WikiPageViews = { views: number; people: number; readers: { user: UserRef; visits: number; last_at: string }[] };
+
+/** How a page was read and edited per day, UTC, oldest first (contracts/wiki.md "Page analytics"). Counts only. */
+export type WikiPageAnalytics = {
+  days: { date: string; views: number; viewers: number }[];
+  total_views: number;
+  total_viewers: number;
+  edits: { date: string; count: number }[];
+};
+
+/** One emoji on a comment and who added it, oldest first (contracts/wiki.md "Comments"). */
+export type WikiReaction = { emoji: string; users: string[] };
+
+export type WikiComment = {
+  id: string;
+  thread_id: string;
+  author: UserRef | null;
+  body_html: string;
+  mentions: string[];
+  created_at: string;
+  edited_at: string | null;
+  reactions: WikiReaction[];
+};
+
+/** A discussion on a page: inline on the text it quotes (`<span data-comment="<id>">`), or on the page. */
+export type WikiThread = {
+  id: string;
+  page_id: string;
+  quote: string;
+  inline: boolean;
+  created_at: string;
+  resolved_at: string | null;
+  resolved_by: UserRef | null;
+  /** Oldest first; the first is the thread's own. */
+  comments: WikiComment[];
+};
+
+/** A page's threads, oldest first, open and resolved, and whether the person follows the page. */
+export type WikiComments = { data: WikiThread[]; following: boolean };
+
+export type WikiDailyNote = { date: string; id: string };
 
 export type WikiRef = { id: string; title: string; icon: string };
 
-export type WikiPage = WikiNode & {
+/** A page's look (contracts/wiki.md "Page settings"): not part of its text, no version. */
+export type WikiPageSettings = {
+  /** "" (none), "gradient:<name>" (components/wiki/covers.ts), or an image: https or an attachment. */
+  cover: string;
+  /** Which part of the cover shows, 0 (top) to 100 (bottom). */
+  cover_y: number;
+  full_width: boolean;
+  small_text: boolean;
+  font: "default" | "serif" | "mono";
+  /** The app keeps the page read-only until someone unlocks it. */
+  locked: boolean;
+};
+
+export type WikiPage = WikiNode &
+  WikiPageSettings & {
   body_html: string;
+  kind: WikiKind;
+  database: Database | null;
+  /** A canvas's cards and connections; null for a page (contracts/wiki.md "Canvas"). */
+  canvas?: Canvas | null;
+  props: Record<string, DbValue>;
+  verification: WikiVerification | null;
+  /** In the trash since; null for a page in the tree. */
+  deleted_at: string | null;
+  deleted_by: UserRef | null;
   created_by: UserRef | null;
   updated_by: UserRef | null;
   created_at: string;
@@ -1627,6 +2012,13 @@ export type WikiRevision = {
   updated_at: string;
 };
 
+/** A link's card, read by the API for a bookmark block (contracts/wiki.md "Bookmarks"). */
+export type LinkCard = { title: string; description: string; image: string; site: string };
+
+/** A page that links to another (a backlink), or names it without a link. */
+export type WikiMention = { id: string; parent_id: string | null; title: string; icon: string; snippet: string; updated_at: string };
+export type WikiLink = { from: string; to: string };
+
 export type WikiSearchHit = {
   id: string;
   parent_id: string | null;
@@ -1636,9 +2028,10 @@ export type WikiSearchHit = {
   snippet: string;
   path: WikiRef[];
   updated_at: string;
+  area?: WikiArea;
 };
 
-export type WikiPagePatch = { title?: string; icon?: string; body_html?: string; version?: number };
+export type WikiPagePatch = Partial<WikiPageSettings> & { title?: string; icon?: string; body_html?: string; version?: number; verified?: boolean; verified_days?: number; database?: Database; props?: Record<string, DbValue>; canvas?: Canvas; aliases?: string[] };
 
 export type ReportsOverview = {
   created: number;
@@ -1940,7 +2333,7 @@ export type AutoRecharge = {
 };
 export type AutoRechargePatch = Partial<Pick<AutoRecharge, "enabled" | "threshold_usd" | "amount_usd" | "monthly_limit_usd">>;
 export type AIFeature =
-  | "summarize" | "rewrite" | "translate" | "triage" | "decide" | "answer_check" | "copilot" | "draft_reply" | "answer" | "answer_email" | "playground" | "kb_draft" | "assistant" | "assistant_peer" | "procedure";
+  | "summarize" | "rewrite" | "translate" | "triage" | "decide" | "answer_check" | "copilot" | "draft_reply" | "answer" | "answer_email" | "playground" | "kb_draft" | "assistant" | "assistant_peer" | "procedure" | "wiki_write";
 /**
  * GET /v1/billing/usage (contracts/billing.md). `from`/`to` are RFC 3339; `to` is exclusive.
  * Every usd value is US dollars, a number with up to 6 decimals.
@@ -2154,6 +2547,31 @@ export type Triage = {
   suggestions?: AISuggestions;
 };
 export type RewriteMode = "friendlier" | "more_formal" | "shorter" | "longer" | "fix_grammar" | "simplify";
+/** POST /v1/wiki/ai/write (contracts/ai.md): Ollie writing in the wiki. */
+export type WikiWriteMode =
+  | "improve" | "fix_grammar" | "shorter" | "longer" | "simplify" | "more_formal" | "friendlier"
+  | "summarize" | "action_items" | "explain" | "continue" | "custom";
+export type WikiWriteInput = {
+  mode: WikiWriteMode;
+  /** The selection to edit. */
+  html?: string;
+  /** The page around the selection or cursor. */
+  context_html?: string;
+  title?: string;
+  instructions?: string;
+};
+// ─── Wiki import and export (contracts/wiki.md "Import and export") ──────────
+
+/** Why an import left a file out or changed a page. */
+export type WikiImportSkipReason =
+  | "unsupported" | "unused" | "executable" | "too_large" | "unreadable"
+  | "body_too_large" | "moved_up" | "columns_dropped" | "nested_archive" | "files_limit"
+  | "canvas_simplified" | "canvas_trimmed";
+/** POST /v1/wiki/import: how many pages it made, its top pages in order, and what it left out by path in the upload. */
+export type WikiImportResult = { pages: number; root_ids: string[]; skipped: { path: string; reason: WikiImportSkipReason | (string & {}) }[] };
+/** Where an import lands: under a page, or at the top of a space. */
+export type WikiImportTarget = { parent_id: string } | { space: WikiSpace; team_id?: string; area?: WikiArea };
+export type WikiExportFormat = "markdown" | "html";
 export type TranslateResult = { html?: string; text?: string; source_language: string };
 export type KBArticleDraft = { title: string; body_html: string; excerpt: string };
 
@@ -2197,6 +2615,20 @@ export type TicketDraft = {
   by: { type: "user" | "api"; name: string; user?: UserRef };
   updated_at: string;
 };
+
+/** The signed-in member's own unsent reply on a ticket (contracts/api.md "Reply drafts"): private, kept on the server. */
+export type ReplyDraft = {
+  ticket_id: string;
+  body_html: string;
+  attachments: Attachment[];
+  updated_at: string;
+  schedule?: { send_at: string; cc: string[]; bcc: string[]; status: TicketStatus | null; mailbox_id: string } | null;
+  /** Why the scheduled reply did not go out, or empty. */
+  send_error?: ScheduledReplyError | "";
+};
+
+/** Why a scheduled reply did not go out (contracts/api.md "Reply drafts"). */
+export type ScheduledReplyError = "merged" | "not_visible" | "cannot_send_from" | "member_gone" | "refused" | "failed";
 
 /** Ollie's suggested reply on an email ticket (contracts/agent.md "Email"). */
 export type SuggestedReply = {
@@ -2451,7 +2883,7 @@ export type BotBody = { name: string; role?: string; language?: string; look?: B
 export type BotDraft = { name?: string; role?: string; language?: string; personality?: Partial<BotPersonality> };
 
 // History imports (contracts/imports.md).
-export type ImportSource = "zendesk" | "helpscout" | "freshdesk" | "intercom" | "front" | "csv";
+export type ImportSource = "zendesk" | "helpscout" | "freescout" | "freshdesk" | "intercom" | "front" | "csv";
 export type ImportStatus = "running" | "paused" | "completed" | "failed" | "canceled" | "undoing" | "undone";
 export type ImportCounts = {
   tickets: number;
@@ -2613,7 +3045,13 @@ export type TicketVariables = { values: Record<string, string>; signature_html: 
 
 // ─── Collab: shared and private mail accounts (contracts/collab.md) ─────────
 
-export type MailAudience = { everyone: boolean; team_ids: string[]; user_ids: string[] };
+export type MailAudience = {
+  everyone: boolean;
+  team_ids: string[];
+  user_ids: string[];
+  /** On an account: people invited to the workspace who get it when they accept (pending invitations; email read-only). */
+  invited?: { id: string; email?: string }[];
+};
 export type MailAddress = { name: string; email: string };
 export type MailProvider = "google" | "microsoft" | "imap";
 export type MailTls = "tls" | "starttls";
@@ -2880,6 +3318,20 @@ export type MailThread = {
   to_address?: string | null;
   /** Its category key (contracts/collab.md "Categories"); null when its account's inbox is not split. */
   category?: string | null;
+  /** The AI draft waiting for a person (Ready for review); null otherwise. */
+  ai_draft?: MailThreadAIDraft | null;
+};
+
+export type MailThreadAIDraft = {
+  /** The id the /v1/collab/drafts routes take. */
+  draft_id: string;
+  /** The AI client's name ("AI draft by <name>"). */
+  drafted_by: string;
+  /** Its first lines. */
+  snippet: string;
+  to: MailAddress[];
+  /** Its AI draft record (feedback names it once the draft is discarded); null when none was kept. */
+  record_id: string | null;
 };
 
 export type MailAttachment = {
@@ -2948,7 +3400,7 @@ export type AIDraftFeedbackReason = "wrong_facts" | "wrong_tone" | "missing_info
 
 export type AIDraftFeedbackBody = {
   reason: AIDraftFeedbackReason;
-  /** At most 1,000 characters. */
+  /** At most 2,000 characters. */
   note?: string;
   /** Sanitized like mail. */
   better_answer_html?: string;
@@ -3012,6 +3464,8 @@ export type MailThreadDetail = {
   can_act: boolean;
   /** The ticket it answered or was answered from, when you see it (contracts/collab.md "Answering tickets"). */
   ticket?: { id: string; number: number; subject: string } | null;
+  /** AI drafts discarded, replaced or abandoned and gone, oldest first (contracts/collab.md "AI draft outcomes"). */
+  unused_ai_drafts?: (AIDraftRef & { outcome_at: string })[];
 };
 
 /** One address across the conversations you see (contracts/collab.md "People"). */
@@ -3044,7 +3498,7 @@ export type CollabStatus = {
   storage: CollabStorage;
 };
 
-export type SidebarSectionId = "favorites" | "mail" | "inbox" | "teams" | "views" | "workspace";
+export type SidebarSectionId = "favorites" | "mail" | "inbox" | "teams" | "views" | "pages" | "workspace";
 export type SidebarPinKind = "box" | "folder" | "account" | "view" | "team" | "ticket_folder" | "view_section";
 export type SidebarPin = { kind: SidebarPinKind; id: string };
 
@@ -3070,12 +3524,29 @@ export type SidebarPrefs = {
   mail_tabs: string[];
   /** Pins the sidebar added once by itself ("box:inbox": All inboxes, at a second account), so one unpinned stays so. */
   auto_pins: string[];
+  /** The member's own sections, placed in `order` as "custom:<id>": rows of anything the workspace offers. */
+  sections: SidebarSection[];
+  /** The member's order of a built-in section's rows ("inbox", "mail", "teams", "workspace"), as row keys spelled like `hidden`'s. Default {}. */
+  row_order: Record<string, string[]>;
+  /** The member's own labels: "section:<id>" for a built-in section, a row key as in `hidden`. Default {}. */
+  names: Record<string, string>;
+  /** The member's own emoji, keyed like `names`. Default {}. */
+  icons: Record<string, string>;
+  /** The red row on top of the ticket inbox while visitors wait in live chat with nobody on it. Default false. */
+  show_waiting_chats: boolean;
 };
+
+/** A row of a member's own section: a Space row of this workspace. */
+export type SidebarItem = Omit<SpaceItem, "workspace_id" | "kind"> & { kind: Exclude<SpaceItemKind, "section" | "everywhere"> };
+
+/** One of a member's own sidebar sections: at most 20, 60 rows each, 300 in all. */
+export type SidebarSection = { id: string; title: string; collapsed: boolean; icon?: string; items: SidebarItem[] };
 
 /** unread / total / none for mail rows; count / awaiting / urgent / overdue / none for ticket rows, and open for team rows. */
 export type SidebarBadge = "unread" | "total" | "count" | "awaiting" | "urgent" | "overdue" | "open" | "none";
 
-export type MailBox = "inbox" | "unread" | "starred" | "sent" | "drafts" | "archive" | "trash" | "spam" | "all" | "shared" | "assigned" | "needs_action" | "snoozed";
+/** ai_review: Ready for review, conversations in an inbox with an AI draft waiting for a person. */
+export type MailBox = "inbox" | "unread" | "starred" | "sent" | "drafts" | "archive" | "trash" | "spam" | "all" | "shared" | "assigned" | "needs_action" | "snoozed" | "ai_review";
 
 export type MailThreadAction =
   | "read"
@@ -3096,8 +3567,8 @@ export type MailThreadAction =
   | "snooze";
 
 export type MailCounts = {
-  /** Unread conversations; assigned, shared, needs_action and snoozed: open ones. */
-  boxes: { inbox: number; unread: number; shared: number; assigned: number; drafts: number; needs_action: number; snoozed?: number };
+  /** Unread conversations; assigned, shared, needs_action, snoozed and ai_review: open ones; spam: unread ones in spam. */
+  boxes: { inbox: number; unread: number; shared: number; assigned: number; drafts: number; needs_action: number; snoozed?: number; ai_review?: number; spam?: number };
   accounts: Record<string, number>;
   folders: Record<string, number>;
   /** By account with aliases, then address (its own included): unread conversations in its inbox with it on a message; missing = 0. */
@@ -3106,6 +3577,10 @@ export type MailCounts = {
   assigned: Record<string, number>;
   /** By split account, then category key (primary included): unread conversations in its inbox; missing = 0. */
   categories?: Record<string, Record<string, number>>;
+  /** boxes.ai_review by account; only accounts with some. */
+  ai_review?: Record<string, number>;
+  /** boxes.spam by account: unread conversations in spam; only accounts with some (contracts/collab.md "Spam beside Needs action"). */
+  spam?: Record<string, number>;
 };
 
 /** `collab.changed` event data. */
@@ -3120,6 +3595,8 @@ export type WorkspacePrefs = {
   updated_at?: string;
 };
 export type WorkspacePrefsInput = Partial<Pick<WorkspacePrefs, "order" | "hidden">>;
+/** The keys a person chose for the app's shortcuts: id to keys, or null for one turned off (contracts/api.md "Keyboard shortcuts"). */
+export type ShortcutKeys = { bindings: Record<string, string | null> };
 export type WorkspaceOverview = {
   id: string;
   name: string;
@@ -3139,7 +3616,7 @@ export type WorkspaceOverview = {
 export type SpaceColor = "grey" | "blue" | "violet" | "teal" | "green" | "amber" | "red" | "pink";
 
 /** What a Space row names: a whole built-in section, or one row of a workspace. */
-export type SpaceItemKind = "section" | "ticket_folder" | "team" | "view" | "box" | "account" | "folder" | "page" | "everywhere";
+export type SpaceItemKind = "section" | "ticket_folder" | "team" | "view" | "box" | "account" | "folder" | "page" | "wiki_page" | "wiki_space" | "mailbox" | "everywhere";
 
 export type SpaceItem = {
   /** A workspace the user is a member of; "" for an everywhere row (it spans them all). */
@@ -3151,6 +3628,8 @@ export type SpaceItem = {
   name?: string;
   /** The number beside the row; left out: the row's default. */
   badge?: SidebarBadge;
+  /** One emoji in place of the row's own icon. */
+  icon?: string;
 };
 
 export type SpaceSection = {
@@ -3159,6 +3638,8 @@ export type SpaceSection = {
   /** 0..40 characters; "" shows no header. */
   title: string;
   collapsed: boolean;
+  /** One emoji beside the title. */
+  icon?: string;
   /** At most 60; at most 300 across the Space. */
   items: SpaceItem[];
 };

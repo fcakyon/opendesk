@@ -19,10 +19,15 @@ import (
 func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	// Every route tagged Tickets or Reports answers feature_disabled while the workspace has Tickets off.
 	api.UseMiddleware(httpx.TicketsGate(d.DB.Pool, func(op *huma.Operation) bool { return httpx.HasTag(op, "Tickets") || httpx.HasTag(op, "Reports") }))
+	registerChatAssigner(d)
 	registerTickets(d, api)
+	registerTrash(d, api)
 	registerMessages(d, api)
 	registerDrafts(d, api)
+	registerReplyDrafts(d, api)
+	registerScheduledReplies(d, api)
 	registerTyping(d, api)
+	registerVisitorPresence(d, api)
 	registerThreads(d, api)
 	registerTemplates(d, api)
 	registerCSAT(d, api)
@@ -36,11 +41,13 @@ func Register(d *deps.Deps, api huma.API, r chi.Router) {
 
 // RegisterWorkers adds the ticket trigger and periodic workers.
 func RegisterWorkers(d *deps.Deps, w *river.Workers) {
+	registerChatAssigner(d) // the answer bot hands over in workers too
 	river.AddWorker(w, &TriggerWorker{D: d})
 	river.AddWorker(w, &SLAScanWorker{D: d})
 	river.AddWorker(w, &SnoozeWakeWorker{D: d})
 	river.AddWorker(w, &AutoCloseWorker{D: d})
 	river.AddWorker(w, &PurgeAttachmentsWorker{D: d})
+	river.AddWorker(w, &ScheduledReplyWorker{D: d})
 }
 
 // Periodic returns the scheduled helpdesk jobs.

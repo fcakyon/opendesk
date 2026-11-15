@@ -627,6 +627,7 @@ function contact(ws: WsData, name: string, email: string, language: string, note
   const c: Contact = {
     id: uuid(),
     email,
+    emails: [],
     name,
     phone: "",
     avatar_url: null,

@@ -5,7 +5,9 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { Lock, RefreshCw, Users } from "lucide-react";
+import { Inbox, Lock, RefreshCw, Users } from "lucide-react";
+import { useCanHandOver } from "@/components/tickets/inboxes/handOver";
+import { quickAdd } from "@/app/quickAdd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BackLink, Row, Section, SettingsPage } from "@/components/layout";
@@ -65,7 +67,9 @@ const imapOf = (a: MailAccount): ImapForm => ({
   smtp_password: "",
 });
 
-const sameAudience = (a: MailAudience, b: MailAudience) => a.everyone === b.everyone && a.team_ids.join() === b.team_ids.join() && a.user_ids.join() === b.user_ids.join();
+const invitedIds = (a: MailAudience) => (a.invited ?? []).map((i) => i.id).join();
+const sameAudience = (a: MailAudience, b: MailAudience) =>
+  a.everyone === b.everyone && a.team_ids.join() === b.team_ids.join() && a.user_ids.join() === b.user_ids.join() && invitedIds(a) === invitedIds(b);
 
 export default function MailAccountDetail() {
   const { t } = useTranslation("collab");
@@ -78,6 +82,8 @@ export default function MailAccountDetail() {
   const collab = useCollab();
   const { data: accounts, isLoading } = useSettingsAccounts();
   const account = accounts?.find((a) => a.id === accountId);
+  const handOver = useCanHandOver(account);
+  const { t: tInbox } = useTranslation("inbox");
   const [form, setForm] = useState<Form | null>(null);
   const [imap, setImap] = useState<ImapForm | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -95,6 +101,8 @@ export default function MailAccountDetail() {
   // Whether the person changed the signature: only then does a save send it, so opening
   // and saving other settings never writes a signature back to Gmail.
   const [sigEdited, setSigEdited] = useState(false);
+  // Turning handling on can also start from the inbox now: off unless chosen, each time (GH#430).
+  const [markInbox, setMarkInbox] = useState(false);
   useEffect(() => {
     const prev = lastBase.current;
     lastBase.current = base;
@@ -118,6 +126,8 @@ export default function MailAccountDetail() {
     if (sigEdited && form.signature_html !== base.signature_html) p.signature_html = form.signature_html;
     if (form.visibility !== base.visibility) p.visibility = form.visibility;
     if (form.handling_enabled !== base.handling_enabled) p.handling_enabled = form.handling_enabled;
+    // Turning handling on: start from the inbox now only when chosen (GH#430).
+    if (p.handling_enabled && markInbox) p.mark_inbox_needs_action = true;
     if (form.reply_all !== base.reply_all) p.reply_all = form.reply_all;
     const aud = form.visibility === "shared" ? (form.shared_with.everyone ? { everyone: true, team_ids: [], user_ids: [] } : form.shared_with) : { everyone: false, team_ids: [], user_ids: [] };
     if (form.visibility === "shared" && (p.visibility || !sameAudience(aud, base.shared_with))) p.shared_with = aud;
@@ -130,9 +140,10 @@ export default function MailAccountDetail() {
       if (Object.keys(changed).length) p.imap = changed as CollabAccountPatch["imap"];
     }
     return p;
-  }, [form, base, account, imap, imapBase, sigEdited]);
+  }, [form, base, account, imap, imapBase, sigEdited, markInbox]);
   const dirty = Object.keys(patch).length > 0;
-  const audienceOk = !form || form.visibility === "private" || !audienceIsEmpty(form.shared_with);
+  // Shared with no one yet is allowed (contracts/collab.md "Who sees what"); the page says so.
+  const nobodyYet = !!form && form.visibility === "shared" && audienceIsEmpty(form.shared_with);
   const imapOk = !imap || account?.provider !== "imap" || imapValid(imap, false);
 
   const save = useMutation({
@@ -216,9 +227,16 @@ export default function MailAccountDetail() {
       back={<BackLink to="/settings/mail-accounts">{t("detail.back")}</BackLink>}
       actions={
         manage ? (
-          <Button variant="primary" disabled={!dirty || !audienceOk || !imapOk || !!fromNameProblem(form.display_name, COLLAB_FROM_VARS)} loading={save.isPending} onClick={() => save.mutate()}>
+          <>
+          {handOver && (
+            <Button icon={<Inbox className="size-3.5" />} onClick={() => quickAdd.inbox({ accountId: account.id })}>
+              {tInbox("inboxes.useForTickets")}
+            </Button>
+          )}
+          <Button variant="primary" disabled={!dirty || !imapOk || !!fromNameProblem(form.display_name, COLLAB_FROM_VARS)} loading={save.isPending} onClick={() => save.mutate()}>
             {t("detail.save")}
           </Button>
+          </>
         ) : undefined
       }
     >
@@ -329,7 +347,7 @@ export default function MailAccountDetail() {
           >
             <SharedAudience value={form.shared_with} onChange={(shared_with) => set({ shared_with })} disabled={!manage} exclude={account.owner?.id} />
           </ChoiceCard>
-          {!audienceOk && <p className="text-[11.5px] text-danger-fg">{t("audience.needSomeone")}</p>}
+          {nobodyYet && <p className="text-[11.5px] text-fg-3">{t("audience.nobodyYetHere")}</p>}
         </div>
       </Section>
 
@@ -342,8 +360,21 @@ export default function MailAccountDetail() {
       {form.visibility === "shared" && (
         <Section title={t("detail.handling.title")} description={t("detail.handling.hint")}>
           <Row label={t("detail.handling.enabled")} description={t("detail.handling.enabledHint")} htmlFor="handling-enabled">
-            <Switch id="handling-enabled" checked={form.handling_enabled} disabled={!manage} onCheckedChange={(handling_enabled) => set({ handling_enabled })} />
+            <Switch
+              id="handling-enabled"
+              checked={form.handling_enabled}
+              disabled={!manage}
+              onCheckedChange={(handling_enabled) => {
+                set({ handling_enabled });
+                setMarkInbox(false);
+              }}
+            />
           </Row>
+          {form.handling_enabled && !base?.handling_enabled && (
+            <Row label={t("detail.handling.markInbox")} description={t("detail.handling.markInboxHint")} htmlFor="handling-mark-inbox">
+              <Switch id="handling-mark-inbox" checked={markInbox} disabled={!manage} onCheckedChange={setMarkInbox} />
+            </Row>
+          )}
         </Section>
       )}
 

@@ -23,13 +23,14 @@ afterEach(async () => {
 
 const seen: (ViewIcon | null)[] = [];
 
-function Harness({ initial, name }: { initial: ViewIcon | null; name: string }) {
+function Harness({ initial, name, section }: { initial: ViewIcon | null; name: string; section?: boolean }) {
   const [icon, setIcon] = useState(initial);
   return (
     <TooltipProvider>
       <ViewIconField
         value={icon}
         name={name}
+        section={section}
         onChange={(i) => {
           seen.push(i);
           setIcon(i);
@@ -39,12 +40,12 @@ function Harness({ initial, name }: { initial: ViewIcon | null; name: string }) 
   );
 }
 
-async function render(initial: ViewIcon | null, name = "Billing queue") {
+async function render(initial: ViewIcon | null, name = "Billing queue", section = false) {
   seen.length = 0;
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
-  await act(async () => root.render(<Harness initial={initial} name={name} />));
+  await act(async () => root.render(<Harness initial={initial} name={name} section={section} />));
   const q = <T extends Element = HTMLButtonElement>(sel: string) => document.querySelector<T>(sel);
   const button = (label: string) => q(`button[aria-label="${label}"]`);
   // By hand: jsdom's selectors miss attribute values outside the BMP, such as most emoji.
@@ -132,5 +133,23 @@ it("opens on the tab of the view's icon and speaks French", async () => {
   await open();
   expect(byText("Texte").getAttribute("aria-checked")).toBe("true");
   expect(byText("Aucune").disabled).toBe(false);
+  await unmount();
+});
+
+it("shows a section as its heading, with no icon until one is picked, and keeps the plain layers icon", async () => {
+  const { host, button, open, previews, unmount } = await render(null, "After sales", true);
+  expect(host.textContent).toContain("for everyone with a view in it");
+  expect(previews()[0].textContent).toBe("After sales");
+  expect(previews()[0].className).toContain("font-semibold");
+  expect(previews()[0].querySelector("[data-view-icon]")).toBeNull();
+  await open();
+  // A colour alone picks the layers icon: a section has no default one to fall back to.
+  await act(async () => button("Teal")!.click());
+  await act(async () => button("Teal")!.click());
+  expect(seen).toEqual([
+    { kind: "icon", value: "layers", color: "teal" },
+    { kind: "icon", value: "layers", color: null },
+  ]);
+  expect(previews().at(-1)!.querySelector('[data-view-icon="icon"]')).not.toBeNull();
   await unmount();
 });
