@@ -47,8 +47,9 @@ LABEL org.opencontainers.image.title="opendesk-realtime" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT}"
 
+# zlib1g is named for its DSA-6613-1 fix, which the snapshot lacks. Drop it once RUNTIME_DEBIAN_DATE includes it.
 RUN apt-get update -y \
- && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 libsctp1 locales ca-certificates tini \
+ && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 libsctp1 locales ca-certificates tini zlib1g \
  && rm -rf /var/lib/apt/lists/* \
  && sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen \
  && groupadd --system --gid 10001 realtime \
