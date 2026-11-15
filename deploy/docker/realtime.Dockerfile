@@ -15,6 +15,8 @@ ARG ELIXIR_VERSION=1.20.4
 ARG OTP_VERSION=29.1.1
 ARG DEBIAN_RELEASE=trixie
 ARG DEBIAN_DATE=20261005
+# The runtime stage is the one that ships, so it takes the newest snapshot (hexpm/elixir lags it).
+ARG RUNTIME_DEBIAN_DATE=20261104
 
 FROM hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_RELEASE}-${DEBIAN_DATE}-slim AS build
 ARG RELEASE_NAME=realtime
@@ -36,7 +38,7 @@ RUN mix deps.compile
 COPY realtime/ ./
 RUN mix compile && mix release "${RELEASE_NAME}" --overwrite
 
-FROM debian:${DEBIAN_RELEASE}-${DEBIAN_DATE}-slim
+FROM debian:${DEBIAN_RELEASE}-${RUNTIME_DEBIAN_DATE}-slim
 ARG RELEASE_NAME=realtime
 ARG VERSION=dev COMMIT=none
 LABEL org.opencontainers.image.title="opendesk-realtime" \
