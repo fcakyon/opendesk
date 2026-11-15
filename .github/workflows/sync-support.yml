@@ -1,0 +1,36 @@
+name: Sync support
+# Reusable: a product repo calls this from `on: push: branches: [main]` when its support/ files change.
+# It publishes support/knowledge.txt and support/instructions.txt to the product's bot.
+on:
+  workflow_call:
+    inputs:
+      test:
+        description: Also run support/questions.json through the bot and print the answers
+        type: boolean
+        default: false
+    secrets:
+      OPENDESK_API_KEY:
+        required: true
+permissions:
+  contents: read
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: sync-support-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: fcakyon/opendesk
+          ref: fatih/openship
+          path: .opendesk
+          sparse-checkout: scripts/sync-support.mjs
+          persist-credentials: false
+      - run: node .opendesk/scripts/sync-support.mjs . ${{ inputs.test && '--test' || '' }}
+        env:
+          OPENDESK_API_KEY: ${{ secrets.OPENDESK_API_KEY }}
