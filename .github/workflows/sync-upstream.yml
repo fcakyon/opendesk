@@ -1,5 +1,8 @@
 name: Sync Upstream
 
+# Scheduled workflows run from the default branch, so this lives on fatih/openship.
+# It fast-forwards main to useopendesk/opendesk:main and never adds commits to main.
+
 on:
   schedule:
     - cron: "17 3 * * *"
@@ -19,32 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
           fetch-depth: 0
           token: ${{ secrets.UPSTREAM_SYNC_TOKEN || github.token }}
 
-      - name: Sync main with useopendesk/opendesk
-        env:
-          HAS_PAT: ${{ secrets.UPSTREAM_SYNC_TOKEN != '' }}
+      - name: Fast-forward main to useopendesk/opendesk
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git remote add upstream https://github.com/useopendesk/opendesk.git
-          git fetch upstream main
-
-          behind=$(git rev-list --count HEAD..upstream/main)
-          if [ "$behind" -eq 0 ]; then
-            echo "main is already up to date with useopendesk/opendesk:main."
-            exit 0
-          fi
-
-          echo "Merging $behind upstream commit(s) into main..."
-          git merge --no-edit -m "chore: merge upstream main into main" upstream/main
-
-          if ! git push origin HEAD:main; then
-            if [ "$HAS_PAT" != "true" ] && ! git diff --quiet HEAD~1 HEAD -- .github/workflows/; then
-              echo "::error::Upstream updated .github/workflows/*, which GITHUB_TOKEN cannot push without workflow scope. Add a UPSTREAM_SYNC_TOKEN repo secret (repo + workflow scopes) or run 'gh repo sync fcakyon/opendesk -b main'."
-            fi
+          git fetch https://github.com/useopendesk/opendesk.git main
+          git push origin FETCH_HEAD:refs/heads/main || {
+            echo "::error::Push failed. If upstream changed .github/workflows/*, add an UPSTREAM_SYNC_TOKEN repo secret (repo + workflow scopes). Otherwise main has diverged from upstream."
             exit 1
-          fi
+          }
