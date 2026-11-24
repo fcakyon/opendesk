@@ -1,13 +1,8 @@
 name: Sync support
 # Reusable: a product repo calls this from `on: push: branches: [main]` when its support/ files change.
-# It publishes support/knowledge.txt and support/instructions.txt to the product's bot.
+# It publishes support/knowledge.txt and support/instructions.txt to the product's bot, and a manual run also tests support/questions.json.
 on:
   workflow_call:
-    inputs:
-      test:
-        description: Also run support/questions.json through the bot and print the answers
-        type: boolean
-        default: false
     secrets:
       OPENDESK_API_KEY:
         required: true
@@ -31,6 +26,6 @@ jobs:
           path: .opendesk
           sparse-checkout: scripts/sync-support.mjs
           persist-credentials: false
-      - run: node .opendesk/scripts/sync-support.mjs . ${{ inputs.test && '--test' || '' }}
+      - run: node .opendesk/scripts/sync-support.mjs . ${{ github.event_name == 'workflow_dispatch' && '--test' || '' }}
         env:
           OPENDESK_API_KEY: ${{ secrets.OPENDESK_API_KEY }}
