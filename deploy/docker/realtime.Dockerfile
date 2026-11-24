@@ -8,7 +8,7 @@
 # of them the same way. Erlang has no cross compiler: multi-arch images are
 # built on a native runner per architecture (see release.yml).
 #
-# The runtime Debian release must match the builder's, or the crypto NIF fails
+# The runtime Debian release (not its snapshot date) must match the builder's, or the crypto NIF fails
 # to load against a different libssl.
 
 ARG ELIXIR_VERSION=1.20.4

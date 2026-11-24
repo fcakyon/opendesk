@@ -30,9 +30,11 @@ export type RichEditorProps = {
   contentClassName?: string;
   /** "compact" shows inline formatting only; "full" adds headings, quotes, code and images. */
   toolbar?: "none" | "compact" | "full";
+  /** Before the formatting buttons: a mail composer's Send, first and on the left, as mail clients put it. */
+  toolbarStart?: ReactNode;
   toolbarEnd?: ReactNode;
-  /** The formatting buttons fold into one, to leave the toolbar's end the room it needs. */
-  toolbarFolded?: boolean;
+  /** Fold the formatting buttons into one, optionally only in a narrow toolbar. */
+  toolbarFolded?: boolean | "responsive";
   /** Drawn under what is written, above the toolbar: what goes out with it (a reply's signature). */
   afterContent?: ReactNode;
   extensions?: Extensions;
@@ -53,6 +55,7 @@ export const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function
     className,
     contentClassName,
     toolbar = "compact",
+    toolbarStart,
     toolbarEnd,
     toolbarFolded,
     afterContent,
@@ -147,7 +150,7 @@ export const RichEditor = forwardRef<RichEditorHandle, RichEditorProps>(function
       <EditorContent editor={editor} className="min-h-0 flex-1 overflow-y-auto" />
       {afterContent}
       {toolbar !== "none" && editor && (
-        <Toolbar editor={editor} full={toolbar === "full"} onImage={onImage} end={toolbarEnd} folded={toolbarFolded} />
+        <Toolbar editor={editor} full={toolbar === "full"} onImage={onImage} start={toolbarStart} end={toolbarEnd} folded={toolbarFolded} />
       )}
     </div>
   );
@@ -173,7 +176,21 @@ function TB({ label, active, onClick, children, shortcut }: { label: string; act
   );
 }
 
-export function Toolbar({ editor, full, onImage, end, folded }: { editor: Editor; full?: boolean; onImage?: () => void; end?: ReactNode; folded?: boolean }) {
+export function Toolbar({
+  editor,
+  full,
+  onImage,
+  start,
+  end,
+  folded,
+}: {
+  editor: Editor;
+  full?: boolean;
+  onImage?: () => void;
+  start?: ReactNode;
+  end?: ReactNode;
+  folded?: RichEditorProps["toolbarFolded"];
+}) {
   const { t: ui } = useTranslation("ui");
   const formatting = (
     <>
@@ -227,8 +244,19 @@ export function Toolbar({ editor, full, onImage, end, folded }: { editor: Editor
     </>
   );
   return (
-    <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
-      {folded ? <FoldedFormatting>{formatting}</FoldedFormatting> : formatting}
+    <div className="@container flex items-center gap-0.5 px-1.5 pb-1.5">
+      {start && (
+        <>
+          <div className="flex items-center gap-1">{start}</div>
+          <span aria-hidden className="mx-1.5 h-4 w-px bg-line" />
+        </>
+      )}
+      {folded === "responsive" ? (
+        <>
+          <div className="min-w-7 @min-[420px]:hidden"><FoldedFormatting>{formatting}</FoldedFormatting></div>
+          <div className="hidden items-center gap-0.5 @min-[420px]:flex">{formatting}</div>
+        </>
+      ) : folded ? <FoldedFormatting>{formatting}</FoldedFormatting> : formatting}
       <div className="ml-auto flex items-center gap-1">{end}</div>
     </div>
   );

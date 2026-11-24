@@ -3,6 +3,7 @@
 import type { Attachment, Channel, Message, Priority, ReportsAgents, ReportsOverview, Severity, SuggestionField, Thread, Ticket, TicketPatch, TicketStatus } from "@/lib/api/types";
 import { chatReachable, contactRef, db, me, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
+import { rawMessage, sourceFile } from "../mailSource";
 import { HttpError, del, forbidden, get, invalid, notFound, paginate, patch, post, required, respond, s, strArr, type Ctx } from "../router";
 import { searchWiki } from "./wiki";
 import { canCreateLabels, checkRequiredOnSolve, mergeFields } from "../labels";
@@ -534,6 +535,25 @@ export function registerTickets() {
     };
   });
 
+  // Show original: only an email that arrived at a mailbox has a source.
+  const sourceOf = (ctx: Ctx) => {
+    const role = ctx.ws.members.find((m) => m.user_id === db.meId)?.role;
+    if (role === "viewer") throw forbidden("Viewers can't read a message's source.");
+    const m = ctx.ws.messages.find((x) => x.id === ctx.params.id && x.direction === "inbound" && x.kind === "reply" && x.mailbox_id && !x.deleted_at);
+    const t = m && ctx.ws.tickets.find((x) => x.id === m.ticket_id);
+    if (!m || !t) throw notFound("Message source");
+    const raw = rawMessage({ from: m.from_email || "customer@example.com", to: ctx.ws.mailboxes.find((b) => b.id === m.mailbox_id)?.email ?? "support@margin.app", subject: m.subject || t.subject, date: m.created_at, messageId: `${m.id}@mail.example.net`, text: m.body_text || new DOMParser().parseFromString(m.body_html, "text/html").body.textContent || "" });
+    return { m, t, raw };
+  };
+  get("/v1/messages/:id/source", (ctx) => {
+    const { raw } = sourceOf(ctx);
+    return { source: raw, size_bytes: raw.length, truncated: false };
+  });
+  get("/v1/messages/:id/source.eml", (ctx) => {
+    const { m, t, raw } = sourceOf(ctx);
+    return sourceFile(raw, m.subject || t.subject);
+  });
+
   get("/v1/tickets/:id/messages", (ctx) => {
     const t = ticket(ctx);
     const role = ctx.ws.members.find((m) => m.user_id === db.meId)?.role;
@@ -830,14 +850,17 @@ function reports(ctx: Ctx): ReportsOverview {
       none: created - Math.round(created * 0.02) - Math.round(created * 0.07) - Math.round(created * 0.16) - Math.round(created * 0.21),
     },
     by_agent: solved
-      ? agentShares.map((share, i) => {
-          const u = db.users[i];
-          return {
-            user: { id: u.id, name: u.name, email: u.email, avatar_url: u.avatar_url },
-            solved: Math.round(solved * share),
-            first_response_p50_minutes: frp(u.id),
-          };
-        })
+      ? agentShares
+          .map((share, i) => {
+            const u = db.users[i];
+            return {
+              user: { id: u.id, name: u.name, email: u.email, avatar_url: u.avatar_url },
+              solved: Math.round(solved * share),
+              first_response_p50_minutes: frp(u.id),
+            };
+          })
+          // Personal, as the agents report: a member who is not an admin gets their own row alone.
+          .filter((a) => isAdmin(ws, db.meId) || a.user.id === db.meId)
       : [],
     by_team: teamRows,
     by_brand: brandRows,

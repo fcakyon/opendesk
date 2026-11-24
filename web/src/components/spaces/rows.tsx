@@ -20,6 +20,7 @@ import type { WaitingScope } from "@/components/tickets/useUrgentChats";
 import type { MailBox, SidebarBadge, SidebarPrefs, SidebarSectionId, WikiArea, WorkspaceOverview } from "@/lib/api/types";
 import { pageTo } from "@/lib/wiki/area";
 import { accountNumbers, allInboxNumbers, boxTabNumbers, folderNumbers, listBoxNumbers, ticketRowNumbers } from "@/lib/collab/badges";
+import { accountView, useAccountViews } from "@/lib/collab/accountView";
 import { accountName, isMailBox, isTabBox, type MailSearch } from "@/lib/collab/boxes";
 import { badgeFor, hid, pickCount, type BadgeKind, type BadgeNumbers, type MailBadge, type TicketBadge } from "@/lib/collab/sidebarPrefs";
 import { cn } from "@/lib/cn";
@@ -184,6 +185,8 @@ export type MailHere = { box: string | null; account?: string; folder?: string }
 
 /** Where the mail page is: its box, account and folder, from the URL. */
 export function useMailLocation(): MailHere {
+  // Account rows read the view each account opens on: they follow a change to it.
+  useAccountViews();
   const href = useRouterState({ select: (s) => (s.location.pathname.startsWith("/mail/") ? `${s.location.pathname}|${(s.location.search as MailSearch).account ?? ""}|${(s.location.search as MailSearch).folder ?? ""}` : "") });
   if (!href) return { box: null };
   const [path, account, folder] = href.split("|");
@@ -326,13 +329,13 @@ export function buildRow(item: { kind: string; id: string }, d: WorkspaceData, c
       const nums =
         box === "inbox"
           ? allInboxNumbers(shownAccounts, d.folders, d.mailCounts)
-          : box === "shared" || box === "assigned"
+          : box === "shared" || box === "assigned" || box === "mentions"
             ? listBoxNumbers(box, d.mailCounts)
             : isTabBox(box)
               ? boxTabNumbers(box, accounts, d.folders, d.mailCounts, true)
               : {};
-      // Inbox, Unread, Shared and Assigned showed their count before anyone chose; the other boxes nothing.
-      const fallback = box === "inbox" || box === "shared" || box === "assigned" || box === "unread" ? undefined : "none";
+      // Inbox, Unread, Shared, Assigned and Mentions show their count before anyone chooses; the other boxes nothing.
+      const fallback = box === "inbox" || box === "shared" || box === "assigned" || box === "mentions" || box === "unread" ? undefined : "none";
       return {
         key,
         label: box === "inbox" ? ctx.labels.allInboxes : ctx.labels.box(box),
@@ -354,8 +357,9 @@ export function buildRow(item: { kind: string; id: string }, d: WorkspaceData, c
         icon: dotIcon(<AccountDot color={a.color} className="size-2.5" />),
         tag: <AccountTags account={a} />,
         badge: { kind: "mail", sections: [...via, "mail"], nums: accountNumbers(a, d.folders[a.id], d.mailCounts) },
-        link: { kind: "mail", box: "inbox", account: a.id },
-        active: !!here && here.box === "inbox" && here.account === a.id && !here.folder,
+        // Inbox or Unread, whichever was used last for the account (GH#523).
+        link: { kind: "mail", box: accountView(a.id, here), account: a.id },
+        active: !!here && here.box === accountView(a.id, here) && here.account === a.id && !here.folder,
         railDot: "unread",
       };
     }
@@ -379,6 +383,11 @@ export function buildRow(item: { kind: string; id: string }, d: WorkspaceData, c
     default:
       return null;
   }
+}
+
+/** The number beside a row: mail and team rows show one above zero; inbox folders and views their count, zero too. */
+export function rowCount(model: RowModel, n: number | undefined): number | undefined {
+  return n !== undefined && (model.badge?.kind === "ticket" || n > 0) ? n : undefined;
 }
 
 /** The number a row shows: its own choice in the Space (`own`), else the workspace's choice for it or its sections, else its default. */
@@ -577,8 +586,7 @@ export function NavItemRow({
   const name = label || prefs.names[model.key] || model.label;
   const glyph = emoji ?? prefs.icons[model.key];
   const { n, choice } = rowNumber(model, prefs, own);
-  // Mail and team rows show a number above zero; inbox folders and views show their count, zero too.
-  const count = n !== undefined && (model.badge?.kind === "ticket" || n > 0) ? n : undefined;
+  const count = rowCount(model, n);
   const dot = rail && (model.railDot === "unread" ? choice !== "none" && !!model.badge?.nums.unread : model.railDot === "count" ? (n ?? 0) > 0 : false);
   const link = (
     <RowAnchor

@@ -135,6 +135,10 @@ The **⋯** menu holds the rest: **Merge into another ticket**, **Copy link**, *
 
 **Delete ticket** (here or from the bulk bar) takes the ticket out of every list, view and search. It is not gone: an admin finds it in **Settings → Trash**, with who deleted it and when, and **Restore** brings it back as it was, conversation included. A ticket that was merged into another stays there; its conversation is on the ticket it went into.
 
+## See an email's source
+
+Sometimes you need an email's headers: who really sent it, which servers it passed through, whether it was authenticated. On a message a customer emailed, open the message's **More** menu (the dots) and choose **View source**. opendesk shows the raw message as the mailbox received it, with its headers first. **Copy source** copies it, and **Download .eml** saves the whole message, with its attachments, to open in a mail app. Only agents and above can see it, only for email that arrived at a mailbox (a reply you sent from opendesk, a chat or a portal message has none), and a message that was purged loses its source with it. In a shared inbox, open the details under the sender's name and choose **View source**.
+
 ## Print or save as PDF
 
 You can print a ticket's conversation or a single message, or keep it as a PDF file. Any member can do this, viewers included.
@@ -178,6 +182,8 @@ The **filter** button at the top of the list narrows it by priority, severity, c
 The **sort** button beside it orders the list by last activity, creation date, priority, severity, SLA due or a custom field, newest or oldest first. Each folder, view and team inbox keeps the order you chose for it: open it again from the sidebar or a shortcut and it comes back the same way, until you choose **Last activity**, **Newest first** again. It applies to the browser you set it in; a link that names a sort opens in that one.
 
 Press <kbd>mod</kbd> <kbd>k</kbd>, or click **Search** at the top, to search everything at once: tickets, contacts, articles and settings.
+
+Settings are searched down to each section and field, by any word in their names and hints, so *time zone*, *2fa* or *sidebar* finds the setting itself. Choose one and its page opens with that setting highlighted. **Search settings**, at the top of the settings menu, does the same. You only see the settings you can change. To find the matching pages of these docs too, ask your question with **Ask AI** (<kbd>tab</kbd>).
 
 <Screenshot src="/guides/inbox/search" alt="The command menu searching for fingerprint, with a matching ticket listed" />
 

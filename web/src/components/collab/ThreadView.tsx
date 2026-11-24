@@ -1,7 +1,9 @@
 // A conversation: its subject, folders and labels, who it is shared with and
 // assigned to, the actions (each mirrored at the provider), the messages oldest
 // first with the older ones folded, the team's comments, and the reply composer.
-// Writing a comment and the reply buttons are pinned under it, whatever its length.
+// Writing a comment and the reply buttons are pinned under it, whatever its length; while a
+// reply is written the reply buttons step aside for it, and the comment entry and count stay,
+// with feedback on the AI draft being written beside them.
 // Beside it, who it is with: the people panel (] shows and hides it).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,6 +22,8 @@ import {
   Mail,
   MailOpen,
   MessageSquare,
+  MessageSquarePlus,
+  MessageSquareText,
   MoreHorizontal,
   PanelRight,
   RefreshCw,
@@ -28,12 +32,14 @@ import {
   Settings,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
   Star,
   Tag,
   Ticket,
   Trash2,
   UserPlus,
   Users,
+  X,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -47,9 +53,11 @@ import { compose } from "@/lib/collab/compose";
 import { accountCategories, PRIMARY } from "@/lib/collab/categories";
 import { useReadOnOpen } from "@/lib/collab/useReadOnOpen";
 import { useMailAccounts } from "@/lib/collab/hooks";
+import { useSyncNow } from "@/lib/collab/syncNow";
 import { hasReplyAll, replyTarget, type ComposeMode } from "@/lib/collab/recipients";
 import { identitySignature, ownEmails, replyIdentity } from "@/lib/collab/identities";
 import { cn } from "@/lib/cn";
+import { AI_TONE, tone } from "@/lib/tones";
 import { springs } from "@/lib/motion";
 import { qk, q } from "@/lib/queries";
 import { usePageCrumb } from "@/app/useBreadcrumbs";
@@ -59,6 +67,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Segmented } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/tooltip";
 import { AIDraftFeedbackDialog, UnusedAIDraft } from "./AIDraftFeedback";
@@ -67,9 +76,11 @@ import { CommentBar, Comments, Count, type CommentBarHandle } from "./Comments";
 import { DraftRow } from "./DraftRow";
 import { draftFromMessage, MailComposer, startDraft, useForwardBlock } from "./MailComposer";
 import { MailMessageItem } from "./MailMessageItem";
+import { useHeldSends, useUndoneSends } from "./outbox";
 import { PersonPanel } from "./PersonPanel";
 import { AssignPicker, LabelsPicker, MovePicker, type MoveTarget } from "./pickers";
 import { ShareDialog } from "./ShareDialog";
+import { SnoozeUnavailable } from "./SnoozeUnavailable";
 import { SnoozeMenu } from "@/components/tickets/detail/SnoozeMenu";
 import { weekdayClock } from "@/lib/format";
 
@@ -180,9 +191,11 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
   const [commentThread, setCommentThread] = useState<string | null>(null);
   // The stored draft the composer continues, and the draft it saves to (hidden from the conversation while open).
   const [editing, setEditing] = useState<MailMessage | null>(null);
-  // An AI draft just discarded: feedback on it, offered from the toast, never required.
+  // An AI draft just discarded: feedback on it, asked at once, never required.
   const [discardedAI, setDiscardedAI] = useState<AIDraftRef | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  // Feedback on the AI draft open in the composer, from the bar under it.
+  const [composerFeedback, setComposerFeedback] = useState(false);
   const [composerDraftId, setComposerDraftId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // The newest message is open unless folded by hand.
@@ -260,11 +273,17 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
   // current conversation: a copy kept from an earlier visit can predate the new mail
   // that made it unread, so a stale copy waits for its refetch.
   const current = !!detail && !isFetching && (isFetchedAfterMount || !isStale);
-  useReadOnOpen({ detail, current, enabled: markReadOnOpen, onAction });
+  // Opened on a waiting AI draft, it stays unread until a reply is sent (GH#592).
+  const replied = useReadOnOpen({ detail, current, enabled: markReadOnOpen, onAction });
 
   const all = useMemo(() => detail?.messages ?? [], [detail]);
   const messages = useMemo(() => all.filter((m) => !m.draft), [all]);
-  const drafts = useMemo(() => all.filter((m) => m.draft && m.id !== composerDraftId && m.id !== editing?.id), [all, composerDraftId, editing]);
+  // A draft on hold to send (Undo send) is not shown as a draft meanwhile.
+  const heldSends = useHeldSends();
+  const drafts = useMemo(
+    () => all.filter((m) => m.draft && m.id !== composerDraftId && m.id !== editing?.id && !heldSends[m.draft_id ?? m.id] && !heldSends[m.id]),
+    [all, composerDraftId, editing, heldSends],
+  );
   const target = replyTarget(all);
   // Every address of the account (its own and its aliases): never a reply-all recipient.
   const ownEmail = useMemo(() => (detail ? ownEmails(detail.account) : []), [detail]);
@@ -315,6 +334,16 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
 
   useEffect(() => setCommentThread(null), [threadId]);
 
+  // Mail taken back with Undo send opens again here, as it was written.
+  const undone = useUndoneSends((s) => s[threadId]);
+  useEffect(() => {
+    if (!undone || !detail?.can_act) return;
+    useUndoneSends.setState((s) => Object.fromEntries(Object.entries(s).filter(([k]) => k !== threadId)), true);
+    editDraft(undone);
+    // editDraft is a fresh closure each render; the taken-back draft is what matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [undone, detail?.can_act, threadId]);
+
   // A discard that finishes after the conversation changed offers no feedback on it.
   const shownThread = useRef<string | null>(threadId);
   useEffect(() => {
@@ -351,6 +380,12 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
       ro.disconnect();
     };
   }, [isPending]);
+
+  // A comment's Reply set the reply target: the comment bar opens, or takes focus if open.
+  const replyToComment = () => {
+    setCommentThread(threadId);
+    requestAnimationFrame(() => commentBar.current?.focus());
+  };
 
   // Jumping to the comments marks them for a moment, so the eye lands there.
   const showComments = () => {
@@ -402,7 +437,31 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
     },
   });
 
+  // In or out of the member's own Mentions box, and nobody else's (contracts/collab.md "Mentions").
+  const follow = useMutation({
+    mutationFn: (on: boolean) => (on ? api.collab.threads.follow(threadId) : api.collab.threads.unfollow(threadId)),
+    onMutate: (on) => {
+      const prev = qc.getQueryData<MailThreadDetail>(qk.mailThread(threadId));
+      if (prev) qc.setQueryData<MailThreadDetail>(qk.mailThread(threadId), { ...prev, following: on });
+      return { prev };
+    },
+    onError: (e, _on, ctx) => {
+      if (ctx?.prev) qc.setQueryData(qk.mailThread(threadId), ctx.prev);
+      toast.error(e);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: qk.mailCounts });
+      void qc.invalidateQueries({ queryKey: qk.mailThreadLists });
+    },
+  });
+  const setFollowing = (on: boolean) =>
+    follow.mutate(on, {
+      onSuccess: () => (on ? toast.success(t("toast.followed")) : toast.undo(t("toast.unfollowed"), () => follow.mutate(true), t("toast.undo"))),
+    });
+
   const move = (m: MoveTarget) => onAction(m.action, { folderId: m.folderId, category: m.category, label: m.label });
+  // Shared with the list's sync button, which spins while it runs (GH#522).
+  const syncNow = useSyncNow(accounts?.find((a) => a.id === detail?.account.id));
 
 
   if (isPending) return <ThreadSkeleton />;
@@ -460,6 +519,49 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
   };
   const composerAccounts = [detail.account];
   const participants = th.participants;
+  const composing = !!(editing || composer);
+  // Replying or commenting, switched at the top of what is being written (the reply's own
+  // kind names it: Reply, Reply all, Forward). A mode switch, never an action button: Send sends.
+  // Nothing written yet (commenting): the reply it would open, the account's usual one.
+  const writing = composer ?? (editing ? "reply" : (replyModes[0] ?? "reply"));
+  const writeKind = writing === "forward" ? { icon: <Forward />, label: t("action.forward") } : writing === "reply_all" ? replyKind.reply_all : replyKind.reply;
+  const writeSwitch = (value: "reply" | "comment") => (
+    <Segmented
+      aria-label={t("thread.replyOrComment")}
+      value={value}
+      onChange={(v) => {
+        if (v === "comment") return setCommentThread(th.id);
+        setCommentThread(null);
+        if (!composing) return openComposer(replyModes[0] ?? "reply");
+        // The switch clicked goes with the comment field: the reply being written takes the focus.
+        requestAnimationFrame(() => composerRef.current?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus());
+      }}
+      options={[
+        { value: "reply", label: writeKind.label, icon: writeKind.icon },
+        { value: "comment", label: t("comments.add"), icon: <Lock /> },
+      ]}
+    />
+  );
+  // An AI draft open in the composer: its row is hidden meanwhile, so its feedback sits in
+  // the bar under it, right of the comment entry. The newest copy says whether feedback was given.
+  const composingAI = editing ? (all.find((m) => m.id === editing.id)?.ai_draft ?? editing.ai_draft) : undefined;
+  const feedbackButton = composingAI && (
+    <>
+      <Tooltip content={t("aiFeedback.description", { name: composingAI.client })}>
+        <Button size="md" variant="ghost" icon={<MessageSquareText />} onClick={() => setComposerFeedback(true)}>
+          {composingAI.has_feedback ? t("aiFeedback.edit") : t("aiFeedback.give")}
+        </Button>
+      </Tooltip>
+      <AIDraftFeedbackDialog draft={composingAI} threadId={th.id} open={composerFeedback} onOpenChange={setComposerFeedback} />
+    </>
+  );
+  const commentsButton = detail.comments.length > 0 && (
+    <Tooltip content={t("thread.showComments")}>
+      <Button size="md" variant="ghost" icon={<MessageSquare />} aria-label={t("list.comments", { count: detail.comments.length })} onClick={showComments}>
+        <Count n={detail.comments.length} className="text-[11.5px]" />
+      </Button>
+    </Tooltip>
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -532,13 +634,20 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
             <HeaderButton label={th.unread ? t("action.read") : t("action.unread")} shortcut={th.unread ? "shift i" : "shift u"} onClick={() => onAction(th.unread ? "read" : "unread", { silent: true })}>
               {th.unread ? <MailOpen /> : <Mail />}
             </HeaderButton>
-            {account?.handling_enabled && (
+            {!account?.handling_enabled ? (
+              // Always in view, so it is found where Gmail and Outlook keep it, and says why it is off (GH#532).
+              <SnoozeUnavailable accounts={account ? [account] : []} />
+            ) : (
               <>
                 <HeaderButton label={th.needs_action ? t("action.done") : t("action.needsAction")} pressed={!th.needs_action} onClick={() => onAction(th.needs_action ? "done" : "needs_action", { silent: true })}>
                   <Check />
                 </HeaderButton>
                 {/* The ticket snooze picker, as is (contracts/collab.md "Snooze"). */}
-                <SnoozeMenu onSnooze={(at) => onAction("snooze", { until: at.toISOString() })} />
+                <SnoozeMenu
+                  onSnooze={(at) => onAction("snooze", { until: at.toISOString() })}
+                  // Gmail's own snooze reaches us as an archive (GH#533): say so where it matters.
+                  note={account.provider === "google" ? t("action.snoozeGmailNote") : undefined}
+                />
                 {th.snoozed_until && (
                   <span className="mono ml-1 hidden whitespace-nowrap text-[11px] text-fg-4 sm:inline" title={t("thread.snoozedUntil", { when: weekdayClock(new Date(th.snoozed_until)) })}>
                     {weekdayClock(new Date(th.snoozed_until))}
@@ -599,6 +708,9 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
                   <MenuSeparator />
                 </>
               )}
+              <MenuItem icon={<AtSign />} onSelect={() => setFollowing(!detail.following)}>
+                {detail.following ? t("action.unfollow") : t("action.follow")}
+              </MenuItem>
               <MenuItem
                 icon={<Link2 />}
                 onSelect={() => {
@@ -609,11 +721,11 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
               </MenuItem>
               <MenuItem
                 icon={<RefreshCw />}
+                disabled={syncNow.syncing}
                 onSelect={() => {
-                  void api.collab.accounts.sync(detail.account.id).then(
-                    () => toast.info(t("toast.syncing", { name: detail.account.name || detail.account.email })),
-                    (e) => toast.error(e),
-                  );
+                  const onQueued = () => toast.info(t("toast.syncing", { name: detail.account.name || detail.account.email }));
+                  if (account) syncNow.sync(account, { onQueued, onError: (e) => toast.error(e) });
+                  else void api.collab.accounts.sync(detail.account.id).then(onQueued, (e) => toast.error(e));
                 }}
               >
                 {t("action.syncAccount")}
@@ -686,6 +798,20 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
                   {t("thread.assignedTo", { who: th.assignees.map((a) => a.name).join(", ") })}
                 </span>
               )}
+              {detail.following && (
+                <Tooltip content={t("action.unfollow")}>
+                  <button
+                    type="button"
+                    onClick={() => setFollowing(false)}
+                    aria-label={t("action.unfollow")}
+                    className="group inline-flex h-[18px] items-center gap-1 rounded-sm pl-1 pr-1 text-fg-3 outline-none hover:bg-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)]"
+                  >
+                    <AtSign className="size-3 text-fg-4" />
+                    {t("thread.following")}
+                    <X className="size-3 text-fg-4 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none" />
+                  </button>
+                </Tooltip>
+              )}
             </div>
           </div>
 
@@ -711,6 +837,21 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
 
           {drafts.map((m) => (canAct ? <DraftRow key={m.id} m={m} composing={!!composer || !!editing} onOpen={() => editDraft(m)} /> : <MailMessageItem key={m.id} m={m} open={false} onToggle={() => undefined} />))}
 
+          {/* AI keys that looked at it in the queue and handed it back (contracts/collab.md "AI notes"). */}
+          {detail.ai_skips?.map((s) => {
+            const line = s.reason ? t("comments.aiSkipped", { name: s.client, reason: s.reason }) : t("comments.aiSkippedNoReason", { name: s.client });
+            // One line: a long reason is cut short and reads in full on hover.
+            return (
+              <p key={`${s.client}-${s.at}`} className={cn("flex min-h-7 min-w-0 items-center gap-1.5 px-1 text-[11.5px]", tone[AI_TONE].text)}>
+                <Sparkles className="size-3 shrink-0" aria-hidden />
+                <Tooltip content={line}>
+                  <span data-text className="min-w-0 cursor-text select-text truncate">
+                    {line}
+                  </span>
+                </Tooltip>
+              </p>
+            );
+          })}
           {canAct && detail.unused_ai_drafts?.map((d) => <UnusedAIDraft key={d.id} draft={d} threadId={th.id} />)}
           {discardedAI && <AIDraftFeedbackDialog draft={discardedAI} threadId={th.id} open={feedbackOpen} onOpenChange={setFeedbackOpen} defaultReason="should_not_answer" />}
 
@@ -725,13 +866,14 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
                 transition={springs.row}
                 className={cn("mt-3 scroll-my-4 rounded-lg transition-shadow duration-500 ease-out motion-reduce:transition-none", flash && "shadow-[0_0_0_3px_var(--focus)] duration-150")}
               >
-                <Comments detail={detail} />
+                <Comments detail={detail} onReply={canAct ? replyToComment : undefined} />
               </motion.div>
             )}
           </AnimatePresence>
 
           {canAct && (editing || composer) && (
             <div ref={composerRef} className="mt-1 scroll-mb-4" hidden={commentMode}>
+              <div className="mb-1.5">{writeSwitch("reply")}</div>
               {editing ? (
                 <MailComposer
                   key={`draft-${editing.id}-${composerKey}`}
@@ -747,18 +889,19 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
                   onSent={() => {
                     setEditing(null);
                     setComposerDraftId(null);
+                    replied(th.id, th.unread);
                   }}
                   onDiscard={(removed) => {
                     const ai = editing.ai_draft;
                     setEditing(null);
                     setComposerDraftId(null);
                     if (!ai) return;
+                    // The feedback form opens at once, not behind a toast that expires (GH#592); closing it skips it.
                     void removed.then((ok) => {
                       if (!ok || shownThread.current !== threadId) return;
                       setDiscardedAI(ai);
-                      toast.success(t("aiFeedback.discardedToast", { name: ai.client }), {
-                        action: { label: t("aiFeedback.why"), onClick: () => setFeedbackOpen(true) },
-                      });
+                      setFeedbackOpen(true);
+                      toast.success(t("aiFeedback.discardedToast", { name: ai.client }));
                     });
                   }}
                 />
@@ -777,6 +920,8 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
                   onSent={() => {
                     setComposer(null);
                     setComposerDraftId(null);
+                    // A forward hands the mail on; it is not an answer to it.
+                    if (composer !== "forward") replied(th.id, th.unread);
                   }}
                   onDiscard={() => {
                     setComposer(null);
@@ -792,64 +937,52 @@ export const ThreadView = forwardRef<ThreadViewHandle, ThreadViewProps>(function
       <footer className={cn("@container relative z-10 shrink-0 border-t border-line bg-surface transition-shadow duration-200 ease-out", below && "shadow-[0_-8px_16px_-12px_rgb(10_10_10/0.18)] dark:shadow-[0_-8px_16px_-12px_rgb(0_0_0/0.6)]")}>
         <div className="mx-auto w-full max-w-[860px] px-4 py-2.5 md:px-6">
           {canAct ? (
-            <>
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div role="group" aria-label={t("thread.replyOrComment")} className="inline-flex items-center rounded-md bg-sunken p-0.5">
-                  <Button
-                    size="sm"
-                    variant={commentMode ? "ghost" : "subtle"}
-                    aria-pressed={!commentMode}
-                    onClick={() => {
-                      setCommentThread(null);
-                      if (!editing && !composer) openComposer(replyModes[0] ?? "reply");
-                    }}
-                  >
-                    {t("action.reply")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={commentMode ? "subtle" : "ghost"}
-                    aria-pressed={commentMode}
-                    onClick={() => setCommentThread(th.id)}
-                  >
-                    {t("comments.add")}
-                  </Button>
+            commentMode ? (
+              <>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  {writeSwitch("comment")}
+                  <span className="flex items-center gap-1">
+                    {commentsButton}
+                    {feedbackButton}
+                  </span>
                 </div>
-                {detail.comments.length > 0 && (
-                  <Tooltip content={t("thread.showComments")}>
-                    <Button size="md" variant="ghost" icon={<MessageSquare />} aria-label={t("list.comments", { count: detail.comments.length })} onClick={showComments}>
-                      <Count n={detail.comments.length} className="text-[11.5px]" />
-                    </Button>
-                  </Tooltip>
-                )}
-              </div>
-              {commentMode ? (
-                <div>
-                  <p className="mb-1.5 flex items-center gap-1.5 rounded-md bg-note px-2.5 py-1.5 text-[11.5px] text-fg-3">
-                    <Lock aria-hidden className="size-3 shrink-0 text-fg-4" />
-                    {t("comments.internalHint")}
-                  </p>
-                  <CommentBar ref={commentBar} detail={detail} onPosted={(id) => (posted.current = id)} />
-                </div>
-              ) : (
-                !editing && !composer && (
-                  <div className="flex items-center gap-1">
-                    {replyModes.slice(1).map((mode) => (
+                <p className="mb-1.5 flex items-center gap-1.5 rounded-md bg-note px-2.5 py-1.5 text-[11.5px] text-fg-3">
+                  <Lock aria-hidden className="size-3 shrink-0 text-fg-4" />
+                  {t("comments.internalHint")}
+                </p>
+                <CommentBar ref={commentBar} detail={detail} onPosted={(id) => (posted.current = id)} />
+              </>
+            ) : (
+              // Plain actions, each opening what it names: the account's usual reply first and labelled.
+              // While a reply is written they step aside; the comment entry and count stay.
+              <div className="flex items-center gap-1.5">
+                {!composing && (
+                  <>
+                    {replyModes.map((mode, i) => (
                       <Tooltip key={mode} content={replyKind[mode].label} shortcut={replyKind[mode].shortcut}>
-                        <Button size="md" variant="ghost" icon={replyKind[mode].icon} aria-label={replyKind[mode].label} onClick={() => openComposer(mode)}>
-                          <span className="hidden @[36rem]:inline">{replyKind[mode].label}</span>
+                        <Button size="md" variant="secondary" icon={replyKind[mode].icon} aria-label={replyKind[mode].label} onClick={() => openComposer(mode)}>
+                          <span className={i === 0 ? undefined : "hidden @[36rem]:inline"}>{replyKind[mode].label}</span>
                         </Button>
                       </Tooltip>
                     ))}
                     <Tooltip content={t("action.forward")} shortcut="f">
-                      <Button size="md" variant="ghost" icon={<Forward />} aria-label={t("action.forward")} onClick={() => openComposer("forward")}>
+                      <Button size="md" variant="secondary" icon={<Forward />} aria-label={t("action.forward")} onClick={() => openComposer("forward")}>
                         <span className="hidden @[36rem]:inline">{t("action.forward")}</span>
                       </Button>
                     </Tooltip>
-                  </div>
-                )
-              )}
-            </>
+                  </>
+                )}
+                <span className="ml-auto flex items-center gap-1">
+                  <Tooltip content={t("comments.internalHint")} shortcut="shift c">
+                    <Button size="md" variant="ghost" icon={<MessageSquarePlus />} aria-label={t("comments.add")} onClick={() => setCommentThread(th.id)}>
+                      <span className="hidden @[28rem]:inline">{t("comments.add")}</span>
+                    </Button>
+                  </Tooltip>
+                  {commentsButton}
+                  {feedbackButton}
+                </span>
+              </div>
+            )
           ) : (
             <p className="rounded-md bg-sunken px-3 py-2 text-[12px] text-fg-3">{t("thread.readOnly")}</p>
           )}

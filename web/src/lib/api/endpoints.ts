@@ -664,6 +664,9 @@ export const api = {
   },
   messages: {
     original: (id: string) => http.get<{ full_html: string }>(`/v1/messages/${id}/original`),
+    /** The raw email a message arrived as; the download is the whole message as an .eml file. */
+    source: (id: string) => http.get<T.MailSource>(`/v1/messages/${id}/source`),
+    sourceFile: (id: string) => download(`/v1/messages/${id}/source.eml`),
   },
   contacts: {
     ...crud<T.Contact, Partial<Pick<T.Contact, "name" | "email" | "phone" | "notes" | "external_id" | "blocked" | "custom">> & { company_id?: string | null } & LabelWrites>("/v1/contacts"),
@@ -873,6 +876,8 @@ export const api = {
     translate: (b: { html?: string; text?: string; target: string }) => http.post<T.TranslateResult>("/v1/ai/translate", b),
     kbDraft: (b: { ticket_ids?: string[]; topic?: string }) => http.post<T.KBArticleDraft>("/v1/kb/articles/ai/draft", b),
     search: (q: string) => http.get<T.SearchResults>("/v1/ai/search", { query: { q } }),
+    /** A few sentences on doing something in opendesk, from the app places and docs the app's own search found. */
+    appHelp: (b: T.AppHelpInput) => http.post<{ answer: string }>("/v1/ai/app-help", b),
     /** The models a workspace may choose from, with the instance defaults. */
     models: () => http.get<T.AIModels>("/v1/ai/models"),
     /** The workspace's provider: the instance's (charged to the AI balance) or its own key. */
@@ -1008,7 +1013,10 @@ export const api = {
         http.post<{ threads: T.MailThread[] }>("/v1/collab/threads/actions", b),
       share: (id: string, shares: T.MailAudience) => http.put<T.MailThreadDetail>(`/v1/collab/threads/${id}/shares`, { shares }),
       assign: (id: string, user_ids: string[]) => http.put<T.MailThreadDetail>(`/v1/collab/threads/${id}/assignees`, { user_ids }),
-      comment: (id: string, b: { body_html: string; mentions?: string[] }) => http.create<T.MailComment>(`/v1/collab/threads/${id}/comments`, b),
+      comment: (id: string, b: { body_html: string; mentions?: string[]; reply_to?: string }) => http.create<T.MailComment>(`/v1/collab/threads/${id}/comments`, b),
+      /** In or out of your Mentions box (contracts/collab.md "Mentions"). */
+      follow: (id: string) => http.put<void>(`/v1/collab/threads/${id}/follow`),
+      unfollow: (id: string) => http.del(`/v1/collab/threads/${id}/follow`),
     },
     comments: {
       update: (id: string, body_html: string) => http.patch<T.MailComment>(`/v1/collab/comments/${id}`, { body_html }),
@@ -1037,14 +1045,18 @@ export const api = {
     send: (b: CollabSendBody) => http.create<T.MailMessage>("/v1/collab/messages", b),
     /** Read from the message's source at the provider (502 provider_error). */
     messageDetails: (id: string) => http.get<T.MailMessageDetails>(`/v1/collab/messages/${id}/details`),
+    messageSource: (id: string) => http.get<T.MailSource>(`/v1/collab/messages/${id}/source`),
+    messageSourceFile: (id: string) => download(`/v1/collab/messages/${id}/source.eml`),
     /** Drafts, kept at the provider (contracts/collab.md "Drafts"). */
     drafts: {
       create: (b: CollabSendBody) => http.create<T.MailMessage>("/v1/collab/drafts", b),
       /** Saves again under the same id; 404 when it is no longer a draft. */
       update: (id: string, b: CollabDraftBody) => http.put<T.MailMessage>(`/v1/collab/drafts/${id}`, b),
       remove: (id: string) => http.del(`/v1/collab/drafts/${id}`),
-      /** With a body the draft is saved with it first. */
-      send: (id: string, b?: CollabDraftBody) => http.post<T.MailMessage>(`/v1/collab/drafts/${id}/send`, b),
+      /** With a body the draft is saved with it first. `opts` pins the account and workspace a
+       * held send started in (components/collab/outbox.ts), and lets it outlive the page. */
+      send: (id: string, b?: CollabDraftBody, opts?: { keepalive?: boolean; as?: string; workspace?: string }) =>
+        http.post<T.MailMessage>(`/v1/collab/drafts/${id}/send`, b, opts),
     },
     /** A person's feedback on an AI draft, for the key that wrote it (contracts/collab.md "AI draft outcomes"). */
     aiDraftFeedback: (id: string, b: T.AIDraftFeedbackBody) => http.put<void>(`/v1/collab/ai-drafts/${id}/feedback`, b),

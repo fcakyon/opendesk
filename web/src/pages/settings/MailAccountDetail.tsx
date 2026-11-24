@@ -32,6 +32,8 @@ import type { MailAccount, MailAudience, MailIdentityPreview } from "@/lib/api/t
 import { errorMessage } from "@/lib/api/client";
 import { storeAccount, useCollab, useSettingsAccounts } from "@/lib/collab/hooks";
 import { identitySignature } from "@/lib/collab/identities";
+import { useSyncNow } from "@/lib/collab/syncNow";
+import { cn } from "@/lib/cn";
 import { clock, relLong, weekdayClock } from "@/lib/format";
 import { COLLAB_FROM_VARS, fromNameProblem } from "@/lib/fromname";
 import { qk } from "@/lib/queries";
@@ -159,11 +161,8 @@ export default function MailAccountDetail() {
     onError: (e) => setFailure(errorMessage(e)),
   });
 
-  const sync = useMutation({
-    mutationFn: () => api.collab.accounts.sync(accountId),
-    onSuccess: () => toast.info(t("detail.syncStarted", { name: account?.name || account?.email || "" })),
-    onError: (e) => toast.error(e),
-  });
+  // Spins until the sync it asked for ends, like the mail list's (GH#522).
+  const syncNow = useSyncNow(account);
 
   // The From name and signature as your mail carries them: filled by the server while they
   // are typed; for someone who cannot change them, as they are now.
@@ -251,7 +250,18 @@ export default function MailAccountDetail() {
       <Section title={t("detail.status")}>
         <Row label={t("detail.status")} description={<SyncWhen account={account} />}>
           <AccountStatus account={account} />
-          <Button size="sm" icon={<RefreshCw />} loading={sync.isPending} onClick={() => sync.mutate()}>
+          <Button
+            size="sm"
+            icon={<RefreshCw className={cn(syncNow.syncing && "animate-spin motion-reduce:animate-none")} />}
+            disabled={syncNow.syncing}
+            aria-busy={syncNow.syncing || undefined}
+            onClick={() =>
+              syncNow.sync(account, {
+                onQueued: () => toast.info(t("detail.syncStarted", { name: account.name || account.email })),
+                onError: (e) => toast.error(e),
+              })
+            }
+          >
             {t("detail.sync")}
           </Button>
         </Row>
@@ -359,7 +369,12 @@ export default function MailAccountDetail() {
 
       {form.visibility === "shared" && (
         <Section title={t("detail.handling.title")} description={t("detail.handling.hint")}>
-          <Row label={t("detail.handling.enabled")} description={t("detail.handling.enabledHint")} htmlFor="handling-enabled">
+          <Row
+            label={t("detail.handling.enabled")}
+            // Gmail's own snooze reaches us as an archive (GH#533): Gmail accounts are told to snooze here.
+            description={account.provider === "google" ? `${t("detail.handling.enabledHint")} ${t("detail.handling.gmailSnoozeHint")}` : t("detail.handling.enabledHint")}
+            htmlFor="handling-enabled"
+          >
             <Switch
               id="handling-enabled"
               checked={form.handling_enabled}

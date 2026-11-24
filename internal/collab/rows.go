@@ -76,22 +76,25 @@ type accountRow struct {
 	// WaitUntil is the end of a hold its provider asked for (holdAccount).
 	WaitUntil *time.Time
 	CreatedAt time.Time
-	// CategoryKeys and CategorySig are what its inbox was last sorted with ("Categories").
+	// CategoryKeys, CategorySig and CategoryBasis are what its inbox was last sorted with
+	// ("Categories"); CategoryBasis is nil until recorded.
 	CategoryKeys   []string
 	CategorySig    string
+	CategoryBasis  *sortBasis
 	CategoryEngine string
 	CategoryEpoch  int64
 }
 
 const accountColumns = `id, workspace_id, owner_id, provider, email, name, display_name, color, visibility, handling_enabled, reply_all, signature_html,
 	config, credentials_enc, sync_state, status, reconnect, last_error, last_synced_at, sync_failures, next_sync_at, provider_wait_until, created_at,
-	category_keys, category_sig, category_engine, category_epoch`
+	category_keys, category_sig, category_engine, category_epoch, category_basis`
 
 func scanAccount(row pgx.Row) (*accountRow, error) {
 	var a accountRow
 	err := row.Scan(&a.ID, &a.WorkspaceID, &a.OwnerID, &a.Provider, &a.Email, &a.Name, &a.DisplayName, &a.Color, &a.Visibility,
 		&a.HandlingEnabled, &a.ReplyAll, &a.SignatureHTML, &a.Config, &a.CredentialsEnc, &a.SyncState, &a.Status, &a.Reconnect, &a.LastError, &a.LastSyncedAt,
-		&a.SyncFailures, &a.NextSyncAt, &a.WaitUntil, &a.CreatedAt, &a.CategoryKeys, &a.CategorySig, &a.CategoryEngine, &a.CategoryEpoch)
+		&a.SyncFailures, &a.NextSyncAt, &a.WaitUntil, &a.CreatedAt, &a.CategoryKeys, &a.CategorySig, &a.CategoryEngine, &a.CategoryEpoch,
+		&a.CategoryBasis)
 	if err != nil {
 		return nil, err
 	}
@@ -201,6 +204,15 @@ type threadRow struct {
 
 const threadColumns = `id, workspace_id, account_id, remote_id, subject, snippet, participants, last_message_at, message_count,
 	unread, starred, has_attachments, needs_action, snoozed_until, folder_ids, addresses, category`
+
+// rowWith scans a row into a scanner's destinations, then into extra ones for the columns
+// selected after them.
+type rowWith struct {
+	pgx.Row
+	extra []any
+}
+
+func (r rowWith) Scan(dest ...any) error { return r.Row.Scan(append(dest, r.extra...)...) }
 
 func scanThread(row pgx.Row) (*threadRow, error) {
 	var t threadRow

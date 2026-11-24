@@ -29,6 +29,7 @@
     "all": "Alle E-Mails",
     "shared": "Mit mir geteilt",
     "assigned": "Mir zugewiesen",
+    "mentions": "Erwähnungen",
     "folder": "Ordner"
   },
   "customize": {
@@ -135,6 +136,8 @@
       "sharedHint": "Wenn ein Teammitglied eine Unterhaltung oder ein Konto mit dir teilt, erscheint es hier.",
       "assigned": "Dir ist nichts zugewiesen",
       "assignedHint": "Unterhaltungen, die dir Teammitglieder zuweisen, erscheinen hier.",
+      "mentions": "Keine Erwähnungen",
+      "mentionsHint": "Unterhaltungen, in denen dich jemand aus dem Team erwähnt oder auf deinen Kommentar antwortet, erscheinen hier, bis du sie entfernst.",
       "aiReview": "Keine KI-Entwürfe zu prüfen",
       "aiReviewHint": "Wenn ein KI-Client eine Antwort entwirft, wartet die Unterhaltung hier, bis jemand den Entwurf sendet, bearbeitet oder verwirft.",
       "starred": "Keine markierten Unterhaltungen",
@@ -198,6 +201,8 @@
     "openAccount": "Kontoeinstellungen",
     "syncAccount": "Konto jetzt synchronisieren",
     "copyLink": "Link kopieren",
+    "follow": "Zu Erwähnungen hinzufügen",
+    "unfollow": "Aus Erwähnungen entfernen",
     "linkCopied": "Link kopiert",
     "movePlaceholder": "In Ordner verschieben",
     "labelPlaceholder": "Labels zuweisen",
@@ -209,6 +214,9 @@
     "createLabel": "Label erstellen",
     "labelCreated": "Label erstellt",
     "snooze": "Zurückstellen",
+    "snoozeNeedsHandling": "Zurückstellen gibt es bei geteilten Konten mit aktivierter Bearbeitung. Aktiviere sie in den Kontoeinstellungen.",
+    "snoozeNeedsSharing": "Zurückstellen gibt es bei geteilten Konten mit aktivierter Bearbeitung. Teile das Konto und aktiviere die Bearbeitung in seinen Einstellungen.",
+    "snoozeGmailNote": "Stelle hier zurück, nicht in Gmail: Hier sehen es alle. Eine in Gmail zurückgestellte E-Mail erscheint hier als archiviert, bis Gmail sie zurückbringt.",
     "assignTo": "Zuweisen an…",
     "shareWith": "Teilen mit…",
     "moveTo": "Verschieben nach…",
@@ -243,6 +251,8 @@
     "starred_one": "Unterhaltung markiert",
     "starred_other": "{{count}} Unterhaltungen markiert",
     "undo": "Rückgängig",
+    "followed": "Zu deinen Erwähnungen hinzugefügt",
+    "unfollowed": "Aus deinen Erwähnungen entfernt",
     "failed": "Das hat nicht geklappt. Nichts wurde geändert.",
     "syncing": "{{name}} wird synchronisiert",
     "sent": "Gesendet von {{email}}",
@@ -258,6 +268,7 @@
     "back": "Zurück zur Liste",
     "sharedWith": "Geteilt mit {{who}}",
     "assignedTo": "Zugewiesen an {{who}}",
+    "following": "In deinen Erwähnungen",
     "everyone": "allen",
     "and": "{{a}} und {{b}}",
     "andMore": "{{list}} und {{count}} weitere",
@@ -315,6 +326,13 @@
     "removeRecipient": "{{email}} entfernen",
     "invalid": "{{value}} ist keine E-Mail-Adresse",
     "needRecipient": "Füge mindestens einen Empfänger hinzu",
+    "emptyTitle": "Ohne Nachricht senden?",
+    "emptyConfirm": "Über der Signatur steht nichts. Trotzdem senden?",
+    "sendAnyway": "Trotzdem senden",
+    "sendingHeld": "Wird gesendet…",
+    "undo": "Rückgängig",
+    "sendNow": "Jetzt senden",
+    "unsent": "Nicht gesendet. Sie ist wieder da, wo du sie geschrieben hast, als Entwurf gespeichert.",
     "tooMany": "Höchstens 100 Empfänger",
     "replyingTo": "Antwort an {{name}}",
     "forwarding": "Weiterleitung",
@@ -355,8 +373,17 @@
     "deleteTitle": "Kommentar löschen",
     "edited": "bearbeitet",
     "someone": "Ein ehemaliges Teammitglied",
+    "aiNote": "KI-Notiz",
+    "aiNoteVia": "Über einen API-Schlüssel von {{name}} hinzugefügt",
+    "aiSkipped": "{{name}} hat sich das angesehen und keinen Entwurf geschrieben: {{reason}}",
+    "aiSkippedNoReason": "{{name}} hat sich das angesehen und keinen Entwurf geschrieben",
     "empty": "Noch keine Kommentare. Besprich diese Unterhaltung hier mit deinem Team.",
-    "menu": "Kommentaraktionen"
+    "menu": "Kommentaraktionen",
+    "reply": "Antworten",
+    "replyingTo": "Antwort an {{name}}:",
+    "cancelReply": "Antwort abbrechen",
+    "parentDeleted": "Ursprünglicher Kommentar gelöscht",
+    "showParent": "Zum ursprünglichen Kommentar von {{name}}"
   },
   "share": {
     "title": "Unterhaltung teilen",
@@ -591,6 +618,7 @@
       "hint": "Trenne die Arbeit im geteilten Postfach von gelesenen und ungelesenen E-Mails",
       "enabled": "Zu erledigende Unterhaltungen verfolgen",
       "enabledHint": "Neue eingehende E-Mails sind zu erledigen, bis jemand sie als erledigt markiert. Das ändert nichts an den E-Mails bei deinem Anbieter.",
+      "gmailSnoozeHint": "Stelle E-Mails hier zurück statt in Gmail: Eine in Gmail zurückgestellte E-Mail erscheint hier als archiviert und nicht mehr als zu erledigen, bis Gmail sie zurückbringt.",
       "markInbox": "Mit dem aktuellen Posteingang beginnen",
       "markInboxHint": "Markiert die Unterhaltungen im Posteingang aus den letzten 30 Tagen als zu erledigen, außer denen, auf die du zuletzt geantwortet hast. Sonst sind nur E-Mails zu erledigen, die ab jetzt eintreffen."
     },
@@ -645,6 +673,8 @@
     "assignedAnon": "Dir wurde eine Unterhaltung zugewiesen",
     "mention": "{{who}} hat dich in einem Kommentar erwähnt",
     "mentionAnon": "Du wurdest in einem Kommentar erwähnt",
+    "reply": "{{who}} hat auf deinen Kommentar geantwortet",
+    "replyAnon": "Jemand hat auf deinen Kommentar geantwortet",
     "open": "Öffnen"
   },
   "shortcuts": {
@@ -755,7 +785,8 @@
     "spoofedTitle": "Vorsicht bei dieser Nachricht",
     "spoofedBody": "Sie hat die Prüfungen ihres Absenders nicht bestanden und kommt daher vielleicht nicht wirklich von {{domain}}. Meide ihre Links und Dateien und antworte nicht mit persönlichen Daten.",
     "unverifiedTitle": "Dieser Absender konnte nicht verifiziert werden",
-    "unverifiedBody": "Nichts bestätigt, dass diese Nachricht von {{domain}} kommt. Sei vorsichtig mit ihren Links und Dateien."
+    "unverifiedBody": "Nichts bestätigt, dass diese Nachricht von {{domain}} kommt. Sei vorsichtig mit ihren Links und Dateien.",
+    "showSource": "Quelltext anzeigen"
   },
   "addresses": {
     "title": "Adressen",
@@ -919,6 +950,10 @@
     "settings": "Einstellungen der Kategorien",
     "moved_one": "Unterhaltung nach {{name}} verschoben",
     "moved_other": "{{count}} Unterhaltungen nach {{name}} verschoben",
+    "dropRefused_one": "Ihr Posteingang hat keine Kategorie {{name}}",
+    "dropRefused_other": "Ihre Posteingänge haben keine Kategorie {{name}}",
+    "dropSome_one": "{{count}} Unterhaltung bleibt: Ihr Posteingang hat keine Kategorie {{name}}",
+    "dropSome_other": "{{count}} Unterhaltungen bleiben: Ihre Posteingänge haben keine Kategorie {{name}}",
     "always": "Immer",
     "alwaysHint": "Künftige E-Mails von {{sender}} auch hierher",
     "ruleSaved": "E-Mails von {{sender}} landen jetzt in {{name}}",
@@ -927,6 +962,12 @@
       "body": "E-Mails von Menschen bleiben in Allgemein, während Newsletter, Updates und Werbung eigene Tabs bekommen. Ollie kann Kategorien aus deinen E-Mails vorschlagen.",
       "action": "Kategorien einrichten",
       "dismiss": "Nicht jetzt"
+    },
+    "reorder": {
+      "hint": "Zum Umsortieren ziehen oder {{left}} bzw. {{right}} drücken",
+      "hintDrag": "Zum Umsortieren ziehen",
+      "moved": "{{name}} an Stelle {{position}} von {{count}} verschoben",
+      "failed": "Die neue Reihenfolge der Tabs konnte nicht gespeichert werden"
     }
   },
   "aiFeedback": {
@@ -1026,8 +1067,8 @@
     "add": "Hinzufügen",
     "newSection": "Neuer Bereich",
     "newSectionTitle": "Neuer Bereich",
-    "emptySection": "Zeilen hierher ziehen oder hinzufügen",
-    "emptyFavorites": "Zeilen hierher ziehen, um sie zu Favoriten zu machen",
+    "emptySection": "Zeilen hier ablegen",
+    "emptyFavorites": "Favoriten hier ablegen",
     "spaceSettings": "Space-Einstellungen",
     "editingSpace": "{{name}} bearbeiten",
     "hintTitle": "Gestalte deine Seitenleiste",
@@ -1051,9 +1092,7 @@
     "customize": "Anpassen",
     "customizeHint": "Seitenleiste anordnen: ziehen, umbenennen, ausblenden",
     "doneHint": "Anordnen der Seitenleiste beenden",
-    "doneEditing": "Fertig",
-    "layoutsShort": "Layouts",
-    "barHint": "Zum Verschieben ziehen. Zum Umbenennen auf einen Namen klicken. Das Auge blendet aus."
+    "doneEditing": "Fertig"
   },
   "layouts": {
     "title": "Mit einem Layout beginnen",

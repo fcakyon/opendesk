@@ -620,6 +620,21 @@ func TestPeriodicJobs(t *testing.T) {
 	if n := countRows(t, e, `SELECT count(*) FROM attachments WHERE id = ANY($1)`, []uuid.UUID{stale, fresh}); n != 1 {
 		t.Fatalf("attachments left %d", n)
 	}
+	// An image an article or changelog entry shows stays, however old its upload.
+	inArticle, inEntry := ids.New(), ids.New()
+	for _, id := range []uuid.UUID{inArticle, inEntry} {
+		e.Exec(`INSERT INTO attachments (id, workspace_id, filename, size_bytes, storage_key, created_at) VALUES ($1, $2, 'i.png', 3, 'x', now() - interval '25 hours')`, id, ws.ID)
+	}
+	e.Exec(`INSERT INTO kb_articles (workspace_id, title, slug, body_html) VALUES ($1, 'A', 'a', $2)`, ws.ID,
+		`<p><img src="http://api.test/v1/attachments/`+inArticle.String()+`?exp=1&amp;sig=x"></p>`)
+	e.Exec(`INSERT INTO changelog_entries (workspace_id, title, slug, body_html) VALUES ($1, 'C', 'c', $2)`, ws.ID,
+		`<img src="/v1/attachments/`+inEntry.String()+`">`)
+	if err := tickets.PurgeAttachments(e.Ctx, e.D); err != nil {
+		t.Fatal(err)
+	}
+	if n := countRows(t, e, `SELECT count(*) FROM attachments WHERE id = ANY($1)`, []uuid.UUID{inArticle, inEntry}); n != 2 {
+		t.Fatalf("article images left %d", n)
+	}
 	if _, err := e.D.Storage.Get(e.Ctx, key); err == nil {
 		t.Fatal("object not removed")
 	}
@@ -754,6 +769,11 @@ func TestReportsAndSearch(t *testing.T) {
 	if total != 2 {
 		t.Fatalf("by_day created %d", total)
 	}
+	// by_agent is personal: the viewer holds no ticket and gets no row, an admin the agent's.
+	if len(o.ByAgent) != 0 {
+		t.Fatalf("viewer by_agent %+v", o.ByAgent)
+	}
+	e.Do("GET", "/v1/reports/overview", ws.Admin.As(ws), nil).Want(t, 200).JSON(t, &o)
 	if len(o.ByAgent) != 1 || o.ByAgent[0].User.ID != ws.Agent.ID || o.ByAgent[0].Solved != 1 {
 		t.Fatalf("by_agent %+v", o.ByAgent)
 	}
