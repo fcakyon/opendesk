@@ -19,6 +19,7 @@
       "go.mod",
       "go.sum",
       "web/**",
+      "docs/src/content/docs/**",
       "admin/**",
       "brand/**",
       "contracts/**",

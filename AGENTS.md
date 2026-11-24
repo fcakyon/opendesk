@@ -112,13 +112,13 @@ from `../akyonlabs/.env` with `claude-haiku-5-5` for normal, fast and widget res
 Defaults for the chat and email agents of every product (tone, length, handoff, safety; a bot's own guidance outranks them) live in
 `deploy/openship/agent-instructions.txt`, set as the app service's `AI_AGENT_INSTRUCTIONS` in OpenShip
 (`openship service env set opendesk -p opendesk "AI_AGENT_INSTRUCTIONS=$(cat deploy/openship/agent-instructions.txt)"`, then redeploy),
-so each product's `support/instructions.txt` keeps only its own scope. Replies follow the language of the visitor's message. The widget `locale` sets only the widget's labels, so product instructions never tie the reply language to the UI language.
+so each product's `support/instructions.txt` keeps only its own scope. Replies follow the language of the visitor's message unless the bot sets a `language` or the workspace AI `reply_language` is `workspace`. The widget `locale` sets only the widget's labels, so product instructions never tie the reply language to the UI language.
 `node scripts/sync-support.mjs <app-repo>` publishes that repo's `support/knowledge.txt`
 and `support/instructions.txt` using its `support/opendesk.json` IDs and ignored
 `OPENDESK_API_KEY`. Add `--test` to exercise `support/questions.json` and review the
 returned answers. Widget signing secrets are separate per product. Keep human handoff
 available without asking anonymous visitors for email first. The embedded widget omits
-the vendor footer on this branch and keeps each product's own branding. Widget
+the vendor footer on this branch and keeps each product's own branding. With Show team faces off, or for a private team's conversation, teammates' replies show under the brand without names or avatars, in the widget and in chat follow-up emails. Widget
 `settings.forward_email` sends each complete visitor message through the system mail
 queue to a private recipient. Configure it through the admin widget API and keep
 addresses out of site code and public widget responses. Attachments and replies stay
