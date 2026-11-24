@@ -112,7 +112,7 @@ from `../akyonlabs/.env` with `claude-haiku-5-5` for normal, fast and widget res
 Defaults for the chat and email agents of every product (tone, length, handoff, safety; a bot's own guidance outranks them) live in
 `deploy/openship/agent-instructions.txt`, set as the app service's `AI_AGENT_INSTRUCTIONS` in OpenShip
 (`openship service env set opendesk -p opendesk "AI_AGENT_INSTRUCTIONS=$(cat deploy/openship/agent-instructions.txt)"`, then redeploy),
-so each product's `support/instructions.txt` keeps only its own scope.
+so each product's `support/instructions.txt` keeps only its own scope. Replies follow the language of the visitor's message. The widget `locale` sets only the widget's labels, so product instructions never tie the reply language to the UI language.
 `node scripts/sync-support.mjs <app-repo>` publishes that repo's `support/knowledge.txt`
 and `support/instructions.txt` using its `support/opendesk.json` IDs and ignored
 `OPENDESK_API_KEY`. Add `--test` to exercise `support/questions.json` and review the
