@@ -116,7 +116,7 @@ so each product's `support/instructions.txt` keeps only its own scope. Replies f
 `node scripts/sync-support.mjs <app-repo>` publishes that repo's `support/knowledge.txt`
 and `support/instructions.txt` using its `support/opendesk.json` IDs and ignored
 `OPENDESK_API_KEY`. Add `--test` to exercise `support/questions.json` and review the
-returned answers. Product repos call `.github/workflows/sync-support.yml` from their own `.github/workflows/sync-support.yml` on pushes to `main` that change those files, with the same key as an `OPENDESK_API_KEY` Actions secret, and a manual run adds `--test`. Widget signing secrets are separate per product. Keep human handoff
+returned answers. Product repos call `.github/workflows/sync-support.yml` from their own `.github/workflows/sync-support.yml` on pushes to `main` that change those files or `support/opendesk.json`, with the same key as an `OPENDESK_API_KEY` Actions secret, and a manual run adds `--test`. Widget signing secrets are separate per product. Keep human handoff
 available without asking anonymous visitors for email first. The embedded widget omits
 the vendor footer on this branch and keeps each product's own branding. With Show team faces off, or for a private team's conversation, teammates' replies show under the brand without names or avatars, in the widget and in chat follow-up emails. Widget
 `settings.forward_email` sends each complete visitor message through the system mail
