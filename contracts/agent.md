@@ -114,6 +114,14 @@ and are never replayed.
   `data.bot_id` unless it is the built-in default (`contracts/bots.md`); the inbox shows that bot
   instead of the assistant. The widget learns of a handoff from `ai.reply.ended` or from
   `ai_handoff` on the conversation.
+- **Why it handed off**: the activity's `data.rule` is `agent` (the model called `handoff_to_human`),
+  `visitor_request` (the visitor asked for a person, in words or with the widget's button),
+  `reply_limit` (`widget_max_replies` was reached) or `needs_human` (Jev's `needs_human` at 0.8 or
+  above, on chat or email). When the agent decided, `data.reason` is the few words it gave
+  `handoff_to_human` (at most 300 characters). The reason is the model's own text and may repeat
+  something the customer wrote, so it has the ticket's visibility: it is in the activity only,
+  never in a customer-facing message, the widget or a notification. The inbox shows both behind
+  "Why?" on the handoff line. Handoffs from before this have neither, and show no "Why?".
 
 - **Why it did not answer**: when the agent leaves a customer's message unanswered on purpose, the
   ticket gets an `ai_skipped` activity (actor `ai`, once per message, no event beyond the activity's

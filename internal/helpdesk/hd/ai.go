@@ -356,10 +356,25 @@ func EnqueueAIWidgetAnswer(ctx context.Context, tx pgx.Tx, jc domain.Jobs, cfg *
 }
 
 // HandoffBot is the bot that hands a conversation to the team; ID is nil for the built-in default.
+// Rule says which rule handed it over and Reason is the words behind it, for the team.
 type HandoffBot struct {
 	ID   *uuid.UUID
 	Name string
+	Rule string
+	// Reason is what the agent wrote when it handed over: a few words, as the model chose
+	// them, so it is read like the ticket and never shown to the customer.
+	Reason string
 }
+
+// Handoff rules (the ai_handoff activity's data.rule): the agent decided, the visitor asked for a
+// person, the conversation reached the agent's reply limit, or Jev judged a person is needed.
+const (
+	HandoffRuleAgent      = "agent"
+	HandoffRuleVisitor    = "visitor_request"
+	HandoffRuleReplyLimit = "reply_limit"
+	HandoffRuleNeedsHuman = "needs_human"
+	maxHandoffReasonRunes = 300
+)
 
 // Why the agent left a customer's message unanswered (the ai_skipped activity's data.reason).
 const (
@@ -394,6 +409,20 @@ func MarkAIHandoff(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, actorType
 	}
 	if bot.ID != nil {
 		data["bot_id"] = bot.ID.String()
+	}
+	rule := bot.Rule
+	if rule == "" {
+		rule = HandoffRuleAgent
+		if actorType == "contact" {
+			rule = HandoffRuleVisitor
+		}
+	}
+	data["rule"] = rule
+	if r := strings.TrimSpace(strings.ToValidUTF8(bot.Reason, "")); r != "" {
+		if rs := []rune(r); len(rs) > maxHandoffReasonRunes {
+			r = strings.TrimSpace(string(rs[:maxHandoffReasonRunes])) + "…"
+		}
+		data["reason"] = r
 	}
 	if _, err := tx.Exec(ctx, `UPDATE tickets SET custom = custom || $3, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
 		wid, tid, patch); err != nil {

@@ -825,7 +825,7 @@ function seedAgentChat(ws: WsData, bot: string) {
   t.sla = computeSla(ws, t, false);
   const handedBy = botForTicket(ws, t);
   t.custom = { ...t.custom, ai_handoff: true, ai_handoff_at: at(start - 3.4), ai_handoff_bot: handedBy.name, language: "en" };
-  ws.activities.push({ id: uuid(), ticket_id: t.id, actor: { type: "ai", user: null }, type: "ai_handoff", data: { bot: handedBy.name, bot_id: handedBy.id }, created_at: at(start - 3.4) });
+  ws.activities.push({ id: uuid(), ticket_id: t.id, actor: { type: "ai", user: null }, type: "ai_handoff", data: { bot: handedBy.name, bot_id: handedBy.id, rule: "agent", reason: "Asks whether order #4822 arrives before Friday; I can't promise a delivery date" }, created_at: at(start - 3.4) });
   c.ticket_count++;
 }
 
@@ -872,7 +872,7 @@ function seedDocsBotChat(ws: WsData) {
   t.status = "open";
   t.sla = computeSla(ws, t, false);
   t.custom = { ...t.custom, ai_handoff: true, ai_handoff_at: at(start - 4.3), ai_handoff_bot: pip.name, language: "en" };
-  ws.activities.push({ id: uuid(), ticket_id: t.id, actor: { type: "ai", user: null }, type: "ai_handoff", data: { bot: pip.name, bot_id: pip.id }, created_at: at(start - 4.3) });
+  ws.activities.push({ id: uuid(), ticket_id: t.id, actor: { type: "ai", user: null }, type: "ai_handoff", data: { bot: pip.name, bot_id: pip.id, rule: "reply_limit" }, created_at: at(start - 4.3) });
   c.ticket_count++;
 }
 

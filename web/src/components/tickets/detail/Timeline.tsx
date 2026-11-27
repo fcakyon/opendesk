@@ -365,6 +365,7 @@ function ActivityLine({ a }: { a: Activity }) {
       <span className="min-w-0 truncate">{text}</span>
       {a.type === "ai_skipped" && <SkippedWhy data={a.data} ollie={ollie} />}
       {ai && <DecisionMeta a={a} ollie={ollie} />}
+      {a.type === "ai_handoff" && <HandoffWhy data={a.data} ollie={ollie} />}
       <span className="flex-1" />
       <Tooltip content={fullDate(a.created_at)}>
         <time dateTime={a.created_at} className="mono shrink-0 text-[10.5px] text-fg-4">
@@ -372,6 +373,27 @@ function ActivityLine({ a }: { a: Activity }) {
         </time>
       </Tooltip>
     </div>
+  );
+}
+
+const HANDOFF_RULES = ["agent", "visitor_request", "reply_limit", "needs_human"] as const;
+type HandoffRule = (typeof HANDOFF_RULES)[number];
+const isHandoffRule = (r: unknown): r is HandoffRule => (HANDOFF_RULES as readonly unknown[]).includes(r);
+
+/** Why a handoff happened: the rule that applied, naming the bot that handed over, and when it decided, its own words. */
+export function HandoffWhy({ data, ollie }: { data: Record<string, unknown>; ollie: string }) {
+  const { t } = useTranslation("inbox");
+  if (!isHandoffRule(data.rule)) return null; // older handoffs kept no reason
+  const reason = typeof data.reason === "string" ? data.reason : "";
+  return (
+    <WhyPopover title={t(`activity.handoffRule.${data.rule}`, botWho(data, ollie))}>
+      {reason && (
+        <p className="mt-1.5 text-[12px] leading-[18px] text-fg-2" data-ph-mask>
+          <span className="label-caps mr-1.5">{t("activity.handoffReason")}</span>
+          {reason}
+        </p>
+      )}
+    </WhyPopover>
   );
 }
 

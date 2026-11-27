@@ -570,6 +570,13 @@
     "aiSuggestedSent": "<b>{{who}}</b> a envoyé la réponse suggérée par {{ollie}}",
     "handoffCustomer": "Le client a demandé à parler à une personne",
     "handoffAi": "<b>{{who}}</b> a passé le relais à l’équipe",
+    "handoffReason": "Raison",
+    "handoffRule": {
+      "agent": "{{who}} a décidé qu’une personne était nécessaire.",
+      "visitor_request": "Le visiteur a demandé à parler à une personne.",
+      "reply_limit": "La conversation a atteint la limite de réponses de {{who}}.",
+      "needs_human": "{{who}} a jugé qu’une personne était nécessaire."
+    },
     "other": "<b>{{who}}</b> a mis à jour ce ticket <m>{{type}}</m>",
     "teamFrom": "<b>{{who}}</b> a déplacé ce ticket de <b>{{from}}</b> vers <b>{{team}}</b>",
     "teamRule": "Transmis à <b>{{team}}</b> par la règle <b>{{rule}}</b>",

@@ -267,7 +267,7 @@ func (s *Service) EmailAnswer(ctx context.Context, a jobs.AIEmailAnswerArgs) err
 		}
 	}
 	if ec.replies >= max(ec.set.WidgetMaxReplies, 1) {
-		return s.handoff(ctx, a.WorkspaceID, a.TicketID, a.MessageID, handoffBot(ec.bot))
+		return s.handoff(ctx, a.WorkspaceID, a.TicketID, a.MessageID, handoffBot(ec.bot, hd.HandoffRuleReplyLimit, ""))
 	}
 	if capped, err := s.agentCapped(ctx, a.WorkspaceID, ec.set); err != nil || capped {
 		if capped {
@@ -281,7 +281,7 @@ func (s *Service) EmailAnswer(ctx context.Context, a jobs.AIEmailAnswerArgs) err
 			return err
 		}
 		if human {
-			return s.handoff(ctx, a.WorkspaceID, a.TicketID, a.MessageID, handoffBot(ec.bot))
+			return s.handoff(ctx, a.WorkspaceID, a.TicketID, a.MessageID, handoffBot(ec.bot, hd.HandoffRuleNeedsHuman, ""))
 		}
 	}
 	in := ec.input(a.WorkspaceID, a.TicketID)
@@ -363,7 +363,7 @@ func (s *Service) postEmailAnswer(ctx context.Context, in agentInput, mode strin
 			return errStale
 		}
 		if res.Handoff {
-			if _, err := hd.MarkAIHandoff(ctx, tx, wid, tid, "ai", handoffBot(in.bot)); err != nil && !db.IsNotFound(err) {
+			if _, err := hd.MarkAIHandoff(ctx, tx, wid, tid, "ai", handoffBot(in.bot, res.HandoffRule, res.HandoffReason)); err != nil && !db.IsNotFound(err) {
 				return err
 			}
 			return nil

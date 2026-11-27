@@ -193,7 +193,7 @@ func TestEmailAgent(t *testing.T) {
 	if tk := e.loadTicket(tid); tk.Custom["ai_handoff"] != true || tk.Assignee != nil || len(publicMessages(e, tid)) != 1 || e.F.calls() != before+1 {
 		t.Fatalf("handoff %+v", tk.Custom)
 	}
-	if n := e.count(`SELECT count(*) FROM activities WHERE ticket_id = $1 AND type = 'ai_handoff' AND actor_type = 'ai'`, tid); n != 1 {
+	if n := e.count(`SELECT count(*) FROM activities WHERE ticket_id = $1 AND type = 'ai_handoff' AND actor_type = 'ai' AND data->>'rule' IN ('agent', 'reply_limit', 'needs_human')`, tid); n != 1 {
 		t.Fatalf("handoff activity %d", n)
 	}
 	// The handoff names the bot that handed over.
