@@ -74,6 +74,19 @@ func matchLocale(tag string) string {
 	return ""
 }
 
+// MatchLocale is the supported locale a BCP 47 tag speaks, or "".
+func MatchLocale(tag string) string { return matchLocale(tag) }
+
+// T is key of the customer-facing catalogs in locale (a supported one, else English), with
+// {{name}} replaced by args in pairs, for words the API writes to customers outside the help
+// center, such as a chat visitor's verification email.
+func T(locale, key string, args ...any) string {
+	return translator{lang: matchLocale(locale)}.T(key, args...)
+}
+
+// RTL reports whether a locale is written right to left.
+func RTL(locale string) bool { return dir(locale) == "rtl" }
+
 // translator speaks one locale, falling back to English for a missing key.
 type translator struct{ lang string }
 

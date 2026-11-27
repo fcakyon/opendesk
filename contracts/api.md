@@ -93,7 +93,7 @@ type Availability = "online" | "away" | "offline";
 type Invitation = { id: string; email: string; role: Role; expires_at: string; created_at: string; invited_by: UserRef | null };
 type Team = { id: string; name: string; member_ids: string[]; created_at: string }; // full shape, brands, widgets, routing and private teams: contracts/teams.md
 
-type Contact = { id: string; email: string | null; emails: string[] /* extra addresses, beside the primary email ("Contact emails") */; name: string; phone: string; avatar_url: string | null; avatar_source: AvatarSource | null; company: CompanyRef | null; external_id: string | null; notes: string; custom: Record<string, unknown>; tags: TagRef[]; fields: FieldValues; blocked: boolean; ticket_count: number; chat_reachable: boolean /* a chat the team starts reaches them in some brand's widget, by the rule of POST /v1/tickets "Starting a chat"; a chat of one brand needs it in that brand */; created_at: string; updated_at: string };
+type Contact = { id: string; email: string | null; emails: string[] /* extra addresses, beside the primary email ("Contact emails") */; name: string; phone: string; avatar_url: string | null; avatar_source: AvatarSource | null; company: CompanyRef | null; external_id: string | null; notes: string; custom: Record<string, unknown>; tags: TagRef[]; fields: FieldValues; blocked: boolean; ticket_count: number; chat_reachable: boolean /* a chat the team starts reaches them in some brand's widget, by the rule of POST /v1/tickets "Starting a chat"; a chat of one brand needs it in that brand */; verification: ContactVerification /* whether they proved who they are ("Contact verification") */; created_at: string; updated_at: string };
 type ContactRef = { id: string; email: string | null; name: string; avatar_url: string | null };
 type Company = { id: string; name: string; domain: string; external_id: string | null /* the workspace's own id for the account in its product, unique per workspace; the widget's verified identify links a contact to the company by it */; avatar_url: string | null /* logo */; avatar_source: "upload" | "domain" | null; notes: string; custom: Record<string, unknown>; tags: TagRef[]; fields: FieldValues; contact_count: number; created_at: string; updated_at: string };
 type CompanyRef = { id: string; name: string; domain: string; avatar_url: string | null };
@@ -863,6 +863,63 @@ writer (`409` on any attempt, `PATCH` and `POST /v1/contacts` included).
   contact with extras can't be cleared (`422`; make an extra the primary instead).
 - `contact.updated` carries the contact with its `emails`.
 
+#### Contact verification
+
+A chat visitor proves who they are in one of two ways, and `Contact.verification` says whether they have:
+
+```ts
+type ContactVerification = {
+  status: "verified" | "unverified" | "none";
+  via: "email" | "identity" | null; // how a verified contact proved it; null otherwise
+  verified_at: string | null;
+};
+```
+
+- **`verified`, via `identity`**: the visitor signed in on a widget with identity verification
+  (`POST /v1/widget/session` with a valid `user_hash`): the host product vouched for them. It stays.
+- **`verified`, via `email`**: the visitor opened a link we emailed to the address they gave in the widget and
+  confirmed it. It holds while that address is still one of the contact's (primary, extra, or the widget's claim
+  `custom.widget_email`); a changed address is `unverified` until it is confirmed in turn.
+- **`unverified`**: a contact the widget created (`custom.source: "widget"`) with an address that is not proven:
+  typed in the widget's email form, or sent by the host page without `user_hash`.
+- **`none`**: neither: an anonymous visitor with no address, or a contact the widget did not create.
+
+Typing an address never verifies anyone or links the visitor to another contact: while it is unproven, an address
+another contact holds stays the visitor's claim (`custom.widget_email`) on a contact of their own. The chat works the
+same either way.
+
+**Merging on verification.** When the visitor confirms an address another contact holds (its primary or an extra; the
+oldest such contact), their contact is that person's duplicate, and merges into it in the same transaction, as
+"Merging contacts" does: their chats and messages move to it, it takes their proof (so it is `verified` via `email`),
+and the claim leaves its `custom`. Audit `contact.merged` with `{from, tickets, reason: "email_verified"}` and no actor;
+events `contact.deleted` (the visitor's), `contact.updated` (the stayer) and `ticket.updated` for each moved ticket. The
+merge ends the visitor's widget sessions like any merge: the browser that typed the address is not proven to be the one
+that opened the link, so it never reads the stayer's conversations. Their widget gets `contact.verified` with
+`merged: true`, starts over as a new visitor and says the chat is now with their other conversations under that address, where the team's
+replies reach them by email (contracts/teams.md "Chat follow-up"). A merge the contacts refuse (one blocked and one
+not, or two different `external_id`s) leaves them apart, the visitor verified on their own.
+
+The link:
+
+- The widget asks for it with `POST /v1/widget/verification` after the visitor sends its email form. One link at a
+  time: while a link to the contact's address still works, nothing is sent unless `resend` is true, so the form sent
+  again sends no duplicate. A verified contact, or one without an address, gets nothing. Resending waits a minute
+  after the last link; one contact, and one address across the workspace's contacts, get at most 5 links a day
+  (`429 verification_too_soon` before `resend_at`), and one IP at most 10 an hour.
+- The platform mailer sends it ("Confirm your email address for {brand}", button "Confirm email address"), for the
+  brand of the widget that asked and in its email layout (contracts/templates.md "Email design"), to
+  `{APP_URL}/chat/verify#token=…`. Its words are the customer-facing catalogs' (`chat_verify.email_*`) in the
+  widget's language (`locale`), else the brand's, else the workspace's, else English. The token rides in the fragment; it works 48 hours, is
+  stored hashed and is used once.
+- The page reads it with `POST /v1/public/chat-verification`, which changes nothing (mail scanners open links), and
+  verifies on the visitor's click with `POST /v1/public/chat-verification/confirm`: the contact's `verification`
+  becomes `verified` via `email`, their open links to that address are used up, a duplicate merges (above), and
+  `contact.updated` (agents) and `contact.verified` (the visitor's widgets, contracts/events.md) are published in the
+  same transaction.
+- An expired or used link, one whose contact is blocked or no longer has its address, answers `404 invalid_link`,
+  except that a link whose address is verified answers `status: "verified"`.
+- Links are deleted a day after they expire.
+
 #### Merging contacts
 
 `POST /v1/contacts/{id}/merge` folds one contact into another when they are one person, in one
@@ -876,6 +933,8 @@ transaction, and cannot be undone. The contact in the path is removed; `into` st
   `custom` and `fields` merged with the stayer's winning.
 - The removed contact's customer-portal sign-in and sessions, and its chat widget sessions, end with it: a browser
   holding one never reads the stayer's conversations.
+- Verification ("Contact verification"): the stayer takes the removed contact's proof when it has none, or only an
+  email proof against the removed one's identity. An email proof goes with its address, which the stayer now has.
 - Refused: the same contact; a blocked and a not blocked contact (block or unblock first); two different
   `external_id`s, which are two identities the host product vouches for.
 - Audit entry `contact.merged` (with the removed id and the number of tickets), events `contact.deleted` (removed),
@@ -1235,13 +1294,16 @@ characters and validated; malformed or incomplete cursors return `400`.
 | GET | `/v1/public/help/{workspace_slug}/changelog/{slug}` | `ChangelogEntry`, the same entries only |
 | POST | `/v1/public/csat/survey` | `{token}` → `{workspace_name, brand_color, ticket: {number, subject}, score: number \| null, comment, locale, locale_fixed}`; `locale_fixed` true when the workspace fixes a set `locale`: the page uses it and offers no other |
 | POST | `/v1/public/csat/rating` | `{token, score: 1..5, comment?}` records the score and answers the same survey object. The token rides in bodies only, never an API URL |
+| POST | `/v1/public/chat-verification` | `{token}` → `{status: "pending" \| "verified", email, brand_name, brand_color, locale, locale_fixed}`: what a chat visitor's verification link confirms; reading it changes nothing. `404 invalid_link` for an expired or used link, a blocked contact or one that no longer has the address ("Contact verification") |
+| POST | `/v1/public/chat-verification/confirm` | `{token}` → the same object with `status: "verified"`: verifies the contact via `email`, uses up their open links to the address, merges the contact into another that holds the address ("Contact verification", "Merging on verification"), publishes `contact.updated` and `contact.verified`. Confirming a verified address changes nothing |
 
 ### Widget (owner: backend-helpdesk; `Authorization: Visitor <token>` except session)
 | method | path | notes |
 | --- | --- | --- |
 | GET | `/v1/widget/config?key=<widget_key>` | `WidgetConfig` below; any widget's key (contracts/teams.md) |
-| POST | `/v1/widget/session` | `{key, visitor_token?, email?, name?, user_id?, user_hash?, avatar_url?, company?: {id}, fields?: Record<string, FieldValue>}` → `{visitor_token, contact: ContactRef, email_collected: boolean, ws_token, gateway_url, unread: number, unread_latest: Message \| null}`; `unread` counts the team's replies (public, not deleted, AI and bots included) the visitor has not read in their chats of the widget's brand, `unread_latest` is the newest of them as `GET .../messages` returns it, so the widget shows a count and a preview on the launcher without another request; `user_hash` = hex HMAC-SHA256(widget_secret, user_id) marks the session verified, with the secret of the widget whose `key` it is. A session belongs to that widget; a `visitor_token` of another widget of the workspace gives a new session of this widget for the same contact. On a verified session, `company.id` is the host product's own id for the user's account: the contact is linked to the workspace's company with that `external_id`. The `user_hash` covers `user_id` alone, so the page's company is a claim: identify never creates a company or changes one (other keys of `company`, such as `name` or `domain`, are accepted and ignored), and an id no company of the workspace has links nothing, without an error; `fields` sets the contact's custom fields whose key starts with `widget_` (any other key, an archived or `user` field, or a value that does not fit is skipped, never an error), so only the fields a workspace names this way are written from the widget. An anonymous session ignores both. Sending them again on the same session updates them (the widget's `opendesk("update", …)`). `avatar_url` (https) is used only on a verified session: it is fetched server-side as the contact's picture (`avatar_source: "widget"`) unless an agent uploaded one. A session works while used within 90 days, and a verified one for 30 days from its start (the host page verifies the visitor again, which starts a fresh one). A verified session is never resumed without `user_hash`: that request starts an anonymous session. With `require_email` on, an anonymous session is still created (the widget's email form needs one); the address is asked for by `POST /v1/widget/conversations`, which answers `422 email_required` until the contact has supplied one. `email_collected` includes an unverified address held by another contact; it never links that contact or grants access to their conversations |
+| POST | `/v1/widget/session` | `{key, visitor_token?, email?, name?, user_id?, user_hash?, avatar_url?, company?: {id}, fields?: Record<string, FieldValue>}` → `{visitor_token, contact: ContactRef, email_collected: boolean, ws_token, gateway_url, unread: number, unread_latest: Message \| null, verification: {status: "verified" \| "unverified" \| "none", email: string \| null, sent_at: string \| null, resend_at: string \| null}}`; `verification` is the visitor's side of "Contact verification": while unverified, the address a link goes to, when the newest link that still works was sent, and when another may be; a session with a valid `user_hash` verifies its contact via `identity`; `unread` counts the team's replies (public, not deleted, AI and bots included) the visitor has not read in their chats of the widget's brand, `unread_latest` is the newest of them as `GET .../messages` returns it, so the widget shows a count and a preview on the launcher without another request; `user_hash` = hex HMAC-SHA256(widget_secret, user_id) marks the session verified, with the secret of the widget whose `key` it is. A session belongs to that widget; a `visitor_token` of another widget of the workspace gives a new session of this widget for the same contact. On a verified session, `company.id` is the host product's own id for the user's account: the contact is linked to the workspace's company with that `external_id`. The `user_hash` covers `user_id` alone, so the page's company is a claim: identify never creates a company or changes one (other keys of `company`, such as `name` or `domain`, are accepted and ignored), and an id no company of the workspace has links nothing, without an error; `fields` sets the contact's custom fields whose key starts with `widget_` (any other key, an archived or `user` field, or a value that does not fit is skipped, never an error), so only the fields a workspace names this way are written from the widget. An anonymous session ignores both. Sending them again on the same session updates them (the widget's `opendesk("update", …)`). `avatar_url` (https) is used only on a verified session: it is fetched server-side as the contact's picture (`avatar_source: "widget"`) unless an agent uploaded one. A session works while used within 90 days, and a verified one for 30 days from its start (the host page verifies the visitor again, which starts a fresh one). A verified session is never resumed without `user_hash`: that request starts an anonymous session. With `require_email` on, an anonymous session is still created (the widget's email form needs one); the address is asked for by `POST /v1/widget/conversations`, which answers `422 email_required` until the contact has supplied one. `email_collected` includes an unverified address held by another contact; it never links that contact or grants access to their conversations |
 | DELETE | `/v1/widget/session` | → 204: ends the visitor's session at once (the widget's `shutdown`, when the host page signs its user out) |
+| POST | `/v1/widget/verification` | `{resend?: boolean, locale?: string}` → the session's `verification`; `locale` is the language the widget shows the visitor (BCP 47), which the email uses. Emails the visitor a link to verify their address ("Contact verification"): the widget calls it after its email form. While a link still works nothing is sent unless `resend`; a verified visitor or one without an address gets nothing; `429 verification_too_soon` before `resend_at`. The chat goes on either way. Widget events: `contact.verified` `{contact_id, verification}` when the visitor confirms |
 | GET | `/v1/widget/conversations` | visitor's chat tickets of the session's widget's brand `{id, subject, status, last_message_preview, last_message_at, ai_handoff, unread}` (`unread`: the team's replies after the ticket's `visitor_read_at`) (`ai_handoff`: the visitor asked for a person, contracts/ai.md). Conversations of another brand answer 404 |
 | POST | `/v1/widget/conversations` | `{body, attachment_ids?, page_url?, topic_id?}` → conversation + first message. `body` may be empty when `attachment_ids` has a file; the conversation is then named after the first file. `page_url`: the host page (https, up to 500 chars, no fragment), stored as the ticket's `page_url` and given to routing rules and the AI agent. `topic_id`: one of `WidgetConfig.topics` (422 otherwise). The ticket gets the widget's brand and `widget_id`, and its team by routing (contracts/teams.md "Routing") |
 | GET | `/v1/widget/conversations/{id}/messages` | public messages only (no notes). Counts as the visitor being on the page (contracts/teams.md "Chat follow-up"), never as reading it: the widget fetches in the background too |

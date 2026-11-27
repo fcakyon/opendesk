@@ -140,7 +140,7 @@ export function inSentence(label: string): string {
 
 /** Public routes, which load only the namespaces they show. */
 export function isPublicPath(pathname: string): boolean {
-  return /^\/(help|csat|portal)(\/|$)/.test(pathname);
+  return /^\/(help|csat|portal|chat)(\/|$)/.test(pathname);
 }
 
 // The language a customer-facing page chose, so Intl formatting follows the

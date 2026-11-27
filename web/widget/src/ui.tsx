@@ -9,7 +9,7 @@ import { homeConversations, isFinished, sortConversations } from "./conversation
 import { NEW, type Controller } from "./controller";
 import { canRecord, clock, useRecorder, VoicePlayer, type Recording } from "./voice";
 import { current, dayLabel, isRtl, relTime, t } from "./i18n";
-import { Arrow, Back, ChatIc, Clip, Clock, Down, Ext, FileIc, Mic, OdMark, StopIc, Trash, Up, X } from "./icons";
+import { Arrow, Back, ChatIc, Check, Clip, Clock, Down, Ext, FileIc, MailIc, Mic, OdMark, StopIc, Trash, Up, X } from "./icons";
 import { repliesFor, type LiveReply } from "./live";
 import { AiMessage, AvatarStack, BotGreeting, Bubble, Dots, HandedOff, LiveReplyView, reducedMotion, type Offer } from "./messages";
 import { primeSound } from "./sound";
@@ -288,6 +288,7 @@ function Home({ c }: { c: Controller }) {
       </div>
       <div class="body">
         <div class="home-body">
+          {s.verify.merged !== null && <VerifyNotice c={c} s={s} />}
           {cfg?.open === false && !(s.error && !s.session) && <Away cfg={cfg} />}
           {s.error && !s.session ? (
             <div class="empty">
@@ -482,7 +483,7 @@ function Thread({
         </button>
       </div>
       <Scroller watch={`${key}:${msgs?.length ?? -1}:${items.length}:${needsTopic}:${!!s.queued}`}>
-        {needsEmail && <Capture c={c} />}
+        {needsEmail ? <Capture c={c} /> : <VerifyNotice c={c} s={s} />}
         {s.queued && (
           <div class="thread queued">
             <div class="row me is-pending">
@@ -727,6 +728,80 @@ function Capture({ c }: { c: Controller }) {
         {busy ? t("saving") : t("continue")}
       </button>
     </form>
+  );
+}
+
+// ── Verification ─────────────────────────────────────────────────────────────
+
+/**
+ * After the email form: a link went to the address the visitor gave, and the chat goes on while
+ * they have not opened it (contracts/api.md "Contact verification"). Resending waits for the
+ * API's resend_at. Once they verify (contact.verified), the notice says so.
+ */
+function VerifyNotice({ c, s }: { c: Controller; s: State }) {
+  const v = s.session?.verification;
+  const ui = s.verify;
+  const [now, setNow] = useState(Date.now());
+  const resendAt = v?.resend_at ? Date.parse(v.resend_at) : 0;
+  useEffect(() => {
+    const left = resendAt - Date.now();
+    if (left <= 0) return;
+    const id = setTimeout(() => setNow(Date.now()), left + 50);
+    return () => clearTimeout(id);
+  }, [resendAt]);
+  if (ui.closed || s.preview) return null;
+  const close = (
+    <button class="icon-btn verify-x" aria-label={t("dismiss")} onClick={() => c.closeVerifyNotice()}>
+      {X(13)}
+    </button>
+  );
+  // Verified, and their chat went to the account that has the address: this widget starts over.
+  if (ui.merged !== null)
+    return (
+      <div class="verify ok merged" role="status" data-testid="verify-merged">
+        <span class="verify-ic" aria-hidden="true">
+          {Check(13)}
+        </span>
+        <span class="verify-text">
+          <b>{t("verifiedNow")}</b>
+          <span dir="auto">{t("verifiedMerged", { email: ui.merged })}</span>
+        </span>
+        {close}
+      </div>
+    );
+  if (v?.status === "verified")
+    return ui.verifiedNow ? (
+      <div class="verify ok" role="status" data-testid="verify-done">
+        <span class="verify-ic" aria-hidden="true">
+          {Check(13)}
+        </span>
+        <span class="verify-text">
+          <b>{t("verifiedNow")}</b>
+        </span>
+        {close}
+      </div>
+    ) : null;
+  if (v?.status !== "unverified" || (!v.sent_at && !ui.note)) return null;
+  const sent = !!v.sent_at;
+  const wait = resendAt > Math.max(now, Date.now());
+  const note = ui.note === "resent" ? t("verifyResent") : ui.note === "wait" ? t("verifyWait") : ui.note === "failed" ? t("verifyFailed") : null;
+  return (
+    <div class="verify" role="status" data-testid="verify-notice">
+      <span class="verify-ic" aria-hidden="true">
+        {MailIc(14)}
+      </span>
+      <div class="verify-text">
+        <b>{sent ? t("verifyThanks") : t("verifyNotSent")}</b>
+        {sent && <span dir="auto">{t("verifySent", { email: v.email ?? "" })}</span>}
+        <div class="verify-row">
+          <button class="btn ghost" disabled={ui.busy || wait} aria-busy={ui.busy ? "true" : undefined} onClick={() => void c.requestVerification(sent)}>
+            {sent ? t("verifyResend") : t("verifySend")}
+          </button>
+          {note && <span class={ui.note === "resent" ? "verify-note is-ok" : "verify-note"}>{note}</span>}
+        </div>
+      </div>
+      {close}
+    </div>
   );
 }
 

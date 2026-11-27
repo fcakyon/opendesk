@@ -152,7 +152,15 @@ func MergeContacts(ctx context.Context, tx pgx.Tx, wid, src, dst uuid.UUID) ([]u
 		fields = $9, email = $10, updated_at = now() WHERE workspace_id = $1 AND id = $2`, wid, dst, name, phone, company, external, notes, custom, fields, primary); err != nil {
 		return nil, err
 	}
-	// Its portal sign-in, sessions and reset links, widget sessions, labels and extra rows go with it.
+	// Verification (contracts/api.md "Contact verification"): dst takes src's proof when it has
+	// none, or a weaker one. Identity goes with the external id, an email proof with its address.
+	if _, err := tx.Exec(ctx, `UPDATE contacts d SET verified_via = s.verified_via, verified_email = s.verified_email, verified_at = s.verified_at
+		FROM contacts s WHERE d.workspace_id = $1 AND d.id = $2 AND s.workspace_id = $1 AND s.id = $3 AND s.verified_via IS NOT NULL
+			AND (d.verified_via IS NULL OR (d.verified_via = 'email' AND s.verified_via = 'identity'))`, wid, dst, src); err != nil {
+		return nil, err
+	}
+	// Its portal sign-in, sessions and reset links, widget sessions, verification links, labels
+	// and extra rows go with it.
 	if _, err := tx.Exec(ctx, `DELETE FROM contacts WHERE workspace_id = $1 AND id = $2`, wid, src); err != nil {
 		return nil, err
 	}

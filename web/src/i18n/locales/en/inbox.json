@@ -857,7 +857,12 @@
     "open": "Open contact",
     "copyEmail": "Copy email",
     "pastTickets": "Past tickets",
-    "noOther": "No other tickets"
+    "noOther": "No other tickets",
+    "verified": "Verified",
+    "unverified": "Unverified",
+    "verifiedByEmail": "They confirmed their email address with the link we emailed them.",
+    "verifiedByIdentity": "They signed in on your website, which vouched for who they are.",
+    "unverifiedHint": "Their email address came through the chat and isn't confirmed yet. It turns Verified when they open the link we email them."
   },
   "fields": {
     "title": "Fields",

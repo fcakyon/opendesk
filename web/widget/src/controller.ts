@@ -5,7 +5,7 @@
 import { WidgetApi, WidgetError, type Fetcher } from "./api";
 import { isAiAnswer, keyBot } from "./ai";
 import { pageUrl, readBotRef, resolveConfig } from "./config";
-import { t } from "./i18n";
+import { current, t } from "./i18n";
 import { dropLive, liveMessage, reduceLive } from "./live";
 import { plainText } from "./markdown";
 import { Live, type SocketFactory } from "./realtime";
@@ -394,7 +394,76 @@ export class Controller {
     const s = await this.session();
     this.remember(s.visitor_token);
     this.set({ session: s });
+    // The address the form took proves nothing yet: a link emailed to it verifies it. The chat
+    // goes on meanwhile, so the queued message does not wait for the email.
+    void this.requestVerification(false);
     await this.flushQueued();
+  }
+
+  /**
+   * Email the visitor a link to verify their address (contracts/api.md "Contact verification").
+   * The API sends one while none still works, so asking again never sends a duplicate;
+   * `resend` asks for another, within its limits.
+   */
+  async requestVerification(resend: boolean) {
+    const { session, verify, preview } = this.s;
+    if (preview || verify.busy || session?.verification?.status !== "unverified") return;
+    this.set((s) => ({ verify: { ...s.verify, busy: true, note: null } }));
+    try {
+      const v = await this.api.verification(resend, current());
+      this.set((s) => ({
+        session: s.session ? { ...s.session, verification: v } : s.session,
+        verify: { ...s.verify, busy: false, note: resend && v.status === "unverified" ? "resent" : null },
+      }));
+      if (resend && v.status === "unverified") this.announce(t("verifyResent"));
+    } catch (e) {
+      const wait = e instanceof WidgetError && e.status === 429;
+      this.set((s) => ({ verify: { ...s.verify, busy: false, note: wait ? "wait" : "failed" } }));
+    }
+  }
+
+  /** The visitor closed the verification notice: it stays closed until the page reloads. */
+  closeVerifyNotice() {
+    this.set((s) => ({ verify: { ...s.verify, closed: true } }));
+  }
+
+  /**
+   * contact.verified: the visitor opened their link, here or on another device. `merged`: the
+   * address was another contact's, so their contact merged into that one and their session
+   * ended with it (the browser that typed the address never reads that contact's conversations).
+   * The widget starts over as a new visitor and says where the chat went.
+   */
+  private async onVerified(contactId: unknown, status: unknown, merged: boolean) {
+    const s = this.s.session;
+    if (!s || contactId !== s.contact.id || status !== "verified") return;
+    if (merged) {
+      const email = s.verification?.email ?? s.contact.email ?? "";
+      this.identity = { ...this.identity, email: undefined, name: undefined };
+      this.api.visitorToken = null;
+      this.remember(null);
+      this.set((st) => ({
+        view: "home",
+        active: null,
+        topic: null,
+        queued: null,
+        conversations: [],
+        messages: {},
+        verify: { ...st.verify, busy: false, note: null, verifiedNow: false, closed: false, merged: email },
+      }));
+      this.announce(`${t("verifiedNow")}. ${t("verifiedMerged", { email })}`);
+      try {
+        await this.startSession();
+      } catch (e) {
+        this.set({ error: e instanceof Error ? e.message : t("unavailable") });
+      }
+      return;
+    }
+    const was = s.verification?.status;
+    this.set((st) => ({
+      session: st.session ? { ...st.session, verification: { status: "verified", email: null, sent_at: null, resend_at: null } } : st.session,
+      verify: { ...st.verify, busy: false, note: null, verifiedNow: was === "unverified" || st.verify.verifiedNow },
+    }));
+    if (was === "unverified") this.announce(t("verifiedNow"));
   }
 
   needsEmail(): boolean {
@@ -542,6 +611,11 @@ export class Controller {
   }
 
   onEvent(e: Envelope) {
+    if (e.type === "contact.verified") {
+      const v = e.data.verification as { status?: string } | undefined;
+      void this.onVerified(e.data.contact_id, v?.status, e.data.merged === true);
+      return;
+    }
     // A reply the team took back (deleted, or turned into a note) leaves the conversation.
     if (e.type === "message.withdrawn") {
       const tid = e.data.ticket_id as string | undefined;

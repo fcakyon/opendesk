@@ -339,7 +339,8 @@ var ContactSelect = `SELECT ct.id, ct.email, ct.name, ct.phone, ct.avatar_url, c
 	ct.blocked, ct.created_at, ct.updated_at, co.id, co.name, co.domain, co.avatar_url,
 	(SELECT count(*) FROM tickets tk WHERE tk.contact_id = ct.id AND tk.deleted_at IS NULL),
 	ct.fields, ` + TagRefsSQL("contact_tags", "lt.contact_id = ct.id") + `, ` + ChatReachableSQL + `,
-	COALESCE((SELECT json_agg(e.email ORDER BY e.created_at, e.email) FROM contact_emails e WHERE e.workspace_id = ct.workspace_id AND e.contact_id = ct.id), '[]')
+	COALESCE((SELECT json_agg(e.email ORDER BY e.created_at, e.email) FROM contact_emails e WHERE e.workspace_id = ct.workspace_id AND e.contact_id = ct.id), '[]'),
+	ct.verified_via, ct.verified_email::text, ct.verified_at
 FROM contacts ct LEFT JOIN companies co ON co.id = ct.company_id`
 
 func ScanContact(row pgx.Row) (Contact, error) {
@@ -347,8 +348,10 @@ func ScanContact(row pgx.Row) (Contact, error) {
 	var coID *uuid.UUID
 	var coName, coDomain, coAvatar *string
 	var tags, emails []byte
+	var proof verifiedProof
 	err := row.Scan(&c.ID, &c.Email, &c.Name, &c.Phone, &c.AvatarURL, &c.AvatarSource, &c.ExternalID, &c.Notes, &c.Custom,
-		&c.Blocked, &c.CreatedAt, &c.UpdatedAt, &coID, &coName, &coDomain, &coAvatar, &c.TicketCount, &c.Fields, &tags, &c.ChatReachable, &emails)
+		&c.Blocked, &c.CreatedAt, &c.UpdatedAt, &coID, &coName, &coDomain, &coAvatar, &c.TicketCount, &c.Fields, &tags, &c.ChatReachable, &emails,
+		&proof.via, &proof.email, &proof.at)
 	if err != nil {
 		return c, err
 	}
@@ -369,6 +372,7 @@ func ScanContact(row pgx.Row) (Contact, error) {
 	if c.Custom == nil {
 		c.Custom = map[string]any{}
 	}
+	c.Verification = proof.of(c)
 	return c, nil
 }
 

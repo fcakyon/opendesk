@@ -471,6 +471,18 @@ input.field { height: 36px; border: 1px solid var(--line); border-radius: var(--
 input.field:hover { border-color: var(--line-2); }
 input.field:focus { border-color: var(--fg-4); box-shadow: 0 0 0 3px var(--ring); }
 .err { color: var(--danger); font-size: 12px; margin-top: 6px; }
+.verify { margin: 12px 14px 4px; display: flex; align-items: flex-start; gap: 10px; padding: 11px 6px 11px 12px; border-radius: var(--r-card, 10px); background: var(--bg-3); border: 1px solid var(--line); animation: rise .2s var(--ease) both; }
+.verify-ic { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 999px; background: var(--bg); color: var(--fg-2); box-shadow: 0 0 0 1px var(--line); }
+.verify.ok { align-items: center; background: var(--ok-soft); border-color: transparent; }
+.verify.ok.merged { align-items: flex-start; }
+.home-body > .verify { margin: 0 0 12px; }
+.verify.ok .verify-ic { color: var(--ok); box-shadow: none; }
+.verify-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 18px; color: var(--fg-2); overflow-wrap: anywhere; }
+.verify-text b { font-size: 13px; font-weight: 600; color: var(--fg); }
+.verify-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.verify-note { font-size: 12px; color: var(--fg-3); }
+.verify-note.is-ok { color: var(--ok); }
+.verify-x { width: 24px; height: 24px; margin-top: -3px; }
 .foot { display: flex; align-items: center; justify-content: center; gap: 5px; height: 30px; font-size: 11px; color: var(--fg-4); border-top: 1px solid var(--line); text-decoration: none; flex: none; transition: color .12s; }
 .foot:hover { color: var(--fg-2); }
 [dir="rtl"] .flip svg { transform: scaleX(-1); }

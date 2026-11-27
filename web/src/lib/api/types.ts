@@ -336,10 +336,30 @@ export type Contact = {
   ticket_count: number;
   /** The team can start a chat with them: verified in a widget, or with a live widget session. */
   chat_reachable?: boolean;
+  /** Whether they proved who they are (contracts/api.md "Contact verification"). Older servers omit it. */
+  verification?: ContactVerification;
   created_at: string;
   updated_at: string;
 };
-export type ContactRef = { id: string; email: string | null; name: string; avatar_url: string | null };
+/**
+ * verified: they opened a link emailed to their address, or signed in on a widget with identity
+ * verification; unverified: a chat visitor whose address came through the widget, not confirmed yet.
+ */
+export type ContactVerification = {
+  status: "verified" | "unverified" | "none";
+  via: "email" | "identity" | null;
+  verified_at: string | null;
+};
+/** What the chat verification page shows of its link (POST /v1/public/chat-verification). */
+export type ChatVerificationPage = {
+  status: "pending" | "verified";
+  email: string;
+  brand_name: string;
+  brand_color: string;
+  locale: string;
+  locale_fixed: boolean;
+};
+export type ContactRef ={ id: string; email: string | null; name: string; avatar_url: string | null };
 export type Company = {
   id: string;
   name: string;

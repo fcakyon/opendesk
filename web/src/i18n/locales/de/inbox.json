@@ -853,7 +853,12 @@
     "open": "Kontakt öffnen",
     "copyEmail": "E-Mail kopieren",
     "pastTickets": "Frühere Tickets",
-    "noOther": "Keine anderen Tickets"
+    "noOther": "Keine anderen Tickets",
+    "verified": "Verifiziert",
+    "unverified": "Nicht verifiziert",
+    "verifiedByEmail": "Hat die E-Mail-Adresse über den Link bestätigt, den wir gesendet haben.",
+    "verifiedByIdentity": "Ist auf Ihrer Website angemeldet, die die Identität bestätigt hat.",
+    "unverifiedHint": "Die E-Mail-Adresse kam über den Chat und ist noch nicht bestätigt. Sie gilt als verifiziert, sobald der Link aus unserer E-Mail geöffnet wird."
   },
   "fields": {
     "title": "Felder",

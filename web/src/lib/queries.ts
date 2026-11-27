@@ -285,6 +285,7 @@ export const qk = {
     return w(["widget-settings"] as const);
   },
   csat: (token: string) => ["public", "csat", token] as const,
+  chatVerification: (token: string) => ["public", "chat-verification", token] as const,
   invitationLookup: (token: string) => ["invitation-lookup", token] as const,
   get billing() {
     return w(["billing"] as const);
@@ -664,6 +665,8 @@ export const q = {
   mailMessageDetails: (id: string) =>
     queryOptions({ queryKey: qk.mailMessageDetails(id), queryFn: () => api.collab.messageDetails(id), staleTime: Infinity, gcTime: 30 * 60_000, retry: 1 }),
   csat: (token: string) => queryOptions({ queryKey: qk.csat(token), queryFn: () => api.public.csat(token), retry: false }),
+  chatVerification: (token: string) =>
+    queryOptions({ queryKey: qk.chatVerification(token), queryFn: () => api.public.chatVerification(token), retry: false, enabled: !!token }),
   invitationLookup: (token: string) =>
     queryOptions({ queryKey: qk.invitationLookup(token), queryFn: () => api.invitations.lookup(token), retry: false }),
 };

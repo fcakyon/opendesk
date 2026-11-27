@@ -8,9 +8,11 @@ import type {
   Action,
   Automation,
   Brand,
+  ChatVerificationPage,
   Company,
   Condition,
   Contact,
+  ContactVerification,
   FieldValues,
   ImapFolder,
   KbArticle,
@@ -45,7 +47,48 @@ import { checkSendAs, normalizeAliases, writeAliasSettings } from "../aliases";
 function contactOut(ws: WsData, c: Contact): Contact {
   c.ticket_count = ws.tickets.filter((t) => t.contact?.id === c.id && !ws.deletedTickets.has(t.id)).length;
   c.chat_reachable = chatReachable(ws, c);
+  c.verification = verificationOf(ws, c);
   return c;
+}
+
+/**
+ * The mock's contact verification (contracts/api.md "Contact verification"): a chat visitor with an
+ * external id signed in with identity verification; one with only an address has not confirmed it.
+ * A verified contact stays so.
+ */
+function verificationOf(ws: WsData, c: Contact): ContactVerification {
+  if (c.verification?.status === "verified") return c.verification;
+  const none: ContactVerification = { status: "none", via: null, verified_at: null };
+  if (!ws.tickets.some((t) => t.contact?.id === c.id && t.channel === "chat")) return none;
+  if (c.external_id) return { status: "verified", via: "identity", verified_at: c.created_at };
+  return c.email ? { status: "unverified", via: null, verified_at: null } : none;
+}
+
+/** The mock's one verification link, token "demo": the first chat visitor who had not verified. */
+let demoVerify: { ws: WsData; c: Contact } | null = null;
+function findVerifyLink(token: string) {
+  if (token !== "demo") throw new HttpError(404, "invalid_link", "This link has expired or was already used.");
+  if (!demoVerify) {
+    for (const ws of db.workspaces) {
+      const c = ws.contacts.find((x) => verificationOf(ws, x).status === "unverified");
+      if (c) {
+        demoVerify = { ws, c };
+        break;
+      }
+    }
+  }
+  if (!demoVerify) throw new HttpError(404, "invalid_link", "This link has expired or was already used.");
+  const { ws, c } = demoVerify;
+  const brand = defaultBrand(ws);
+  const page: ChatVerificationPage = {
+    status: verificationOf(ws, c).status === "verified" ? "verified" : "pending",
+    email: c.email ?? "",
+    brand_name: brand?.name ?? ws.workspace.name,
+    brand_color: ws.workspace.settings.brand_color ?? "",
+    locale: ws.workspace.settings.locale ?? "",
+    locale_fixed: !!ws.workspace.settings.locale_fixed && !!ws.workspace.settings.locale,
+  };
+  return { ws, c, page };
 }
 
 function companyOut(ws: WsData, c: Company): Company {
@@ -900,6 +943,18 @@ export function registerResources() {
     return publicArticles(ws, brand)
       .filter((a) => (a.title + " " + a.excerpt + " " + a.body_html).toLowerCase().includes(q))
       .slice(0, 20);
+  });
+
+  // Public chat verification: reading the link changes nothing; confirming verifies the visitor.
+  post("/v1/public/chat-verification", (ctx) => respond(200, findVerifyLink(String(ctx.body.token ?? "")).page));
+  post("/v1/public/chat-verification/confirm", (ctx) => {
+    const { ws, c, page } = findVerifyLink(String(ctx.body.token ?? ""));
+    if (page.status !== "verified") {
+      c.verification = { status: "verified", via: "email", verified_at: nowIso() };
+      c.updated_at = nowIso();
+      publish(ws, "contact.updated", { contact: contactOut(ws, c) });
+    }
+    return respond(200, { ...page, status: "verified" });
   });
 
   // Public CSAT.

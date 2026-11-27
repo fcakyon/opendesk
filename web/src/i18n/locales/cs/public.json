@@ -75,6 +75,25 @@
     "error": "Něco se nepovedlo. Zkuste to znovu.",
     "offline": "Nelze se připojit k serveru. Zkontrolujte připojení."
   },
+  "chat_verify": {
+    "page_title": "Potvrďte svou e-mailovou adresu",
+    "title": "Potvrďte svou e-mailovou adresu",
+    "body": "Potvrďte, že tato adresa patří vám, aby tým {{brand}} věděl, že chat je opravdu od vás.",
+    "button": "Potvrdit e-mailovou adresu",
+    "not_you": "Nejste to vy? Zavřete tuto stránku a nic se nezmění.",
+    "done_title": "Vaše e-mailová adresa je potvrzena",
+    "already_title": "Vaše e-mailová adresa už je potvrzena",
+    "done_body": "Tým {{brand}} teď ví, že chat z adresy {{email}} je od vás. Tuto stránku můžete zavřít a pokračovat v chatu.",
+    "invalid_title": "Tento odkaz není platný",
+    "invalid_body": "Jeho platnost mohla vypršet nebo už byl použit. Požádejte v chatu o nový e-mail.",
+    "error": "Něco se pokazilo. Zkuste to prosím znovu.",
+    "offline": "Nelze se spojit se serverem. Zkontrolujte připojení.",
+    "email_subject": "Potvrďte svou e-mailovou adresu pro {{brand}}",
+    "email_intro": "Děkujeme za chat s týmem {{brand}}. Potvrďte, že tato adresa patří vám, aby tým věděl, že jste to opravdu vy.",
+    "email_meanwhile": "Mezitím můžete dál chatovat.",
+    "email_expiry": "Odkaz platí {{hours}} hodin.",
+    "email_reason": "Tento e-mail dostáváte, protože tato adresa byla zadána v chatu na webu {{brand}}. Pokud jste to nebyli vy, e-mail ignorujte a nic se nezmění."
+  },
   "footer": {
     "powered_by": "Běží na",
     "language": "Jazyk"

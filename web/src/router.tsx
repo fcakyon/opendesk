@@ -107,6 +107,15 @@ const csatLegacyRoute = createRoute({
   staticData: { title: "rateYourConversation" },
 });
 
+// A chat visitor's verification link (/chat/verify#token=…): the token rides in the fragment,
+// and the page verifies only on the visitor's click, never on load (mail scanners open links).
+const chatVerifyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/chat/verify",
+  component: page(() => import("./pages/public/ChatVerify")),
+  staticData: { title: "verifyYourEmail" },
+});
+
 // Capture before createRouter subscribes to browser history.
 const initialPortalResetPath = window.location.pathname;
 const initialPortalResetToken = captureResetToken();
@@ -1149,6 +1158,7 @@ const routeTree = rootRoute.addChildren([
   helpRoute,
   csatRoute,
   csatLegacyRoute,
+  chatVerifyRoute,
   portalRoute, portalForgotRoute, portalResetRoute, portalNewRoute, portalTicketRoute,
   ticketPrintRoute,
   authLayout.addChildren([

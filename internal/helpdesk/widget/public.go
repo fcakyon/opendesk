@@ -284,8 +284,9 @@ type widgetSession struct {
 		EmailCollected bool              `json:"email_collected" doc:"The visitor supplied an address, including an unverified address held by another contact"`
 		// Unread is the team's replies the visitor has not read in this widget's chats, and
 		// UnreadLatest the newest of them, so the widget shows both without another request.
-		Unread       int             `json:"unread"`
-		UnreadLatest *domain.Message `json:"unread_latest"`
+		Unread       int                 `json:"unread"`
+		UnreadLatest *domain.Message     `json:"unread_latest"`
+		Verification visitorVerification `json:"verification" doc:"Whether the visitor proved their address (POST /v1/widget/verification)"`
 	}
 }
 
@@ -529,6 +530,16 @@ func (h *handler) session(ctx context.Context, in *widgetSessionInput) (*widgetS
 			if err := syncProfile(ctx, tx, wid, contactID, b.Company, b.Fields); err != nil {
 				return err
 			}
+			// The host product vouched for this person: their contact is verified by identity.
+			changed, err := domain.MarkIdentityVerified(ctx, tx, wid, contactID)
+			if err != nil {
+				return err
+			}
+			if changed {
+				if err := publishContact(ctx, tx, wid, contactID, "contact.updated"); err != nil {
+					return err
+				}
+			}
 		}
 		c, err := domain.LoadContact(ctx, tx, wid, contactID)
 		if err != nil {
@@ -557,6 +568,9 @@ func (h *handler) session(ctx context.Context, in *widgetSessionInput) (*widgetS
 		out.Body.Contact = domain.ContactRef{ID: c.ID, Email: c.Email, Name: c.Name, AvatarURL: c.AvatarURL}
 		out.Body.WSToken = wsToken
 		out.Body.GatewayURL = h.d.Cfg.GatewayURL + "/widget" // the widget socket, open to any origin
+		if out.Body.Verification, err = verificationOf(ctx, tx, wid, c, time.Now()); err != nil {
+			return err
+		}
 		out.Body.Unread, out.Body.UnreadLatest, err = unreadFor(ctx, tx, wid, contactID, g.BrandID)
 		return err
 	})

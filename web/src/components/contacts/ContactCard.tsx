@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Avatar } from "@/components/ui/avatar";
 import { CompanyGlyph } from "./bits";
 import { PhoneNumber } from "./PhoneNumber";
+import { VerificationBadge } from "./VerificationBadge";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -61,6 +62,7 @@ export function ContactCard({ contactId, compact, excludeTicketId }: { contactId
               {c.name || c.email || t("contact.unnamed")}
             </span>
             {c.blocked && <Badge tone="danger">{t("contact.blocked")}</Badge>}
+            <VerificationBadge v={c.verification} />
           </div>
           {c.company && (
             <Link

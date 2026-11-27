@@ -838,7 +838,12 @@
     "open": "Ouvrir le contact",
     "copyEmail": "Copier l’adresse e-mail",
     "pastTickets": "Tickets précédents",
-    "noOther": "Aucun autre ticket"
+    "noOther": "Aucun autre ticket",
+    "verified": "Vérifié",
+    "unverified": "Non vérifié",
+    "verifiedByEmail": "A confirmé son adresse e-mail avec le lien que nous lui avons envoyé.",
+    "verifiedByIdentity": "S’est connecté sur votre site, qui a confirmé son identité.",
+    "unverifiedHint": "Son adresse e-mail vient de la conversation et n’est pas encore confirmée. Elle passe à Vérifié dès que le lien de notre e-mail est ouvert."
   },
   "fields": {
     "title": "Champs",

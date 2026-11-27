@@ -1114,6 +1114,9 @@ export const api = {
     csat: (token: string) =>
       http.post<T.CsatSurvey>("/v1/public/csat/survey", { token }, pub),
     submitCsat: (token: string, b: { score: number; comment?: string }) => http.post<void>("/v1/public/csat/rating", { token, ...b }, pub),
+    /** A chat visitor's verification link (contracts/api.md "Contact verification"): reading it changes nothing. */
+    chatVerification: (token: string) => http.post<T.ChatVerificationPage>("/v1/public/chat-verification", { token }, pub),
+    confirmChatVerification: (token: string) => http.post<T.ChatVerificationPage>("/v1/public/chat-verification/confirm", { token }, pub),
   },
 };
 

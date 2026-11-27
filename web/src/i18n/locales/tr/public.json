@@ -71,6 +71,25 @@
     "error": "Bir sorun oluştu. Lütfen tekrar deneyin.",
     "offline": "Sunucuya ulaşılamıyor. Bağlantınızı kontrol edin."
   },
+  "chat_verify": {
+    "page_title": "E-posta adresinizi onaylayın",
+    "title": "E-posta adresinizi onaylayın",
+    "body": "Bu adresin size ait olduğunu onaylayın; böylece {{brand}} sohbetin gerçekten sizden geldiğini bilir.",
+    "button": "E-posta adresini onayla",
+    "not_you": "Siz değil misiniz? Bu sayfayı kapatın, hiçbir şey değişmez.",
+    "done_title": "E-posta adresiniz onaylandı",
+    "already_title": "E-posta adresiniz zaten onaylandı",
+    "done_body": "{{brand}} artık {{email}} adresinden gelen sohbetin size ait olduğunu biliyor. Bu sayfayı kapatıp sohbete devam edebilirsiniz.",
+    "invalid_title": "Bu bağlantı geçerli değil",
+    "invalid_body": "Süresi dolmuş ya da daha önce kullanılmış olabilir. Sohbetten yeni bir e-posta isteyin.",
+    "error": "Bir sorun oluştu. Lütfen tekrar deneyin.",
+    "offline": "Sunucuya ulaşılamıyor. Bağlantınızı kontrol edin.",
+    "email_subject": "{{brand}} için e-posta adresinizi onaylayın",
+    "email_intro": "{{brand}} ile sohbet ettiğiniz için teşekkürler. Bu adresin size ait olduğunu onaylayın; böylece ekip gerçekten siz olduğunuzu bilir.",
+    "email_meanwhile": "Bu arada sohbete devam edebilirsiniz.",
+    "email_expiry": "Bağlantı {{hours}} saat geçerlidir.",
+    "email_reason": "Bu e-postayı, bu adres bir {{brand}} web sitesindeki sohbette verildiği için alıyorsunuz. Siz değilseniz yok sayın, hiçbir şey değişmez."
+  },
   "footer": {
     "powered_by": "Altyapı:",
     "language": "Dil"

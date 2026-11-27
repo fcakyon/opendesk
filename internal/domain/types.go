@@ -46,9 +46,11 @@ type Contact struct {
 	Blocked      bool           `json:"blocked"`
 	TicketCount  int            `json:"ticket_count"`
 	// ChatReachable: the team can start a chat with them (contracts/api.md "Tickets").
-	ChatReachable bool      `json:"chat_reachable"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ChatReachable bool `json:"chat_reachable"`
+	// Verification: whether they proved who they are (contracts/api.md "Contact verification").
+	Verification ContactVerification `json:"verification"`
+	CreatedAt    time.Time           `json:"created_at"`
+	UpdatedAt    time.Time           `json:"updated_at"`
 }
 
 // Tag is a label definition (contracts/api.md Tag).

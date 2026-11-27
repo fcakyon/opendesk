@@ -448,6 +448,8 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
   }
 
   if (resource === "contact") {
+    // contact.verified is the visitor's widget's copy; contact.updated carries the contact.
+    if (verb === "verified") return;
     if (verb === "deleted") {
       const id = d.contact_id as string;
       qc.removeQueries({ queryKey: qk.contact(id) });

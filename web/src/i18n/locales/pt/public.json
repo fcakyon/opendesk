@@ -73,6 +73,25 @@
     "error": "Algo deu errado. Tente novamente.",
     "offline": "Não foi possível acessar o servidor. Verifique sua conexão."
   },
+  "chat_verify": {
+    "page_title": "Confirme seu endereço de e-mail",
+    "title": "Confirme seu endereço de e-mail",
+    "body": "Confirme que este endereço é seu para que {{brand}} saiba que o chat é mesmo seu.",
+    "button": "Confirmar endereço de e-mail",
+    "not_you": "Não foi você? Feche esta página e nada muda.",
+    "done_title": "Seu endereço de e-mail foi confirmado",
+    "already_title": "Seu endereço de e-mail já está confirmado",
+    "done_body": "Agora {{brand}} sabe que o chat de {{email}} é seu. Você pode fechar esta página e continuar conversando.",
+    "invalid_title": "Este link não é válido",
+    "invalid_body": "Ele pode ter expirado ou já ter sido usado. Peça um novo e-mail no chat.",
+    "error": "Algo deu errado. Tente novamente.",
+    "offline": "Não foi possível acessar o servidor. Verifique sua conexão.",
+    "email_subject": "Confirme seu endereço de e-mail para {{brand}}",
+    "email_intro": "Obrigado por conversar com {{brand}}. Confirme que este endereço é seu para que a equipe saiba que é mesmo você.",
+    "email_meanwhile": "Enquanto isso, você pode continuar conversando.",
+    "email_expiry": "O link funciona por {{hours}} horas.",
+    "email_reason": "Você recebeu este e-mail porque este endereço foi informado no chat de um site de {{brand}}. Se não foi você, ignore-o e nada muda."
+  },
   "footer": {
     "powered_by": "Desenvolvido com",
     "language": "Idioma"

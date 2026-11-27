@@ -105,6 +105,19 @@ export type WidgetSession = {
   /** The team's replies not read yet in this widget's chats, and the newest of them. */
   unread?: number;
   unread_latest?: Message | null;
+  /** Whether the visitor proved their address (POST /v1/widget/verification). Older servers omit it. */
+  verification?: Verification;
+};
+
+/** The visitor's verification: a link emailed to the address they gave confirms it. The chat works either way. */
+export type Verification = {
+  status: "verified" | "unverified" | "none";
+  /** While unverified: the address a link goes to. */
+  email: string | null;
+  /** While unverified: when the newest link that still works was sent. */
+  sent_at: string | null;
+  /** While unverified: the earliest time another link can be sent. */
+  resend_at: string | null;
 };
 
 export type Conversation = {

@@ -51,6 +51,7 @@ var NotSealed = []string{
 	"app_attest_challenges.challenge_hash",
 	"app_attest_keys.public_key",
 	"auth_throttle.key",
+	"contact_email_verifications.token_hash",
 	"customer_password_resets.token_hash",
 	"customer_sessions.refresh_hash",
 	"idempotency_keys.request_hash",
