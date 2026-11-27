@@ -88,6 +88,7 @@
     "mentionTeammate": "Mentionner un collègue",
     "mergeSearch": "Rechercher par objet, client ou numéro",
     "remove": "Retirer {{name}}",
+    "editAddress": "Modifier {{name}}",
     "addAddress": "Ajouter {{address}}",
     "openFile": "Ouvrir {{name}}"
   }

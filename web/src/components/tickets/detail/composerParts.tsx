@@ -16,6 +16,7 @@ import { Picker } from "@/components/ui/picker";
 import { Tooltip } from "@/components/ui/tooltip";
 import { toast } from "@/components/ui/toast";
 import type { Upload } from "./outbox";
+import { EmailChip } from "./addressEdit";
 
 /** Uploads files for a message (25 MB each), each shown as it goes. */
 export function uploadFiles(files: FileList | File[], setUploads: Dispatch<SetStateAction<Upload[]>>) {
@@ -142,7 +143,7 @@ export function AttachButton({ onFiles }: { onFiles: (files: FileList) => void }
 
 const emailRe = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 
-/** Addresses as chips (Cc, Bcc, a side conversation's To): typed, pasted or split on commas. */
+/** Addresses as chips (Cc, Bcc, a side conversation's To): typed, pasted or split on commas; a click on one edits it in place. */
 export function EmailChips({
   label,
   values,
@@ -170,12 +171,7 @@ export function EmailChips({
       <span className={cn("shrink-0 text-xs text-fg-3", wide ? "w-12" : "w-7")}>{label}</span>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 py-1">
         {values.map((v) => (
-          <span key={v} className="mono inline-flex h-5 items-center gap-1 rounded-sm bg-hover pl-1.5 pr-0.5 text-[11.5px] animate-pop-in motion-reduce:animate-none" data-ph-mask>
-            {v}
-            <button type="button" aria-label={t("tickets.remove", { name: v })} onClick={() => onChange(values.filter((x) => x !== v))} className="flex size-4 items-center justify-center rounded-xs text-fg-4 hover:text-fg">
-              <X className="size-3" />
-            </button>
-          </span>
+          <EmailChip key={v} value={v} values={values} onChange={onChange} isEmail={(p) => emailRe.test(p)} />
         ))}
         <input
           value={text}

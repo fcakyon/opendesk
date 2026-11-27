@@ -89,6 +89,7 @@
     "mentionTeammate": "Zmínit kolegu",
     "mergeSearch": "Hledat podle předmětu, zákazníka nebo #čísla",
     "remove": "Odebrat {{name}}",
+    "editAddress": "Upravit {{name}}",
     "addAddress": "Přidat {{address}}",
     "openFile": "Otevřít {{name}}"
   }

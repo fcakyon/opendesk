@@ -86,6 +86,7 @@
     "mentionTeammate": "提及同事",
     "mergeSearch": "按主题、客户或 #number 搜索",
     "remove": "移除 {{name}}",
+    "editAddress": "编辑 {{name}}",
     "addAddress": "添加 {{address}}",
     "openFile": "打开 {{name}}"
   }

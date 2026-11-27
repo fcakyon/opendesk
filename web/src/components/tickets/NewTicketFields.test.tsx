@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import "@/i18n";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Contact } from "@/lib/api/types";
 import { emptyNewTicket, isChat, isLog, type NewTicketDraft } from "./newTicket";
 import { NewTicketCopies, NewTicketTo } from "./NewTicketFields";
@@ -22,8 +23,10 @@ describe("a new ticket's recipients", () => {
       const s = { draft, set: (p: Partial<NewTicketDraft>) => ((draft = { ...draft, ...p }), void render()), chat: isChat(draft), log: isLog(draft) } as unknown as NewTicketState;
       root.render(
         <QueryClientProvider client={qc}>
-          <NewTicketTo s={s} />
-          <NewTicketCopies s={s} />
+          <TooltipProvider>
+            <NewTicketTo s={s} />
+            <NewTicketCopies s={s} />
+          </TooltipProvider>
         </QueryClientProvider>,
       );
     });

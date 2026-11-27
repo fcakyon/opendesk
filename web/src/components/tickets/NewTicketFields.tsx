@@ -14,9 +14,11 @@ import { Select } from "@/components/ui/select";
 import { Segmented } from "@/components/ui/tabs";
 import { Picker } from "@/components/ui/picker";
 import { Avatar } from "@/components/ui/avatar";
+import { Tooltip } from "@/components/ui/tooltip";
 import { api } from "@/lib/api/endpoints";
 import { q, qk } from "@/lib/queries";
 import { addressLabel, TeamDot } from "./teams";
+import { AddressInput, TypedAddress } from "./detail/addressEdit";
 import { EmailChips } from "./detail/composerParts";
 import { allTo, isEmailed, toAddress, type NewTicketTo as Recipient } from "./newTicket";
 import type { NewTicketState } from "./useNewTicket";
@@ -59,13 +61,19 @@ export function NewTicketTo({ s }: { s: NewTicketState }) {
   };
   // The contact leaving hands the ticket to the next one.
   const remove = (i: number) => (i === 0 ? s.set({ to: moreTo[0] ?? null, moreTo: moreTo.slice(1) }) : s.set({ moreTo: moreTo.filter((_, j) => j !== i - 1) }));
+  // A typed address fixed in place: emptied, or now the same as another, it leaves.
+  const edit = (i: number, email: string | null) => {
+    if (!email || people.some((p, j) => j !== i && toAddress(p) === email.toLowerCase())) return remove(i);
+    if (i === 0) s.set({ to: { email } });
+    else s.set({ moreTo: moreTo.map((r, j) => (j === i - 1 ? { email } : r)) });
+  };
   return (
     <Field label={tr("newTicket.to")} error={unreachable ? tr("newTicket.notOnChat") : undefined}>
       {({ id }) =>
         to && several ? (
           <div className="flex min-h-8 flex-wrap items-center gap-1 rounded-md border border-line bg-surface px-1 py-1 text-sm">
             {people.map((r, i) => (
-              <RecipientChip key={toAddress(r) || i} r={r} onRemove={() => remove(i)} />
+              <RecipientChip key={toAddress(r) || i} r={r} onRemove={() => remove(i)} onEdit={(email) => edit(i, email)} />
             ))}
             {people.length < MAX_TO && (
             <ContactPicker
@@ -88,10 +96,14 @@ export function NewTicketTo({ s }: { s: NewTicketState }) {
         ) : to ? (
           <div className="flex h-8 items-center gap-2 rounded-md border border-line bg-surface pl-2 pr-1 text-sm">
             <Avatar name={to.contact?.name || to.email || "?"} size="xs" />
-            <span className="min-w-0 flex-1 truncate" data-ph-mask>
-              {to.contact ? `${to.contact.name} ` : ""}
-              <span className="text-fg-3">{to.contact?.email ?? to.email}</span>
-            </span>
+            {to.contact || !to.email ? (
+              <span className="min-w-0 flex-1 truncate" data-ph-mask>
+                {to.contact ? `${to.contact.name} ` : ""}
+                <span className="text-fg-3">{to.contact?.email ?? to.email}</span>
+              </span>
+            ) : (
+              <TypedAddress email={to.email} isEmail={(v) => emailRe.test(v)} onChange={(email) => s.set({ to: email ? { email } : null })} />
+            )}
             <Button size="xs" variant="ghost" onClick={() => s.set({ to: null })}>
               {tr("newTicket.change")}
             </Button>
@@ -159,17 +171,47 @@ function ContactPicker({ s, exclude, onPick, trigger }: { s: NewTicketState; exc
   );
 }
 
-function RecipientChip({ r, onRemove }: { r: Recipient; onRemove: () => void }) {
+/** One of an email's To: a typed address (no contact) is edited in place with a click. */
+function RecipientChip({ r, onRemove, onEdit }: { r: Recipient; onRemove: () => void; onEdit: (email: string | null) => void }) {
   const { t } = useTranslation("indicators");
+  const [editing, setEditing] = useState(false);
   const email = r.contact?.email ?? r.email ?? "";
   const name = r.contact?.name;
+  const typed = !r.contact && !!r.email;
+  if (editing) {
+    return (
+      <span className="inline-flex h-6 items-center rounded-sm bg-surface text-[12.5px]">
+        <AddressInput
+          className="h-6 rounded-sm px-1.5"
+          initial={email}
+          label={t("tickets.editAddress", { name: email })}
+          onCancel={() => setEditing(false)}
+          onCommit={(text) => {
+            const v = text.trim();
+            if (v && !emailRe.test(v)) return false;
+            setEditing(false);
+            if (v !== email) onEdit(v || null);
+            return true;
+          }}
+        />
+      </span>
+    );
+  }
   return (
     <span className="inline-flex h-6 min-w-0 max-w-full items-center gap-1.5 rounded-sm bg-hover pl-1 pr-0.5 text-[12.5px] animate-pop-in motion-reduce:animate-none" data-ph-mask>
       <Avatar name={name || email || "?"} src={r.contact?.avatar_url} size="xs" />
-      <span className="min-w-0 truncate">
-        {name ? `${name} ` : ""}
-        <span className={cn(name && "text-fg-3")}>{email}</span>
-      </span>
+      {typed ? (
+        <Tooltip content={t("tickets.editAddress", { name: email })}>
+          <button type="button" aria-label={t("tickets.editAddress", { name: email })} onClick={() => setEditing(true)} className="min-w-0 cursor-text truncate hover:text-fg">
+            {email}
+          </button>
+        </Tooltip>
+      ) : (
+        <span className="min-w-0 truncate">
+          {name ? `${name} ` : ""}
+          <span className={cn(name && "text-fg-3")}>{email}</span>
+        </span>
+      )}
       <button
         type="button"
         aria-label={t("tickets.remove", { name: name || email })}
