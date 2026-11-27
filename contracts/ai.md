@@ -209,7 +209,7 @@ interface AIModel {
 | GET | `/v1/ai/models` | viewer | $0 | → `{data: AIModel[], default, fast}` ("Models" above; on the workspace's own key, its provider's models) |
 | PATCH | `/v1/ai/settings` | admin | $0 | `Partial<AISettings>` → `AISettings` |
 | POST | `/v1/tickets/{id}/ai/draft` | agent | $0.03 | `{instructions?: string, tone?: string}` → `{body_html, body_text, sources: KBSource[]}`; uses the thread, contact, saved replies, the top KB matches and, for users, what the workspace's connected tools return ("Drafts and connected tools") |
-| POST | `/v1/tickets/{id}/ai/summary` | agent | $0.01 | `{}` → `{summary: string, key_points: string[], sentiment: Sentiment, updated_at}`; stored on the ticket (`custom.ai_summary`) and published as `ticket.updated` |
+| POST | `/v1/tickets/{id}/ai/summary` | agent | $0.01 | `{language?: string /* BCP 47, the reader's interface language */}` → `{summary: string, key_points: string[], sentiment: Sentiment, updated_at}`; `summary` and `key_points` are written in `language`. An empty or invalid tag uses the workspace's customer language (`settings.locale`), then English. `sentiment` stays the English enum. An empty body is the same as no language. Stored on the ticket (`custom.ai_summary`, replacing the previous summary) and published as `ticket.updated`. Automatic summaries (`ai.summarize`) send no language, so they use the customer language |
 | POST | `/v1/tickets/{id}/ai/ask` | viewer | $0.02 | `{question: string}` → `{answer_html, sources: KBSource[]}` (copilot) |
 | POST | `/v1/tickets/{id}/ai/triage` | agent | $0.01 | `{apply: boolean}` → `Triage`; `apply` sets tags/priority/severity with `automation`-style activities attributed to `ai` |
 | DELETE | `/v1/tickets/{id}/ai/suggestions/{field}` | agent | $0 | → 204; dismisses Ollie's suggestion for `field` (`priority`, `severity`, `labels`, `team`, `spam`). Accepting is setting the field (PATCH the ticket), which removes the suggestion |
@@ -323,7 +323,9 @@ severity (`settings.severity_enabled` false, contracts/api.md), triage neither a
 in `custom.ai_suggested_tags` for an agent to accept.
 
 A summary also sets `custom.ai_sentiment`. `custom.ai_summary` is
-`{text, key_points, sentiment, updated_at, message_count}`.
+`{text, key_points, sentiment, updated_at, message_count}`. The text and key points
+are written in the language of the request, or the workspace's customer language when
+the request gives none (an automatic summary). A new summary replaces the stored one.
 
 Messages and tickets also get `language` detection for free when triage runs
 (`custom.language`), which the web app uses for a "Translate" affordance on replies, the

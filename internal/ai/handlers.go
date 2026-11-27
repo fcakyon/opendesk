@@ -187,7 +187,9 @@ func (s *Service) register(api huma.API) {
 		Summary: "Summarize a ticket", Description: "Stores the summary in custom.ai_summary and publishes ticket.updated.", Tags: tags},
 		func(ctx context.Context, in *struct {
 			ID   string `path:"id"`
-			Body *struct{}
+			Body *struct {
+				Language string `json:"language,omitempty" maxLength:"35" doc:"BCP 47 tag the summary is written in. Empty or invalid uses the workspace's customer language, then English."`
+			}
 		}) (*struct{ Body SummaryOutput }, error) {
 			// The summary is stored on the ticket: a write, as an agent.
 			p, err := auth.RequireWorkspace(ctx, auth.RoleAgent, auth.ScopeTicketsWrite)
@@ -201,7 +203,11 @@ func (s *Service) register(api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			out, err := s.Summarize(ctx, p.WorkspaceID, p.ActorUserID(), tid)
+			lang := ""
+			if in.Body != nil {
+				lang = in.Body.Language
+			}
+			out, err := s.Summarize(ctx, p.WorkspaceID, p.ActorUserID(), tid, lang)
 			if err != nil {
 				return nil, apiErr(err)
 			}

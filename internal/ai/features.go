@@ -300,8 +300,9 @@ var summarySchema = obj(map[string]any{"summary": strT, "key_points": strArr, "s
 	"summary", "key_points", "sentiment")
 
 // Summarize writes custom.ai_summary and publishes ticket.updated. userID is nil for
-// automatic summaries.
-func (s *Service) Summarize(ctx context.Context, wid uuid.UUID, userID *uuid.UUID, tid uuid.UUID) (*SummaryOutput, error) {
+// automatic summaries. lang is the reader's language; an empty or invalid tag uses
+// the workspace's customer language, then English.
+func (s *Service) Summarize(ctx context.Context, wid uuid.UUID, userID *uuid.UUID, tid uuid.UUID, lang string) (*SummaryOutput, error) {
 	set, err := s.workspaceAI(ctx, wid)
 	if err != nil {
 		return nil, err
@@ -310,9 +311,12 @@ func (s *Service) Summarize(ctx context.Context, wid uuid.UUID, userID *uuid.UUI
 	if err != nil {
 		return nil, err
 	}
-	set.ReplyLanguage = "workspace"
+	writeIn, err := s.summaryLanguage(ctx, wid, lang)
+	if err != nil {
+		return nil, err
+	}
 	req := Request{Model: s.models.Default, MaxTokens: 3000, Effort: "low", JSONSchema: summarySchema, SchemaName: "ticket_summary",
-		System: []Block{{Text: summarySystem, Cache: true}, {Text: guidance(tc.Workspace.Name, set, "concise", ""), Cache: true}},
+		System: []Block{{Text: summarySystem, Cache: true}, {Text: summaryGuidance(tc.Workspace.Name, set, writeIn), Cache: true}},
 		Messages: []Message{{Role: "user", Blocks: []Block{
 			{Text: renderTicket(tc.T) + "\n" + renderContact(tc.Contact)},
 			// The previous summary is not reused: a fresh summary reads the whole thread.
@@ -362,6 +366,30 @@ func (s *Service) Summarize(ctx context.Context, wid uuid.UUID, userID *uuid.UUI
 	}
 	c.charge(ctx)
 	return res, nil
+}
+
+// summaryLanguage is the language a summary is written in. A real BCP 47 tag on the
+// request wins. Otherwise the workspace's customer language, then English. "und"
+// and anything language.Parse refuses are ignored.
+func (s *Service) summaryLanguage(ctx context.Context, wid uuid.UUID, explicit string) (string, error) {
+	if l := readerLang(explicit); l != "" {
+		return l, nil
+	}
+	st, err := hd.LoadSettings(ctx, s.d.DB.Pool, wid)
+	if err != nil {
+		return "", err
+	}
+	if l := readerLang(st.Locale); l != "" {
+		return l, nil
+	}
+	return "en", nil
+}
+
+func readerLang(s string) string {
+	if l := canonicalLang(s); l != "" && l != "und" {
+		return l
+	}
+	return ""
 }
 
 // --- Rewrite and translate ----------------------------------------------------------

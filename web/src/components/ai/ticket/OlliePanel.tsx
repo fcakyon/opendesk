@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next";
 import type { AIAnswer, AISummary, IntegrationStarter, Priority, Sentiment, Severity, Suggestion, SuggestionField, Ticket, TicketPatch, Triage } from "@/lib/api/types";
 import { api } from "@/lib/api/endpoints";
+import { uiLanguage } from "@/i18n";
 import { useAI } from "@/lib/ai";
 import { aiDecisions, aiSuggestions, pct } from "@/lib/decisions";
 import { relLong, fullDate } from "@/lib/format";
@@ -164,7 +165,7 @@ function useSummary(ticket: Ticket, run: Run) {
   const summarize = async () => {
     setBusy(true);
     try {
-      const res = await run(t("summary.working"), () => api.ai.summary(ticket.id));
+      const res = await run(t("summary.working"), () => api.ai.summary(ticket.id, uiLanguage()));
       const cur = qc.getQueryData<Ticket>(qk.of("tickets", "detail", ticket.id)) ?? ticket;
       patchCachedTicket(qc, { ...cur, custom: { ...cur.custom, ai_summary: { text: res.summary, key_points: res.key_points, sentiment: res.sentiment, updated_at: res.updated_at }, ai_sentiment: res.sentiment } }, me);
       balanceSpent(qc);

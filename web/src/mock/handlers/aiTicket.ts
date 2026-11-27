@@ -537,6 +537,8 @@ export function registerAiTicket() {
   post("/v1/tickets/:id/ai/summary", (ctx) => {
     guard(ctx);
     const t = ticketOf(ctx);
+    // The reader's language. The mock keeps its English sample text; a bad tag is ignored.
+    if (typeof ctx.body.language === "string" && ctx.body.language.length > 35) throw invalid("language is too long");
     reserve(ctx.ws, "summarize");
     const s = summarize(ctx.ws, t);
     t.custom = { ...t.custom, ai_summary: s, ai_sentiment: s.sentiment };
