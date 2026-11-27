@@ -4,7 +4,7 @@ import { AlertCircle, ArrowDown, Check, CheckCheck, ClipboardCopy, FileCode, For
 import { memo, useMemo, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { tone } from "@/lib/tones";
-import type { Attachment, Member, Message, Thread } from "@/lib/api/types";
+import type { Attachment, Member, Message, Thread, WhatsAppDeliveryMeta } from "@/lib/api/types";
 import { api } from "@/lib/api/endpoints";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole, useSession } from "@/lib/session";
@@ -256,6 +256,22 @@ function Delivery({ m, onRetry }: { m: Message; onRetry?: () => void }) {
       <span className="flex items-center gap-1 text-[11px] text-fg-4">
         <Spinner className="size-3" /> {t("message.sending")}
       </span>
+    );
+  // WhatsApp reports its own receipt on the message: one tick sent, two delivered, blue read.
+  const wa = m.delivery_meta as WhatsAppDeliveryMeta | undefined;
+  const waStatus = m.delivery_status === "failed" || m.delivery_status === "bounced" ? undefined : wa?.provider_status;
+  if (waStatus && waStatus !== "failed")
+    return (
+      <Tooltip content={t(`message.whatsapp.${waStatus}`)}>
+        <span className="flex items-center gap-1 text-[11px] text-fg-4 animate-fade-in">
+          {waStatus === "sent" ? (
+            <Check className="size-3" />
+          ) : (
+            <CheckCheck className={`size-3 ${waStatus === "read" ? tone.blue.text : ""}`} />
+          )}
+          {t(`message.whatsapp.${waStatus}`)}
+        </span>
+      </Tooltip>
     );
   if (m.delivery_status === "sent")
     return (

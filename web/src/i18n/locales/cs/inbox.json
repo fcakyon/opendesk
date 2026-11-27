@@ -192,7 +192,9 @@
     "title_one": "● {{count}} čekající zákazník",
     "title_few": "● {{count}} čekající zákazníci",
     "title_many": "● {{count}} čekajícího zákazníka",
-    "title_other": "● {{count}} čekajících zákazníků"
+    "title_other": "● {{count}} čekajících zákazníků",
+    "whatsapp": "WhatsApp",
+    "whatsappHint": "WhatsApp. Odpovědi odsud dostane zákazník na WhatsApp."
   },
   "presence": {
     "viewing": "{{name}} prohlíží",
@@ -724,7 +726,12 @@
       "member_gone": "Na tento tiket už nemůžete odpovídat, proto odpověď nebyla odeslána.",
       "refused": "V naplánovaném čase již nebylo možné odpověď odeslat v původní podobě. Zkontrolujte ji a odešlete znovu.",
       "failed": "Naplánovanou odpověď se nepodařilo odeslat. Odešlete ji znovu."
-    }
+    },
+    "whatsappWindowOpen": "Okno WhatsAppu je otevřené. Na odpověď zbývá {{left}}.",
+    "whatsappWindowClosed": "24hodinové okno je zavřené, odeslat lze jen šablonu.",
+    "whatsappDisconnected": "Toto číslo WhatsAppu není připojené. Správce ho může znovu připojit v Nastavení > WhatsApp.",
+    "whatsappTemplate": "Odeslat šablonu",
+    "whatsappOneFile": "WhatsApp přijímá jeden soubor na zprávu. Odeberte soubor a připojte jiný."
   },
   "sharedDraft": {
     "label": "Sdílený koncept",
@@ -822,7 +829,13 @@
     "showNote": "Zobrazit poznámku",
     "hideNote": "Skrýt poznámku",
     "forward": "Přeposlat",
-    "copyForAgent": "Kopírovat pro AI agenta"
+    "copyForAgent": "Kopírovat pro AI agenta",
+    "whatsapp": {
+      "sent": "Odesláno",
+      "delivered": "Doručeno",
+      "read": "Přečteno",
+      "failed": "Nedoručeno"
+    }
   },
   "merge": {
     "title": "Sloučit #{{number}} s jiným tiketem",
@@ -1252,5 +1265,40 @@
   "wiki": {
     "title": "Wiki",
     "untitled": "Bez názvu"
+  },
+  "whatsappTemplate": {
+    "title": "Odeslat šablonu",
+    "description": "Odeslat lze jen šablony schválené společností Meta, během 24hodinového okna i po něm.",
+    "search": "Hledat šablony",
+    "loading": "Načítání šablon",
+    "noTemplates": "Odsud zatím nelze odeslat žádnou šablonu. Synchronizujte schválené šablony v Nastavení > WhatsApp.",
+    "emptySearch": "Hledání neodpovídá žádná šablona.",
+    "preview": "Náhled",
+    "header": "Záhlaví",
+    "headerMedia": "Záhlaví: {{kind}}",
+    "kind": {
+      "image": "Obrázek",
+      "video": "Video",
+      "document": "Dokument"
+    },
+    "headerChoose": "Vybrat soubor",
+    "headerFileHint": "Nejvýše {{size}}.",
+    "headerUploading": "Nahrávání",
+    "headerRemove": "Odebrat soubor záhlaví",
+    "headerTooLarge": "{{name}} je větší než {{size}}.",
+    "headerUploadFailed": "{{name}} se nepodařilo nahrát",
+    "headerValue": "Záhlaví: {{name}}",
+    "headerValueHint": "Nejvýše 60 znaků.",
+    "params": "Vyplňte zástupné hodnoty",
+    "paramHint": "Vloží se na toto místo ve zprávě.",
+    "buttons": "Odkazy tlačítek",
+    "buttonValue": "Tlačítko: {{text}}",
+    "buttonNumber": "Tlačítko {{number}}",
+    "buttonHint": "Vloží se do odkazu tohoto tlačítka.",
+    "back": "Zpět",
+    "cancel": "Zrušit",
+    "send": "Odeslat šablonu",
+    "sent": "Šablona byla odeslána.",
+    "error": "Šablonu se nepodařilo odeslat"
   }
 }

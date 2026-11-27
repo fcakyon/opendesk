@@ -93,7 +93,8 @@
     "wikiTrash": "Koš",
     "pages": "Stránky",
     "pagesPage": "Stránka",
-    "pagesSettings": "Stránky"
+    "pagesSettings": "Stránky",
+    "whatsapp": "WhatsApp"
   },
   "folders": {
     "unassigned": "Nepřiřazené",
@@ -157,7 +158,8 @@
     "auditLog": "Protokol auditu",
     "trash": "Koš",
     "phone": "Telefon",
-    "pages": "Stránky"
+    "pages": "Stránky",
+    "whatsapp": "WhatsApp"
   },
   "settingsPage": "Stránka nastavení",
   "command": {

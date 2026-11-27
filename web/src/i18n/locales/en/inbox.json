@@ -186,7 +186,9 @@
     "soundOn": "Mute chat alert sounds",
     "soundOff": "Play a sound when a visitor is waiting",
     "title_one": "● {{count}} customer waiting",
-    "title_other": "● {{count}} customers waiting"
+    "title_other": "● {{count}} customers waiting",
+    "whatsapp": "WhatsApp",
+    "whatsappHint": "WhatsApp. Replies from here go to the customer's WhatsApp."
   },
   "presence": {
     "viewing": "{{name}} is viewing",
@@ -687,7 +689,12 @@
       "member_gone": "You can no longer reply on this ticket, so the reply was not sent.",
       "refused": "The reply could no longer be sent as it was written when it was due. Check it and send it again.",
       "failed": "The scheduled reply could not be sent. Send it again."
-    }
+    },
+    "whatsappWindowOpen": "WhatsApp window open. {{left}} left to reply.",
+    "whatsappWindowClosed": "The 24 hour window is closed, so only a template can go out.",
+    "whatsappDisconnected": "This WhatsApp number is not connected. An admin can connect it again in Settings > WhatsApp.",
+    "whatsappTemplate": "Send template",
+    "whatsappOneFile": "WhatsApp takes one file per message. Remove the file to attach another."
   },
   "sharedDraft": {
     "label": "Shared draft",
@@ -700,6 +707,41 @@
     "replaceTitle": "Replace what you wrote?",
     "replaceBody": "The draft by {{name}} replaces what you have written.",
     "replaceConfirm": "Replace"
+  },
+  "whatsappTemplate": {
+    "title": "Send a template",
+    "description": "Only templates approved at Meta can go out, inside the 24 hour window or after it.",
+    "search": "Search templates",
+    "loading": "Loading templates",
+    "noTemplates": "No template can be sent from here yet. Sync approved templates in Settings > WhatsApp.",
+    "emptySearch": "No template matches that search.",
+    "preview": "Preview",
+    "header": "Header",
+    "headerMedia": "{{kind}} header",
+    "kind": {
+      "image": "Image",
+      "video": "Video",
+      "document": "Document"
+    },
+    "headerChoose": "Choose a file",
+    "headerFileHint": "Up to {{size}}.",
+    "headerUploading": "Uploading",
+    "headerRemove": "Remove the header file",
+    "headerTooLarge": "{{name}} is larger than {{size}}.",
+    "headerUploadFailed": "Couldn't upload {{name}}",
+    "headerValue": "Header: {{name}}",
+    "headerValueHint": "Up to 60 characters.",
+    "params": "Fill in the placeholders",
+    "paramHint": "Goes in this placeholder in the message.",
+    "buttons": "Button links",
+    "buttonValue": "Button: {{text}}",
+    "buttonNumber": "Button {{number}}",
+    "buttonHint": "Goes in this button's link.",
+    "back": "Back",
+    "cancel": "Cancel",
+    "send": "Send template",
+    "sent": "Template sent.",
+    "error": "Couldn't send this template"
   },
   "message": {
     "from": "Message from {{name}}",
@@ -788,7 +830,13 @@
     "hideNote": "Hide note",
     "forward": "Forward",
     "viewSource": "View source",
-    "copyForAgent": "Copy for AI agent"
+    "copyForAgent": "Copy for AI agent",
+    "whatsapp": {
+      "sent": "Sent",
+      "delivered": "Delivered",
+      "read": "Read",
+      "failed": "Not delivered"
+    }
   },
   "merge": {
     "title": "Merge #{{number}} into another ticket",

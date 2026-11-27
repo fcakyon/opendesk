@@ -104,6 +104,7 @@ func MergeContacts(ctx context.Context, tx pgx.Tx, wid, src, dst uuid.UUID) ([]u
 	for _, q := range []string{
 		`UPDATE messages SET author_contact_id = $3 WHERE workspace_id = $1 AND author_contact_id = $2`,
 		`UPDATE phone_calls SET contact_id = $3 WHERE workspace_id = $1 AND contact_id = $2`,
+		`UPDATE whatsapp_contacts SET contact_id = $3 WHERE workspace_id = $1 AND contact_id = $2`,
 		`UPDATE attachments SET uploaded_by_contact_id = $3 WHERE workspace_id = $1 AND uploaded_by_contact_id = $2`,
 		`UPDATE api_key_requests SET contact_id = $3 WHERE workspace_id = $1 AND contact_id = $2`,
 	} {

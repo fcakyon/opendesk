@@ -189,7 +189,9 @@
     "soundOff": "Jouer un son lorsqu’un visiteur attend",
     "title_one": "● {{count}} client en attente",
     "title_other": "● {{count}} clients en attente",
-    "title_many": "● {{count}} clients en attente"
+    "title_many": "● {{count}} clients en attente",
+    "whatsapp": "WhatsApp",
+    "whatsappHint": "WhatsApp. Les réponses d’ici partent vers le WhatsApp du client."
   },
   "presence": {
     "viewing": "{{name}} consulte",
@@ -700,7 +702,12 @@
       "member_gone": "Vous ne pouvez plus répondre sur ce ticket, la réponse n’a donc pas été envoyée.",
       "refused": "La réponse n’a pas pu être envoyée telle qu’elle était écrite à l’heure prévue. Vérifiez-la et renvoyez-la.",
       "failed": "La réponse programmée n’a pas pu être envoyée. Renvoyez-la."
-    }
+    },
+    "whatsappWindowOpen": "Fenêtre WhatsApp ouverte. {{left}} pour répondre.",
+    "whatsappWindowClosed": "La fenêtre de 24 heures est fermée : seul un modèle peut être envoyé.",
+    "whatsappDisconnected": "Ce numéro WhatsApp n’est pas connecté. Un admin peut le reconnecter dans Paramètres > WhatsApp.",
+    "whatsappTemplate": "Envoyer un modèle",
+    "whatsappOneFile": "WhatsApp accepte un fichier par message. Retirez le fichier pour en joindre un autre."
   },
   "sharedDraft": {
     "label": "Brouillon partagé",
@@ -713,6 +720,41 @@
     "replaceTitle": "Remplacer votre texte ?",
     "replaceBody": "Le brouillon de {{name}} remplace le texte que vous avez rédigé.",
     "replaceConfirm": "Remplacer"
+  },
+  "whatsappTemplate": {
+    "title": "Envoyer un modèle",
+    "description": "Seuls les modèles approuvés par Meta peuvent être envoyés, pendant ou après la fenêtre de 24 heures.",
+    "search": "Rechercher des modèles",
+    "loading": "Chargement des modèles",
+    "noTemplates": "Aucun modèle ne peut encore être envoyé. Synchronisez les modèles approuvés dans Paramètres > WhatsApp.",
+    "emptySearch": "Aucun modèle ne correspond à cette recherche.",
+    "preview": "Aperçu",
+    "header": "En-tête",
+    "headerMedia": "En-tête : {{kind}}",
+    "kind": {
+      "image": "Image",
+      "video": "Vidéo",
+      "document": "Document"
+    },
+    "headerChoose": "Choisir un fichier",
+    "headerFileHint": "Jusqu’à {{size}}.",
+    "headerUploading": "Importation",
+    "headerRemove": "Retirer le fichier d’en-tête",
+    "headerTooLarge": "{{name}} dépasse {{size}}.",
+    "headerUploadFailed": "Impossible d’importer {{name}}",
+    "headerValue": "En-tête : {{name}}",
+    "headerValueHint": "Jusqu’à 60 caractères.",
+    "params": "Remplissez les variables",
+    "paramHint": "S’insère à la place de cette variable dans le message.",
+    "buttons": "Liens des boutons",
+    "buttonValue": "Bouton : {{text}}",
+    "buttonNumber": "Bouton {{number}}",
+    "buttonHint": "S’insère dans le lien de ce bouton.",
+    "back": "Retour",
+    "cancel": "Annuler",
+    "send": "Envoyer le modèle",
+    "sent": "Modèle envoyé.",
+    "error": "Impossible d’envoyer ce modèle"
   },
   "message": {
     "from": "Message de {{name}}",
@@ -768,7 +810,13 @@
     "viaForm": "Envoyé via le formulaire à l’adresse <m>{{address}}</m>",
     "forward": "Transférer",
     "viewSource": "Afficher la source",
-    "copyForAgent": "Copier pour un agent IA"
+    "copyForAgent": "Copier pour un agent IA",
+    "whatsapp": {
+      "sent": "Envoyé",
+      "delivered": "Remis",
+      "read": "Lu",
+      "failed": "Non remis"
+    }
   },
   "merge": {
     "title": "Fusionner #{{number}} avec un autre ticket",

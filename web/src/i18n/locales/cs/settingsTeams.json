@@ -599,7 +599,8 @@
       "chat": "Chat",
       "api": "API",
       "portal": "Portál",
-      "phone": "Telefon"
+      "phone": "Telefon",
+      "whatsapp": "WhatsApp"
     },
     "via": {
       "address": "Tým adresy",

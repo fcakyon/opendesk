@@ -86,6 +86,7 @@
     "myTeams": "Meine Teams",
     "newTicket": "Neues Ticket",
     "phone": "Telefon",
+    "whatsapp": "WhatsApp",
     "print": "Drucken",
     "wikiGraph": "Graph",
     "wikiTags": "Tags",
@@ -157,7 +158,8 @@
     "auditLog": "Audit-Log",
     "trash": "Papierkorb",
     "phone": "Telefon",
-    "pages": "Seiten"
+    "pages": "Seiten",
+    "whatsapp": "WhatsApp"
   },
   "settingsPage": "Einstellungsseite",
   "command": {

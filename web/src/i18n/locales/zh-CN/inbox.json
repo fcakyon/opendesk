@@ -183,7 +183,9 @@
     "longestHint": "等待最久：{{name}}。打开会话。",
     "soundOn": "关闭聊天提醒音",
     "soundOff": "有访客等待时播放提示音",
-    "title_other": "● {{count}} 位客户正在等待"
+    "title_other": "● {{count}} 位客户正在等待",
+    "whatsapp": "WhatsApp",
+    "whatsappHint": "WhatsApp。从这里发出的回复会发到客户的 WhatsApp。"
   },
   "presence": {
     "viewing": "{{name}} 正在查看",
@@ -643,7 +645,12 @@
       "member_gone": "你已无法在这个工单上回复，因此回复未发送。",
       "refused": "到期时已无法按原内容发送这条回复。请检查后重新发送。",
       "failed": "定时回复未能发送。请重新发送。"
-    }
+    },
+    "whatsappWindowOpen": "WhatsApp 窗口已开启，还剩 {{left}} 可以回复。",
+    "whatsappWindowClosed": "24 小时窗口已关闭，只能发送模板。",
+    "whatsappDisconnected": "此 WhatsApp 号码未连接。管理员可以在 设置 > WhatsApp 中重新连接。",
+    "whatsappTemplate": "发送模板",
+    "whatsappOneFile": "WhatsApp 每条消息只能带一个文件。移除当前文件才能添加另一个。"
   },
   "sharedDraft": {
     "label": "共享草稿",
@@ -656,6 +663,41 @@
     "replaceTitle": "替换你写的内容？",
     "replaceBody": "{{name}} 的草稿会替换你已写的内容。",
     "replaceConfirm": "替换"
+  },
+  "whatsappTemplate": {
+    "title": "发送模板",
+    "description": "只能发送在 Meta 通过审核的模板，24 小时窗口内和窗口外都一样。",
+    "search": "搜索模板",
+    "loading": "正在加载模板",
+    "noTemplates": "这里还没有可发送的模板。请在“设置 > WhatsApp”中同步已审核的模板。",
+    "emptySearch": "没有符合该搜索的模板。",
+    "preview": "预览",
+    "header": "标题",
+    "headerMedia": "{{kind}}标题",
+    "kind": {
+      "image": "图片",
+      "video": "视频",
+      "document": "文件"
+    },
+    "headerChoose": "选择文件",
+    "headerFileHint": "最大 {{size}}。",
+    "headerUploading": "正在上传",
+    "headerRemove": "移除标题文件",
+    "headerTooLarge": "{{name}} 大于 {{size}}。",
+    "headerUploadFailed": "无法上传 {{name}}",
+    "headerValue": "标题：{{name}}",
+    "headerValueHint": "最多 60 个字符。",
+    "params": "填写占位符",
+    "paramHint": "会填入消息里的这个占位符。",
+    "buttons": "按钮链接",
+    "buttonValue": "按钮：{{text}}",
+    "buttonNumber": "按钮 {{number}}",
+    "buttonHint": "会填入这个按钮的链接。",
+    "back": "返回",
+    "cancel": "取消",
+    "send": "发送模板",
+    "sent": "模板已发送。",
+    "error": "无法发送这个模板"
   },
   "message": {
     "from": "来自 {{name}} 的消息",
@@ -741,7 +783,13 @@
     "showNote": "显示备注",
     "hideNote": "隐藏备注",
     "forward": "转发",
-    "copyForAgent": "复制给 AI 智能体"
+    "copyForAgent": "复制给 AI 智能体",
+    "whatsapp": {
+      "sent": "已发送",
+      "delivered": "已送达",
+      "read": "已读",
+      "failed": "未送达"
+    }
   },
   "merge": {
     "title": "把 #{{number}} 合并到其他工单",

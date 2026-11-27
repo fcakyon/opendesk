@@ -11,6 +11,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
 
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/collab"
@@ -19,6 +20,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 	"github.com/useopendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/jobs"
 	"github.com/useopendesk/opendesk/internal/templates"
 )
 
@@ -387,6 +389,17 @@ func PostMessage(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal
 	} else if len(b.To)+len(b.Cc)+len(b.Bcc) > 0 {
 		return domain.Message{}, httpx.Validation("to, cc and bcc apply only to email replies")
 	}
+	// A WhatsApp reply leaves only inside Meta's 24-hour window, as free-form text.
+	whatsappReply := channel == domain.ChannelWhatsApp && b.Kind == "reply"
+	if whatsappReply {
+		if err := checkWhatsAppReply(ctx, tx, wid, tid); err != nil {
+			return domain.Message{}, err
+		}
+		if err := validateWhatsAppReply(attIDs, bodyText); err != nil {
+			return domain.Message{}, err
+		}
+		nm.DeliveryStatus = "pending"
+	}
 	asKeyBot(&nm, p, bot)
 	if actor.UserID != nil && nm.FromName == "" {
 		if u, err := domain.LoadUserRef(ctx, tx, *actor.UserID); err == nil {
@@ -396,6 +409,12 @@ func PostMessage(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal
 	msg, err := domain.AddMessage(ctx, tx, d.Jobs, nm)
 	if err != nil {
 		return domain.Message{}, err
+	}
+	if whatsappReply {
+		if _, err := d.Jobs.InsertTx(ctx, tx, jobs.WhatsAppSendArgs{WorkspaceID: wid, MessageID: msg.ID},
+			&river.InsertOpts{MaxAttempts: jobs.WhatsAppSendAttempts}); err != nil {
+			return domain.Message{}, err
+		}
 	}
 	if fromNote != nil {
 		// The reply carries the note's words now: the note stays where it was as a marker

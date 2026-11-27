@@ -186,7 +186,9 @@
     "soundOn": "Chat-Alarmtöne stummschalten",
     "soundOff": "Ton abspielen, wenn ein Besucher wartet",
     "title_one": "● {{count}} Kunde wartet",
-    "title_other": "● {{count}} Kunden warten"
+    "title_other": "● {{count}} Kunden warten",
+    "whatsapp": "WhatsApp",
+    "whatsappHint": "WhatsApp. Antworten von hier gehen an das WhatsApp des Kunden."
   },
   "presence": {
     "viewing": "{{name}} sieht es sich an",
@@ -683,7 +685,12 @@
       "member_gone": "Du kannst auf dieses Ticket nicht mehr antworten, daher wurde die Antwort nicht gesendet.",
       "refused": "Die Antwort konnte zum geplanten Zeitpunkt nicht so gesendet werden, wie sie geschrieben war. Prüfe sie und sende sie erneut.",
       "failed": "Die geplante Antwort konnte nicht gesendet werden. Sende sie erneut."
-    }
+    },
+    "whatsappWindowOpen": "WhatsApp-Fenster offen. Noch {{left}} zum Antworten.",
+    "whatsappWindowClosed": "Das 24-Stunden-Fenster ist geschlossen, daher kann nur eine Vorlage gesendet werden.",
+    "whatsappDisconnected": "Diese WhatsApp-Nummer ist nicht verbunden. Ein Admin kann sie unter Einstellungen > WhatsApp wieder verbinden.",
+    "whatsappTemplate": "Vorlage senden",
+    "whatsappOneFile": "WhatsApp nimmt eine Datei pro Nachricht. Entferne die Datei, um eine andere anzuhängen."
   },
   "sharedDraft": {
     "label": "Geteilter Entwurf",
@@ -696,6 +703,41 @@
     "replaceTitle": "Deinen Text ersetzen?",
     "replaceBody": "Der Entwurf von {{name}} ersetzt, was du geschrieben hast.",
     "replaceConfirm": "Ersetzen"
+  },
+  "whatsappTemplate": {
+    "title": "Vorlage senden",
+    "description": "Nur bei Meta genehmigte Vorlagen können gesendet werden, innerhalb des 24-Stunden-Fensters oder danach.",
+    "search": "Vorlagen suchen",
+    "loading": "Vorlagen werden geladen",
+    "noTemplates": "Es kann noch keine Vorlage gesendet werden. Synchronisiere genehmigte Vorlagen unter Einstellungen > WhatsApp.",
+    "emptySearch": "Keine Vorlage passt zu dieser Suche.",
+    "preview": "Vorschau",
+    "header": "Kopfzeile",
+    "headerMedia": "{{kind}}-Kopfzeile",
+    "kind": {
+      "image": "Bild",
+      "video": "Video",
+      "document": "Dokument"
+    },
+    "headerChoose": "Datei wählen",
+    "headerFileHint": "Bis zu {{size}}.",
+    "headerUploading": "Wird hochgeladen",
+    "headerRemove": "Datei der Kopfzeile entfernen",
+    "headerTooLarge": "{{name}} ist größer als {{size}}.",
+    "headerUploadFailed": "{{name}} konnte nicht hochgeladen werden",
+    "headerValue": "Kopfzeile: {{name}}",
+    "headerValueHint": "Bis zu 60 Zeichen.",
+    "params": "Platzhalter ausfüllen",
+    "paramHint": "Wird in diesem Platzhalter in der Nachricht eingesetzt.",
+    "buttons": "Links der Schaltflächen",
+    "buttonValue": "Schaltfläche: {{text}}",
+    "buttonNumber": "Schaltfläche {{number}}",
+    "buttonHint": "Wird in den Link dieser Schaltfläche eingesetzt.",
+    "back": "Zurück",
+    "cancel": "Abbrechen",
+    "send": "Vorlage senden",
+    "sent": "Vorlage gesendet.",
+    "error": "Die Vorlage konnte nicht gesendet werden"
   },
   "message": {
     "from": "Nachricht von {{name}}",
@@ -784,7 +826,13 @@
     "hideNote": "Notiz ausblenden",
     "forward": "Weiterleiten",
     "viewSource": "Quelltext anzeigen",
-    "copyForAgent": "Für KI-Agent kopieren"
+    "copyForAgent": "Für KI-Agent kopieren",
+    "whatsapp": {
+      "sent": "Gesendet",
+      "delivered": "Zugestellt",
+      "read": "Gelesen",
+      "failed": "Nicht zugestellt"
+    }
   },
   "merge": {
     "title": "#{{number}} mit anderem Ticket zusammenführen",

@@ -17,11 +17,12 @@ it exists, and this file is the contract the parts are built against.
   widget's conversation and upload routes answer `403 feature_disabled`, for members, API keys, customers and
   visitors alike, so no ticket of the workspace is read, created or changed. Public help center articles and
   the widget's session and config stay available. Stored tickets are retained and return when Tickets is on.
-  Inbound email, phone events and support channel commands are still accepted and stored (the `inbound_emails`,
-  `phone_inbound_events` and `support_channel_inbound_events` rows, deduplicated as always) but change no ticket:
-  their jobs snooze (no attempt used, ten minutes at a time) and the rows stay pending, visible to operations as
-  scheduled jobs. Turning Tickets on wakes every held job, oldest first, so each becomes its ticket, reply or call
-  entry exactly once. Linking a support channel identity is not ticket work and is not held.
+  Inbound email, phone events, WhatsApp deliveries and support channel commands are still accepted and stored (the
+  `inbound_emails`, `phone_inbound_events`, `whatsapp_inbound_events` and `support_channel_inbound_events` rows,
+  deduplicated as always) but change no ticket: their jobs snooze (no attempt used, ten minutes at a time) and the
+  rows stay pending, visible to operations as scheduled jobs. Turning Tickets on wakes every held job, oldest first,
+  so each becomes its ticket, reply or call entry exactly once. Linking a support channel identity is not ticket work
+  and is not held. A suspended workspace's WhatsApp deliveries are acknowledged and dropped, as its phone events are.
 - Errors: RFC 9457 problem+json `{ "status", "title", "detail", "code"?, "product"?, "reason"?, "errors"? }`.
   `code` is a stable machine string (`invalid_credentials`, `mfa_required`, `forbidden`,
   `not_found`, `conflict`, `rate_limited`, `validation_failed`). A suspended workspace answers
@@ -101,7 +102,7 @@ type CompanyRef = { id: string; name: string; domain: string; avatar_url: string
 type TicketStatus = "open" | "pending" | "on_hold" | "solved" | "closed";
 type Priority = "low" | "normal" | "high" | "urgent";
 type Severity = "sev1" | "sev2" | "sev3" | "sev4"; // business impact, sev1 the most severe; a ticket may have none
-type Channel = "email" | "chat" | "api" | "portal" | "phone"; // phone: a ticket a call opened (contracts/phone.md)
+type Channel = "email" | "chat" | "api" | "portal" | "phone" | "whatsapp"; // phone: a ticket a call opened (contracts/phone.md); whatsapp: one a customer's WhatsApp message opened (contracts/whatsapp.md)
 type TicketSkill = { id: string; name: string }; // a workspace skill required by this ticket's matched route
 type Ticket = {
   id: string; number: number; alias: string | null /* optional, workspace-unique reference; not an authorization token */; subject: string; status: TicketStatus; priority: Priority; severity: Severity | null; channel: Channel;
@@ -122,6 +123,7 @@ type Message = {
   body_html: string; body_text: string; has_quoted: boolean /* an original to open: an inbound email's full text, or the copy of an email we sent as it went out */; subject: string;
   from_email: string; from_name: string; to: string[]; cc: string[]; bcc: string[];
   attachments: Attachment[]; delivery_status: "none" | "pending" | "sent" | "failed" | "bounced"; delivery_error: string;
+  delivery_meta?: Record<string, unknown>; // what the provider reported (contracts/whatsapp.md "Delivery receipts and send outcomes"): a WhatsApp message carries provider_status ("sent" | "delivered" | "read" | "failed"), provider_error, provider_error_code (a number) and the approved template it went out with under whatsapp_template; delivery_status stays "sent" once delivered or read. Email, and every other channel, leaves this out
   ai: boolean; // a reply from the widget AI agent (contracts/agent.md)
   ai_action: AIAction | null; // an action the agent asks the visitor to confirm (contracts/agent.md "Visitor actions"); public
   ai_rating: "up" | "down" | null; // the visitor's rating of an agent reply (contracts/agent.md "Ratings")

@@ -29,7 +29,8 @@
     "chat": "聊天",
     "api": "API",
     "portal": "客户门户",
-    "phone": "电话"
+    "phone": "电话",
+    "whatsapp": "WhatsApp"
   },
   "sentiment": {
     "positive": "正面",

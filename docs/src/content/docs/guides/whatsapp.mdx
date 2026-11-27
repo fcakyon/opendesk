@@ -1,0 +1,150 @@
+---
+title: WhatsApp messages
+description: Connect a WhatsApp Business number through Meta's Cloud API, so customer messages open tickets and your replies go back to WhatsApp, with approved templates for after the 24 hour window.
+---
+
+import Steps from '../../../components/Steps.astro';
+import Step from '../../../components/Step.astro';
+import Callout from '../../../components/Callout.astro';
+
+Connect a WhatsApp Business number through [Meta's WhatsApp Cloud API](https://developers.facebook.com/docs/whatsapp/cloud-api) and it becomes a customer channel. A customer's message opens a ticket in your inbox, on the **WhatsApp** channel, and your replies go back to them on WhatsApp. Meta only takes a free-form reply within 24 hours of the customer's latest message; after that, send an approved template.
+
+Connecting needs the admin role. Open **Settings**, **WhatsApp**, in the **Channels** group.
+
+## What you need in Meta
+
+The connection reads and writes your number through a Meta app of the business that owns it. An admin copies these from Meta:
+
+- **Phone number ID** and **WhatsApp Business account ID**: in the [Meta app dashboard](https://developers.facebook.com/apps/), open the app that has the WhatsApp product, then **WhatsApp**, then **API Setup**. The account ID is the WhatsApp Business account's, and the phone number ID belongs to the number you connect.
+- **Access token**: a system user's token with the WhatsApp Business permissions. In [Business settings](https://business.facebook.com/settings/), open **Users**, then **System users**, give a system user access to the WhatsApp Business account and generate a token with `whatsapp_business_management` and `whatsapp_business_messaging`.
+- **App secret**: in the Meta app dashboard, open **App settings**, then **Basic**, and click **Show** next to **App secret**. Meta signs each webhook call with it, and opendesk refuses the calls whose signature does not match.
+- **Verify token**: a string you choose, which Meta echoes when it checks the webhook address. Leave the field empty and opendesk makes one for you, which is enough when you use the webhook button.
+
+The phone number ID and the account ID are numbers. opendesk checks the token, the account ID and the phone number ID with Meta before it saves anything: a wrong ID, a token without access to the number, or a number outside that WhatsApp Business account is refused there and then.
+
+<Callout type="note" title="The credentials are kept encrypted">
+
+The token and the app secret are encrypted at rest and never shown again. To use another token or secret, disconnect the number and connect it again with the new ones. Its tickets carry on: they pick up the new connection, and a customer's 24 hours keep counting from their latest message.
+
+</Callout>
+
+## Connect a number
+
+<Steps>
+<Step title="Open the WhatsApp settings">
+
+In **Settings**, **WhatsApp**, click **Connect a number**.
+
+</Step>
+<Step title="Paste the details">
+
+Give the connection a **Name** for settings (the number's verified name when empty) and choose a **Brand** for its tickets (the default brand when empty). Then paste the **Phone number ID**, the **WhatsApp Business account ID**, the **Access token** and the **App secret**. A **Verify token** is optional: one is generated when you leave it empty. The **Graph API version** is optional too, and uses `v26.0` when empty. Click **Connect**.
+
+opendesk checks the credentials with Meta, reads the number's display number and verified name, and adds the connection.
+
+</Step>
+<Step title="Point Meta at opendesk">
+
+Under the connection, admins see its **Webhook URL** with a copy button. Click the webhook icon next to **Test**: opendesk subscribes the Meta app to your WhatsApp Business account and points its callback at this number's URL, so Meta sends its messages there.
+
+To set the webhook up by hand instead, copy the URL into the Meta app, under **WhatsApp**, **Configuration**, **Webhook**, **Edit**, paste the **Verify token** you typed when connecting, and subscribe the app to the **messages** field. A verify token opendesk generated is never shown, so type your own when connecting if you want to configure Meta by hand.
+
+</Step>
+<Step title="Make sure messages arrive">
+
+Write to the number from a phone: a ticket appears in the inbox. The connection says **Connected**, or **Needs attention** with Meta's reason, and shows when the last message came in, or **No messages yet**. An admin can click **Test** to check the credentials at any time.
+
+</Step>
+</Steps>
+
+<Callout type="note" title="Every number has its own webhook URL">
+
+A Meta app can carry several numbers. Each connection has its own URL, so click its webhook icon after connecting it, or Meta keeps sending that number's messages to the callback it had before.
+
+</Callout>
+
+## Where a message goes
+
+opendesk finds the contact by the phone number the message comes from. A number it has never seen becomes a new contact, named after the WhatsApp profile name. A message from a blocked contact opens no ticket.
+
+The message then goes on:
+
+1. the customer's open **WhatsApp ticket** on the number they wrote to (open, pending or on hold), the most recently updated one;
+2. else a new ticket on the **WhatsApp** channel, named after the first words of the message (the first 80 characters) and in the connection's brand. Routing rules on the WhatsApp channel send it to a team, as for any new ticket.
+
+Once a ticket is solved, the customer's next message opens a new one. A customer who writes to two of your numbers has a ticket for each.
+
+A message shows what the customer sent:
+
+- their text as it is, or the caption of a photo, video or document;
+- a photo, video, voice note, audio file or document as an attachment. A file that cannot be taken, because it is too large for WhatsApp or is a program, leaves a placeholder such as `[image]`, `[video]`, `[audio]`, `[document]` or `[sticker]`;
+- a shared location with a Google Maps link, or a shared contact card with the name and phone numbers it holds;
+- the option a customer picked with a template's button or list.
+
+A reaction, or a notice from WhatsApp about the customer's account, opens no ticket.
+
+## In the ticket
+
+A WhatsApp ticket is on the **WhatsApp** channel: the ticket list shows a WhatsApp badge on it, and the **filter** button narrows the list by **Channel**, WhatsApp included. A reply written on the ticket goes to the customer's WhatsApp; a note stays internal.
+
+Above the reply box, a bar shows the window: **WhatsApp window open** with the time left to reply, or **The 24 hour window is closed, so only a template can go out**. The **Send template** button is there either way. Every message from the customer starts the 24 hours again. When the ticket's number is not connected, the bar says so, and nothing can be sent until an admin connects the number again.
+
+A reply carries text of up to 4096 characters, or one file with a caption of up to 1024 characters. Files may be up to 5 MB for an image, 16 MB for video or audio, and 25 MB for anything else (a document). The reply box refuses a second file: send the files one at a time.
+
+Each reply shows its receipt on the timeline: **Sending**, then **Sent**, **Delivered** or **Read** (the blue ticks) as Meta reports it, or **Not delivered**, with Meta's reason in its tooltip. The window is checked again as the reply goes out, so a reply the window closed on is marked **Not delivered**: send a template instead.
+
+## Templates
+
+A message template is a message Meta approves in advance. It is the only way to write to a customer after the 24 hour window closed, and it can go out inside the window too.
+
+<Steps>
+<Step title="Create and submit the template at Meta">
+
+In WhatsApp Manager, open **Message templates** and create one: its name, language, category and content, with a header, body, footer and buttons as you need them. Submit it and wait for Meta's review.
+
+</Step>
+<Step title="Sync the templates in opendesk">
+
+In **Settings**, **WhatsApp**, under **Templates**, click **Sync from Meta**, which needs the admin role. It reads the templates of every connected number and lists each with its name, language, category and status: **Approved**, **Pending** or **Rejected**.
+
+</Step>
+<Step title="Send one on a ticket">
+
+Open the WhatsApp ticket and click **Send template** above the reply box. Search by name, language or category, pick an approved template, fill in its placeholders and any URL button values, choose the file for an image, video or document header, and check the preview. Send: it appears in the timeline as a reply, with the text the customer receives and the header file.
+
+</Step>
+</Steps>
+
+- A template with a text header variable asks for its value, up to 60 characters. A template with an image, video or document header asks for the file, up to 5 MB for an image, 16 MB for a video and 25 MB for a document. A template whose header is a location cannot be sent from opendesk yet.
+- A template belongs to the number it was synced from, and a ticket offers only its own number's templates.
+- Only approved templates are offered. A template Meta paused or rejected stops being offered as soon as Meta's review result arrives, and at the latest at the next sync (every 6 hours); a send checks the approval again, so a template Meta no longer approves cannot go out. After you edit a template at Meta, click **Sync from Meta** to get the new text.
+
+## Good to know
+
+- A number connects once in a workspace: a second connection for the same phone number is refused with "This workspace already has a WhatsApp connection for that phone number." A workspace can connect several numbers, each with its own webhook URL and templates.
+- A ticket always replies from the number the customer wrote to. When that number is disconnected, its tickets wait: connect the same number again and they send through it, with their 24 hour windows where they were.
+- The credentials are encrypted at rest and never shown again. Only admins see the webhook URL and the buttons that connect, check, subscribe, sync and disconnect; other members see the number and its synced templates.
+- The **Graph API version** is optional and uses `v26.0` when empty. Set another version only when Meta retires one.
+- The connection's last message time is the quickest check that Meta's messages are arriving.
+- A reply goes out once Meta accepts it, usually within seconds; its receipt follows from Meta after that.
+
+## If something does not work
+
+| What you see | What to do |
+| --- | --- |
+| The connection says **Needs attention**, with Meta's reason under it | Click **Test**. When Meta no longer accepts the token, use a new one: disconnect the number, connect it again with the new token, click the webhook icon next to **Test**, and sync the templates. Its tickets stay. |
+| **Connect** refuses the credentials | The reason is Meta's: check the phone number ID and the account ID, and that the token has the WhatsApp Business permissions and access to this number. |
+| No messages arrive and the connection says **No messages yet** | Click the webhook icon to subscribe again. Compare the **Webhook URL** with the callback URL in the Meta app, under **WhatsApp**, **Configuration**, and subscribe the app to the **messages** field. The URL must be reachable from the internet, because Meta calls it. If you self-host behind a proxy, forward `/v1/whatsapp/hooks/` paths. |
+| Messages used to arrive and then stopped | The app secret may no longer match: opendesk refuses a webhook call whose signature does not verify. Compare the **App secret** with the one in the Meta app, under **App settings**, **Basic**. To use the right one, disconnect the number, connect it again, and click the webhook icon. |
+| The reply box says the 24 hour window is closed | Send a template. The window opens again when the customer writes. |
+| The reply box says the WhatsApp number is not connected | The number was disconnected. An admin connects it again in **Settings**, **WhatsApp**, with the same phone number ID; the ticket then sends through it. |
+| A reply is marked **Not delivered** | Hover its status: Meta's reason is in the tooltip. The usual causes are a closed window, a file over the limit, or a token Meta no longer accepts. |
+| A template is missing from the list | Only approved templates are offered. Click **Sync from Meta**. A pending one waits for Meta's review; edit and resubmit a rejected one at Meta, then sync. |
+| A template send is refused | The dialog names what is missing: a variable, a URL button value or the header file. A template Meta paused or rejected cannot go out, so sync and pick another. |
+| A second connection is refused for the same number | The number is already connected in this workspace. Use its connection, or disconnect it first. |
+
+## Related
+
+- [Routing](/guides/routing/)
+- [Inbox and tickets](/guides/inbox-and-tickets/)
+- [Automations](/guides/automations/)

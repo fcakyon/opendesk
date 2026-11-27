@@ -205,7 +205,7 @@ func LoadTicket(ctx context.Context, q db.Querier, wid, id uuid.UUID) (Ticket, e
 // MessageSelect is the column list scanMessage reads.
 const MessageSelect = `SELECT m.id, m.ticket_id, m.kind, m.direction, m.author_type, m.body_html, m.body_text,
 	m.full_html <> '', m.subject, m.from_email, m.from_name, m.to_emails, m.cc_emails, m.bcc_emails,
-	m.delivery_status, m.delivery_error, m.ai, m.ai_action, m.ai_rating, m.mailbox_id, m.reply_to, m.auth_failed,
+	m.delivery_status, m.delivery_error, m.delivery_meta, m.ai, m.ai_action, m.ai_rating, m.mailbox_id, m.reply_to, m.auth_failed,
 	m.form_sender, m.received_at, m.thread_id, m.created_at, m.edited_at, m.deleted_at, m.purged_at, m.sent_as_reply_id,
 	m.collab_account_id, m.collab_reply_to,
 	du.id, du.name, du.email, du.avatar_url,
@@ -226,7 +226,7 @@ func ScanMessage(row pgx.Row) (Message, error) {
 	var m Message
 	var uID, cID *uuid.UUID
 	var uName, uEmail, uAvatar, cEmail, cName, cAvatar *string
-	var atts []byte
+	var atts, deliveryMeta []byte
 	var bID *uuid.UUID
 	var bName, bAvatar *string
 	var bLook []byte
@@ -236,7 +236,7 @@ func ScanMessage(row pgx.Row) (Message, error) {
 	var collabReplyTo string
 	err := row.Scan(&m.ID, &m.TicketID, &m.Kind, &m.Direction, &m.Author.Type, &m.BodyHTML, &m.BodyText,
 		&m.HasQuoted, &m.Subject, &m.FromEmail, &m.FromName, &m.To, &m.Cc, &m.Bcc,
-		&m.DeliveryStatus, &m.DeliveryError, &m.AI, &m.AIAction, &m.AIRating, &m.MailboxID, &m.ReplyTo, &m.AuthFailed,
+		&m.DeliveryStatus, &m.DeliveryError, &deliveryMeta, &m.AI, &m.AIAction, &m.AIRating, &m.MailboxID, &m.ReplyTo, &m.AuthFailed,
 		&m.FormSender, &m.ReceivedAt, &m.ThreadID, &m.CreatedAt, &m.EditedAt, &m.DeletedAt, &m.PurgedAt, &m.SentAsReplyID,
 		&collabAccount, &collabReplyTo, &dID, &dName, &dEmail, &dAvatar,
 		&uID, &uName, &uEmail, &uAvatar, &cID, &cEmail, &cName, &cAvatar, &bID, &bName, &bAvatar, &bLook, &keyID, &keyName, &atts)
@@ -267,6 +267,12 @@ func ScanMessage(row pgx.Row) (Message, error) {
 	m.Attachments = []Attachment{}
 	if err := json.Unmarshal(atts, &m.Attachments); err != nil {
 		return m, err
+	}
+	m.DeliveryMeta = map[string]any{}
+	if len(deliveryMeta) > 0 {
+		if err := json.Unmarshal(deliveryMeta, &m.DeliveryMeta); err != nil {
+			return m, err
+		}
 	}
 	// A deleted message's files open only with links signed for it (admins read it).
 	deleted := m.DeletedAt != nil

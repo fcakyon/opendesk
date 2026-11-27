@@ -171,6 +171,45 @@ export type SendMessageBody = {
   saved_reply_ids?: string[];
 };
 
+/** The credentials an admin pastes to connect a WhatsApp number (contracts/whatsapp.md). */
+export type WhatsAppCredentialsBody = {
+  phone_number_id: string;
+  waba_id: string;
+  access_token: string;
+  app_secret: string;
+  /** One is generated when empty; update keeps the connection's. */
+  verify_token?: string;
+  /** The Graph API version; the server's default when empty. */
+  api_version?: string;
+};
+
+export type WhatsAppConnectBody = {
+  /** The number's verified name when empty. */
+  name?: string;
+  /** The brand its tickets belong to; the workspace's default brand when empty. */
+  brand_id?: string;
+  credentials: WhatsAppCredentialsBody;
+};
+
+export type WhatsAppUpdateBody = {
+  name?: string;
+  /** Replacement credentials for the same phone number. */
+  credentials?: WhatsAppCredentialsBody;
+};
+
+/** Sends an approved template, also outside the 24 hour window (contracts/whatsapp.md "Templates"). */
+export type WhatsAppTemplateSendBody = {
+  template_id: string;
+  /** One value per `{{1}}` or `{{name}}` placeholder of the body, keyed by it. */
+  params?: Record<string, string>;
+  /** The value (not the approved text) of a text header's one placeholder. */
+  header_text?: string;
+  /** An uploaded attachment for an image, video or document header: its opendesk attachment id. */
+  header_media_id?: string;
+  /** URL button values, keyed by the button's index. */
+  button_urls?: Record<string, string>;
+};
+
 /** Starts a third-party thread (contracts/api.md "Threads"). */
 export type StartThreadBody = {
   to: string[];
@@ -505,6 +544,27 @@ export const api = {
     lines: () => http.get<{ data: T.PhoneLine[] }>("/v1/phone/lines"),
     /** A call's recording, for a provider that only serves it to the connection (the audio, not a link). */
     recording: (callId: string) => download(`/v1/phone/calls/${callId}/recording`),
+  },
+  /** Settings > WhatsApp: numbers connected through Meta's Cloud API (contracts/whatsapp.md). */
+  whatsapp: {
+    connections: () => http.get<{ data: T.WhatsAppConnection[] }>("/v1/whatsapp/connections"),
+    connect: (b: WhatsAppConnectBody) => http.create<T.WhatsAppConnection>("/v1/whatsapp/connections", b),
+    update: (id: string, b: WhatsAppUpdateBody) => http.patch<T.WhatsAppConnection>(`/v1/whatsapp/connections/${id}`, b),
+    /** Checks the credentials at Meta and records the outcome on the connection. */
+    test: (id: string) => http.post<T.WhatsAppConnection>(`/v1/whatsapp/connections/${id}/test`),
+    /** Points the Meta app's webhook at this connection. */
+    subscribe: (id: string) => http.post<T.WhatsAppConnection>(`/v1/whatsapp/connections/${id}/subscribe`),
+    disconnect: (id: string) => http.del(`/v1/whatsapp/connections/${id}`),
+    /** Synced templates; every connection's when none is named. */
+    templates: (connectionId?: string) =>
+      http.get<{ data: T.WhatsAppTemplate[] }>("/v1/whatsapp/templates", { query: connectionId ? { connection_id: connectionId } : undefined }),
+    /** Pulls the templates an admin approved at Meta; every connection's when none is named. */
+    syncTemplates: (connectionId?: string) =>
+      http.post<{ data: T.WhatsAppTemplate[]; synced: number }>("/v1/whatsapp/templates/sync", connectionId ? { connection_id: connectionId } : {}),
+    /** The connection a WhatsApp ticket's replies go out from and its 24 hour window. */
+    ticket: (ticketId: string) => http.get<T.WhatsAppTicketState>(`/v1/tickets/${ticketId}/whatsapp`),
+    /** Sends a template on the ticket's WhatsApp conversation, in the window or outside it. */
+    sendTemplate: (ticketId: string, b: WhatsAppTemplateSendBody) => http.create<T.Message>(`/v1/tickets/${ticketId}/whatsapp-template`, b),
   },
   ticketPanels: {
     list: () => http.get<{ data: T.TicketPanel[] }>("/v1/ticket-panels"),

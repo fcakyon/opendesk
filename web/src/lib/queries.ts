@@ -183,6 +183,13 @@ export const qk = {
   get phoneLines() {
     return w(["phone", "lines"] as const);
   },
+  get whatsappConnections() {
+    return w(["whatsapp", "connections"] as const);
+  },
+  /** A WhatsApp ticket's connection and 24 hour window, as the server will send. */
+  whatsappTicket: (ticketId: string) => w(["whatsapp", "ticket", ticketId] as const),
+  /** A connection's templates; every connection's under "all". */
+  whatsappTemplates: (connectionId?: string) => w(["whatsapp", "templates", connectionId ?? "all"] as const),
   get ticketPanels() {
     return w(["ticket-panels"] as const);
   },
@@ -519,6 +526,11 @@ export const q = {
   phoneProviders: () => list(qk.phoneProviders, api.phone.providers, { staleTime: 60 * 60_000 }),
   phoneConnections: () => list(qk.phoneConnections, api.phone.connections),
   phoneLines: () => list(qk.phoneLines, api.phone.lines, { staleTime: 5 * 60_000 }),
+  whatsappConnections: () => list(qk.whatsappConnections, api.whatsapp.connections),
+  whatsappTicket: (ticketId: string) =>
+    queryOptions({ queryKey: qk.whatsappTicket(ticketId), queryFn: () => api.whatsapp.ticket(ticketId), staleTime: 30_000 }),
+  whatsappTemplates: (connectionId?: string) =>
+    list(qk.whatsappTemplates(connectionId), () => api.whatsapp.templates(connectionId), { staleTime: 60_000 }),
   supportChannelProviders: () => list(qk.supportChannelProviders, api.supportChannels.providers, { staleTime: 60 * 60_000 }),
   supportChannelConnections: () => list(qk.supportChannelConnections, api.supportChannels.connections),
   supportChannelDestinations: () => list(qk.supportChannelDestinations, api.supportChannels.destinations),

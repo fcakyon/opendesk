@@ -13,6 +13,7 @@ import { DAY, escapeHtml, isRecord, nowIso, parseUUID, uuid } from "../util";
 import { clearDraft, clearOwnDraft } from "./drafts";
 import { renderSentReply } from "./templates";
 import { cannotSend, sendingOf } from "./mailhost";
+import { checkWhatsAppReply, simulateWhatsAppDelivery } from "./whatsapp";
 
 const STATUSES: TicketStatus[] = ["open", "pending", "on_hold", "solved", "closed"];
 const CHANNELS: Channel[] = ["email", "chat", "api", "portal", "phone"];
@@ -602,13 +603,16 @@ export function registerTickets() {
       checkPatch(ctx.ws, t, { mailbox_id: from });
       applyPatch(ctx.ws, t, { mailbox_id: from }, myRef);
     }
+    const attachments = attachmentsFor(strArr(ctx.body.attachment_ids));
+    if (kind === "reply" && t.channel === "whatsapp") checkWhatsAppReply(ctx.ws, t, attachments.length);
     const msg = addMessage(
       ctx.ws,
       t,
-      { kind, direction: "outbound", html, user: myRef, to: kind === "reply" && t.channel === "email" && strArr(ctx.body.to)?.length ? strArr(ctx.body.to) : undefined, cc: strArr(ctx.body.cc), bcc: strArr(ctx.body.bcc), attachments: attachmentsFor(strArr(ctx.body.attachment_ids)), delivery: "pending" },
+      { kind, direction: "outbound", html, user: myRef, to: kind === "reply" && t.channel === "email" && strArr(ctx.body.to)?.length ? strArr(ctx.body.to) : undefined, cc: strArr(ctx.body.cc), bcc: strArr(ctx.body.bcc), attachments, delivery: "pending" },
       { status, actor: myRef },
     );
-    if (msg.delivery_status === "pending") simulateDelivery(ctx.ws, t, msg.id);
+    if (kind === "reply" && t.channel === "whatsapp") simulateWhatsAppDelivery(ctx.ws, t, msg);
+    else if (msg.delivery_status === "pending") simulateDelivery(ctx.ws, t, msg.id);
     if (fromNote) {
       const note = ctx.ws.messages[noteIndex];
       // Its words are kept, hidden like a deleted message's: only admins read them.

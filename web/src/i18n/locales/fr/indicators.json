@@ -29,7 +29,8 @@
     "chat": "Chat",
     "api": "API",
     "portal": "Portail",
-    "phone": "Téléphone"
+    "phone": "Téléphone",
+    "whatsapp": "WhatsApp"
   },
   "sentiment": {
     "positive": "Positif",

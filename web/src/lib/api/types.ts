@@ -382,8 +382,8 @@ export type TicketStatus = "open" | "pending" | "on_hold" | "solved" | "closed";
 export type Priority = "low" | "normal" | "high" | "urgent";
 /** Business impact; sev1 is the most severe. A ticket may have none. */
 export type Severity = "sev1" | "sev2" | "sev3" | "sev4";
-/** phone: a ticket a call opened (contracts/phone.md). */
-export type Channel = "email" | "chat" | "api" | "portal" | "phone";
+/** phone: a ticket a call opened (contracts/phone.md); whatsapp: a WhatsApp number's (contracts/whatsapp.md). */
+export type Channel = "email" | "chat" | "api" | "portal" | "phone" | "whatsapp";
 // Labels ("tags" in the API) and custom fields (contracts/api.md "Labels and custom fields").
 export type LabelColor =
   | "gray" | "red" | "orange" | "amber" | "yellow" | "lime" | "green" | "teal" | "cyan" | "blue" | "indigo" | "violet" | "purple" | "pink" | "rose";
@@ -568,6 +568,12 @@ export type Message = {
   attachments: Attachment[];
   delivery_status: DeliveryStatus;
   delivery_error: string;
+  /**
+   * What the channel's provider reported (contracts/whatsapp.md "Delivery"): a WhatsApp message
+   * carries provider_status (sent, delivered, read, failed), provider_error and the template it
+   * was sent from under whatsapp_template.
+   */
+  delivery_meta?: Record<string, unknown>;
   /** A reply from the widget AI agent (contracts/agent.md). */
   ai: boolean;
   /** An action the agent asks the visitor to confirm; set only on agent messages that carry one. */
@@ -1307,6 +1313,76 @@ export type PhoneConnection = {
   created_at: string;
 };
 export type PhoneLine = { id: string; name: string; provider: string };
+/** A WhatsApp Business number connected to the workspace (contracts/whatsapp.md). Credentials are never returned. */
+export type WhatsAppConnection = {
+  id: string;
+  workspace_id?: string;
+  brand_id?: string;
+  name: string;
+  phone_number_id: string;
+  waba_id: string;
+  display_phone_number: string;
+  verified_name: string;
+  api_version: string;
+  status: "connected" | "error";
+  last_error: string;
+  last_event_at?: string | null;
+  /** Where Meta delivers this number's messages: admins only. */
+  webhook_url?: string;
+  created_at: string;
+  updated_at: string;
+};
+/** A WhatsApp ticket's conversation as the server will send on it (contracts/whatsapp.md "Tickets"). */
+export type WhatsAppTicketState = {
+  /** The connection that holds the ticket's number now; null while the number is not connected. */
+  connection_id: string | null;
+  connection_name: string;
+  display_phone_number: string;
+  /** Whether a free-form reply may go out now. A template may go out any time. */
+  window_open: boolean;
+  /** When the 24 hour window closes or closed; null when the customer never wrote to this number. */
+  window_closes_at: string | null;
+};
+/** A template approved at Meta and synced into the workspace (contracts/whatsapp.md "Templates"). */
+export type WhatsAppTemplate = {
+  id: string;
+  connection_id?: string;
+  name: string;
+  language: string;
+  category: string;
+  /** APPROVED, PENDING, REJECTED and anything else Meta reports. */
+  status: string;
+  header_type?: string;
+  header_content?: string;
+  body_content: string;
+  footer_content?: string;
+  buttons?: WhatsAppTemplateButton[];
+  created_at?: string;
+  updated_at?: string;
+};
+export type WhatsAppTemplateButton = {
+  type?: string;
+  text?: string;
+  url?: string;
+  [key: string]: unknown;
+};
+/** What an outbound WhatsApp message's delivery_meta holds. */
+export type WhatsAppDeliveryMeta = {
+  provider_status?: "sent" | "delivered" | "read" | "failed";
+  provider_error?: string;
+  /** Meta's numeric error code, e.g. 131047 for a closed window. */
+  provider_error_code?: number;
+  whatsapp_template?: {
+    id?: string;
+    name?: string;
+    language?: string;
+    body?: string;
+    params?: Record<string, string>;
+    header_type?: string;
+    header_text?: string;
+    button_urls?: Record<string, string>;
+  };
+};
 export type SupportChannelConnection = {
   id: string;
   provider: string;

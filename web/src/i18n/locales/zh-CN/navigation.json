@@ -86,6 +86,7 @@
     "myTeams": "我的团队",
     "newTicket": "新建工单",
     "phone": "电话",
+    "whatsapp": "WhatsApp",
     "print": "打印",
     "wikiGraph": "关系图",
     "wikiTags": "标记",
@@ -157,7 +158,8 @@
     "auditLog": "审计日志",
     "trash": "垃圾箱",
     "phone": "电话",
-    "pages": "页面"
+    "pages": "页面",
+    "whatsapp": "WhatsApp"
   },
   "settingsPage": "设置页面",
   "command": {

@@ -10,6 +10,7 @@ import { useRealtime } from "@/lib/realtime/store";
 import { useSession } from "@/lib/session";
 import { useNow } from "@/lib/useNow";
 import { useAssistantName } from "@/components/assistant/name";
+import { WhatsAppMark } from "@/components/indicators";
 
 // Live chat visitors waiting for a reply. A chat nobody is on, where the visitor waits
 // for a person (Ollie handed off, or the agent is off), is urgent: the row washes red
@@ -170,6 +171,23 @@ export function LiveChatBadge({ urgent, handedOff, bot }: { urgent?: boolean; ha
     >
       <Icon className="size-3" strokeWidth={2.2} />
       {t(handedOff ? "waiting.handoff" : "waiting.chat")}
+    </span>
+  );
+}
+
+/**
+ * Marks a ticket from WhatsApp, styled like the live chat badge: the channel's own mark
+ * and name, so it is never mistaken for email or live chat.
+ */
+export function WhatsAppBadge() {
+  const { t } = useTranslation("inbox");
+  return (
+    <span
+      className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-[5px] bg-tone-green-soft px-1.5 text-[10.5px] font-medium text-tone-green"
+      title={t("waiting.whatsappHint")}
+    >
+      <WhatsAppMark className="size-3" />
+      {t("waiting.whatsapp")}
     </span>
   );
 }

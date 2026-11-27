@@ -112,6 +112,8 @@ const (
 	ChannelPortal = "portal"
 	// ChannelPhone: a ticket a call opened (contracts/phone.md).
 	ChannelPhone = "phone"
+	// ChannelWhatsApp: a ticket a WhatsApp message opened (contracts/whatsapp.md).
+	ChannelWhatsApp = "whatsapp"
 )
 
 var (
@@ -119,7 +121,7 @@ var (
 	Priorities = []string{"low", "normal", "high", "urgent"}
 	// Severities are ordered most severe first; a ticket may have none (nil).
 	Severities = []string{"sev1", "sev2", "sev3", "sev4"}
-	Channels   = []string{ChannelEmail, ChannelChat, ChannelAPI, ChannelPortal, ChannelPhone}
+	Channels   = []string{ChannelEmail, ChannelChat, ChannelAPI, ChannelPortal, ChannelPhone, ChannelWhatsApp}
 )
 
 type Ticket struct {
@@ -130,7 +132,7 @@ type Ticket struct {
 	Status    string      `json:"status" enum:"open,pending,on_hold,solved,closed"`
 	Priority  string      `json:"priority" enum:"low,normal,high,urgent"`
 	Severity  *string     `json:"severity" enum:"sev1,sev2,sev3,sev4" nullable:"true"`
-	Channel   string      `json:"channel" enum:"email,chat,api,portal,phone"`
+	Channel   string      `json:"channel" enum:"email,chat,api,portal,phone,whatsapp"`
 	MailboxID *uuid.UUID  `json:"mailbox_id"`
 	Contact   *ContactRef `json:"contact"`
 	Assignee  *UserRef    `json:"assignee"`
@@ -254,6 +256,9 @@ type Message struct {
 	Attachments    []Attachment  `json:"attachments"`
 	DeliveryStatus string        `json:"delivery_status" enum:"none,pending,sent,failed,bounced"`
 	DeliveryError  string        `json:"delivery_error"`
+	// DeliveryMeta is what the delivery provider reported (contracts/whatsapp.md): its own
+	// status and timestamps, never credentials. Empty for email.
+	DeliveryMeta map[string]any `json:"delivery_meta,omitempty"`
 	// AI marks a reply written by the widget AI agent.
 	AI bool `json:"ai"`
 	// AIAction is an action the agent asks the visitor to confirm (contracts/agent.md).

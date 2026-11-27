@@ -61,6 +61,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/supportchannels"
 	"github.com/useopendesk/opendesk/internal/version"
 	"github.com/useopendesk/opendesk/internal/webui"
+	"github.com/useopendesk/opendesk/internal/whatsapp"
 )
 
 type area struct {
@@ -79,6 +80,7 @@ var areas = []area{
 	{integrations.Register, integrations.RegisterWorkers, integrations.Periodic, integrations.Background},
 	{supportchannels.Register, supportchannels.RegisterWorkers, supportchannels.Periodic, supportchannels.Background},
 	{phone.Register, phone.RegisterWorkers, phone.Periodic, phone.Background},
+	{whatsapp.Register, whatsapp.RegisterWorkers, whatsapp.Periodic, whatsapp.Background},
 	{assistant.Register, assistant.RegisterWorkers, assistant.Periodic, assistant.Background},
 	{knowledge.Register, knowledge.RegisterWorkers, knowledge.Periodic, knowledge.Background},
 	{bots.Register, bots.RegisterWorkers, bots.Periodic, bots.Background},

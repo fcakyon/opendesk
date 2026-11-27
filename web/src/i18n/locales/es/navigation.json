@@ -93,7 +93,8 @@
     "wikiTrash": "Papelera",
     "pages": "Páginas",
     "pagesPage": "Página",
-    "pagesSettings": "Páginas"
+    "pagesSettings": "Páginas",
+    "whatsapp": "WhatsApp"
   },
   "folders": {
     "unassigned": "Sin asignar",
@@ -157,7 +158,8 @@
     "auditLog": "Registro de auditoría",
     "trash": "Papelera",
     "phone": "Teléfono",
-    "pages": "Páginas"
+    "pages": "Páginas",
+    "whatsapp": "WhatsApp"
   },
   "settingsPage": "Página de ajustes",
   "command": {

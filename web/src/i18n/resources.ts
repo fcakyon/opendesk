@@ -28,6 +28,7 @@ import settingsChannels from "./locales/en/settingsChannels.json";
 import settingsDev from "./locales/en/settingsDev.json";
 import settingsInbox from "./locales/en/settingsInbox.json";
 import settingsTeams from "./locales/en/settingsTeams.json";
+import settingsWhatsapp from "./locales/en/settingsWhatsapp.json";
 import setup from "./locales/en/setup.json";
 import shell from "./locales/en/shell.json";
 import shortcuts from "./locales/en/shortcuts.json";
@@ -35,6 +36,6 @@ import spaces from "./locales/en/spaces.json";
 import wiki from "./locales/en/wiki.json";
 import workspaces from "./locales/en/workspaces.json";
 
-export const en = { common, billing, collab, ai, agent, agentQuality, bots, aiSetup, aiTicket, assistant, public: pub, shell, settings, settingsInbox, settingsDev, settingsChannels, settingsTeams, emailDesign, contacts, kb, mailCategories, reports, inbox, indicators, navigation, auth, ui, imports, setup, shortcuts, spaces, wiki, workspaces } as const;
-export const NAMESPACES = ["common", "billing", "collab", "ai", "agent", "agentQuality", "bots", "aiSetup", "aiTicket", "assistant", "public", "shell", "settings", "settingsInbox", "settingsDev", "settingsChannels", "settingsTeams", "emailDesign", "contacts", "kb", "mailCategories", "reports", "inbox", "indicators", "navigation", "auth", "ui", "imports", "setup", "shortcuts", "spaces", "wiki", "workspaces"] as const;
+export const en = { common, billing, collab, ai, agent, agentQuality, bots, aiSetup, aiTicket, assistant, public: pub, shell, settings, settingsInbox, settingsDev, settingsChannels, settingsTeams, settingsWhatsapp, emailDesign, contacts, kb, mailCategories, reports, inbox, indicators, navigation, auth, ui, imports, setup, shortcuts, spaces, wiki, workspaces } as const;
+export const NAMESPACES = ["common", "billing", "collab", "ai", "agent", "agentQuality", "bots", "aiSetup", "aiTicket", "assistant", "public", "shell", "settings", "settingsInbox", "settingsDev", "settingsChannels", "settingsTeams", "settingsWhatsapp", "emailDesign", "contacts", "kb", "mailCategories", "reports", "inbox", "indicators", "navigation", "auth", "ui", "imports", "setup", "shortcuts", "spaces", "wiki", "workspaces"] as const;
 export type Namespace = (typeof NAMESPACES)[number];
