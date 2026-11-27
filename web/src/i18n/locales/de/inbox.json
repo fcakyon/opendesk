@@ -554,7 +554,9 @@
     "messageDeleted": "<b>{{who}}</b> hat eine Nachricht gelöscht",
     "messageRestored": "<b>{{who}}</b> hat eine gelöschte Nachricht wiederhergestellt",
     "noteSentAsReply": "<b>{{who}}</b> hat eine interne Notiz als Antwort gesendet",
-    "messagePurged": "<b>{{who}}</b> hat den Inhalt einer Nachricht endgültig gelöscht"
+    "messagePurged": "<b>{{who}}</b> hat den Inhalt einer Nachricht endgültig gelöscht",
+    "panelAction": "<b>{{who}}</b> hat <b>{{label}}</b> in {{panel}} ausgeführt",
+    "panelActionFailed": "<b>{{who}}</b> hat <b>{{label}}</b> in {{panel}} versucht, was nicht geklappt hat: {{message}}"
   },
   "typing_one": "{{who}} schreibt",
   "typing_other": "{{who}} schreiben",
@@ -1146,7 +1148,13 @@
     "discountCodes_other": "Rabattcodes",
     "refunded": "{{amount}} erstattet",
     "openLink": "{{name}} öffnen",
-    "copyValue": "{{name}} kopieren"
+    "copyValue": "{{name}} kopieren",
+    "actions": {
+      "error": "Das hat nicht geklappt. Versuchen Sie es gleich noch einmal.",
+      "cancel": "Abbrechen",
+      "fill": "Füllen Sie die Pflichtfelder aus.",
+      "choose": "Auswählen"
+    }
   },
   "print": {
     "action": "Drucken oder als PDF speichern",

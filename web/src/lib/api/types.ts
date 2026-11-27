@@ -1450,7 +1450,21 @@ export type PanelBlock =
   | { type: "card"; id?: string; title: string; url?: string; subtitle?: string; badges?: PanelBadge[]; links?: PanelLink[]; collapsed?: boolean; fields?: PanelField[]; lines?: PanelLine[]; footer?: PanelField[] }
   | { type: "fields"; title?: string; items: PanelField[] }
   | { type: "list"; title?: string; items: PanelListItem[] }
-  | { type: "note"; text: string; tone: PanelTone };
+  | { type: "note"; text: string; tone: PanelTone }
+  | { type: "actions"; actions: PanelAction[] };
+/** A button of an http panel: it sends a signed request back to the panel's URL (contracts/integrations.md "Actions"). */
+export type PanelAction = { id: string; label: string; tone?: "neutral" | "danger"; confirm?: string; inputs?: PanelInput[] };
+export type PanelInput = {
+  name: string;
+  label: string;
+  type: "text" | "textarea" | "select";
+  required?: boolean;
+  placeholder?: string;
+  default?: string;
+  max_length?: number;
+  options?: { value: string; label: string }[];
+};
+export type PanelActionResult = { ok: boolean; message: string; tone: PanelTone; data?: TicketPanelData };
 export type TicketPanelErrorCode = "timeout" | "rate_limited" | "ticket" | "refused" | "status" | "answer";
 
 export type TicketPanelData = {

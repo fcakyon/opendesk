@@ -573,7 +573,9 @@
     "other": "<b>{{who}}</b> a mis à jour ce ticket <m>{{type}}</m>",
     "teamFrom": "<b>{{who}}</b> a déplacé ce ticket de <b>{{from}}</b> vers <b>{{team}}</b>",
     "teamRule": "Transmis à <b>{{team}}</b> par la règle <b>{{rule}}</b>",
-    "replyAddress": "les réponses sont désormais envoyées depuis <m>{{address}}</m>"
+    "replyAddress": "les réponses sont désormais envoyées depuis <m>{{address}}</m>",
+    "panelAction": "<b>{{who}}</b> a lancé <b>{{label}}</b> dans {{panel}}",
+    "panelActionFailed": "<b>{{who}}</b> a essayé <b>{{label}}</b> dans {{panel}}, sans succès : {{message}}"
   },
   "typing_one": "{{who}} écrit",
   "typing_other": "{{who}} écrivent",
@@ -1132,7 +1134,13 @@
     "discountCodes_other": "Codes de réduction",
     "refunded": "Remboursé : {{amount}}",
     "openLink": "Ouvrir {{name}}",
-    "copyValue": "Copier {{name}}"
+    "copyValue": "Copier {{name}}",
+    "actions": {
+      "error": "Cela n’a pas abouti. Réessayez dans un instant.",
+      "cancel": "Annuler",
+      "fill": "Remplissez les champs obligatoires.",
+      "choose": "Choisir"
+    }
   },
   "print": {
     "action": "Imprimer ou enregistrer en PDF",

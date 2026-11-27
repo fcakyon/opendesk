@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlarmClock, Hand, ShieldAlert, Sparkles, ArrowRightLeft, CircleDot, GitMerge, Link2, MailX, MessagesSquare, PencilLine, Star, Tag as TagIcon, TimerOff, Trash2, Undo2, Users, UserRound, Reply } from "lucide-react";
+import { AlarmClock, Hand, MousePointerClick, ShieldAlert, Sparkles, ArrowRightLeft, CircleDot, GitMerge, Link2, MailX, MessagesSquare, PencilLine, Star, Tag as TagIcon, TimerOff, Trash2, Undo2, Users, UserRound, Reply } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -303,6 +303,11 @@ function describe(a: Activity, t: TFunction<"inbox">, { teams, members, tags, fi
       const key = d.outcome === "failed" ? "activity.procedureFailed" : d.outcome === "nothing_to_do" ? "activity.procedureNothing" : "activity.procedureRan";
       return { icon: <Sparkles />, hue: "ai", text: line(key, { name }) };
     }
+    case "panel_action":
+      return {
+        icon: <MousePointerClick />,
+        text: line(d.ok === false ? "activity.panelActionFailed" : "activity.panelAction", { label: String(d.label ?? d.action ?? ""), panel: String(d.panel ?? ""), message: String(d.message ?? "") }),
+      };
     case "ai_suggested_reply":
       return { icon: <Sparkles />, hue: "ai", text: line("activity.aiSuggested") };
     case "ai_suggested_reply_sent":

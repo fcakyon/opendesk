@@ -558,7 +558,9 @@
     "messageDeleted": "<b>{{who}}</b> deleted a message",
     "messageRestored": "<b>{{who}}</b> restored a deleted message",
     "noteSentAsReply": "<b>{{who}}</b> sent an internal note as a reply",
-    "messagePurged": "<b>{{who}}</b> permanently deleted a message’s content"
+    "messagePurged": "<b>{{who}}</b> permanently deleted a message’s content",
+    "panelAction": "<b>{{who}}</b> ran <b>{{label}}</b> in {{panel}}",
+    "panelActionFailed": "<b>{{who}}</b> tried <b>{{label}}</b> in {{panel}}, which did not go through: {{message}}"
   },
   "typing_one": "{{who}} is typing",
   "typing_other": "{{who}} are typing",
@@ -1150,7 +1152,13 @@
     "discountCodes_other": "Discount codes",
     "refunded": "{{amount}} refunded",
     "openLink": "Open {{name}}",
-    "copyValue": "Copy {{name}}"
+    "copyValue": "Copy {{name}}",
+    "actions": {
+      "error": "That didn't go through. Try again in a moment.",
+      "cancel": "Cancel",
+      "fill": "Fill in the required fields.",
+      "choose": "Choose"
+    }
   },
   "print": {
     "action": "Print or save as PDF",

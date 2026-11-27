@@ -9,7 +9,7 @@ import { DEFAULT_REFERENCE_PATTERN, findReferences, MAX_PATTERN_LENGTH, referenc
 import { db, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
 import { HttpError, del, forbidden, get, invalid, notFound, patch, post, respond, type Ctx } from "../router";
-import { findTicket } from "../tickets";
+import { addActivity, findTicket } from "../tickets";
 import { nowIso, uuid } from "../util";
 
 const panelsOf = new Map<string, TicketPanel[]>();
@@ -210,7 +210,10 @@ const iso = (days: number) => new Date(Date.now() + days * 86_400_000).toISOStri
  * the ticket, else made up from its number) with a supplier running late, an older order folded, the contact's
  * subscription and invoices, and a note.
  */
-function blocksFor(p: TicketPanel, t: { number: number; subject: string }): PanelBlock[] {
+/** Actions a ticket has already pressed, by ticket: the credit note is approved once. */
+const approved = new Set<string>();
+
+function blocksFor(p: TicketPanel, t: { id?: string; number: number; subject: string }): PanelBlock[] {
   const re = referenceRegExp(p.reference_pattern ?? DEFAULT_REFERENCE_PATTERN);
   const ref = (re && findReferences(re, t.subject)[0]) || `S${String(42 + (t.number % 300)).padStart(5, "0")}`;
   const so = 42 + (t.number % 300);
@@ -271,7 +274,33 @@ function blocksFor(p: TicketPanel, t: { number: number; subject: string }): Pane
         { title: "INV/2026/00009", subtitle: `For ${ref}`, url: "https://erp.example.com/odoo/invoices/9", value: { type: "money", amount: "3831.60", currency: "EUR" }, badge: { text: "Paid", tone: "success" } },
       ],
     },
-    { type: "note", text: "Credit note RINV/2026/0003 is waiting for approval.", tone: "info" },
+    approved.has(t.id ?? "")
+      ? { type: "note", text: "Credit note RINV/2026/0003 was approved.", tone: "success" }
+      : { type: "note", text: "Credit note RINV/2026/0003 is waiting for approval.", tone: "info" },
+    {
+      type: "actions",
+      actions: [
+        ...(approved.has(t.id ?? "") ? [] : [{ id: "approve_credit_note", label: "Approve credit note", confirm: "Approve credit note RINV/2026/0003? The customer is refunded in Odoo." }]),
+        {
+          id: "send_reminder",
+          label: "Send payment reminder",
+          inputs: [
+            {
+              name: "invoice",
+              label: "Invoice",
+              type: "select",
+              required: true,
+              options: [
+                { value: "INV/2026/00012", label: "INV/2026/00012 (overdue)" },
+                { value: "INV/2026/00009", label: "INV/2026/00009" },
+              ],
+              default: "INV/2026/00012",
+            },
+            { name: "note", label: "Note for the customer", type: "textarea", placeholder: "Optional", max_length: 300 },
+          ],
+        },
+      ],
+    },
   ];
 }
 
@@ -397,5 +426,33 @@ export function registerTicketPanels() {
     const p = panelsState(ctx.ws).find((x) => x.id === ctx.params.panelId && x.enabled);
     if (!p) throw notFound("Ticket panel");
     return dataFor(p, t);
+  });
+
+  post("/v1/tickets/:id/panels/:panelId/actions", (ctx) => {
+    const t = findTicket(ctx.ws, ctx.params.id);
+    if (!t) throw notFound("Ticket");
+    const p = panelsState(ctx.ws).find((x) => x.id === ctx.params.panelId && x.enabled);
+    if (!p) throw notFound("Ticket panel");
+    if (p.kind !== "http") throw invalid("Only a panel from a URL has actions.");
+    const id = String(ctx.body.action ?? "");
+    const offered = (dataFor(p, t).blocks ?? []).flatMap((b) => (b.type === "actions" ? b.actions : []));
+    const action = offered.find((a) => a.id === id);
+    if (!action) throw new HttpError(409, "action_unavailable", "The panel no longer offers this action. Refresh it and try again.");
+    const inputs = (ctx.body.inputs ?? {}) as Record<string, string>;
+    for (const i of action.inputs ?? []) {
+      const v = (inputs[i.name] ?? "").trim();
+      if (i.required && !v) throw invalid(`Fill in ${i.label}.`);
+      if (i.type === "select" && v && !i.options?.some((o) => o.value === v)) throw invalid(`${i.label} is not one of the choices.`);
+    }
+    let message = "Done.";
+    if (id === "approve_credit_note") {
+      approved.add(t.id);
+      message = "Credit note RINV/2026/0003 approved.";
+    } else if (id === "send_reminder") {
+      message = `Reminder for ${inputs.invoice} sent to ${t.contact?.email ?? "the customer"}.`;
+    }
+    addActivity(ctx.ws, t, "panel_action", { panel_id: p.id, panel: p.name, action: id, label: action.label, ok: true, message }, userRef(db.meId));
+    // The URL answers the panel as it is now only when something on it changed.
+    return respond(200, { ok: true, message, tone: "success", data: dataFor(p, t) });
   });
 }

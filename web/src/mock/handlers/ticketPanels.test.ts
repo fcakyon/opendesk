@@ -90,7 +90,7 @@ describe("mock ticket panels", () => {
     const tickets = (await call("GET", "/v1/tickets")).body.data as { id: string }[];
     const d = (await call("GET", `/v1/tickets/${tickets[0]!.id}/panels/${made.body.panel.id}`)).body;
     expect(d.sections).toBeUndefined();
-    expect(d.blocks.map((b: { type: string }) => b.type)).toEqual(["card", "card", "fields", "list", "note"]);
+    expect(d.blocks.map((b: { type: string }) => b.type)).toEqual(["card", "card", "fields", "list", "note", "actions"]);
     expect(d.blocks[0].links).toHaveLength(2);
     expect([d.blocks[0].collapsed, d.blocks[1].collapsed]).toEqual([undefined, true]);
     expect(made.body.panel.reference_pattern).toBe(DEFAULT_REFERENCE_PATTERN);
@@ -117,5 +117,24 @@ describe("mock ticket panels", () => {
     expect(token.client_id).toBeUndefined();
     expect((await call("PATCH", `/v1/ticket-panels/${id}`, { client_secret: "s3" })).status).toBe(422);
     await call("DELETE", `/v1/ticket-panels/${id}`);
+  });
+  it("presses an http panel's actions: refuses an unknown one and a form that does not fit, and leaves a timeline entry", async () => {
+    const made = await call("POST", "/v1/ticket-panels", { kind: "http", url: "https://erp.example.com/panel", name: "Odoo" });
+    const tickets = (await call("GET", "/v1/tickets")).body.data as { id: string }[];
+    const path = `/v1/tickets/${tickets[0]!.id}/panels/${made.body.panel.id}/actions`;
+    expect((await call("POST", path, { action: "nope" })).status).toBe(409);
+    expect((await call("POST", path, { action: "send_reminder", inputs: {} })).status).toBe(422);
+    expect((await call("POST", path, { action: "send_reminder", inputs: { invoice: "other" } })).status).toBe(422);
+    const sent = await call("POST", path, { action: "send_reminder", inputs: { invoice: "INV/2026/00012", note: "Please pay" } });
+    expect(sent.status).toBe(200);
+    expect(sent.body).toMatchObject({ ok: true, tone: "success" });
+    expect(sent.body.message).toContain("INV/2026/00012");
+    const approve = await call("POST", path, { action: "approve_credit_note" });
+    expect(approve.body.data.blocks.some((b: { type: string; text?: string }) => b.type === "note" && b.text?.includes("was approved"))).toBe(true);
+    const offered = approve.body.data.blocks.flatMap((b: { type: string; actions?: { id: string }[] }) => (b.type === "actions" ? b.actions! : [])).map((a: { id: string }) => a.id);
+    expect(offered).toEqual(["send_reminder"]);
+    const acts = (await call("GET", `/v1/tickets/${tickets[0]!.id}/activities`)).body.data as { type: string }[];
+    expect(acts.filter((a) => a.type === "panel_action")).toHaveLength(2);
+    await call("DELETE", `/v1/ticket-panels/${made.body.panel.id}`);
   });
 });
