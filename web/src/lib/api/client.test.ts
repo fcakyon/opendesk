@@ -68,6 +68,55 @@ describe("api client", () => {
     expect(ended).toHaveBeenCalledWith(null);
   });
 
+  it("tries a refresh again when another tab rotated the cookie first (409)", async () => {
+    vi.useFakeTimers();
+    try {
+      let refreshes = 0;
+      setTransport(async (url, init) => {
+        if (url.endsWith("/v1/auth/refresh")) {
+          refreshes++;
+          return refreshes === 1 ? json(409, { status: 409, code: "refresh_in_progress" }) : json(200, { access_token: "tok_new", expires_in: 900, user: { id: "u1" } });
+        }
+        return json(200, { auth: (init.headers as Record<string, string>).Authorization });
+      });
+      const ended = vi.fn();
+      onSession((s) => s === null && ended());
+      const r = refreshSession();
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect((await r)?.access_token).toBe("tok_new");
+      expect(refreshes).toBe(2);
+      expect(ended).not.toHaveBeenCalled();
+      expect(await http.get<{ auth: string }>("/v1/me")).toEqual({ auth: "Bearer tok_new" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the session when the 409 outlasts the retries", async () => {
+    vi.useFakeTimers();
+    try {
+      let refreshes = 0;
+      setTransport(async (url, init) => {
+        if (url.endsWith("/v1/auth/refresh")) {
+          refreshes++;
+          return json(409, { status: 409, code: "refresh_in_progress" });
+        }
+        return json(200, { auth: (init.headers as Record<string, string>).Authorization });
+      });
+      setAccessToken("tok_current", 900);
+      const ended = vi.fn();
+      onSession((s) => s === null && ended());
+      const r = refreshSession();
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(await r).toBeNull();
+      expect(refreshes).toBe(3);
+      expect(ended).not.toHaveBeenCalled();
+      expect(await http.get<{ auth: string }>("/v1/me")).toEqual({ auth: "Bearer tok_current" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not refresh on a failed login", async () => {
     let refreshes = 0;
     setTransport(async (url) => {

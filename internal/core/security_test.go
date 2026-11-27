@@ -203,11 +203,12 @@ func TestRefreshRotation(t *testing.T) {
 			t.Errorf("cookie lacks %s: %s", want, sc)
 		}
 	}
-	// Replaying the rotated token inside the grace window is refused without ending the session.
+	// Replaying the rotated token inside the grace window (another tab refreshed a moment
+	// earlier) answers 409 refresh_in_progress, keeps the cookie and the session.
 	old := e.client()
 	old.jar.SetCookies(mustURL(e.srv.URL+"/v1/auth"), []*http.Cookie{{Name: name, Value: first, Path: "/v1/auth"}})
-	if r := old.do("POST", "/v1/auth/refresh", nil); r.Status != 401 {
-		t.Fatalf("rotated token accepted: %d", r.Status)
+	if r := old.do("POST", "/v1/auth/refresh", nil); r.Status != 409 || r.str("code") != "refresh_in_progress" || r.Header.Get("Set-Cookie") != "" {
+		t.Fatalf("in-grace replay: %d %q %s", r.Status, r.Header.Get("Set-Cookie"), r.Raw)
 	}
 	if r := u.do("POST", "/v1/auth/refresh", nil); r.Status != 200 {
 		t.Fatalf("session ended by in-grace replay: %d %s", r.Status, r.Raw)

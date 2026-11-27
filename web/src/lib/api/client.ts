@@ -225,24 +225,43 @@ export function apiUrl(path: string) {
 const refreshing = new Map<string, Promise<TokenResponse | null>>();
 
 /**
+ * Waits before trying a refresh again that another tab answered first (409
+ * refresh_in_progress): by then its new cookie is in the browser's jar.
+ */
+export const REFRESH_RETRY_MS = [1_000, 2_000];
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
  * Exchanges an account's refresh cookie for a new access token: the active
  * account by default, or, before any account is known, the one this browser
  * used most recently. Concurrent callers for one account share one request,
  * because the server rotates the refresh token on use and a second parallel
- * refresh would present an already-rotated token.
+ * refresh would present an already-rotated token. Tabs do not share it: when
+ * another tab rotated the cookie a moment earlier (409), this one tries again
+ * with the cookie that tab received.
  */
 export function refreshSession(userId: string | null = state.userId): Promise<TokenResponse | null> {
   const key = userId ?? "";
   const running = refreshing.get(key);
   if (running) return running;
+  const post = () =>
+    transport(apiUrl("/v1/auth/refresh"), {
+      method: "POST",
+      credentials: "include",
+      headers: userId ? { Accept: "application/json", "Content-Type": "application/json" } : { Accept: "application/json" },
+      body: userId ? JSON.stringify({ user_id: userId }) : undefined,
+    });
   const p = (async () => {
     try {
-      const res = await transport(apiUrl("/v1/auth/refresh"), {
-        method: "POST",
-        credentials: "include",
-        headers: userId ? { Accept: "application/json", "Content-Type": "application/json" } : { Accept: "application/json" },
-        body: userId ? JSON.stringify({ user_id: userId }) : undefined,
-      });
+      let res = await post();
+      for (const wait of REFRESH_RETRY_MS) {
+        if (res.status !== 409) break;
+        await sleep(wait);
+        res = await post();
+      }
+      // Still another tab's turn: the session is alive, keep whatever token we had.
+      if (res.status === 409) return null;
       if (!res.ok) {
         const active = userId === state.userId;
         storeToken(userId, null);
