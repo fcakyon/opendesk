@@ -86,6 +86,7 @@ type phoneConnectionList struct {
 // Register mounts the phone API and the providers' webhook.
 func (s *Service) Register(api huma.API, r chi.Router) {
 	tags := []string{"Phone"}
+	s.registerRecording(api, tags)
 	huma.Register(api, huma.Operation{OperationID: "list-phone-providers", Method: http.MethodGet, Path: "/v1/phone/providers", Tags: tags, Summary: "List phone providers"},
 		func(ctx context.Context, _ *struct{}) (*struct {
 			Body struct {

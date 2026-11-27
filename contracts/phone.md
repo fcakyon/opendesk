@@ -187,6 +187,7 @@ type CallData = { call_id: string; provider: string; direction: "inbound" | "out
   agent: UserRef | null; agent_name: string;
   started_at: string | null; answered_at: string | null; ended_at: string | null; duration: number;
   recording: boolean; voicemail: boolean;
+  recording_stream?: boolean // Voys: the recording plays through the app ("Recordings"); recording_url is then ""
   asset_url: string; recording_url: string; voicemail_url: string; links_expire_at: string | null;
   tags: string[]; comments: { id: string; text: string; author?: string; at?: string }[];
   summary: string; transcript: string; outside_hours: boolean };
@@ -196,7 +197,7 @@ opendesk stores links, never media. `recording_url` and `voicemail_url` are the 
 direct links and stop working at `links_expire_at`; the app then plays through `asset_url`,
 the provider's lasting page, which is also what "Open in Aircall" opens, shown only when
 there is one. The provider's API link to the call is not kept, as it is no page for people.
-Only https links are kept. The summary is bounded to 4,000 characters, the transcript to 20,000, comments to 20.
+Only https links are kept. A provider whose recordings only its connection can open (Voys) has no link to show: see "Recordings". The summary is bounded to 4,000 characters, the transcript to 20,000, comments to 20.
 
 ### Agents
 
@@ -328,8 +329,8 @@ Docs: [API specs](https://openapi.voys.dev) (`voipgrid/user`, `voipgrid/callerid
   `GET https://api.eu-production.holodeck.voys.nl/transcription-storage/clients/{client_uuid}/calls/{call_id}/transcriptions`
   (text) and `.../summaries` (`{summary}`) with the connection's token, never the body's
   text. `{call_id, recording_url}` sets `recording`: the URL is an API URL that needs the
-  token, so it is not kept, and the entry has no player or page to open (`asset_url` stays
-  empty). Some accounts receive these three with a `status` (`transcript_created`,
+  token, so the entry has no link to open (`asset_url` stays empty); it is kept, only when it
+  is on Voys' own API host (`api.voys.nl`, https), and plays through the app ("Recordings"). Some accounts receive these three with a `status` (`transcript_created`,
   `summary_created`, `recording_created`): an event whose status is not a call's is read
   by its field, whatever its status.
 - Lines: `GET /api/v2/clients/{client_uuid}/callerid_numbers` with
@@ -427,11 +428,29 @@ validation remains necessary before claiming live-tested Placetel functionality.
 - A suspended workspace's events are acknowledged and dropped.
 - While the workspace has Tickets off, events are stored and acknowledged but not applied: the inbound job snoozes with the event row unprocessed, and runs when Tickets is turned on (contracts/api.md).
 
+## Recordings
+
+A provider whose recordings only the connection's credentials can open (`provider.Recorder`;
+Voys) shows no link. The entry has `recording_stream: true` and `recording_url: ""`, and plays
+through `GET /v1/phone/calls/{id}/recording` (viewer, `tickets:read`; a call whose ticket the
+caller cannot see, of another workspace, or without a recording is `404`). The server opens the
+address the provider's event gave with the connection's token and streams the audio, with no
+copy kept: `Content-Type` the provider's `audio/*` (anything else is not played),
+the headers of every download of an outside file (`Content-Disposition: attachment`, `nosniff`,
+`Content-Security-Policy: default-src 'none'; sandbox`, `private, no-store`, `no-referrer`), at
+most 200 MB and three minutes. The address is trusted only as a path on the provider's own API
+host, so the token is never sent elsewhere, and redirects are not followed (Voys serves the audio
+from that host itself). The browser fetches it with the session and plays the
+bytes from memory (`media-src blob:`). `409 recording_not_ready` when the provider has no audio
+yet (the entry offers to try again), `429 provider_rate_limited`, `502 recording_refused` (the
+token's user lacks access to recordings) or `recording_unavailable`. Each play that reached the
+audio is audit logged (`phone.recording_played`: call, provider and ticket, never the audio).
+
 ## Not yet
 
 Aircall SMS and WhatsApp, two-way contact sync, an OAuth app (Aircall Marketplace) instead of
 API keys, Aircall's real-time transcription. For Voys: insight cards (Voys has none),
-playable recordings (Voys' recording URL needs the API token), contact sync with its contact
+contact sync with its contact
 book, and registering the call notification for the admin (Voys has no API for it).
 For Placetel: recording correlation and playback, summaries, transcripts, agent mapping,
 insight cards and call control.

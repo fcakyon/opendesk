@@ -499,6 +499,8 @@ export const api = {
     rotateWebhook: (id: string) => http.post<T.PhoneConnection>(`/v1/phone/connections/${id}/rotate-webhook`),
     disconnect: (id: string) => http.del(`/v1/phone/connections/${id}`),
     lines: () => http.get<{ data: T.PhoneLine[] }>("/v1/phone/lines"),
+    /** A call's recording, for a provider that only serves it to the connection (the audio, not a link). */
+    recording: (callId: string) => download(`/v1/phone/calls/${callId}/recording`),
   },
   ticketPanels: {
     list: () => http.get<{ data: T.TicketPanel[] }>("/v1/ticket-panels"),

@@ -8,6 +8,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -167,6 +168,27 @@ var ErrIgnored = errors.New("phone event ignored")
 
 // ErrUnauthorized is Verify's answer for an event that does not carry the secret.
 var ErrUnauthorized = errors.New("phone event not verified")
+
+// Recorder is implemented by an adapter whose recordings are not links an agent can open:
+// the provider serves them only to the connection's own credentials. opendesk keeps the
+// recording's address (Call.RecordingURL) without showing it, and plays it through the
+// app: the adapter opens it with the credentials, the app streams it and keeps no copy.
+type Recorder interface {
+	// Recording opens the recording at rawURL, the address the provider's event gave. An
+	// address that is not the provider's own is refused before any credential is sent.
+	Recording(ctx context.Context, client *http.Client, credentials map[string]string, rawURL string) (*Recording, error)
+}
+
+// Recording is a recording being read; the caller closes Body.
+type Recording struct {
+	Body        io.ReadCloser
+	ContentType string
+	// Length is the size in bytes, -1 when the provider did not say.
+	Length int64
+}
+
+// ErrNoRecording is Recording's answer when the provider has none (yet) at the address.
+var ErrNoRecording = errors.New("the provider has no recording yet")
 
 // ErrUnsupported is an adapter's answer for what its provider does not do (Descriptor).
 var ErrUnsupported = errors.New("not supported by this phone provider")

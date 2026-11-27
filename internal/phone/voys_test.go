@@ -454,3 +454,55 @@ func TestVoysFetchesWaitAndUnknownCallsMakeNothing(t *testing.T) {
 		t.Fatalf("calls %d", calls)
 	}
 }
+
+// A Voys recording is played through the app: its address needs the connection's token, so
+// the entry offers no link, and the audio is streamed to whoever may read the ticket.
+func TestVoysRecordingPlaysThroughTheApp(t *testing.T) {
+	h := newVoysHarness(t)
+	const call = "ua9-grq-prd-1793095200.1001"
+	h.sendAll(t, h.recorded(t, "answered"))
+	tk := h.ticketOfCall(t, call)
+
+	// The recording event gives the address; the fake serves Voys' own host only.
+	h.v.SetIntelligence(call, "Speaker 1: Hallo.", "A short call.")
+	var rec [][]byte
+	for _, b := range h.recorded(t, "intelligence") {
+		rec = append(rec, bytes.ReplaceAll(b, []byte("https://api.voys.nl/api/v2"), []byte(h.v.API())))
+	}
+	h.sendAll(t, rec)
+	d := h.callEntries(t, tk.ID)[0].Data
+	if d["recording"] != true || d["recording_stream"] != true || d["recording_url"] != "" {
+		t.Fatalf("entry %+v", d)
+	}
+	path := "/v1/phone/calls/" + d["call_id"].(string) + "/recording"
+
+	// Voys has not made the audio yet.
+	h.e.Do("GET", path, h.ws.Agent.As(h.ws), nil).Want(t, 409)
+
+	audio := []byte("ID3-not-really-audio")
+	h.v.SetRecording(call, audio, "audio/mpeg")
+	r := h.e.Do("GET", path, h.ws.Agent.As(h.ws), nil).Want(t, 200)
+	if !bytes.Equal(r.Body, audio) || r.Header.Get("Content-Type") != "audio/mpeg" || r.Header.Get("X-Content-Type-Options") != "nosniff" ||
+		!strings.HasPrefix(r.Header.Get("Content-Disposition"), "attachment") || r.Header.Get("Cache-Control") != "private, no-store" ||
+		r.Header.Get("Content-Security-Policy") != "default-src 'none'; sandbox" {
+		t.Fatalf("play: %q %v", r.Body, r.Header)
+	}
+	if !slices.Contains(h.v.Requests(), "GET /api/v2/clients/"+fake.Client+"/callrecordings/"+call+"/audio") {
+		t.Fatalf("Voys was asked: %v", h.v.Requests())
+	}
+	var played int
+	h.e.Scalar(`SELECT count(*) FROM audit_logs WHERE workspace_id = $1 AND action = 'phone.recording_played'`, &played, h.ws.ID)
+	if played != 1 {
+		t.Fatalf("audit entries: %d", played)
+	}
+
+	// What Voys answers that is not sound is not played.
+	h.v.SetRecording(call, []byte("<html>"), "text/html")
+	h.e.Do("GET", path, h.ws.Agent.As(h.ws), nil).Want(t, 409)
+
+	// Another workspace finds no such call; without a session there is nothing.
+	other := h.e.NewWorkspace()
+	h.e.Do("GET", path, other.Admin.As(other), nil).Want(t, 404)
+	h.e.Do("GET", path, hdtest.Auth{Workspace: h.ws.ID}, nil).Want(t, 401)
+	h.e.Do("GET", "/v1/phone/calls/not-an-id/recording", h.ws.Agent.As(h.ws), nil).Want(t, 404)
+}

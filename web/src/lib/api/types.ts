@@ -652,6 +652,8 @@ export type CallData = {
   asset_url: string;
   /** Direct links, working until links_expire_at. */
   recording_url: string;
+  /** The provider only serves the recording to the connection: it plays through the app. */
+  recording_stream?: boolean;
   voicemail_url: string;
   links_expire_at: string | null;
   tags: string[];

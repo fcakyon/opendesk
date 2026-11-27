@@ -292,6 +292,8 @@ func webCSP(cfg *config.Config) string {
 		"script-src 'self' https://challenges.cloudflare.com",
 		"style-src 'self' 'unsafe-inline'",
 		"img-src 'self' data: blob: https:",
+		// A call's recording is fetched with the session and played from a blob.
+		"media-src 'self' blob:",
 		"font-src 'self' data:",
 		"connect-src " + strings.Join(connect, " "),
 		// blob: is the attachment preview's PDF, made by the app from bytes it checked.

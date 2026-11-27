@@ -24,7 +24,13 @@ type Voys struct {
 	tokens      map[string]user
 	transcripts map[string]string
 	summaries   map[string]string
+	recordings  map[string]recording
 	requests    []string
+}
+
+type recording struct {
+	audio       []byte
+	contentType string
 }
 
 type user struct {
@@ -34,7 +40,7 @@ type user struct {
 // New starts a fake answering to token, a user of the customer "Lamp & Twist BV".
 func New(t testing.TB, token string) *Voys {
 	f := &Voys{tokens: map[string]user{token: {"b9e3af06-62c5-4922-aba0-177df05c62f1", Client, "Lamp & Twist BV"}},
-		transcripts: map[string]string{}, summaries: map[string]string{}}
+		transcripts: map[string]string{}, summaries: map[string]string{}, recordings: map[string]recording{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
 	return f
@@ -65,6 +71,18 @@ func (f *Voys) SetIntelligence(callID, transcript, summary string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.transcripts[callID], f.summaries[callID] = transcript, summary
+}
+
+// SetRecording stores a call's recording, which Voys serves at RecordingURL(callID).
+func (f *Voys) SetRecording(callID string, audio []byte, contentType string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.recordings[callID] = recording{audio, contentType}
+}
+
+// RecordingURL is the address Voys' recording event gives for a call.
+func (f *Voys) RecordingURL(callID string) string {
+	return f.API() + "/clients/" + Client + "/callrecordings/" + callID + "/audio"
 }
 
 // Requests returns "METHOD /path" of every request so far.
@@ -118,6 +136,15 @@ func (f *Voys) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		reply(w, 200, map[string]any{"items": []map[string]any{{"number": "+31332022075", "description": "Sales"}, {"number": "610", "description": "Jane"}},
 			"count": 2})
+	case strings.HasPrefix(path, "/api/v2/clients/"+Client+"/callrecordings/") && strings.HasSuffix(path, "/audio"):
+		id := strings.TrimSuffix(strings.TrimPrefix(path, "/api/v2/clients/"+Client+"/callrecordings/"), "/audio")
+		rec, ok := f.recordings[id]
+		if !ok {
+			reply(w, 404, map[string]any{"detail": "Not found"})
+			return
+		}
+		w.Header().Set("Content-Type", rec.contentType)
+		_, _ = w.Write(rec.audio)
 	case strings.HasPrefix(path, "/transcription-storage/clients/"):
 		rest := strings.TrimPrefix(path, "/transcription-storage/clients/")
 		parts := strings.Split(rest, "/")
