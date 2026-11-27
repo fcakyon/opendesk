@@ -482,6 +482,8 @@
     "automation": "Eine Automatisierung",
     "customer": "Der Kunde",
     "ai": "KI",
+    "why": "Warum?",
+    "whyInternal": "Nur das Team sieht das.",
     "noteEdited": "<b>{{who}}</b> hat eine interne Notiz bearbeitet",
     "noteDeleted": "<b>{{who}}</b> hat eine interne Notiz gelöscht",
     "status": "<b>{{who}}</b> hat dies als <b>{{status}}</b> markiert",
@@ -531,6 +533,12 @@
     "triagedAs": "<b>{{who}}</b> hat dies als <b>{{category}}</b> eingeordnet",
     "aiAnswered": "<b>{{who}}</b> hat aus der Wissensdatenbank geantwortet",
     "aiAnsweredEmail": "<b>{{who}}</b> hat per E-Mail geantwortet",
+    "aiSkipped": "<b>{{who}}</b> hat diese Nachricht dem Team überlassen",
+    "skippedReason": {
+      "contact_limit": "Der Kunde hat das Limit der Antworten erreicht, die {{who}} einer Person pro Stunde gibt.",
+      "monthly_cap": "{{who}} hatte sein Monatslimit aufgebraucht.",
+      "no_balance": "Das KI-Guthaben ist aufgebraucht, daher konnte {{who}} nicht antworten."
+    },
     "procedureRan": "<b>{{who}}</b> hat <b>{{name}}</b> ausgeführt",
     "procedureNothing": "<b>{{who}}</b> hat <b>{{name}}</b> ausgeführt: nichts zu tun",
     "procedureFailed": "<b>{{who}}</b> konnte <b>{{name}}</b> nicht abschließen",

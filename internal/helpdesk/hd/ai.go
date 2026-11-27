@@ -361,6 +361,13 @@ type HandoffBot struct {
 	Name string
 }
 
+// Why the agent left a customer's message unanswered (the ai_skipped activity's data.reason).
+const (
+	SkipContactLimit = "contact_limit" // the customer's hourly limit of agent answers was reached
+	SkipMonthlyCap   = "monthly_cap"   // the workspace's monthly agent cap was reached
+	SkipNoBalance    = "no_balance"    // the AI balance was used up
+)
+
 // NotifyAIHandoff is the notification type sent when a visitor asks for a person.
 const NotifyAIHandoff = "ai_handoff"
 

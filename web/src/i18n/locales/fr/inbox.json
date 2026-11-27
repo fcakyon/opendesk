@@ -506,6 +506,8 @@
     "automation": "Une automatisation",
     "customer": "Le client",
     "ai": "IA",
+    "why": "Pourquoi ?",
+    "whyInternal": "Seule l’équipe voit ceci.",
     "noteEdited": "<b>{{who}}</b> a modifié une note interne",
     "noteDeleted": "<b>{{who}}</b> a supprimé une note interne",
     "status": "<b>{{who}}</b> a marqué ce ticket <b>{{status}}</b>",
@@ -555,6 +557,12 @@
     "triagedAs": "<b>{{who}}</b> a classé ce ticket dans <b>{{category}}</b>",
     "aiAnswered": "<b>{{who}}</b> a répondu à partir de la base de connaissances",
     "aiAnsweredEmail": "<b>{{who}}</b> a répondu par e-mail",
+    "aiSkipped": "<b>{{who}}</b> a laissé ce message à l’équipe",
+    "skippedReason": {
+      "contact_limit": "Le client a atteint la limite de réponses que {{who}} donne à une personne en une heure.",
+      "monthly_cap": "{{who}} avait atteint son plafond mensuel.",
+      "no_balance": "Le solde IA est épuisé, {{who}} n’a donc pas pu répondre."
+    },
     "procedureRan": "<b>{{who}}</b> a exécuté <b>{{name}}</b>",
     "procedureNothing": "<b>{{who}}</b> a exécuté <b>{{name}}</b> : rien à faire",
     "procedureFailed": "<b>{{who}}</b> n’a pas pu terminer <b>{{name}}</b>",

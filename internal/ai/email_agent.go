@@ -263,7 +263,7 @@ func (s *Service) EmailAnswer(ctx context.Context, a jobs.AIEmailAnswerArgs) err
 			return err
 		}
 		if recent >= emailContactHourly {
-			return s.decline(ctx, a.WorkspaceID, a.TicketID, a.MessageID)
+			return s.decline(ctx, a.WorkspaceID, a.TicketID, a.MessageID, hd.SkipContactLimit, ec.bot)
 		}
 	}
 	if ec.replies >= max(ec.set.WidgetMaxReplies, 1) {
@@ -271,7 +271,7 @@ func (s *Service) EmailAnswer(ctx context.Context, a jobs.AIEmailAnswerArgs) err
 	}
 	if capped, err := s.agentCapped(ctx, a.WorkspaceID, ec.set); err != nil || capped {
 		if capped {
-			return s.decline(ctx, a.WorkspaceID, a.TicketID, a.MessageID)
+			return s.decline(ctx, a.WorkspaceID, a.TicketID, a.MessageID, hd.SkipMonthlyCap, ec.bot)
 		}
 		return err
 	}
@@ -286,6 +286,9 @@ func (s *Service) EmailAnswer(ctx context.Context, a jobs.AIEmailAnswerArgs) err
 	}
 	in := ec.input(a.WorkspaceID, a.TicketID)
 	res, err := s.runAgent(ctx, in, agentEvents{})
+	if isNoBalance(err) {
+		return s.decline(ctx, a.WorkspaceID, a.TicketID, a.MessageID, hd.SkipNoBalance, ec.bot)
+	}
 	if err != nil {
 		return err
 	}
