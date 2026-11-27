@@ -55,13 +55,15 @@ type ReportBrand struct {
 	FirstResponseP50Minutes *float64  `json:"first_response_p50_minutes"`
 }
 
-// reportFilter narrows the overview to a team ("none": no team), a brand and a mailbox
-// ("none": no mailbox). AgentRow, when set, keeps by_agent to that member's row: a member who
+// reportFilter narrows the overview to a team ("none": no team), a brand, a mailbox ("none":
+// no mailbox) and a member's tickets (Assignee). AgentRow, when set, keeps by_agent to that
+// member's row: a member who
 // sees their own row alone (onlineScope).
 type reportFilter struct {
 	Team     string
 	Brand    string
 	Mailbox  string
+	Assignee string
 	AgentRow *uuid.UUID
 }
 
@@ -69,8 +71,9 @@ type reportFilter struct {
 // messages, calls and threads to the ticket they went into and closed what was left, so they
 // would make one conversation two tickets created, and the merge a solve.
 //
-// The mailbox is the one a ticket replies from (tickets.mailbox_id): a uuid validate parsed,
-// or none, written in place so that every query keeps its arguments.
+// The mailbox is the one a ticket replies from (tickets.mailbox_id). It and the assignee are
+// uuids validate parsed (or none for the mailbox), written in place so that every query keeps
+// its arguments.
 func (f reportFilter) sql(n int) string {
 	s := fmt.Sprintf(` AND ($%[1]d = '' OR ($%[1]d = 'none' AND t.team_id IS NULL) OR t.team_id::text = $%[1]d)
 		AND ($%[2]d = '' OR t.brand_id::text = $%[2]d) AND t.merged_into_id IS NULL`, n, n+1)
@@ -80,6 +83,9 @@ func (f reportFilter) sql(n int) string {
 		s += ` AND t.mailbox_id IS NULL`
 	default:
 		s += ` AND t.mailbox_id = '` + uuid.MustParse(f.Mailbox).String() + `'`
+	}
+	if f.Assignee != "" {
+		s += ` AND t.assignee_id = '` + uuid.MustParse(f.Assignee).String() + `'`
 	}
 	return s
 }
@@ -123,6 +129,13 @@ func (f reportFilter) validate() (reportFilter, error) {
 			return f, err
 		}
 		f.Mailbox = id.String()
+	}
+	if f.Assignee = strings.TrimSpace(f.Assignee); f.Assignee != "" {
+		id, err := hd.ParseRef(f.Assignee, "assignee_id")
+		if err != nil {
+			return f, err
+		}
+		f.Assignee = id.String()
 	}
 	return f, nil
 }
@@ -510,20 +523,24 @@ func registerInsights(d *deps.Deps, api huma.API) {
 
 	huma.Register(api, huma.Operation{OperationID: "report-overview", Method: http.MethodGet, Path: "/v1/reports/overview",
 		Summary: "Helpdesk overview report", Tags: []string{"Reports"},
-		Description: "from and to are YYYY-MM-DD (days in the workspace timezone, to inclusive) or RFC 3339. Default: the last 30 days. Spam, deleted and merged tickets are excluded. First response is how long a customer waited for a person's reply, never a bot's or an automation's: none on tickets the team started. team_id (or none), brand_id and mailbox_id (or none) narrow every figure. " +
+		Description: "from and to are YYYY-MM-DD (days in the workspace timezone, to inclusive) or RFC 3339. Default: the last 30 days. Spam, deleted and merged tickets are excluded. First response is how long a customer waited for a person's reply, never a bot's or an automation's: none on tickets the team started. team_id (or none), brand_id and mailbox_id (or none) narrow every figure, and assignee_id to the tickets assigned to one member; a member who is not an admin may only name themselves. " +
 			"by_agent is personal, as the agents report: admins (and API keys) get every member's row, other members their own row alone."},
 		func(ctx context.Context, in *struct {
-			From      string `query:"from"`
-			To        string `query:"to"`
-			TeamID    string `query:"team_id" doc:"A team id, or none for tickets without a team"`
-			BrandID   string `query:"brand_id"`
-			MailboxID string `query:"mailbox_id" doc:"A mailbox id: the tickets that reply from it. Or none for tickets without a mailbox (chat, phone, API)"`
+			From       string `query:"from"`
+			To         string `query:"to"`
+			TeamID     string `query:"team_id" doc:"A team id, or none for tickets without a team"`
+			BrandID    string `query:"brand_id"`
+			MailboxID  string `query:"mailbox_id" doc:"A mailbox id: the tickets that reply from it. Or none for tickets without a mailbox (chat, phone, API)"`
+			AssigneeID string `query:"assignee_id" doc:"A member: only the tickets assigned to them. Members who are not admins may only name themselves"`
 		}) (*struct{ Body ReportOverview }, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeTicketsRead)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			rf := reportFilter{Team: in.TeamID, Brand: in.BrandID, Mailbox: in.MailboxID}
+			if err := allowPerson(ctx, p, in.AssigneeID); err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			rf := reportFilter{Team: in.TeamID, Brand: in.BrandID, Mailbox: in.MailboxID, Assignee: in.AssigneeID}
 			if scope, self := onlineScope(ctx, p); scope == onlineSelf {
 				rf.AgentRow = self
 			}

@@ -105,6 +105,9 @@
   "filter": {
     "teamLabel": "Tým: {{value}}",
     "brandLabel": "Značka: {{value}}",
+    "personLabel": "Osoba: {{value}}",
+    "allPeople": "Všechny osoby",
+    "searchPeople": "Hledat osoby",
     "allTeams": "Všechny týmy",
     "noTeam": "Bez týmu",
     "private": "Soukromé",

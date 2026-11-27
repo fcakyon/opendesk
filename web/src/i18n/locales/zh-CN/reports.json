@@ -96,6 +96,9 @@
   "filter": {
     "teamLabel": "团队：{{value}}",
     "brandLabel": "品牌：{{value}}",
+    "personLabel": "人员：{{value}}",
+    "allPeople": "所有人员",
+    "searchPeople": "搜索人员",
     "allTeams": "全部团队",
     "noTeam": "无团队",
     "private": "私有",

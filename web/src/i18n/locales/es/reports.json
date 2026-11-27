@@ -102,6 +102,9 @@
   "filter": {
     "teamLabel": "Equipo: {{value}}",
     "brandLabel": "Marca: {{value}}",
+    "personLabel": "Persona: {{value}}",
+    "allPeople": "Todas las personas",
+    "searchPeople": "Buscar personas",
     "allTeams": "Todos los equipos",
     "noTeam": "Sin equipo",
     "private": "Privado",

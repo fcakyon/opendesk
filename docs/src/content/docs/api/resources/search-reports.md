@@ -42,7 +42,7 @@ curl "https://api.opendesk.sh/v1/reports/overview?from=2026-09-01&to=2026-09-30"
 }
 ```
 
-`team_id` (a team, or `none`), `brand_id` and `mailbox_id` (a mailbox, or `none` for tickets without one, such as chats and calls) narrow every figure. A ticket counts under the mailbox it replies from.
+`team_id` (a team, or `none`), `brand_id` and `mailbox_id` (a mailbox, or `none` for tickets without one, such as chats and calls) narrow every figure, and `assignee_id` narrows it to the tickets assigned to one member. A ticket counts under the mailbox it replies from. Signed in, a member who is not an owner or admin may only name themselves in `assignee_id`.
 
 `by_agent` is personal, as in the agents report: API keys, owners and admins get every member's row, and other members their own row alone. The other figures are the same for everyone.
 
@@ -65,4 +65,4 @@ curl "https://api.opendesk.sh/v1/reports/agents?from=2026-09-01&to=2026-09-30"  
 }
 ```
 
-One row per owner, admin and agent, most solved first, narrowed like the overview by `team_id`, `brand_id` and `mailbox_id`. Online time is personal: `online_minutes` is filled in for every row only for API keys with the `settings:read` scope (`online_time` is then `all`). Signed in, owners and admins get every row and members their own row only (`online_time` is then `self`). A workspace that turned online time off (`settings.agent_online_time: false`) answers `off` to everyone, with no online time on any row. See [Agents](/guides/reports/#agents) for what each column counts.
+One row per owner, admin and agent, most solved first, narrowed like the overview by `team_id`, `brand_id` and `mailbox_id`. `assignee_id` answers that member's row alone, with the same figures as without it. Online time is personal: `online_minutes` is filled in for every row only for API keys with the `settings:read` scope (`online_time` is then `all`). Signed in, owners and admins get every row and members their own row only (`online_time` is then `self`). A workspace that turned online time off (`settings.agent_online_time: false`) answers `off` to everyone, with no online time on any row. See [Agents](/guides/reports/#agents) for what each column counts.
