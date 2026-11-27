@@ -200,16 +200,16 @@ function SummaryView({ s, busy, onRefresh }: { s: AISummary; busy: boolean; onRe
           ))}
         </ul>
       )}
-      <div className="flex items-center gap-2 text-[11px] text-fg-4">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-fg-4">
         <Tooltip content={t("summary.mood")}>
           <span className={cn("inline-flex h-[18px] items-center rounded-sm px-1.5 text-[10.5px] font-medium", tone[sentimentTone[s.sentiment] ?? "gray"].chip)}>{t(`sentiment.${s.sentiment}`)}</span>
         </Tooltip>
         <Tooltip content={fullDate(s.updated_at)}>
-          <span className="min-w-0 flex-1 truncate">{t("summary.updated", { when: relLong(s.updated_at) })}</span>
+          <span className="min-w-0 truncate">{t("summary.updated", { when: relLong(s.updated_at) })}</span>
         </Tooltip>
         {onRefresh && (
           <AiTooltip feature="summarize" label={t("summary.refreshHint")}>
-            <button type="button" onClick={onRefresh} disabled={busy} className={cn(textBtn, "-mr-1.5 font-normal text-fg-4 hover:text-fg")}>
+            <button type="button" onClick={onRefresh} disabled={busy} className={cn(textBtn, "-mr-1.5 ml-auto font-normal text-fg-4 hover:text-fg")}>
               {t("summary.refresh")}
             </button>
           </AiTooltip>
@@ -240,7 +240,7 @@ type AskedKey = "priority" | "severity" | "team" | "tags" | "new_tags";
 function SeverityValue({ s }: { s: Severity }) {
   useTranslation("indicators");
   return (
-    <span className="flex items-center gap-1.5">
+    <span className="flex items-center gap-1.5 whitespace-nowrap">
       <SeverityChip severity={s} />
       {severityLabel(s)}
     </span>
@@ -271,7 +271,7 @@ function useSuggestions(ticket: Ticket, run: Run, say: (s: string) => void) {
 
   const tagColor = (n: string) => tags?.find((x) => x.name.toLowerCase() === n.toLowerCase())?.color ?? null;
   const teamName = (id: string) => teams?.find((x) => x.id === id)?.name ?? t("suggest.fields.team");
-  const tagList = (names: string[]) => names.map((n) => <TagChip key={n} name={n} color={tagColor(n)} />);
+  const tagList = (names: string[]) => names.map((n) => <TagChip key={n} name={n} color={tagColor(n)} className="max-w-[min(140px,100%)]" />);
   const patchAsync = (patch: TicketPatch) => run(t("ollie.applying"), () => update.mutateAsync({ id: ticket.id, patch }));
   const done = () => say(t("suggest.done"));
 
@@ -316,7 +316,9 @@ function useSuggestions(ticket: Ticket, run: Run, say: (s: string) => void) {
           t("suggest.fields.newLabels"),
           newTags.map((x) => (
             <Tooltip key={x} content={t("suggest.newTag")}>
-              <span className="inline-flex h-[19px] items-center rounded-sm border border-dashed border-line-strong px-1.5 text-[10.5px] text-fg-2">{x}</span>
+              <span className="inline-flex h-[19px] max-w-full items-center rounded-sm border border-dashed border-line-strong px-1.5 text-[10.5px] text-fg-2">
+                <span className="truncate">{x}</span>
+              </span>
             </Tooltip>
           )),
           newTags.join(", "),
@@ -433,12 +435,19 @@ function useSuggestions(ticket: Ticket, run: Run, say: (s: string) => void) {
   return { rows, busy, applying, suggest, applyAll, skipAll };
 }
 
-function SuggestionRow({ row, disabled }: { row: Row; disabled: boolean }) {
+/**
+ * One proposal: label, value, then Apply and Skip. The value wraps within its column, and when the buttons
+ * leave it less than its starting width they drop under the row; nothing overlaps in any language. Every row's
+ * label column is as wide as the longest label in the list (`labels`, stacked out of sight) and the buttons are
+ * the same width on every row, so all rows make the same choice and the values line up.
+ */
+function SuggestionRow({ row, labels, disabled }: { row: Row; labels: string[]; disabled: boolean }) {
   const { t } = useTranslation("aiTicket");
   const name = useAssistantName();
   const reduce = useReducedMotion();
   const what = `${row.label}: ${row.text}`;
-  const value = <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-[12px] text-fg">{row.value}</span>;
+  const sure = row.sure != null;
+  const sureTip = sure ? [t("suggest.sure", { name, pct: row.sure }), row.why].filter(Boolean).join(" · ") : null;
   return (
     <motion.li
       layout={reduce ? false : "position"}
@@ -446,41 +455,47 @@ function SuggestionRow({ row, disabled }: { row: Row; disabled: boolean }) {
       animate={{ opacity: 1, y: 0 }}
       exit={reduce ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, x: 8, transition: { duration: 0.14 } }}
       transition={springs.row}
-      className="flex min-h-8 items-center gap-2 py-0.5"
+      className="flex flex-wrap items-start gap-x-2 gap-y-0.5 py-1"
     >
-      <span className="w-[54px] shrink-0 text-[11.5px] text-fg-3">{row.label}</span>
-      {row.sure != null ? (
-        <Tooltip content={row.why ? `${t("suggest.sure", { name, pct: row.sure })} · ${row.why}` : t("suggest.sure", { name, pct: row.sure })}>
-          <span className="flex min-w-0 flex-1" tabIndex={-1}>
-            {value}
+      <span className="grid min-w-[54px] max-w-24 shrink-0 py-[3px] text-[11.5px] leading-[18px] text-fg-3">
+        {labels.map((l, i) => (
+          <span key={i} aria-hidden className="invisible col-start-1 row-start-1">
+            {l}
           </span>
-        </Tooltip>
-      ) : (
-        value
-      )}
-      <button type="button" onClick={row.apply} disabled={disabled} aria-label={t("suggest.applyAria", { what })} className={cn(textBtn, "text-fg")}>
-        {t("suggest.apply")}
-      </button>
-      <button type="button" onClick={row.skip} disabled={disabled} aria-label={t("suggest.skipAria", { what })} className={cn(textBtn, "-ml-1.5 text-fg-4 hover:text-fg-2")}>
-        {t("suggest.skip")}
-      </button>
+        ))}
+        <span className="col-start-1 row-start-1">{row.label}</span>
+      </span>
+      <Tooltip content={sureTip}>
+        <span className="flex min-h-6 min-w-0 flex-[1_1_5rem] flex-wrap items-center gap-1 text-[12px] text-fg" tabIndex={sure ? -1 : undefined}>
+          {row.value}
+        </span>
+      </Tooltip>
+      <span className="ml-auto flex shrink-0 items-center gap-0.5">
+        <button type="button" onClick={row.apply} disabled={disabled} aria-label={t("suggest.applyAria", { what })} className={cn(textBtn, "text-fg")}>
+          {t("suggest.apply")}
+        </button>
+        <button type="button" onClick={row.skip} disabled={disabled} aria-label={t("suggest.skipAria", { what })} className={cn(textBtn, "text-fg-4 hover:text-fg-2")}>
+          {t("suggest.skip")}
+        </button>
+      </span>
     </motion.li>
   );
 }
 
 function SuggestionList({ rows, applying, onApplyAll, onSkipAll }: { rows: Row[]; applying: boolean; onApplyAll: () => void; onSkipAll: () => void }) {
   const { t } = useTranslation("aiTicket");
+  const labels = rows.map((r) => r.label);
   return (
     <div className={cn("rounded-lg px-2.5 py-1", tone.violet.soft)}>
       <ul className="flex flex-col">
         <AnimatePresence initial={false}>
           {rows.map((r) => (
-            <SuggestionRow key={r.key} row={r} disabled={applying} />
+            <SuggestionRow key={r.key} row={r} labels={labels} disabled={applying} />
           ))}
         </AnimatePresence>
       </ul>
       {rows.length > 1 && (
-        <div className="flex items-center justify-end gap-1 pb-1 pt-0.5">
+        <div className="flex flex-wrap items-center justify-end gap-1 pb-1 pt-0.5">
           <button type="button" onClick={onSkipAll} disabled={applying} className={cn(textBtn, "text-fg-4 hover:text-fg-2")}>
             {t("suggest.skipAll")}
           </button>
