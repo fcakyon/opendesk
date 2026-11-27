@@ -61,6 +61,8 @@
     "chartLabel_other": "Tickets creados y resueltos por día, {{count}} días. Usa las teclas de flecha para leer cada día.",
     "chartLabel_many": "Tickets creados y resueltos por día, {{count}} de días. Usa las teclas de flecha para leer cada día.",
     "range": {
+      "today": "Hoy",
+      "yesterday": "Ayer",
       "last7": "Últimos 7 días",
       "last30": "Últimos 30 días",
       "last90": "Últimos 90 días",

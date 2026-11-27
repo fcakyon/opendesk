@@ -60,6 +60,8 @@
     "chartLabel_one": "Tickets created and solved per day, {{count}} days. Use the arrow keys to read each day.",
     "chartLabel_other": "Tickets created and solved per day, {{count}} days. Use the arrow keys to read each day.",
     "range": {
+      "today": "Today",
+      "yesterday": "Yesterday",
       "last7": "Last 7 days",
       "last30": "Last 30 days",
       "last90": "Last 90 days",

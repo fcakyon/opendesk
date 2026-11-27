@@ -60,6 +60,8 @@
     "chartLabel_one": "Erstellte und gelöste Tickets pro Tag, {{count}} Tag. Mit den Pfeiltasten liest du jeden Tag.",
     "chartLabel_other": "Erstellte und gelöste Tickets pro Tag, {{count}} Tage. Mit den Pfeiltasten liest du jeden Tag.",
     "range": {
+      "today": "Heute",
+      "yesterday": "Gestern",
       "last7": "Letzte 7 Tage",
       "last30": "Letzte 30 Tage",
       "last90": "Letzte 90 Tage",

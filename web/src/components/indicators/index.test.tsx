@@ -89,7 +89,7 @@ describe("indicator localization", () => {
     expect(container.textContent).toContain("Résolus");
     expect(container.textContent).toContain("mer. 4 févr.");
     expect(presets(now).map((p) => p.range)).toEqual(english.map((p) => p.range));
-    expect(presets(now)[0].label).toBe("7 derniers jours");
+    expect(presets(now).find((p) => p.id === "7")!.label).toBe("7 derniers jours");
     expect(rangeLabel({ from: "2026-02-04", to: "2026-02-06" })).toContain("févr.");
   });
 });

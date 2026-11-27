@@ -14,6 +14,9 @@ const day = (d: Date) => format(d, "yyyy-MM-dd");
 
 export function presets(now = new Date()): { id: string; label: string; range: ReportsRange }[] {
   return [
+    // A single day; the server reads dates as whole days in the workspace's time zone.
+    { id: "today", label: i18n.t("indicators:reports.range.today"), range: { from: day(now), to: day(now) } },
+    { id: "yesterday", label: i18n.t("indicators:reports.range.yesterday"), range: { from: day(subDays(now, 1)), to: day(subDays(now, 1)) } },
     { id: "7", label: i18n.t("indicators:reports.range.last7"), range: { from: day(subDays(now, 6)), to: day(now) } },
     { id: "30", label: i18n.t("indicators:reports.range.last30"), range: { from: day(subDays(now, 29)), to: day(now) } },
     { id: "90", label: i18n.t("indicators:reports.range.last90"), range: { from: day(subDays(now, 89)), to: day(now) } },

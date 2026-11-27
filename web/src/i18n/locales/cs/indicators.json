@@ -62,6 +62,8 @@
     "chartLabel_many": "Tikety vytvořené a vyřešené za den, {{count}} dne. Jednotlivé dny procházejte šipkami.",
     "chartLabel_other": "Tikety vytvořené a vyřešené za den, {{count}} dní. Jednotlivé dny procházejte šipkami.",
     "range": {
+      "today": "Dnes",
+      "yesterday": "Včera",
       "last7": "Posledních 7 dní",
       "last30": "Posledních 30 dní",
       "last90": "Posledních 90 dní",
