@@ -1,6 +1,6 @@
 // Typed wrappers for every endpoint in contracts/api.md.
 
-import { download, http, stream, streamEvents, type StreamHandlers } from "./client";
+import { download, downloadPost, http, stream, streamEvents, type StreamHandlers } from "./client";
 import type * as T from "./types";
 import { creatingTicket } from "../ownTickets";
 import { uiLanguage } from "@/i18n";
@@ -698,6 +698,18 @@ export const api = {
     merge: (id: string, into: string) => http.post<T.Contact>(`/v1/contacts/${id}/merge`, { into }),
     bulk: (b: DirectoryBulkTarget<ContactBulkQuery> & ({ delete: true } | { patch: DirectoryBulkPatch & { company_id?: string | null } })) =>
       http.post<BulkResult>("/v1/contacts/bulk", b),
+    /** A CSV file of the people named by id (at most 1000) or by the People list's filters. */
+    exportCsv: (target: { ids: string[] } | { query: ContactBulkQuery }) => downloadPost("/v1/contacts/export", target),
+    /** Contact imports (contracts/imports.md "Contacts"): upload a file, map its columns, then follow the run. */
+    importUpload: (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      return http.create<T.ContactImportUpload>("/v1/contacts/import/upload", fd);
+    },
+    importStart: (b: { upload_id: string; mapping: T.ContactImportMapping; match_on: T.ContactImportMatch; on_match: T.ContactImportOnMatch }) =>
+      http.create<T.ContactImport>("/v1/contacts/imports", b),
+    importGet: (id: string) => http.get<T.ContactImport>(`/v1/contacts/imports/${id}`),
+    importCancel: (id: string) => http.post<T.ContactImport>(`/v1/contacts/imports/${id}/cancel`),
     /** Extra addresses (contracts/api.md "Contact emails"); each answers with the contact. */
     addEmail: (id: string, email: string) => http.post<T.Contact>(`/v1/contacts/${id}/emails`, { email }),
     removeEmail: (id: string, email: string) => http.del<T.Contact>(`/v1/contacts/${id}/emails/${encodeURIComponent(email)}`),

@@ -60,6 +60,7 @@ func RegisterWorkers(d *deps.Deps, w *river.Workers) {
 	helpdomains.RegisterWorkers(d, w)
 	imports.RegisterWorkers(d, w)
 	wiki.RegisterWorkers(d, w)
+	contacts.RegisterWorkers(d, w)
 	contacts.InstallImageHooks()
 }
 

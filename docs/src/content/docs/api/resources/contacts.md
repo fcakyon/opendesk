@@ -14,6 +14,11 @@ Scopes: `contacts:read` to read, `contacts:write` to change.
 | `DELETE` | `/v1/contacts/{id}` | Delete a contact |
 | `GET` | `/v1/contacts/{id}/tickets` | The contact's tickets |
 | `POST` | `/v1/contacts/bulk` | Label, set a custom field or the company of, or delete many contacts: `ids` (up to 100) or `query` (the list's filters, at most 1000 contacts), with `patch` or `delete: true` |
+| `POST` | `/v1/contacts/export` | Download contacts as a CSV file: `ids` (up to 1000) or `query` (the list's filters, at most 50,000 people) |
+| `POST` | `/v1/contacts/import/upload` | Upload a CSV file of people (multipart `file`); answers its columns and the mapping guessed from the headers |
+| `POST` | `/v1/contacts/imports` | Start importing an uploaded file: `upload_id`, `mapping`, `match_on` (`email` or `external_id`) and `on_match` (`skip`, `fill` or `overwrite`) |
+| `GET` | `/v1/contacts/imports`, `/v1/contacts/imports/{id}` | List imports, or follow one: its status, counts and the first rows that failed |
+| `POST` | `/v1/contacts/imports/{id}/cancel` | Stop an import; the people it added stay |
 | `GET` | `/v1/contacts/{id}/portal` | The contact's customer portal access: `status` (`none`, `invited`, `active`), the last sign-in and the brands an invitation can come from |
 | `POST` | `/v1/contacts/{id}/portal/invite` | Email the contact a 7-day link to choose a portal password, from `brand_id` or the default brand |
 | `POST` | `/v1/contacts/portal/invite` | Invite up to 100 contacts by `ids`; answers `{sent, skipped}` with the skipped counted by reason |

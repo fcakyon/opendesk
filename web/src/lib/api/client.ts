@@ -464,6 +464,12 @@ export async function download(path: string, opts: RequestOptions = {}): Promise
   return { blob: await res.blob(), filename: dispositionName(res.headers.get("content-disposition")) };
 }
 
+/** POST a JSON body and get a file back, as `download` does for a GET. */
+export async function downloadPost(path: string, body: unknown): Promise<Download> {
+  const res = await raw("POST", path, { body });
+  return { blob: await res.blob(), filename: dispositionName(res.headers.get("content-disposition")) };
+}
+
 /** The file name of a Content-Disposition header: RFC 5987's filename* first, else filename. */
 export function dispositionName(header: string | null): string | null {
   if (!header) return null;

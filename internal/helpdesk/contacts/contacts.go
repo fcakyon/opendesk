@@ -20,8 +20,6 @@ import (
 	"github.com/useopendesk/opendesk/internal/events"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 	"github.com/useopendesk/opendesk/internal/httpx"
-	"github.com/useopendesk/opendesk/internal/ids"
-	"github.com/useopendesk/opendesk/internal/images"
 )
 
 type contactWriteBody struct {
@@ -231,33 +229,8 @@ func registerContacts(d *deps.Deps, api huma.API) {
 			}
 			var c domain.Contact
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				row := contactRow{}
-				if err := in.Body.apply(ctx, tx, p.WorkspaceID, &row); err != nil {
-					return err
-				}
-				if row.Email == nil && row.Name == "" {
-					return httpx.Validation("a contact needs an email or a name")
-				}
-				if err := applyFields(ctx, tx, p.WorkspaceID, domain.FieldEntityContact, &row.Fields, in.Body.Fields); err != nil {
-					return err
-				}
-				id := ids.New()
-				if _, err := tx.Exec(ctx, `INSERT INTO contacts (id, workspace_id, email, name, phone, company_id,
-					external_id, notes, custom, blocked, fields) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-					id, p.WorkspaceID, row.Email, row.Name, row.Phone, row.CompanyID, row.ExternalID,
-					row.Notes, row.Custom, row.Blocked, row.Fields); err != nil {
-					return uniqueErr(err)
-				}
-				if _, err := pictureFromURL(ctx, d, tx, p.WorkspaceID, id, row.PictureURL); err != nil {
-					return err
-				}
-				if err := applyLabels(ctx, tx, p, domain.ContactLabels, id, in.Body.Tags, in.Body.AddTags, in.Body.RemoveTags); err != nil {
-					return err
-				}
-				if c, err = domain.LoadContact(ctx, tx, p.WorkspaceID, id); err != nil {
-					return err
-				}
-				_, err := events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "contact.created", Data: map[string]any{"contact": c}})
+				var err error
+				c, err = insertContact(ctx, d, tx, p, &in.Body)
 				return err
 			})
 			if err != nil {
@@ -303,64 +276,8 @@ func registerContacts(d *deps.Deps, api huma.API) {
 			}
 			var c domain.Contact
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				var row contactRow
-				var oldEmail *string
-				err := tx.QueryRow(ctx, `SELECT email, name, phone, company_id, external_id, notes, custom, blocked, fields
-					FROM contacts WHERE workspace_id = $1 AND id = $2 FOR UPDATE`, p.WorkspaceID, id).
-					Scan(&row.Email, &row.Name, &row.Phone, &row.CompanyID, &row.ExternalID, &row.Notes, &row.Custom, &row.Blocked, &row.Fields)
-				oldEmail = row.Email
-				if db.IsNotFound(err) {
-					return httpx.NotFound("Contact")
-				}
-				if err != nil {
-					return err
-				}
-				if err := in.Body.apply(ctx, tx, p.WorkspaceID, &row); err != nil {
-					return err
-				}
-				if row.Email == nil && row.Name == "" {
-					return httpx.Validation("a contact needs an email or a name")
-				}
-				if row.Email == nil && oldEmail != nil {
-					// Extra addresses sit beside a primary one.
-					var extras bool
-					if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM contact_emails WHERE workspace_id = $1 AND contact_id = $2)`, p.WorkspaceID, id).Scan(&extras); err != nil {
-						return err
-					}
-					if extras {
-						return httpx.Validation("a contact with other email addresses keeps a primary one: make one of them the primary instead")
-					}
-				}
-				if err := applyFields(ctx, tx, p.WorkspaceID, domain.FieldEntityContact, &row.Fields, in.Body.Fields); err != nil {
-					return err
-				}
-				// The contacts_customer_identity trigger ends customer credentials, sessions
-				// and reset links when the email changes or the contact is blocked.
-				if _, err := tx.Exec(ctx, `UPDATE contacts SET email = $3, name = $4, phone = $5, company_id = $6,
-					external_id = $7, notes = $8, custom = $9, blocked = $10, fields = $11, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
-					p.WorkspaceID, id, row.Email, row.Name, row.Phone, row.CompanyID, row.ExternalID,
-					row.Notes, row.Custom, row.Blocked, row.Fields); err != nil {
-					return uniqueErr(err)
-				}
-				if prefix, err := pictureFromURL(ctx, d, tx, p.WorkspaceID, id, row.PictureURL); err != nil {
-					return err
-				} else if prefix != "" {
-					defer images.Discard(d.Storage, prefix)
-				}
-				if !sameEmail(oldEmail, row.Email) {
-					// A new address may have a different Gravatar picture.
-					if _, err := tx.Exec(ctx, `UPDATE contacts SET avatar_retry_at = now(), avatar_failures = 0
-						WHERE workspace_id = $1 AND id = $2 AND avatar_source IS DISTINCT FROM 'upload'`, p.WorkspaceID, id); err != nil {
-						return err
-					}
-				}
-				if err := applyLabels(ctx, tx, p, domain.ContactLabels, id, in.Body.Tags, in.Body.AddTags, in.Body.RemoveTags); err != nil {
-					return err
-				}
-				if c, err = domain.LoadContact(ctx, tx, p.WorkspaceID, id); err != nil {
-					return err
-				}
-				_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "contact.updated", Data: map[string]any{"contact": c}})
+				var err error
+				c, err = patchContact(ctx, d, tx, p, id, &in.Body)
 				return err
 			})
 			if err != nil {

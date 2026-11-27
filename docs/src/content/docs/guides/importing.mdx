@@ -329,6 +329,24 @@ The API for imports is in [the contract](https://github.com/useopendesk/opendesk
 
 </Fold>
 
+## Import and export people
+
+A list of customers does not need a history to go with it. On **People**, **Import** adds people from a CSV file, and **Export** (or **Export** in the bar over a selection) saves them as one.
+
+To import, choose a file with a header row and one row per person: a name or an email is enough. opendesk reads the headers and picks the column for each field; change any it got wrong. Phone, company, external ID, notes, labels and your own custom fields can come along. A company that does not exist yet is created, and labels are separated by commas, semicolons or bars.
+
+Then say how to find people who are already here, by **email address** or by **external ID**, and what to do with them:
+
+| Choice | What it does |
+| --- | --- |
+| Leave them alone | Their details stay as they are. |
+| Fill in what's empty | Only fields they have empty are set. Labels are added. |
+| Update with the file | Every value in the file replaces theirs. An empty cell changes nothing. |
+
+The people are added in the background while you keep working, and the dialog shows how many were added, updated, skipped and failed. A row that cannot be saved, such as one with an invalid email, fails alone and is listed with its line number; the rest go on. **Stop** ends the import and keeps the people already added.
+
+An export has the same columns, so you can export a list, edit it in a spreadsheet and import it again. Exports of a filter hold up to 50,000 people, and cells a spreadsheet would run as a formula are written as plain text. The file reaches your computer through your own session: nothing is emailed or stored.
+
 ## Related
 
 - [Inbox and tickets](/guides/inbox-and-tickets/)

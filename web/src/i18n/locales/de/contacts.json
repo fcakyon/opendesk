@@ -263,7 +263,12 @@
     "invited_other": "{{count}} Einladungen gesendet",
     "invitedSome_one": "{{count}} Einladung gesendet, {{skipped}} übersprungen (keine E-Mail, gesperrt oder schon mit Zugang)",
     "invitedSome_other": "{{count}} Einladungen gesendet, {{skipped}} übersprungen (keine E-Mail, gesperrt oder schon mit Zugang)",
-    "inviteFailed": "Die Einladungen konnten nicht gesendet werden"
+    "inviteFailed": "Die Einladungen konnten nicht gesendet werden",
+    "export": "Exportieren",
+    "exported": "Export gespeichert",
+    "exportFailed": "Der Export hat nicht geklappt.",
+    "exportAll": "Alle exportieren",
+    "exportMatching": "Treffer exportieren"
   },
   "portal": {
     "title": "Kundenportal",
@@ -291,5 +296,85 @@
     "needsEmail": "Fügen Sie eine E-Mail-Adresse hinzu, um diesen Kontakt einzuladen.",
     "isBlocked": "Heben Sie die Sperre auf, um diesen Kontakt einzuladen.",
     "ssoOnly": "Kunden melden sich über Ihren Identitätsanbieter an, ohne Einladung."
+  },
+  "import": {
+    "open": "Importieren",
+    "title": "Personen importieren",
+    "runningTitle": "Personen werden importiert",
+    "body": "Füge Personen aus einer CSV-Datei hinzu. Ordne die Spalten den Feldern zu und lege fest, was mit Personen passiert, die schon da sind.",
+    "close": "Fertig",
+    "replace": "Andere Datei wählen",
+    "summary": "{{rows}} Zeilen, {{columns}} Spalten",
+    "start_one": "{{count}} Zeile importieren",
+    "start_other": "{{count}} Zeilen importieren",
+    "notInFile": "Nicht in der Datei",
+    "emptyColumn": "In den ersten Zeilen leer",
+    "customField": "Eigenes Feld",
+    "fields": {
+      "email": {
+        "label": "E-Mail",
+        "hint": "Findet Personen, die schon da sind"
+      },
+      "name": {
+        "label": "Name",
+        "hint": "Wird aus der E-Mail genommen, wenn leer"
+      },
+      "phone": {
+        "label": "Telefon",
+        "hint": "Höchstens 50 Zeichen"
+      },
+      "company": {
+        "label": "Firma",
+        "hint": "Nach Name; neue werden angelegt"
+      },
+      "external_id": {
+        "label": "Externe ID",
+        "hint": "Die ID im anderen System"
+      },
+      "notes": {
+        "label": "Notizen",
+        "hint": "Im Profil sichtbar"
+      },
+      "labels": {
+        "label": "Labels",
+        "hint": "Durch Komma, Semikolon oder Strich getrennt"
+      }
+    },
+    "matchOn": "Vorhandene Personen finden über",
+    "matchEmail": "E-Mail-Adresse",
+    "matchExternal": "Externe ID",
+    "onMatch": "Wenn jemand schon da ist",
+    "skip": "Nicht anfassen",
+    "fill": "Leeres auffüllen",
+    "overwrite": "Mit der Datei aktualisieren",
+    "skipHint": "Ihre Angaben bleiben, wie sie sind.",
+    "fillHint": "Nur leere Felder werden gesetzt; Labels werden hinzugefügt.",
+    "overwriteHint": "Jeder Wert aus der Datei ersetzt den bisherigen; leere Zellen ändern nichts.",
+    "problem": {
+      "identity": "Wähle eine Spalte für den Namen oder die E-Mail.",
+      "email": "Wähle die E-Mail-Spalte, um Personen per E-Mail zu finden.",
+      "external_id": "Wähle die Spalte der externen ID, um Personen darüber zu finden."
+    },
+    "status": {
+      "running": "Import läuft",
+      "done": "Fertig",
+      "failed": "Angehalten",
+      "cancelled": "Von dir gestoppt"
+    },
+    "of": "{{done}} von {{total}} Zeilen",
+    "stop": "Stoppen",
+    "cancelFailed": "Der Import ließ sich nicht stoppen.",
+    "count": {
+      "created": "Hinzugefügt",
+      "updated": "Aktualisiert",
+      "skipped": "Übersprungen",
+      "failed": "Fehlgeschlagen"
+    },
+    "rowErrors_one": "{{count}} Zeile konnte nicht importiert werden",
+    "rowErrors_other": "{{count}} Zeilen konnten nicht importiert werden",
+    "line": "Zeile {{line}}",
+    "moreErrors_one": "Und {{count}} weitere",
+    "moreErrors_other": "Und {{count}} weitere",
+    "dropHint": "Eine Zeile pro Person, mit einer Kopfzeile, die die Spalten benennt. Ein Name oder eine E-Mail genügt."
   }
 }

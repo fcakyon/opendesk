@@ -556,3 +556,12 @@ func (WikiTrashPurgeArgs) Kind() string { return "wiki.trash_purge" }
 type WikiRemindersArgs struct{}
 
 func (WikiRemindersArgs) Kind() string { return "wiki.reminders" }
+
+// ContactImportArgs adds the people of an uploaded CSV file to the directory
+// (contracts/imports.md "Contacts"), working from the import's checkpoint and snoozing when
+// its time is up. Owner: helpdesk.
+type ContactImportArgs struct {
+	ImportID uuid.UUID `json:"import_id"`
+}
+
+func (ContactImportArgs) Kind() string { return "contacts.import" }

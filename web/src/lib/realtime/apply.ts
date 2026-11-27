@@ -6,6 +6,7 @@ import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import type {
   Activity,
   Contact,
+  ContactImport,
   Envelope,
   Import,
   KnowledgeSource,
@@ -341,6 +342,22 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
       else void qc.invalidateQueries({ queryKey: qk.billing });
       // A purchase or recharge brings a new invoice.
       void qc.invalidateQueries({ queryKey: qk.billingInvoices });
+      return;
+    }
+    case "contact_import.updated": {
+      // Progress goes to the person who started the import, on user:<me> only.
+      if (!ctx.viaUser && !env.topics?.includes(`user:${ctx.me}`)) return;
+      const x = d.import as ContactImport | undefined;
+      if (!x) return;
+      const before = qc.getQueryData<ContactImport>(qk.of("contacts", "import", x.id));
+      qc.setQueryData(qk.of("contacts", "import", x.id), x);
+      // People are added in chunks: the lists catch up as the run moves and when it ends.
+      if (x.status !== "running" || (before && before.created !== x.created)) {
+        later("contact-import", 1500, () => {
+          void qc.invalidateQueries({ queryKey: qk.of("contacts") });
+          void qc.invalidateQueries({ queryKey: qk.of("companies") });
+        });
+      }
       return;
     }
     case "notification.created": {

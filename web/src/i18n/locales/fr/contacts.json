@@ -275,7 +275,12 @@
     "invitedSome_one": "{{count}} invitation envoyée, {{skipped}} ignorés (sans e-mail, bloqués ou ayant déjà accès)",
     "invitedSome_other": "{{count}} invitations envoyées, {{skipped}} ignorés (sans e-mail, bloqués ou ayant déjà accès)",
     "invitedSome_many": "{{count}} invitations envoyées, {{skipped}} ignorés (sans e-mail, bloqués ou ayant déjà accès)",
-    "inviteFailed": "Impossible d’envoyer les invitations"
+    "inviteFailed": "Impossible d’envoyer les invitations",
+    "export": "Exporter",
+    "exported": "Export enregistré",
+    "exportFailed": "L’export a échoué.",
+    "exportAll": "Tout exporter",
+    "exportMatching": "Exporter les résultats"
   },
   "portal": {
     "title": "Portail client",
@@ -303,5 +308,88 @@
     "needsEmail": "Ajoutez une adresse e-mail pour inviter ce contact.",
     "isBlocked": "Débloquez ce contact pour l’inviter.",
     "ssoOnly": "Les clients se connectent via votre fournisseur d’identité, sans invitation."
+  },
+  "import": {
+    "open": "Importer",
+    "title": "Importer des personnes",
+    "runningTitle": "Import des personnes",
+    "body": "Ajoutez des personnes depuis un fichier CSV. Associez ses colonnes aux champs et choisissez ce qui arrive aux personnes déjà présentes.",
+    "close": "Terminé",
+    "replace": "Choisir un autre fichier",
+    "summary": "{{rows}} lignes, {{columns}} colonnes",
+    "start_one": "Importer {{count}} ligne",
+    "start_many": "Importer {{count}} lignes",
+    "start_other": "Importer {{count}} lignes",
+    "notInFile": "Absent du fichier",
+    "emptyColumn": "Vide dans les premières lignes",
+    "customField": "Champ personnalisé",
+    "fields": {
+      "email": {
+        "label": "E-mail",
+        "hint": "Retrouve les personnes déjà présentes"
+      },
+      "name": {
+        "label": "Nom",
+        "hint": "Tiré de l’e-mail s’il est vide"
+      },
+      "phone": {
+        "label": "Téléphone",
+        "hint": "50 caractères au plus"
+      },
+      "company": {
+        "label": "Société",
+        "hint": "Par nom ; les nouvelles sont créées"
+      },
+      "external_id": {
+        "label": "ID externe",
+        "hint": "Leur identifiant dans l’autre système"
+      },
+      "notes": {
+        "label": "Notes",
+        "hint": "Affichées sur leur fiche"
+      },
+      "labels": {
+        "label": "Étiquettes",
+        "hint": "Séparées par des virgules, points-virgules ou barres"
+      }
+    },
+    "matchOn": "Retrouver les personnes déjà présentes par",
+    "matchEmail": "Adresse e-mail",
+    "matchExternal": "ID externe",
+    "onMatch": "Quand quelqu’un est déjà présent",
+    "skip": "Ne pas y toucher",
+    "fill": "Remplir ce qui est vide",
+    "overwrite": "Mettre à jour avec le fichier",
+    "skipHint": "Leurs informations restent telles quelles.",
+    "fillHint": "Seuls les champs vides sont remplis ; les étiquettes sont ajoutées.",
+    "overwriteHint": "Chaque valeur du fichier remplace l’actuelle ; les cellules vides ne changent rien.",
+    "problem": {
+      "identity": "Choisissez une colonne pour le nom ou l’e-mail.",
+      "email": "Choisissez la colonne e-mail pour retrouver les personnes par e-mail.",
+      "external_id": "Choisissez la colonne de l’ID externe pour les retrouver par ce biais."
+    },
+    "status": {
+      "running": "Import en cours",
+      "done": "Terminé",
+      "failed": "Arrêté",
+      "cancelled": "Arrêté par vous"
+    },
+    "of": "{{done}} sur {{total}} lignes",
+    "stop": "Arrêter",
+    "cancelFailed": "Impossible d’arrêter l’import.",
+    "count": {
+      "created": "Ajoutées",
+      "updated": "Mises à jour",
+      "skipped": "Ignorées",
+      "failed": "Échecs"
+    },
+    "rowErrors_one": "{{count}} ligne n’a pas pu être importée",
+    "rowErrors_many": "{{count}} lignes n’ont pas pu être importées",
+    "rowErrors_other": "{{count}} lignes n’ont pas pu être importées",
+    "line": "Ligne {{line}}",
+    "moreErrors_one": "Et {{count}} de plus",
+    "moreErrors_many": "Et {{count}} de plus",
+    "moreErrors_other": "Et {{count}} de plus",
+    "dropHint": "Une ligne par personne, avec une ligne d’en-tête qui nomme les colonnes. Un nom ou un e-mail suffit."
   }
 }

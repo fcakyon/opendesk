@@ -27,6 +27,7 @@ import { registerShortcuts } from "./handlers/shortcuts";
 import { registerDrafts, stageDraft } from "./handlers/drafts";
 import { registerKnowledge } from "./handlers/knowledge";
 import { registerProcedures } from "./handlers/procedures";
+import { registerContactImports } from "./handlers/contactImports";
 import { registerImports } from "./handlers/imports";
 import { registerIntegrations } from "./handlers/integrations";
 import { registerTicketPanels } from "./handlers/ticketPanels";
@@ -115,6 +116,7 @@ export function installMock(): void {
   registerIntegrations();
   registerTicketPanels();
   registerImports();
+  registerContactImports();
   registerAiClients();
   registerBots();
   registerNotificationPrefs();

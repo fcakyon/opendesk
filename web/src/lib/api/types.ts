@@ -3757,3 +3757,43 @@ export type Space = {
 
 /** GET and PUT /v1/me/spaces. `saved` false: nothing saved yet (no Spaces). */
 export type SpacesResponse = { spaces: Space[]; saved: boolean };
+
+/** The CSV column that fills each contact field ("" or absent leaves it unset); contracts/imports.md "Contacts". */
+export type ContactImportMapping = {
+  name?: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  external_id?: string;
+  notes?: string;
+  labels?: string;
+  /** A custom field's key to its column. */
+  fields?: Record<string, string>;
+};
+export type ContactImportUpload = {
+  upload_id: string;
+  filename: string;
+  rows: number;
+  columns: { name: string; samples: string[] }[];
+  suggested: ContactImportMapping;
+};
+export type ContactImportMatch = "email" | "external_id";
+export type ContactImportOnMatch = "skip" | "fill" | "overwrite";
+export type ContactImport = {
+  id: string;
+  filename: string;
+  status: "running" | "done" | "failed" | "cancelled";
+  match_on: ContactImportMatch;
+  on_match: ContactImportOnMatch;
+  total: number;
+  processed: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  /** The first rows that could not be imported, with the line each is on. */
+  errors: { line: number; message: string }[];
+  error: string;
+  created_at: string;
+  finished_at: string | null;
+};
