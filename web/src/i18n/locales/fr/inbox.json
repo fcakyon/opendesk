@@ -859,6 +859,7 @@
     "setBy": "Défini par {{name}}",
     "said": "{{name}} a répondu",
     "sure": "Confiance de {{pct}} %",
+    "threshold": "seuil {{pct}} %",
     "setThis": "Défini par {{name}}"
   },
   "suggest": {

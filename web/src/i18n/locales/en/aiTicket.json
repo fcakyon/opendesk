@@ -92,6 +92,11 @@
     "applyAria": "Apply {{what}}",
     "skipAria": "Skip {{what}}",
     "sure": "{{name}} is {{pct}}% sure",
+    "why": {
+      "below_threshold": "Below the {{pct}}% threshold",
+      "field_off": "Triage is not set to change this field",
+      "not_on_team": "The assignee is not on this team"
+    },
     "newTag": "A new label, created when you apply",
     "done": "Done. The ticket is updated.",
     "nothing": "Everything already matches what {{name}} would pick.",

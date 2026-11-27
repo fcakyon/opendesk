@@ -364,7 +364,8 @@ function DecisionMeta({ a, ollie }: { a: Activity; ollie: string }) {
   const { t } = useTranslation("inbox");
   const sure = typeof a.data.confidence === "number" ? pct(a.data.confidence) : null;
   if (sure == null) return null;
-  const note = `${t("ollie.setThis", { name: ollie })} · ${t("ollie.sure", { pct: sure })}`;
+  const threshold = typeof a.data.threshold === "number" ? pct(a.data.threshold) : null;
+  const note = [t("ollie.setThis", { name: ollie }), t("ollie.sure", { pct: sure }), ...(threshold != null ? [t("ollie.threshold", { pct: threshold })] : [])].join(" · ");
   return (
     <Tooltip content={note}>
       <span className={cn("mono shrink-0 rounded-sm px-1 text-[10px] tabular-nums", tone[AI_TONE].text, tone[AI_TONE].soft)}>{sure}%</span>

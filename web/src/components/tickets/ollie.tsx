@@ -27,6 +27,7 @@ export function useOllieNote() {
     const n = field ? decisionNote(aiDecisions(ticket), field) : null;
     const parts = [t("ollie.setThis", { name })];
     if (n?.sure != null) parts.push(t("ollie.sure", { pct: n.sure }));
+    if (n?.threshold != null) parts.push(t("ollie.threshold", { pct: n.threshold }));
     return parts.join(" · ");
   };
 }

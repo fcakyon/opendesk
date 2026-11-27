@@ -873,6 +873,7 @@
     "setBy": "Gesetzt von {{name}}",
     "said": "{{name}} hat geantwortet",
     "sure": "{{pct}} % sicher",
+    "threshold": "Schwelle {{pct}} %",
     "setThis": "{{name}} hat das gesetzt"
   },
   "suggest": {

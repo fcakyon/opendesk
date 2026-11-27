@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import type { AIAnswer, AISummary, IntegrationStarter, Priority, Sentiment, Severity, Suggestion, SuggestionField, Ticket, TicketPatch, Triage } from "@/lib/api/types";
 import { api } from "@/lib/api/endpoints";
 import { useAI } from "@/lib/ai";
-import { aiSuggestions, pct } from "@/lib/decisions";
+import { aiDecisions, aiSuggestions, pct } from "@/lib/decisions";
 import { relLong, fullDate } from "@/lib/format";
 import { ease, springs } from "@/lib/motion";
 import { q, qk } from "@/lib/queries";
@@ -227,6 +227,8 @@ type Row = {
   /** Plain words for the value, for screen readers. */
   text: string;
   sure: number | null;
+  /** Why Ollie did not apply it itself, for the tooltip. */
+  why?: string;
   patch: TicketPatch;
   apply: () => void;
   skip: () => void;
@@ -324,6 +326,7 @@ function useSuggestions(ticket: Ticket, run: Run, say: (s: string) => void) {
   const askedLeft = asked.filter((r) => !handled.has(r.key as AskedKey));
   const askedFields = new Set<SuggestionField>(result ? ["priority", "severity", "team", "labels"] : []);
 
+  const decisions = aiDecisions(ticket);
   // Ollie's own decisions that fell below the workspace threshold; a severity one only while the workspace uses severity.
   const auto: Row[] = aiSuggestions(ticket)
     .filter(([f]) => !askedFields.has(f) && (f !== "severity" || display.severity))
@@ -359,6 +362,7 @@ function useSuggestions(ticket: Ticket, run: Run, say: (s: string) => void) {
         value,
         text,
         sure: pct(s.confidence),
+        why: s.reason ? t(`suggest.why.${s.reason}`, { pct: pct(decisions?.threshold) ?? 70 }) : undefined,
         patch,
         apply: () =>
           void patchAsync(patch)
@@ -445,7 +449,7 @@ function SuggestionRow({ row, disabled }: { row: Row; disabled: boolean }) {
     >
       <span className="w-[54px] shrink-0 text-[11.5px] text-fg-3">{row.label}</span>
       {row.sure != null ? (
-        <Tooltip content={t("suggest.sure", { name, pct: row.sure })}>
+        <Tooltip content={row.why ? `${t("suggest.sure", { name, pct: row.sure })} · ${row.why}` : t("suggest.sure", { name, pct: row.sure })}>
           <span className="flex min-w-0 flex-1" tabIndex={-1}>
             {value}
           </span>

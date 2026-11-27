@@ -370,14 +370,18 @@ interface AIDecisions { engine: "jev" | "llm"; model: string /* "jev", or the LL
   threshold: number; decided_at: string; fields: Partial<Record<DecisionField, Decision>> }
 type SuggestionField = "priority" | "severity" | "labels" | "team" | "spam"
 interface Suggestion { value: string | string[] | boolean /* labels: names; team: id */; confidence: number | null;
-  probability: number | null; model: string; decided_at: string }
+  probability: number | null; model: string; decided_at: string;
+  reason?: "below_threshold" /* confidence under the threshold */ | "field_off" /* triage may not change this field */
+    | "not_on_team" /* team only: the assignee is not on the private team */ }
 type AISuggestions = Partial<Record<SuggestionField, Suggestion>>
 ```
 
 The latest run is stored as `custom.ai_decisions` and pending suggestions as
 `custom.ai_suggestions` (published with `ticket.updated`, changes `["custom"]`). Activities of applied
-decisions are attributed to `ai` with data `{via, model: "jev", confidence}` (LLM: `{via, model}`),
-rendered "Ollie set severity to Sev 2". A suggestion goes away when anyone sets that field, or on
+decisions are attributed to `ai` with data `{via, model: "jev", confidence, threshold}` (LLM: `{via, model}`),
+rendered "Ollie set severity to Sev 2"; `threshold` is the workspace's `triage_threshold` the confidence
+was weighed against, and the tooltips show both. A suggestion's `reason` says why it was not applied (older
+suggestions have none). A suggestion goes away when anyone sets that field, or on
 `DELETE /v1/tickets/{id}/ai/suggestions/{field}`; a new triage run replaces them.
 
 Jev API (TypeSafe, documented at docs.typesafe.ai): `POST {TYPESAFE_API_URL}/v1/systemone`, or on

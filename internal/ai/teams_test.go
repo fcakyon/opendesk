@@ -213,7 +213,53 @@ func TestTriageRoutesToATeam(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := e.loadTicket(tk2.ID); got.TeamID != nil || tr2.Suggestions["team"].Value != v {
+	if got := e.loadTicket(tk2.ID); got.TeamID != nil || tr2.Suggestions["team"].Value != v || tr2.Suggestions["team"].Reason != SuggestNotOnTeam {
 		t.Fatalf("assignee off the team: team %v suggestions %+v", got.TeamID, tr2.Suggestions)
+	}
+}
+
+// A team decision says what it was weighed against: applied, its activity carries the
+// threshold; kept as a suggestion, the suggestion says why.
+func TestTriageTeamDecisionSaysWhy(t *testing.T) {
+	e := newEnv(t, opts{noEmbed: true})
+	e.defaultBrand()
+	team := ids.New()
+	e.Exec(`INSERT INTO teams (id, workspace_id, name, private) VALUES ($1, $2, 'Billing', false)`, team, e.WS.ID)
+	v := team.String()
+	run := func(conf float64) (*Triage, uuid.UUID) {
+		tk := e.ticket("Refund", "Please refund invoice 7")
+		tr := &Triage{TeamID: &v, team: &team, Sentiment: "neutral", Language: "en", Category: "refund",
+			Decisions: AIDecisions{Fields: map[string]*Decision{"team": {Value: v, Confidence: &conf}}}}
+		if err := e.D.DB.Tx(e.Ctx, func(tx pgx.Tx) error {
+			_, err := applyTriage(e.Ctx, tx, e.WS.ID, tk.ID, tr, false, "auto_triage")
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return tr, tk.ID
+	}
+
+	// The team is off for triage: a suggestion, however sure.
+	tr, _ := run(0.95)
+	if got := tr.Suggestions["team"]; got.Reason != SuggestFieldOff {
+		t.Fatalf("field off: %+v", got)
+	}
+
+	// On, and sure enough: applied, with the threshold on the activity.
+	e.settings(map[string]any{"triage_fields": []string{"team"}, "triage_threshold": 0.8})
+	tr, tid := run(0.9)
+	if _, ok := tr.Suggestions["team"]; ok {
+		t.Fatalf("suggested an applied team: %+v", tr.Suggestions)
+	}
+	var thr float64
+	e.Scalar(`SELECT (data->>'threshold')::float8 FROM activities WHERE ticket_id = $1 AND type = 'team_changed'`, &thr, tid)
+	if thr != 0.8 {
+		t.Fatalf("threshold %v", thr)
+	}
+
+	// Under the threshold: a suggestion that says so.
+	tr, _ = run(0.6)
+	if got := tr.Suggestions["team"]; got.Reason != SuggestBelowThreshold {
+		t.Fatalf("below threshold: %+v", got)
 	}
 }
