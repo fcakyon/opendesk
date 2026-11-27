@@ -102,6 +102,11 @@
     "allTeams": "All teams",
     "noTeam": "No team",
     "private": "Private",
+    "mailboxLabel": "Mailbox: {{value}}",
+    "allMailboxes": "All mailboxes",
+    "noMailbox": "No mailbox",
+    "noMailboxHint": "Chat, phone, API",
+    "searchMailboxes": "Search mailboxes",
     "allBrands": "All brands",
     "searchTeams": "Search teams",
     "searchBrands": "Search brands"

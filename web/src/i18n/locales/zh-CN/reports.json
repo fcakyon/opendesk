@@ -99,6 +99,11 @@
     "allTeams": "全部团队",
     "noTeam": "无团队",
     "private": "私有",
+    "mailboxLabel": "邮箱：{{value}}",
+    "allMailboxes": "全部邮箱",
+    "noMailbox": "无邮箱",
+    "noMailboxHint": "聊天、电话、API",
+    "searchMailboxes": "搜索邮箱",
     "allBrands": "全部品牌",
     "searchTeams": "搜索团队",
     "searchBrands": "搜索品牌"

@@ -102,6 +102,11 @@
     "allTeams": "Alle Teams",
     "noTeam": "Kein Team",
     "private": "Privat",
+    "mailboxLabel": "Postfach: {{value}}",
+    "allMailboxes": "Alle Postfächer",
+    "noMailbox": "Kein Postfach",
+    "noMailboxHint": "Chat, Telefon, API",
+    "searchMailboxes": "Postfächer suchen",
     "allBrands": "Alle Marken",
     "searchTeams": "Teams suchen",
     "searchBrands": "Marken suchen"

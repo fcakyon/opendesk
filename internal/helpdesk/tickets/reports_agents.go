@@ -198,15 +198,16 @@ func registerAgentsReport(d *deps.Deps, api huma.API) {
 	huma.Register(api, huma.Operation{OperationID: "report-agents", Method: http.MethodGet, Path: "/v1/reports/agents",
 		Summary: "Agents report", Tags: []string{"Reports"},
 		Description: "One row per member for the range: tickets assigned and solved, replies and notes, replies per solved ticket, " +
-			"median first response and handle time, and online time. from, to, team_id and brand_id as in /v1/reports/overview; " +
-			"online time is not narrowed by team or brand. Admins (and API keys with settings:read) see every member's row with online time, " +
+			"median first response and handle time, and online time. from, to, team_id, brand_id and mailbox_id as in /v1/reports/overview; " +
+			"online time is not narrowed by team, brand or mailbox. Admins (and API keys with settings:read) see every member's row with online time, " +
 			"other members only their own row, other API keys every row without online time. A workspace with online time off " +
 			"(settings agent_online_time false) answers online_time off and no online time to anyone."},
 		func(ctx context.Context, in *struct {
-			From    string `query:"from"`
-			To      string `query:"to"`
-			TeamID  string `query:"team_id" doc:"A team id, or none for tickets without a team"`
-			BrandID string `query:"brand_id"`
+			From      string `query:"from"`
+			To        string `query:"to"`
+			TeamID    string `query:"team_id" doc:"A team id, or none for tickets without a team"`
+			BrandID   string `query:"brand_id"`
+			MailboxID string `query:"mailbox_id" doc:"A mailbox id: the tickets that reply from it. Or none for tickets without a mailbox (chat, phone, API)"`
 		}) (*struct{ Body ReportAgents }, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeTicketsRead)
 			if err != nil {
@@ -218,7 +219,7 @@ func registerAgentsReport(d *deps.Deps, api huma.API) {
 				nobody := uuid.Nil
 				onlineFor = &nobody
 			}
-			res, err := agentsReport(ctx, d.DB.Pool, p.WorkspaceID, in.From, in.To, reportFilter{Team: in.TeamID, Brand: in.BrandID}, scope, onlineFor)
+			res, err := agentsReport(ctx, d.DB.Pool, p.WorkspaceID, in.From, in.To, reportFilter{Team: in.TeamID, Brand: in.BrandID, Mailbox: in.MailboxID}, scope, onlineFor)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}

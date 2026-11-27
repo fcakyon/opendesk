@@ -2256,8 +2256,8 @@ export type TicketPatch = {
 };
 
 export type ReportsRange = { from: string; to: string };
-/** The overview's query: a range, narrowed to a team (`none`: no team) and a brand. */
-export type ReportsQuery = ReportsRange & { team_id?: string; brand_id?: string };
+/** The overview's query: a range, narrowed to a team (`none`: no team), a brand and a mailbox (`none`: no mailbox). */
+export type ReportsQuery = ReportsRange & { team_id?: string; brand_id?: string; mailbox_id?: string };
 
 // Billing (contracts/billing.md).
 export type Plan = "free" | "pro" | "collab" | "self_hosted";

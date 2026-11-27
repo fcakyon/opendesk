@@ -55,20 +55,33 @@ type ReportBrand struct {
 	FirstResponseP50Minutes *float64  `json:"first_response_p50_minutes"`
 }
 
-// reportFilter narrows the overview to a team ("none": no team) and a brand. AgentRow, when
-// set, keeps by_agent to that member's row: a member who sees their own row alone (onlineScope).
+// reportFilter narrows the overview to a team ("none": no team), a brand and a mailbox
+// ("none": no mailbox). AgentRow, when set, keeps by_agent to that member's row: a member who
+// sees their own row alone (onlineScope).
 type reportFilter struct {
 	Team     string
 	Brand    string
+	Mailbox  string
 	AgentRow *uuid.UUID
 }
 
 // sql binds the filter as $n and $n+1. Merged tickets count nowhere: a merge moved their
 // messages, calls and threads to the ticket they went into and closed what was left, so they
 // would make one conversation two tickets created, and the merge a solve.
+//
+// The mailbox is the one a ticket replies from (tickets.mailbox_id): a uuid validate parsed,
+// or none, written in place so that every query keeps its arguments.
 func (f reportFilter) sql(n int) string {
-	return fmt.Sprintf(` AND ($%[1]d = '' OR ($%[1]d = 'none' AND t.team_id IS NULL) OR t.team_id::text = $%[1]d)
+	s := fmt.Sprintf(` AND ($%[1]d = '' OR ($%[1]d = 'none' AND t.team_id IS NULL) OR t.team_id::text = $%[1]d)
 		AND ($%[2]d = '' OR t.brand_id::text = $%[2]d) AND t.merged_into_id IS NULL`, n, n+1)
+	switch f.Mailbox {
+	case "":
+	case hd.TeamNone:
+		s += ` AND t.mailbox_id IS NULL`
+	default:
+		s += ` AND t.mailbox_id = '` + uuid.MustParse(f.Mailbox).String() + `'`
+	}
+	return s
 }
 
 // firstResponseSQL is a ticket's first response as the reports measure it (alias t): how long
@@ -103,6 +116,13 @@ func (f reportFilter) validate() (reportFilter, error) {
 			return f, err
 		}
 		f.Brand = id.String()
+	}
+	if f.Mailbox = strings.TrimSpace(f.Mailbox); f.Mailbox != "" && f.Mailbox != hd.TeamNone {
+		id, err := hd.ParseRef(f.Mailbox, "mailbox_id")
+		if err != nil {
+			return f, err
+		}
+		f.Mailbox = id.String()
 	}
 	return f, nil
 }
@@ -490,19 +510,20 @@ func registerInsights(d *deps.Deps, api huma.API) {
 
 	huma.Register(api, huma.Operation{OperationID: "report-overview", Method: http.MethodGet, Path: "/v1/reports/overview",
 		Summary: "Helpdesk overview report", Tags: []string{"Reports"},
-		Description: "from and to are YYYY-MM-DD (days in the workspace timezone, to inclusive) or RFC 3339. Default: the last 30 days. Spam, deleted and merged tickets are excluded. First response is how long a customer waited for a person's reply, never a bot's or an automation's: none on tickets the team started. team_id (or none) and brand_id narrow every figure. " +
+		Description: "from and to are YYYY-MM-DD (days in the workspace timezone, to inclusive) or RFC 3339. Default: the last 30 days. Spam, deleted and merged tickets are excluded. First response is how long a customer waited for a person's reply, never a bot's or an automation's: none on tickets the team started. team_id (or none), brand_id and mailbox_id (or none) narrow every figure. " +
 			"by_agent is personal, as the agents report: admins (and API keys) get every member's row, other members their own row alone."},
 		func(ctx context.Context, in *struct {
-			From    string `query:"from"`
-			To      string `query:"to"`
-			TeamID  string `query:"team_id" doc:"A team id, or none for tickets without a team"`
-			BrandID string `query:"brand_id"`
+			From      string `query:"from"`
+			To        string `query:"to"`
+			TeamID    string `query:"team_id" doc:"A team id, or none for tickets without a team"`
+			BrandID   string `query:"brand_id"`
+			MailboxID string `query:"mailbox_id" doc:"A mailbox id: the tickets that reply from it. Or none for tickets without a mailbox (chat, phone, API)"`
 		}) (*struct{ Body ReportOverview }, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeTicketsRead)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			rf := reportFilter{Team: in.TeamID, Brand: in.BrandID}
+			rf := reportFilter{Team: in.TeamID, Brand: in.BrandID, Mailbox: in.MailboxID}
 			if scope, self := onlineScope(ctx, p); scope == onlineSelf {
 				rf.AgentRow = self
 			}
