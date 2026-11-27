@@ -455,7 +455,10 @@
     "reports": "Rapports",
     "onlineTime": "Temps en ligne des agents",
     "onlineTimeOn": "Enregistre le temps où chaque membre a opendesk ouvert avec le statut En ligne, pour Rapports → Agents. Désactivez-le là où son enregistrement demande le consentement de l’équipe ou l’accord d’un conseil d’entreprise.",
-    "onlineTimeOff": "Aucun temps en ligne n’est enregistré ni affiché dans les rapports. Enregistrer avec ce réglage désactivé supprime le temps en ligne enregistré jusqu’ici."
+    "onlineTimeOff": "Aucun temps en ligne n’est enregistré ni affiché dans les rapports. Enregistrer avec ce réglage désactivé supprime le temps en ligne enregistré jusqu’ici.",
+    "teamMembers": "Compter une équipe par ses membres",
+    "teamMembersOn": "Les chiffres d’une équipe dans les rapports comptent aussi les tickets assignés à ses responsables et à ses membres, et Rapports → Agents ne liste qu’eux, chacun avec tout son travail. Pour les équipes qui regroupent des personnes plutôt que de recevoir des tickets routés.",
+    "teamMembersOff": "Les chiffres d’une équipe dans les rapports comptent les tickets routés vers elle."
   },
   "display": {
     "title": "Statuts et priorités",

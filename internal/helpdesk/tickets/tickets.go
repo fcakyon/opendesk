@@ -64,8 +64,10 @@ type listIn struct {
 	Q          string `query:"q" maxLength:"200" doc:"Full text over tickets and contacts, exact ticket alias, or #number"`
 	Spam       string `query:"spam" enum:"true,false,any," doc:"Default false (spam hidden); true lists only spam"`
 	Merged     string `query:"merged" enum:"true,false,any," doc:"Default any; false leaves out tickets merged into another, true lists only those"`
-	Sort       string `query:"sort" maxLength:"60" doc:"last_message_at (default), created_at, priority, severity, due or field.<key>"`
-	Order      string `query:"order" enum:"asc,desc," doc:"Default desc, asc for due"`
+	// TeamMembers is how the reports page lists a team's open work when settings.reports_team_members is on.
+	TeamMembers bool   `query:"team_members" doc:"With team_id: also the tickets assigned to the leads and members of the teams it names"`
+	Sort        string `query:"sort" maxLength:"60" doc:"last_message_at (default), created_at, priority, severity, due or field.<key>"`
+	Order       string `query:"order" enum:"asc,desc," doc:"Default desc, asc for due"`
 
 	fields    []hd.FieldFilter
 	fieldsErr error
@@ -135,7 +137,7 @@ func ticketListQuery(ctx context.Context, q db.Querier, p *auth.Principal, in li
 	if f.ChannelNot, err = validEnum(f.ChannelNot, domain.Channels, "channel_not"); err != nil {
 		return listQuery{}, err
 	}
-	return forCaller(ctx, q, p, listQuery{TicketFilters: f, ContactID: in.ContactID, Spam: in.Spam, Merged: in.Merged})
+	return forCaller(ctx, q, p, listQuery{TicketFilters: f, ContactID: in.ContactID, Spam: in.Spam, Merged: in.Merged, TeamMembers: in.TeamMembers})
 }
 
 // Resolve reads the field.<key> and field.<key>[op] parameters (custom field filters).

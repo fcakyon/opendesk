@@ -26,6 +26,9 @@ type listQuery struct {
 	ContactID string
 	Spam      string // "", "true", "false", "any"
 	Merged    string // "", "true", "false", "any"; "" is any
+	// TeamMembers widens TeamID's teams to the tickets assigned to their leads and members, as
+	// the reports count a team with settings.reports_team_members.
+	TeamMembers bool
 	// Defs are the ticket field definitions (needed for Fields filters and field sorts).
 	Defs domain.FieldDefs
 	// Hidden are the private teams the caller may not see (domain.HiddenTeams); their
@@ -149,14 +152,14 @@ func applyFilters(b *sqlBuilder, wid uuid.UUID, me *uuid.UUID, f listQuery) erro
 		b.add("t.assignee_id = " + b.arg(id))
 	}
 	if strings.TrimSpace(f.TeamID) != "" {
-		clause, err := teamClause(b, me, f.TeamID, "team_id")
+		clause, err := teamClause(b, me, f.TeamID, "team_id", f.TeamMembers)
 		if err != nil {
 			return err
 		}
 		b.add(clause)
 	}
 	if strings.TrimSpace(f.TeamNot) != "" {
-		clause, err := teamClause(b, me, f.TeamNot, "team_not")
+		clause, err := teamClause(b, me, f.TeamNot, "team_not", false)
 		if err != nil {
 			return err
 		}
@@ -303,7 +306,7 @@ func refList(raw, field string) ([]uuid.UUID, error) {
 // teamClause is the predicate for tickets of any of a comma-separated list of team ids,
 // mine (the caller's teams) and none. It is NULL for a ticket without a team unless none
 // is listed.
-func teamClause(b *sqlBuilder, me *uuid.UUID, raw, field string) (string, error) {
+func teamClause(b *sqlBuilder, me *uuid.UUID, raw, field string, members bool) (string, error) {
 	var ors []string
 	var teams []uuid.UUID
 	parts := strings.Split(raw, ",")
@@ -330,7 +333,14 @@ func teamClause(b *sqlBuilder, me *uuid.UUID, raw, field string) (string, error)
 		}
 	}
 	if len(teams) > 0 {
-		ors = append(ors, "t.team_id = ANY("+b.arg(teams)+"::uuid[])")
+		arg := b.arg(teams)
+		ors = append(ors, "t.team_id = ANY("+arg+"::uuid[])")
+		if members {
+			// Observers watch a team without being on it.
+			ors = append(ors, `EXISTS (SELECT 1 FROM team_members tm JOIN teams tt ON tt.id = tm.team_id
+				WHERE tm.team_id = ANY(`+arg+`::uuid[]) AND tt.workspace_id = t.workspace_id
+					AND tm.user_id = t.assignee_id AND tm.role <> 'observer')`)
+		}
 	}
 	if len(ors) == 0 {
 		return "false", nil

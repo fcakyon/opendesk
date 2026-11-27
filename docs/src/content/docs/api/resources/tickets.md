@@ -81,6 +81,7 @@ curl "https://api.opendesk.sh/v1/tickets?status=open,pending&assignee=none&sort=
 | `assignee` | `me`, `none` or a user id |
 | `team_id` | comma-separated team ids, `mine` (your teams) and `none`: tickets of any of them |
 | `team_not` | the same values: tickets of none of them |
+| `team_members` | `true`: with `team_id`, also the tickets assigned to the leads and members of the teams it names |
 | `mailbox_id`, `contact_id`, `view_id` | ids |
 | `mailbox_not` | comma-separated mailbox ids: tickets whose reply address is none of them |
 | `contact_not` | comma-separated contact ids: tickets whose contact is none of them |

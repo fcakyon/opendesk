@@ -17,6 +17,8 @@ export type TicketListQuery = ListQuery & {
   team_id?: string;
   /** The same values as team_id: tickets of none of them. */
   team_not?: string;
+  /** With team_id: also the tickets assigned to the leads and members of the teams it names. */
+  team_members?: boolean;
   mailbox_id?: string;
   /** Mailbox ids, comma separated: tickets whose reply address is none of them. */
   mailbox_not?: string;

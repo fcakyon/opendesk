@@ -94,6 +94,12 @@ function sendAs(t: Ticket, m: Mailbox): string {
 }
 
 /** A team filter: ids, "mine" and "none", comma separated. */
+/** The ticket's assignee leads or is a member of one of the teams named (team_members). */
+function heldByTeamMember(ws: WsData, filter: string, t: Ticket): boolean {
+  const ids = filter.split(",");
+  return !!t.assignee && ws.teams.some((x) => ids.includes(x.id) && x.members.some((m) => m.user_id === t.assignee!.id && m.role !== "observer"));
+}
+
 function teamMatches(ws: WsData, filter: string, t: Ticket, meId: string): boolean {
   const mine = filter.includes("mine") ? myTeamIds(ws, meId) : [];
   return filter
@@ -134,7 +140,7 @@ export function computeSla(ws: WsData, t: Ticket, keepPolicy = true): Ticket["sl
   };
 }
 
-export type ListFilters = TicketFilters & { contact_id?: string; spam?: boolean; merged?: boolean; view_id?: string; fieldFilters?: FieldFilterIn[] };
+export type ListFilters = TicketFilters & { contact_id?: string; spam?: boolean; merged?: boolean; view_id?: string; fieldFilters?: FieldFilterIn[]; team_members?: boolean };
 
 export function resolveFilters(ws: WsData, f: ListFilters): ListFilters {
   if (!f.view_id) return f;
@@ -157,7 +163,7 @@ export function matches(ws: WsData, t: Ticket, raw: ListFilters, meId: string): 
   if (f.assignee === "me" && t.assignee?.id !== meId) return false;
   if (f.assignee === "none" && t.assignee) return false;
   if (f.assignee && f.assignee !== "me" && f.assignee !== "none" && t.assignee?.id !== f.assignee) return false;
-  if (f.team_id && !teamMatches(ws, f.team_id, t, meId)) return false;
+  if (f.team_id && !teamMatches(ws, f.team_id, t, meId) && !(f.team_members && heldByTeamMember(ws, f.team_id, t))) return false;
   if (f.team_not && teamMatches(ws, f.team_not, t, meId)) return false;
   if (f.mailbox_id && t.mailbox_id !== f.mailbox_id) return false;
   if (f.mailbox_not && t.mailbox_id && f.mailbox_not.split(",").includes(t.mailbox_id)) return false;

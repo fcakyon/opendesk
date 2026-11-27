@@ -19,6 +19,7 @@ import { ChannelBars } from "@/components/reports/ChannelBars";
 import { SeverityBars } from "@/components/reports/SeverityBars";
 import { AgentTable } from "@/components/reports/AgentTable";
 import { AgentWorkTable } from "@/components/reports/AgentWork";
+import { openWorkTeam, useTeamByPeople } from "@/components/reports/teamMembers";
 import { PersonFilter } from "@/components/reports/PersonFilter";
 import { MailboxFilter, openWorkMailbox, useReportMailboxes } from "@/components/reports/MailboxFilter";
 import { AnimatedNumber } from "@/components/motion";
@@ -46,8 +47,8 @@ function previous<R extends ReportsRange>(r: R): R {
 const OPEN_STATUSES = ["open", "pending", "on_hold"] as Ticket["status"][];
 
 /** The open tickets behind the backlog and open work cards, narrowed like the report. */
-function openWork(r: ReportsQuery, mailboxes: Mailbox[]) {
-  return { status: OPEN_STATUSES, team_id: r.team_id, brand_id: r.brand_id, ...openWorkMailbox(r.mailbox_id, mailboxes), assignee: r.assignee_id };
+function openWork(r: ReportsQuery, mailboxes: Mailbox[], byPeople: boolean) {
+  return { status: OPEN_STATUSES, ...openWorkTeam(r.team_id, byPeople), brand_id: r.brand_id, ...openWorkMailbox(r.mailbox_id, mailboxes), assignee: r.assignee_id };
 }
 
 export default function ReportsPage() {
@@ -357,8 +358,9 @@ function BacklogCard({ filter, openNow }: { filter: ReportsQuery; openNow: numbe
   useTranslation("indicators");
   const narrowed = !!(filter.team_id || filter.brand_id || filter.mailbox_id || filter.assignee_id);
   const mailboxes = useReportMailboxes();
+  const byPeople = useTeamByPeople();
   const counts = useQuery({ ...q.counts(), enabled: !narrowed });
-  const list = useInfiniteQuery({ ...q.tickets(openWork(filter, mailboxes)), enabled: narrowed });
+  const list = useInfiniteQuery({ ...q.tickets(openWork(filter, mailboxes, byPeople)), enabled: narrowed });
   const tickets = list.data?.pages.flatMap((pg) => pg.data) ?? [];
   const c = narrowed
     ? list.data && {
@@ -438,7 +440,8 @@ function OpenWorkCards({ filter }: { filter: ReportsQuery }) {
   const { t } = useTranslation("reports");
   useTranslation("indicators");
   const mailboxes = useReportMailboxes();
-  const list = useInfiniteQuery(q.tickets(openWork(filter, mailboxes)));
+  const byPeople = useTeamByPeople();
+  const list = useInfiniteQuery(q.tickets(openWork(filter, mailboxes, byPeople)));
   const tickets = list.data?.pages.flatMap((pg) => pg.data) ?? [];
   const sample = list.hasNextPage ? t("open.sample", { count: tickets.length }) : t("open.subtitle");
 

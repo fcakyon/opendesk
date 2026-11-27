@@ -286,6 +286,10 @@ export const qk = {
   wikiComments: (id: string) => w(["wiki", "comments", id] as const),
   wikiRows: (id: string) => w(["wiki", "rows", id] as const),
   wikiDaily: (from: string, to: string, area: WikiArea) => w(["wiki", "daily", from, to, area] as const),
+  /** Under every report: the overview's and the agents' for any range and filter. */
+  get reportsAll() {
+    return w(["reports"] as const);
+  },
   reports: (r: ReportsQuery) => w(["reports", r] as const),
   reportAgents: (r: ReportsQuery) => w(["reports", "agents", r] as const),
   get widgetSettings() {
