@@ -641,6 +641,8 @@ export const api = {
     /** Admin: removes a deleted message's text, files and original email for good. */
     purgeMessage: (id: string, messageId: string) => http.post<T.Message>(`/v1/tickets/${id}/messages/${messageId}/purge`),
     activities: (id: string) => http.get<T.Page<T.Activity>>(`/v1/tickets/${id}/activities`),
+    /** The customer's other tickets, from any of their addresses: newest first, at most 50, with how many in all. */
+    customerTickets: (id: string) => http.get<{ data: T.CustomerPastTicket[]; total: number }>(`/v1/tickets/${encodeURIComponent(id)}/customer-tickets`),
     /** A teammate is writing a reply: the chat's visitor sees them typing. */
     typing: (id: string, opts?: { workspace?: string }) => http.post<void>(`/v1/tickets/${id}/typing`, undefined, opts),
     /** The ticket's shared draft (contracts/api.md "Drafts"): staged for the team, sent by whoever picks it up. */

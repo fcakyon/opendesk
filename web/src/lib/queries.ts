@@ -87,6 +87,8 @@ export const qk = {
   /** The ticket's shared draft (contracts/api.md "Drafts"). */
   ticketDraft: (id: string) => w(["tickets", "draft", id] as const),
   replyDraft: (id: string) => w(["tickets", "reply-draft", id] as const),
+  /** The customer's other tickets, from every address they wrote from. */
+  customerTickets: (id: string) => w(["tickets", "customer-tickets", id] as const),
   get contactLists() {
     return w(["contacts", "list"] as const);
   },
@@ -473,6 +475,7 @@ export const q = {
     }),
   contact: (id: string) => queryOptions({ queryKey: qk.contact(id), queryFn: () => api.contacts.get(id) }),
   contactTickets: (id: string) => list(qk.contactTickets(id), () => api.contacts.tickets(id, { limit: 20 })),
+  customerTickets: (id: string) => queryOptions({ queryKey: qk.customerTickets(id), queryFn: () => api.tickets.customerTickets(id) }),
   contactPortal: (id: string) => queryOptions({ queryKey: qk.contactPortal(id), queryFn: () => api.contacts.portal(id) }),
   companies: (query: Omit<CompanyListQuery, "limit" | "cursor">) =>
     infiniteQueryOptions({

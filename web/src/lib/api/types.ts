@@ -1523,6 +1523,18 @@ export type WebhookDelivery = {
   duration_ms: number | null;
   created_at: string;
 };
+/** One of the customer's other tickets (GET /v1/tickets/{id}/customer-tickets), with the contact it is filed under. */
+export type CustomerPastTicket = {
+  id: string;
+  number: number;
+  subject: string;
+  status: TicketStatus;
+  channel: string;
+  message_count: number;
+  last_message_at: string;
+  /** email: the contact's address, or the one it typed in the chat. */
+  contact: { id: string; name: string; email: string };
+};
 /** A row of the trash (GET /v1/tickets/deleted): a deleted ticket, who deleted it and when. */
 export type DeletedTicket = {
   id: string;

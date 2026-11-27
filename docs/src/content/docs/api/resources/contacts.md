@@ -13,6 +13,7 @@ Scopes: `contacts:read` to read, `contacts:write` to change.
 | `PATCH` | `/v1/contacts/{id}` | Update a contact |
 | `DELETE` | `/v1/contacts/{id}` | Delete a contact |
 | `GET` | `/v1/contacts/{id}/tickets` | The contact's tickets |
+| `GET` | `/v1/tickets/{id}/customer-tickets` | The customer's other tickets, from any of their addresses: those of the ticket's contact, of every contact who wrote in it, and of every contact with one of their addresses (primary, extra, or typed in the chat). Not the ticket itself, deleted or merged tickets. Newest first, at most 50, with `total`; each names the contact it is filed under. Needs `tickets:read` too |
 | `POST` | `/v1/contacts/bulk` | Label, set a custom field or the company of, or delete many contacts: `ids` (up to 100) or `query` (the list's filters, at most 1000 contacts), with `patch` or `delete: true` |
 | `POST` | `/v1/contacts/export` | Download contacts as a CSV file: `ids` (up to 1000) or `query` (the list's filters, at most 50,000 people) |
 | `POST` | `/v1/contacts/import/upload` | Upload a CSV file of people (multipart `file`); answers its columns and the mapping guessed from the headers |
