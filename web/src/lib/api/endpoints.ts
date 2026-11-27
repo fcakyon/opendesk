@@ -284,6 +284,10 @@ export const api = {
       http.post<{ recovery_codes: string[] }>("/v1/auth/totp/enable", { code }, { workspace: false }),
     totpDisable: (code: string) => http.post<void>("/v1/auth/totp/disable", { code }, { workspace: false }),
   },
+  signatureImages: {
+    /** PNG, JPEG, GIF or WebP, at most 5 MB: a public, stable URL for an <img> in a signature. */
+    upload: (file: File | Blob) => http.create<T.SignatureImage>("/v1/signature-images", imageForm(file)),
+  },
   me: {
     get: () => http.get<T.Me>("/v1/me", { workspace: false }),
     /** `avatar_url` is an https picture to copy (processed in the background), or "" to remove it. */

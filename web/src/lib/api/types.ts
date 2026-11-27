@@ -24,6 +24,9 @@ export type User = {
 export type TimeFormat = "auto" | "12h" | "24h";
 export type UserRef = { id: string; name: string; email: string; avatar_url: string | null };
 
+/** POST /v1/signature-images: a stored signature picture, a PNG of at most 600 px on its longer side. */
+export type SignatureImage = { url: string; width: number; height: number };
+
 export type WorkspaceSettings = {
   /** Whether ticketing is enabled for this workspace. Defaults to true. */
   tickets_enabled?: boolean;

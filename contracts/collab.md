@@ -1468,7 +1468,7 @@ addresses alike; "Get from Gmail" (`…/signature/pull`, `…/display-name/pull`
 from then on the setting syncs as before. A literal `{agent}` or `{{ … }}` never reaches Gmail.
 
 A signature is never changed by being opened: the settings page edits one the rich editor cannot
-hold (tables, inline styles, sized images, divs) as HTML with a live preview, and sends
+hold (tables, inline styles, pictures with HTML attributes beyond a size, divs) as HTML with a live preview, and sends
 `signature_html` in the PATCH only when the person changed it, so opening and saving other settings
 never writes a signature back to Gmail.
 

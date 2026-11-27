@@ -48,6 +48,7 @@ func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	helpsite.Register(d, r)
 	routing.Register(d, api)
 	images.Register(d, r)
+	images.RegisterSignature(d, api)
 	imports.Register(d, api, r)
 }
 

@@ -132,7 +132,7 @@ ticket and the address: the same layout, signature and quoted conversation sendi
 keeps its copy as it went out (contracts/api.md `GET /v1/messages/{id}/original`), which the conversation
 opens as its recipients got it.
 
-Every signature is edited in one editor: a designed one (tables, inline styles, sized images) opens
+Every signature is edited in one editor: a designed one (tables, inline styles, pictures with more than a source, a description, a title and a size in pixels) opens
 as HTML, its tags kept as typed, and is never simplified unless the person chooses to; a save sends
 it only when it changed. Wherever the app shows a signature (the reply composer's preview, the
 editors' previews) it shows it as recipients get it, its layout and image sizes kept.
