@@ -5,6 +5,7 @@
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import type {
   Activity,
+  ContactMessage,
   Contact,
   ContactImport,
   Envelope,
@@ -369,6 +370,13 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
         old ? [n, ...old.filter((x) => x.id !== n.id)] : old,
       );
       ctx.onNotification?.(n);
+      return;
+    }
+    case "contact_message.updated": {
+      // A message to many customers, as it goes: it reaches the member who sent it only.
+      if (!ctx.viaUser && !env.topics?.includes(`user:${ctx.me}`)) return;
+      const m = d.contact_message as ContactMessage | undefined;
+      if (m) qc.setQueryData<ContactMessage[]>(qk.contactMessages, (old) => (old ? [m, ...old.filter((x) => x.id !== m.id)] : [m]));
       return;
     }
     case "notification.read": {

@@ -132,6 +132,9 @@ export const qk = {
   get mailboxes() {
     return w(["mailboxes"] as const);
   },
+  get contactMessages() {
+    return w(["contact-messages"] as const);
+  },
   mailboxImapFolders: (id: string) => w(["mailboxes", id, "imap-folders"] as const),
   get members() {
     return w(["members"] as const);
@@ -497,6 +500,8 @@ export const q = {
   slaPolicies: () => list(qk.slaPolicies, () => api.slaPolicies.list({ limit: 100 })),
   automations: () => list(qk.automations, () => api.automations.list({ limit: 100 })),
   mailboxes: () => list(qk.mailboxes, () => api.mailboxes.list({ limit: 100 })),
+  /** The latest messages sent to many customers, with how far each got. */
+  contactMessages: () => queryOptions({ queryKey: qk.contactMessages, queryFn: async () => (await api.contactMessages.list()).data }),
   members: () => queryOptions({ queryKey: qk.members, queryFn: () => allPages(api.members.list) }),
   invitations: () => list(qk.invitations, () => api.invitations.list()),
   teams: () => list(qk.teams, () => api.teams.list({ limit: 100 })),

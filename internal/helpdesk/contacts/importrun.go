@@ -19,7 +19,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/deps"
 	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/events"
-	"github.com/useopendesk/opendesk/internal/helpdesk/imports"
+	"github.com/useopendesk/opendesk/internal/helpdesk/imports/csvfile"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/ids"
 	"github.com/useopendesk/opendesk/internal/jobs"
@@ -194,7 +194,7 @@ func columnIndex(header []string) map[string]int {
 
 // chunk adds rows [from, to) in one transaction, each in a savepoint of its own so a row
 // that cannot be saved fails alone, and moves the checkpoint with them.
-func (r *importRun) chunk(ctx context.Context, d *deps.Deps, f *imports.CSVFile, cols map[string]int, defs domain.FieldDefs, from, to int) error {
+func (r *importRun) chunk(ctx context.Context, d *deps.Deps, f *csvfile.File, cols map[string]int, defs domain.FieldDefs, from, to int) error {
 	next := *r
 	next.Errors = append([]ContactImportRowError{}, r.Errors...)
 	var x ContactImport

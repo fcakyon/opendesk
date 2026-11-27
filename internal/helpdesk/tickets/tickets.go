@@ -178,6 +178,9 @@ type ticketCreateBody struct {
 	AttachmentIDs []string            `json:"attachment_ids,omitempty" maxItems:"20"`
 	Custom        map[string]any      `json:"custom,omitempty"`
 	Fields        map[string]any      `json:"fields,omitempty" doc:"Custom field values by key"`
+	// notice: a ticket of a message to many customers. Made solved, it asks for no satisfaction
+	// rating and for none of the fields an agent fills before solving a ticket.
+	notice bool `json:"-"`
 }
 
 // CreateInput is the trusted internal surface for creating a ticket through the
@@ -711,7 +714,7 @@ func createTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 		if err != nil {
 			return domain.Ticket{}, err
 		}
-		if closing(nt.Status) {
+		if closing(nt.Status) && !b.notice {
 			if err := domain.CheckRequiredOnSolve(defs, fields); err != nil {
 				return domain.Ticket{}, err
 			}
@@ -1020,7 +1023,7 @@ func createTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 			return domain.Ticket{}, err
 		}
 	}
-	if nt.Status == domain.StatusSolved {
+	if nt.Status == domain.StatusSolved && !b.notice {
 		if err := requestCSAT(ctx, tx, d, wid, t.ID); err != nil {
 			return domain.Ticket{}, err
 		}

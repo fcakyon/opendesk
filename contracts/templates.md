@@ -203,6 +203,8 @@ Endpoints (backend-email):
   as the customer would see it: a signature or auto-reply inside its brand's layout, a layout or
   CSAT email around sample content. Values come from `ticket_id` (a ticket the caller can see),
   else sample data, with the caller as the agent. Referenced ids must be the workspace's.
+  `kind: "notice"` previews a message to many customers (contracts/api.md "Messages to many customers"): `body_html` is
+  filled like a reply, `subject` is the email's subject as written (default "Your update"), and there is no history.
 - `POST /v1/templates/test` (agent+) takes the same body and sends the rendered email to the caller's
   own login address through the platform mailer, subject prefixed `[Test]`. Limited to 10 an hour
   per user (`429`).

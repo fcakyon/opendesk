@@ -557,6 +557,17 @@ type WikiRemindersArgs struct{}
 
 func (WikiRemindersArgs) Kind() string { return "wiki.reminders" }
 
+// ContactMessageArgs creates the next few tickets of a message sent to many customers, then
+// queues itself again until every customer was reached. NextIndex is where the message stands
+// when this run was queued; a run that finds it elsewhere does nothing. Owner: helpdesk.
+type ContactMessageArgs struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	MessageID   uuid.UUID `json:"message_id"`
+	NextIndex   int       `json:"next_index"`
+}
+
+func (ContactMessageArgs) Kind() string { return "helpdesk.contact_message" }
+
 // ContactImportArgs adds the people of an uploaded CSV file to the directory
 // (contracts/imports.md "Contacts"), working from the import's checkpoint and snoozing when
 // its time is up. Owner: helpdesk.

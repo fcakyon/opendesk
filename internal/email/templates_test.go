@@ -217,6 +217,15 @@ func TestTemplatePreviewAndTest(t *testing.T) {
 	if code != 200 || !strings.Contains(p.HTML, "The team will answer") || !strings.HasPrefix(p.Subject, "Got it: Can") {
 		t.Fatalf("auto-reply preview %d %q %s", code, p.Subject, p.HTML)
 	}
+	// A message to many customers: its own subject as written, filled body, none of a reply's history.
+	code = doJSON(t, "POST", srv.URL+"/v1/templates/preview", map[string]any{"kind": "notice", "subject": "Planned maintenance",
+		"body_html": "<p>Hi {{ contact.first_name }}, we will be offline.</p>"}, &p)
+	if code != 200 || p.Subject != "Planned maintenance" || !strings.Contains(p.HTML, "Hi Jane, we will be offline.") || strings.Contains(p.HTML, "sign in to my account") || len(p.Problems) != 0 {
+		t.Fatalf("notice preview %d %q %+v", code, p.Subject, p.Problems)
+	}
+	if code := doJSON(t, "POST", srv.URL+"/v1/templates/preview", map[string]any{"kind": "notice", "body_html": "<p>x</p>"}, &p); code != 200 || p.Subject != "Your update" {
+		t.Fatalf("notice without a subject %d %q", code, p.Subject)
+	}
 	if code := doJSON(t, "POST", srv.URL+"/v1/templates/preview", map[string]any{"kind": "reply", "ticket_id": ids.New().String()}, nil); code != 404 {
 		t.Fatalf("unknown ticket %d", code)
 	}

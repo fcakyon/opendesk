@@ -3112,7 +3112,33 @@ export type EmailTemplate = {
 };
 export type EmailTemplates = { layout: EmailTemplate; csat: EmailTemplate };
 
-export type PreviewKind = "reply" | "signature" | "personal_signature" | "auto_reply" | "layout" | "csat";
+/** notice: a message to many customers (contracts/api.md "Messages to many customers"): its own subject, no history. */
+export type PreviewKind = "reply" | "notice" | "signature" | "personal_signature" | "auto_reply" | "layout" | "csat";
+/** A message sent to many customers, and how far it got (contracts/api.md "Messages to many customers"). */
+export type ContactMessage = {
+  id: string;
+  subject: string;
+  /** The label every ticket of this message carries. */
+  label: string;
+  /** What the tickets start as. */
+  status: "open" | "pending" | "solved";
+  state: "sending" | "done" | "cancelled";
+  mailbox_id: string | null;
+  created_by: string | null;
+  /** Customers it reaches. */
+  total: number;
+  /** Tickets created so far. */
+  sent: number;
+  failed: number;
+  last_error: string;
+  /** Customers left out when it was made, by reason. */
+  skipped: Partial<Record<"no_email" | "blocked", number>>;
+  created_at: string;
+  finished_at: string | null;
+};
+/** Who a send would reach, and who it would leave out. */
+export type NoticePreview = { reaches: number; skipped: Partial<Record<"no_email" | "blocked", number>> };
+
 export type TemplatePreviewBody = {
   kind: PreviewKind;
   body_html?: string;

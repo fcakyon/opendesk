@@ -14,6 +14,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
 import { DirectoryBulkBar } from "@/components/contacts/DirectoryBulkBar";
+import { MessageProgress } from "@/components/contacts/MessageProgress";
 import { DirectoryFilters } from "@/components/contacts/DirectoryFilters";
 import { exportContacts } from "@/components/contacts/exportCsv";
 import { ImportDialog } from "@/components/contacts/ImportDialog";
@@ -109,6 +110,8 @@ export default function ContactsPage() {
           <SearchInput value={term} onChange={setTerm} placeholder={t("searchPeople")} />
         </div>
       </PageHeader>
+
+      {canEdit && <MessageProgress />}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <DirectoryFilters scope="contacts" search={search} onSearch={(next) => void navigate({ search: next })} />

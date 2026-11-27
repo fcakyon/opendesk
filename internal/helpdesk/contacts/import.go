@@ -27,7 +27,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/events"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
-	"github.com/useopendesk/opendesk/internal/helpdesk/imports"
+	"github.com/useopendesk/opendesk/internal/helpdesk/imports/csvfile"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/ids"
 	"github.com/useopendesk/opendesk/internal/jobs"
@@ -137,9 +137,9 @@ type contactImportForm struct {
 	File huma.FormFile `form:"file" required:"true" doc:"A .csv file, at most 50 MB"`
 }
 
-const maxUploadBody = imports.MaxCSVBytes + 1<<20
+const maxUploadBody = csvfile.MaxBytes + 1<<20
 
-// Column names people use for each field, normalized (imports.NormHeader); an export's own
+// Column names people use for each field, normalized (csvfile.NormHeader); an export's own
 // headers come first, so an exported file maps itself.
 var importAliases = []struct {
 	field   string
@@ -159,7 +159,7 @@ var importAliases = []struct {
 func suggestImportMapping(header []string, defs domain.FieldDefs) ContactImportMapping {
 	normed := make([]string, len(header))
 	for i, h := range header {
-		normed[i] = imports.NormHeader(h)
+		normed[i] = csvfile.NormHeader(h)
 	}
 	used := map[int]bool{}
 	pick := func(aliases ...string) string {
@@ -195,7 +195,7 @@ func suggestImportMapping(header []string, defs domain.FieldDefs) ContactImportM
 		if f.Archived || f.Type == domain.FieldUser {
 			continue
 		}
-		if c := pick(imports.NormHeader(f.Name), imports.NormHeader(key)); c != "" {
+		if c := pick(csvfile.NormHeader(f.Name), csvfile.NormHeader(key)); c != "" {
 			if m.Fields == nil {
 				m.Fields = map[string]string{}
 			}
@@ -248,7 +248,7 @@ func limitBody(api huma.API) func(huma.Context, func(huma.Context)) {
 }
 
 // readUpload reads a workspace's stored upload and parses it.
-func readUpload(ctx context.Context, d *deps.Deps, wid, id uuid.UUID) (string, *imports.CSVFile, error) {
+func readUpload(ctx context.Context, d *deps.Deps, wid, id uuid.UUID) (string, *csvfile.File, error) {
 	var key, filename string
 	err := d.DB.Pool.QueryRow(ctx, `SELECT storage_key, filename FROM import_uploads WHERE workspace_id = $1 AND id = $2`, wid, id).Scan(&key, &filename)
 	if db.IsNotFound(err) {
@@ -264,17 +264,17 @@ func readUpload(ctx context.Context, d *deps.Deps, wid, id uuid.UUID) (string, *
 	return filename, f, nil
 }
 
-func readStored(ctx context.Context, d *deps.Deps, key string) (*imports.CSVFile, error) {
+func readStored(ctx context.Context, d *deps.Deps, key string) (*csvfile.File, error) {
 	rc, err := d.Storage.Get(ctx, key)
 	if err != nil {
 		return nil, err
 	}
 	defer rc.Close()
-	raw, err := io.ReadAll(io.LimitReader(rc, imports.MaxCSVBytes+1))
+	raw, err := io.ReadAll(io.LimitReader(rc, csvfile.MaxBytes+1))
 	if err != nil {
 		return nil, err
 	}
-	f, err := imports.ParseCSV(raw)
+	f, err := csvfile.Parse(raw)
 	if err != nil {
 		return nil, httpx.E(http.StatusUnprocessableEntity, "csv_unreadable", err.Error())
 	}
@@ -282,24 +282,24 @@ func readStored(ctx context.Context, d *deps.Deps, key string) (*imports.CSVFile
 }
 
 func upload(ctx context.Context, d *deps.Deps, p *auth.Principal, f huma.FormFile) (ContactImportUpload, error) {
-	if f.Size > imports.MaxCSVBytes {
+	if f.Size > csvfile.MaxBytes {
 		return ContactImportUpload{}, httpx.E(http.StatusRequestEntityTooLarge, "too_large", "CSV files can be at most 50 MB.")
 	}
 	filename := hd.CleanFilename(f.Filename)
 	if ext := strings.ToLower(filepath.Ext(filename)); ext != ".csv" && ext != ".tsv" && ext != ".txt" {
 		return ContactImportUpload{}, httpx.E(http.StatusUnprocessableEntity, "file_type_refused", "Upload a .csv file. Spreadsheets can save one with File, then Download or Export, as CSV.")
 	}
-	raw, err := io.ReadAll(io.LimitReader(f.File, imports.MaxCSVBytes+1))
+	raw, err := io.ReadAll(io.LimitReader(f.File, csvfile.MaxBytes+1))
 	if err != nil {
 		return ContactImportUpload{}, err
 	}
-	if len(raw) > imports.MaxCSVBytes {
+	if len(raw) > csvfile.MaxBytes {
 		return ContactImportUpload{}, httpx.E(http.StatusRequestEntityTooLarge, "too_large", "CSV files can be at most 50 MB.")
 	}
 	if len(raw) == 0 {
 		return ContactImportUpload{}, httpx.Validation("the file is empty")
 	}
-	parsed, err := imports.ParseCSV(raw)
+	parsed, err := csvfile.Parse(raw)
 	if err != nil {
 		return ContactImportUpload{}, httpx.E(http.StatusUnprocessableEntity, "csv_unreadable", err.Error())
 	}

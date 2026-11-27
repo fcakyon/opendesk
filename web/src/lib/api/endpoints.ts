@@ -716,6 +716,11 @@ export const api = {
     addEmail: (id: string, email: string) => http.post<T.Contact>(`/v1/contacts/${id}/emails`, { email }),
     removeEmail: (id: string, email: string) => http.del<T.Contact>(`/v1/contacts/${id}/emails/${encodeURIComponent(email)}`),
     makePrimaryEmail: (id: string, email: string) => http.post<T.Contact>(`/v1/contacts/${id}/emails/${encodeURIComponent(email)}/make-primary`),
+    /** Who a message to many customers would reach: by ids, or by the list's filters (at most 1000). */
+    messagePreview: (target: DirectoryBulkTarget<ContactBulkQuery>) => http.post<T.NoticePreview>("/v1/contacts/message/preview", target),
+    /** Sends one message to many customers, one ticket each (422 no_recipients, unknown_label; 409 message_in_progress; 429). */
+    sendMessage: (b: DirectoryBulkTarget<ContactBulkQuery> & { mailbox_id: string; subject: string; body_html: string; label: string; status?: T.ContactMessage["status"] }) =>
+      http.post<T.ContactMessage>("/v1/contacts/message", b),
     /** Customer portal access (contracts/customer-portal.md "Invitations"). */
     portal: (id: string) => http.get<T.PortalAccess>(`/v1/contacts/${id}/portal`),
     /** Emails a one-time link to choose a portal password, valid 7 days (422 no_email, contact_blocked, help_center_off, brand_required, password_sign_in_off; 429). */
@@ -876,6 +881,10 @@ export const api = {
       http.post<{ url: string }>(`/v1/mailboxes/oauth/${provider}/start`, b),
     connectOptions: () => http.get<T.MailboxConnectOptions>("/v1/mailboxes/connect-options"),
     detect: (email: string) => http.post<T.MailDetection>("/v1/mailboxes/detect", { email }),
+  },
+  contactMessages: {
+    list: () => http.get<{ data: T.ContactMessage[] }>("/v1/contact-messages"),
+    cancel: (id: string) => http.post<T.ContactMessage>(`/v1/contact-messages/${id}/cancel`, {}),
   },
   billing: {
     get: () => http.get<T.Billing>("/v1/billing"),

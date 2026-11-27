@@ -335,7 +335,8 @@ export function registerTickets() {
     }
     const p = readPatch(ctx.body);
     const fields = p.fields ? mergeFields(ws, "ticket", {}, p.fields).next : {};
-    if (p.status === "solved" || p.status === "closed") checkRequiredOnSolve(ws, fields);
+    // A message to many customers (contactMessages.ts) asks for none of an agent's fields.
+    if ((p.status === "solved" || p.status === "closed") && ctx.body.notice !== true) checkRequiredOnSolve(ws, fields);
     const teamId = s(ctx, "team_id") ?? null;
     if (teamId && !ws.teams.some((x) => x.id === teamId)) throw invalid("Unknown team");
     // From: the given address, else the default brand's address for the team, else its default.

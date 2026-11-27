@@ -3,6 +3,7 @@
 
 import { registerPortalRoutes } from "./portal";
 import { registerPortalInviteRoutes } from "./portalInvites";
+import { registerContactMessageRoutes } from "./contactMessages";
 import type {
   Action,
   Automation,
@@ -113,6 +114,7 @@ function syncContactRefs(ws: WsData, c: Contact) {
 export function registerResources() {
   registerPortalRoutes();
   registerPortalInviteRoutes();
+  registerContactMessageRoutes();
   // Contacts.
   get("/v1/contacts", (ctx) => {
     const q = (ctx.query.get("q") ?? "").toLowerCase().trim();
