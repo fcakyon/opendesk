@@ -100,6 +100,7 @@ void i18n
     partialBundledLanguages: true,
     interpolation: { escapeValue: false },
     returnNull: false,
+    returnEmptyString: true,
     react: { useSuspense: false },
   });
 
