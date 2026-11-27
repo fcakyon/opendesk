@@ -5,7 +5,19 @@
 			header_up X-Forwarded-For {http.request.header.X-Forwarded-For}
 		}
 	}
+	handle /robots.txt {
+		header Content-Type "text/plain; charset=utf-8"
+		respond "User-agent: *
+Allow: /
+" 200
+	}
+	handle /sitemap.xml {
+		header X-Robots-Tag "noindex, nofollow"
+		respond 404
+	}
 	handle {
+		encode zstd gzip
+		header X-Robots-Tag "noindex, nofollow"
 		reverse_proxy opendesk:8080 {
 			header_up X-Forwarded-For {http.request.header.X-Forwarded-For}
 		}
