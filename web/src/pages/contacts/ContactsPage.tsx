@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { Plus, Users } from "lucide-react";
+import { Download, Plus, Upload, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PageHeader, Stat, StatStrip } from "@/components/layout";
@@ -14,7 +14,10 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
 import { DirectoryBulkBar } from "@/components/contacts/DirectoryBulkBar";
+import { MessageProgress } from "@/components/contacts/MessageProgress";
 import { DirectoryFilters } from "@/components/contacts/DirectoryFilters";
+import { exportContacts } from "@/components/contacts/exportCsv";
+import { ImportDialog } from "@/components/contacts/ImportDialog";
 import { HeaderCheck, RowCheck } from "@/components/contacts/RowCheck";
 import { useSelection } from "@/components/contacts/useSelection";
 import { isFiltered, NO_COMPANY, peopleFilter } from "@/lib/directorySort";
@@ -51,6 +54,7 @@ export default function ContactsPage() {
   const [term, setTerm] = useState(search.q ?? "");
   const debounced = useDebounced(term, 250);
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     if ((debounced || undefined) === search.q) return;
@@ -79,10 +83,23 @@ export default function ContactsPage() {
   const hasLabels = rows.some((r) => labelsOf(r).length > 0);
   const cols = hasLabels ? colsLabels : colsPlain;
 
+  const exportAll = useMutation({
+    mutationFn: () => exportContacts({ query: filter }),
+    onSuccess: () => toast.success(t("bulk.exported")),
+    onError: (e) => toast.error(e, t("bulk.exportFailed")),
+  });
   const newButton = canEdit ? (
-    <Button variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setCreating(true)}>
-      {t("newContact")}
-    </Button>
+    <>
+      <Button variant="ghost" icon={<Upload className="size-3.5" />} onClick={() => setImporting(true)}>
+        {t("import.open")}
+      </Button>
+      <Button variant="ghost" icon={<Download className="size-3.5" />} loading={exportAll.isPending} onClick={() => exportAll.mutate()}>
+        {t(filtered ? "bulk.exportMatching" : "bulk.exportAll")}
+      </Button>
+      <Button variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setCreating(true)}>
+        {t("newContact")}
+      </Button>
+    </>
   ) : undefined;
 
   return (
@@ -93,6 +110,8 @@ export default function ContactsPage() {
           <SearchInput value={term} onChange={setTerm} placeholder={t("searchPeople")} />
         </div>
       </PageHeader>
+
+      {canEdit && <MessageProgress />}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <DirectoryFilters scope="contacts" search={search} onSearch={(next) => void navigate({ search: next })} />
@@ -218,6 +237,7 @@ export default function ContactsPage() {
         />
       )}
 
+      <ImportDialog open={importing} onOpenChange={setImporting} />
       <ContactDrawer contactId={contactId ?? null} onClose={() => void open(undefined)} />
       <NewContactDialog open={creating} onOpenChange={setCreating} onCreated={(id) => void open(id)} defaultCompany={company.data ?? null} />
     </div>

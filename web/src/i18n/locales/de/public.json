@@ -71,6 +71,25 @@
     "error": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
     "offline": "Der Server ist nicht erreichbar. Bitte prüfen Sie Ihre Verbindung."
   },
+  "chat_verify": {
+    "page_title": "Bestätigen Sie Ihre E-Mail-Adresse",
+    "title": "Bestätigen Sie Ihre E-Mail-Adresse",
+    "body": "Bestätigen Sie, dass diese Adresse Ihnen gehört, damit {{brand}} weiß, dass der Chat wirklich von Ihnen stammt.",
+    "button": "E-Mail-Adresse bestätigen",
+    "not_you": "Nicht Sie? Schließen Sie diese Seite, dann ändert sich nichts.",
+    "done_title": "Ihre E-Mail-Adresse ist bestätigt",
+    "already_title": "Ihre E-Mail-Adresse ist bereits bestätigt",
+    "done_body": "{{brand}} weiß jetzt, dass der Chat von {{email}} von Ihnen stammt. Sie können diese Seite schließen und weiterchatten.",
+    "invalid_title": "Dieser Link ist ungültig",
+    "invalid_body": "Er ist möglicherweise abgelaufen oder wurde bereits verwendet. Fordern Sie im Chat eine neue E-Mail an.",
+    "error": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
+    "offline": "Der Server ist nicht erreichbar. Bitte prüfen Sie Ihre Verbindung.",
+    "email_subject": "Bestätigen Sie Ihre E-Mail-Adresse für {{brand}}",
+    "email_intro": "Danke für Ihren Chat mit {{brand}}. Bestätigen Sie, dass diese Adresse Ihnen gehört, damit das Team weiß, dass Sie es wirklich sind.",
+    "email_meanwhile": "Sie können in der Zwischenzeit weiterchatten.",
+    "email_expiry": "Der Link ist {{hours}} Stunden gültig.",
+    "email_reason": "Sie erhalten diese E-Mail, weil diese Adresse im Chat auf einer Website von {{brand}} angegeben wurde. Wenn Sie das nicht waren, ignorieren Sie sie, dann ändert sich nichts."
+  },
   "footer": {
     "powered_by": "Bereitgestellt von",
     "language": "Sprache"

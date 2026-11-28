@@ -92,7 +92,7 @@ Integrations are for your team's Ollie. To let the [AI agent](/guides/ai/#the-ai
 
 ## Ticket panels
 
-A ticket panel shows, beside the ticket and under the contact, what another product knows about the ticket's contact: their orders in your Shopify store, or anything a system of your own can answer, such as an ERP's orders and supplier dates, a billing system's subscription or a CRM's account. Panels only read. They load when someone opens the ticket, each on its own, and a product that is slow or down shows a short note instead of holding the ticket up. Admins add them in **Settings, Integrations, Ticket panels**, or from the **Shopify** and **Your own data** cards of the integrations catalog. Tickets show a panel's name above what it answers: to change it, open the panel's menu and click **Rename**.
+A ticket panel shows, beside the ticket and under the contact, what another product knows about the ticket's contact: their orders in your Shopify store, or anything a system of your own can answer, such as an ERP's orders and supplier dates, a billing system's subscription or a CRM's account. Panels read, and a panel from a URL of your own can also offer buttons that do something in your system ([Actions](#actions)). They load when someone opens the ticket, each on its own, and a product that is slow or down shows a short note instead of holding the ticket up. Admins add them in **Settings, Integrations, Ticket panels**, or from the **Shopify** and **Your own data** cards of the integrations catalog. Tickets show a panel's name above what it answers: to change it, open the panel's menu and click **Rename**.
 
 <Steps>
 <Step title="Shopify: create an app for your shop">
@@ -129,7 +129,7 @@ Open the panel's menu and click **Order references**. opendesk looks for them in
 A `POST`, signed like webhook deliveries (`OD-Signature: t=<unix>,v1=<hex>`, the HMAC-SHA256 of `"<t>.<body>"` with the secret):
 
 ```json
-{ "panel_id": "…", "workspace_id": "…", "refresh": false, "locale": "fr",
+{ "event": "lookup", "panel_id": "…", "workspace_id": "…", "refresh": false, "locale": "fr",
   "ticket": { "id": "…", "number": 1042, "subject": "Where is my order S00042?",
               "references": ["S00042"] },
   "contact": { "id": "…", "email": "ada@example.com", "name": "Ada Buyer",
@@ -285,6 +285,20 @@ HTTPServer(("", 8080), Panel).serve_forever()  # behind your https proxy
 ```
 
 </Fold>
+
+### Actions
+
+A panel from a URL can offer buttons: create an invoice in your own system, update a CRM record. Add an `actions` block to the answer:
+
+```json
+{ "type": "actions", "items": [
+  { "id": "create_invoice", "label": "Create invoice", "confirm": "Create an invoice for this order?",
+    "inputs": [ { "name": "amount", "label": "Amount", "type": "text", "required": true },
+                { "name": "reason", "label": "Reason", "type": "select", "options": [ { "value": "late" }, { "value": "damaged" } ] } ] }
+] }
+```
+
+An agent presses the button, confirms the sentence you gave (if any) and fills in the form (if any). opendesk then posts to the same URL, signed the same way, with `"event": "action"`, the action's `id` and `inputs`, the agent who pressed it (their id, name and email), and the ticket and contact. Check the signature like a lookup's, and use the `OD-Request-Id` header to ignore a retry of a press you already did. Answer `{ "message": "Invoice INV-9 created", "tone": "success" }`, and optionally new `blocks` for the panel to show now. A `409` or `422` with a `message` shows your words as a failure; an error status or a timeout says the action did not go through. Only buttons the panel's latest answer offered can be pressed, a person (not an API key) presses them, and each press is on the ticket's timeline and in the audit log, without what was filled in.
 
 An answer from before blocks, `{ "sections": [ { "title", "items": [ { "label", "value", "url"? } ] } ] }`, still shows as it always has. A panel whose credentials or secret are refused is marked **Needs attention** in settings until you replace the credentials, change the URL or it works again. When you rotate the app's secret in the Dev Dashboard, paste the new one with **Replace the credentials**. The full schema is in [the contract](https://github.com/useopendesk/opendesk/blob/main/contracts/integrations.md#the-http-answer).
 

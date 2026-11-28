@@ -4,8 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Mail } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { VerificationBadge } from "@/components/contacts/VerificationBadge";
 import { Tooltip } from "@/components/ui/tooltip";
-import type { Ticket } from "@/lib/api/types";
+import type { ContactVerification, Ticket } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { minutes } from "@/lib/format";
 import { tone } from "@/lib/tones";
@@ -38,8 +39,8 @@ export function awayFor(m: number): string {
   return n < 60 ? `${n} min` : minutes(n);
 }
 
-/** The line at the top of a chat ticket. */
-export function VisitorPresenceBar({ p }: { p: (VisitorPresence & { now: number }) | null }) {
+/** The line at the top of a chat ticket: whether the visitor is here, and whether they verified who they are. */
+export function VisitorPresenceBar({ p, verification }: { p: (VisitorPresence & { now: number }) | null; verification?: ContactVerification | null }) {
   const { t } = useTranslation("inbox");
   if (!p) return null;
   const away = minutesAway(p, p.now);
@@ -59,6 +60,7 @@ export function VisitorPresenceBar({ p }: { p: (VisitorPresence & { now: number 
           <span className="truncate">{t("visitorPresence.email")}</span>
         </span>
       )}
+      <VerificationBadge v={verification} className="ms-auto" />
     </div>
   );
 }

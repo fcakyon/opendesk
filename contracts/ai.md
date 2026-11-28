@@ -209,7 +209,7 @@ interface AIModel {
 | GET | `/v1/ai/models` | viewer | $0 | → `{data: AIModel[], default, fast}` ("Models" above; on the workspace's own key, its provider's models) |
 | PATCH | `/v1/ai/settings` | admin | $0 | `Partial<AISettings>` → `AISettings` |
 | POST | `/v1/tickets/{id}/ai/draft` | agent | $0.03 | `{instructions?: string, tone?: string}` → `{body_html, body_text, sources: KBSource[]}`; uses the thread, contact, saved replies, the top KB matches and, for users, what the workspace's connected tools return ("Drafts and connected tools") |
-| POST | `/v1/tickets/{id}/ai/summary` | agent | $0.01 | `{}` → `{summary: string, key_points: string[], sentiment: Sentiment, updated_at}`; stored on the ticket (`custom.ai_summary`) and published as `ticket.updated` |
+| POST | `/v1/tickets/{id}/ai/summary` | agent | $0.01 | `{language?: string /* BCP 47, the reader's interface language */}` → `{summary: string, key_points: string[], sentiment: Sentiment, updated_at}`; `summary` and `key_points` are written in `language`. An empty or invalid tag uses the workspace's customer language (`settings.locale`), then English. `sentiment` stays the English enum. An empty body is the same as no language. Stored on the ticket (`custom.ai_summary`, replacing the previous summary) and published as `ticket.updated`. Automatic summaries (`ai.summarize`) send no language, so they use the customer language |
 | POST | `/v1/tickets/{id}/ai/ask` | viewer | $0.02 | `{question: string}` → `{answer_html, sources: KBSource[]}` (copilot) |
 | POST | `/v1/tickets/{id}/ai/triage` | agent | $0.01 | `{apply: boolean}` → `Triage`; `apply` sets tags/priority/severity with `automation`-style activities attributed to `ai` |
 | DELETE | `/v1/tickets/{id}/ai/suggestions/{field}` | agent | $0 | → 204; dismisses Ollie's suggestion for `field` (`priority`, `severity`, `labels`, `team`, `spam`). Accepting is setting the field (PATCH the ticket), which removes the suggestion |
@@ -217,7 +217,8 @@ interface AIModel {
 | POST | `/v1/wiki/ai/write` | agent | $0.01 (selection), $0.03 (from the page) | `{mode: "improve"\|"fix_grammar"\|"shorter"\|"longer"\|"simplify"\|"more_formal"\|"friendlier"\|"summarize"\|"action_items"\|"explain"\|"continue"\|"custom", html?: string /* the selection */, context_html?: string /* the page around it */, title?: string, instructions?: string}` → `{html}` (not saved); Ollie writing in the wiki (`contracts/wiki.md` "AI"). Edits of a selection take the fast model; `summarize`, `continue` and `custom` the default one. The output is sanitized as wiki HTML |
 | POST | `/v1/ai/translate` | agent | $0.01 | `{html?: string, text?: string, target: string /* BCP 47 */}` → `{html?, text?, source_language}` |
 | POST | `/v1/kb/articles/ai/draft` | agent | $0.05 | `{ticket_ids?: string[] /* at most 10 */, topic?: string /* up to 300 chars */}` → `{title, body_html, excerpt}` (not saved) |
-| GET | `/v1/ai/search` | viewer | $0 | `?q` semantic search over tickets and articles (embeddings), FTS fallback → same shape as `/v1/search` |
+| GET | `/v1/ai/search` | viewer | $0 | `?q` semantic search over tickets and articles (embeddings) fused with full-text matches (a ticket's words, its messages', its contact's, and addresses: contracts/api.md "Search"), FTS fallback → same shape as `/v1/search`, with matching contacts |
+| POST | `/v1/ai/app-help` | viewer, people only | $0.005 | `{question: string /* 1..500 */, language?: string /* BCP 47, the reader's */, sources: {title: string /* 1..300, where it is */, url?: string /* ..500 */, text?: string /* ..2000 */}[] /* 1..8 */}` → `{answer: string}`: a few sentences of plain text on doing something in opendesk, from the excerpts the app's own search found ("Asking about the app" below); fast model; 20 a minute per person (`429 rate_limited`) |
 
 `{id}` is a ticket uuid, `#123` (URL-encoded `%23123`) or `123`. API keys need the scope
 of the data the route reads or writes: `tickets:read` (summary, ask, search),
@@ -252,6 +253,30 @@ for rewrite) for a live preview only; render and insert the sanitized `done` pay
 error before the first event is a normal problem+json response with its status (so `402
 ai_balance_empty` arrives as JSON even on a streaming request); an error after the stream started
 is `event: error` with the problem object as data, and the stream ends.
+
+### Asking about the app
+
+The command menu's Ask AI also answers questions about opendesk itself
+("how do I customize my sidebar"), from two indexes the web app builds with itself (`web/indexer`), each
+loaded on first use as a chunk of its own:
+
+- **settings**: every settings page's title, sections, rows and the field labels and hints inside
+  them, read from the code (`<SettingsPage>`, `<Section>`, `<Row>`, `<Field>`) as i18n keys and shown in the
+  reader's language. An entry opens its page at `#find=<ns:key>`, which scrolls that section or row into
+  view and highlights it briefly. Entries are left out for whoever cannot use them: the page's rule in
+  `web/src/lib/settingsAccess.ts` (the settings nav reads the same table) and the conditions the code
+  shows the part under (admin, owner, Collab, Tickets, AI, Cloud). A few places that are not settings
+  pages (Customize sidebar, New Space) join them.
+- **docs**: the docs site's pages and their `##` sections with their first words, linking to
+  `docs.opendesk.sh`. Built from `docs/src/content/docs`; nothing is fetched from the docs site at runtime.
+  The larger of the two, it loads only in Ask AI: the menu's normal search lists settings, never docs.
+
+Matching runs in the browser (words anywhere, stems, everyday synonyms, a typo in a word of five letters
+or more and two from eight), with or without AI.
+With AI, **Answer with {assistant}** sends the question and the top excerpts (at most four places and four
+docs sections: the app's own strings and the public docs, never workspace data) to
+`POST /v1/ai/app-help`, which answers from them alone on the fast model, metered as `app_help`. API keys
+and OAuth grants are refused (`403`): it serves the app's own menu.
 
 ### Drafts and connected tools
 
@@ -298,7 +323,9 @@ severity (`settings.severity_enabled` false, contracts/api.md), triage neither a
 in `custom.ai_suggested_tags` for an agent to accept.
 
 A summary also sets `custom.ai_sentiment`. `custom.ai_summary` is
-`{text, key_points, sentiment, updated_at, message_count}`.
+`{text, key_points, sentiment, updated_at, message_count}`. The text and key points
+are written in the language of the request, or the workspace's customer language when
+the request gives none (an automatic summary). A new summary replaces the stored one.
 
 Messages and tickets also get `language` detection for free when triage runs
 (`custom.language`), which the web app uses for a "Translate" affordance on replies, the
@@ -345,14 +372,18 @@ interface AIDecisions { engine: "jev" | "llm"; model: string /* "jev", or the LL
   threshold: number; decided_at: string; fields: Partial<Record<DecisionField, Decision>> }
 type SuggestionField = "priority" | "severity" | "labels" | "team" | "spam"
 interface Suggestion { value: string | string[] | boolean /* labels: names; team: id */; confidence: number | null;
-  probability: number | null; model: string; decided_at: string }
+  probability: number | null; model: string; decided_at: string;
+  reason?: "below_threshold" /* confidence under the threshold */ | "field_off" /* triage may not change this field */
+    | "not_on_team" /* team only: the assignee is not on the private team */ }
 type AISuggestions = Partial<Record<SuggestionField, Suggestion>>
 ```
 
 The latest run is stored as `custom.ai_decisions` and pending suggestions as
 `custom.ai_suggestions` (published with `ticket.updated`, changes `["custom"]`). Activities of applied
-decisions are attributed to `ai` with data `{via, model: "jev", confidence}` (LLM: `{via, model}`),
-rendered "Ollie set severity to Sev 2". A suggestion goes away when anyone sets that field, or on
+decisions are attributed to `ai` with data `{via, model: "jev", confidence, threshold}` (LLM: `{via, model}`),
+rendered "Ollie set severity to Sev 2"; `threshold` is the workspace's `triage_threshold` the confidence
+was weighed against, and the tooltips show both. A suggestion's `reason` says why it was not applied (older
+suggestions have none). A suggestion goes away when anyone sets that field, or on
 `DELETE /v1/tickets/{id}/ai/suggestions/{field}`; a new triage run replaces them.
 
 Jev API (TypeSafe, documented at docs.typesafe.ai): `POST {TYPESAFE_API_URL}/v1/systemone`, or on

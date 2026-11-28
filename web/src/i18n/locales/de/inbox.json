@@ -95,7 +95,11 @@
     "notFoundHint": "Es wurde vielleicht gelöscht oder zusammengeführt.",
     "loadError": "Dieses Ticket konnte nicht geladen werden",
     "back": "Zurück zur Liste",
-    "movedPrivate": "Dieses Ticket wurde in ein privates Team verschoben"
+    "movedPrivate": "Dieses Ticket wurde in ein privates Team verschoben",
+    "followUpOf": "Folgeanfrage zu #{{number}}",
+    "followUpHidden": "Folgeanfrage zu einem früheren Ticket",
+    "followUpHint": "Der Kunde hat erneut geschrieben, nachdem #{{number}} geschlossen wurde",
+    "copyForAgent": "Ticket für KI-Agent kopieren"
   },
   "commands": {
     "reply": "Antworten",
@@ -120,7 +124,9 @@
     "unspammed": "Aus Spam verschoben",
     "deleted": "#{{number}} gelöscht",
     "snoozed": "Zurückgestellt",
-    "linkCopied": "Link kopiert"
+    "linkCopied": "Link kopiert",
+    "copiedForAgent": "Kopiert. Füge es in deinen KI-Agenten ein.",
+    "copyFailed": "Kopieren fehlgeschlagen. Versuch es noch einmal."
   },
   "finish": {
     "close": {
@@ -180,7 +186,9 @@
     "soundOn": "Chat-Alarmtöne stummschalten",
     "soundOff": "Ton abspielen, wenn ein Besucher wartet",
     "title_one": "● {{count}} Kunde wartet",
-    "title_other": "● {{count}} Kunden warten"
+    "title_other": "● {{count}} Kunden warten",
+    "whatsapp": "WhatsApp",
+    "whatsappHint": "WhatsApp. Antworten von hier gehen an das WhatsApp des Kunden."
   },
   "presence": {
     "viewing": "{{name}} sieht es sich an",
@@ -270,6 +278,10 @@
       "description": "Neue Unterhaltungen landen hier, wenn eine Adresse, ein Widget oder eine Routing-Regel sie an dieses Team schickt.",
       "seeOpen": "Offene Tickets ansehen",
       "seeUnassigned": "Nicht zugewiesene ansehen"
+    },
+    "all": {
+      "title": "Noch keine Tickets",
+      "description": "Hier steht jedes Ticket, egal in welchem Status, außer Spam."
     }
   },
   "error": {
@@ -472,6 +484,8 @@
     "automation": "Eine Automatisierung",
     "customer": "Der Kunde",
     "ai": "KI",
+    "why": "Warum?",
+    "whyInternal": "Nur das Team sieht das.",
     "noteEdited": "<b>{{who}}</b> hat eine interne Notiz bearbeitet",
     "noteDeleted": "<b>{{who}}</b> hat eine interne Notiz gelöscht",
     "status": "<b>{{who}}</b> hat dies als <b>{{status}}</b> markiert",
@@ -490,6 +504,7 @@
     "unassigned": "<b>{{who}}</b> hat die Zuweisung dieses Tickets aufgehoben",
     "team": "<b>{{who}}</b> hat dies nach <b>{{team}}</b> verschoben",
     "contactChanged": "<b>{{who}}</b> hat den Kontakt von <b>{{from}}</b> zu <b>{{to}}</b> geändert",
+    "contactAnswered": "<b>{{to}}</b> hat auf die E-Mail von <b>{{from}}</b> geantwortet und ist jetzt der Kontakt",
     "noContact": "kein Kontakt",
     "teamRemoved": "<b>{{who}}</b> hat das Team entfernt",
     "tagged": "<b>{{who}}</b> fügte hinzu",
@@ -520,6 +535,12 @@
     "triagedAs": "<b>{{who}}</b> hat dies als <b>{{category}}</b> eingeordnet",
     "aiAnswered": "<b>{{who}}</b> hat aus der Wissensdatenbank geantwortet",
     "aiAnsweredEmail": "<b>{{who}}</b> hat per E-Mail geantwortet",
+    "aiSkipped": "<b>{{who}}</b> hat diese Nachricht dem Team überlassen",
+    "skippedReason": {
+      "contact_limit": "Der Kunde hat das Limit der Antworten erreicht, die {{who}} einer Person pro Stunde gibt.",
+      "monthly_cap": "{{who}} hatte sein Monatslimit aufgebraucht.",
+      "no_balance": "Das KI-Guthaben ist aufgebraucht, daher konnte {{who}} nicht antworten."
+    },
     "procedureRan": "<b>{{who}}</b> hat <b>{{name}}</b> ausgeführt",
     "procedureNothing": "<b>{{who}}</b> hat <b>{{name}}</b> ausgeführt: nichts zu tun",
     "procedureFailed": "<b>{{who}}</b> konnte <b>{{name}}</b> nicht abschließen",
@@ -527,6 +548,13 @@
     "aiSuggestedSent": "<b>{{who}}</b> hat die von {{ollie}} vorgeschlagene Antwort gesendet",
     "handoffCustomer": "Der Kunde wollte mit einer Person sprechen",
     "handoffAi": "<b>{{who}}</b> hat dies ans Team übergeben",
+    "handoffReason": "Grund",
+    "handoffRule": {
+      "agent": "{{who}} hat entschieden, dass eine Person nötig ist.",
+      "visitor_request": "Die Besucherin oder der Besucher wollte mit einer Person sprechen.",
+      "reply_limit": "Die Unterhaltung hat das Antwortlimit von {{who}} erreicht.",
+      "needs_human": "{{who}} hielt eine Person für nötig."
+    },
     "other": "<b>{{who}}</b> hat dieses Ticket aktualisiert <m>{{type}}</m>",
     "teamFrom": "<b>{{who}}</b> hat dies von <b>{{from}}</b> nach <b>{{team}}</b> verschoben",
     "teamRule": "Durch Regel <b>{{rule}}</b> an <b>{{team}}</b> geleitet",
@@ -535,7 +563,9 @@
     "messageDeleted": "<b>{{who}}</b> hat eine Nachricht gelöscht",
     "messageRestored": "<b>{{who}}</b> hat eine gelöschte Nachricht wiederhergestellt",
     "noteSentAsReply": "<b>{{who}}</b> hat eine interne Notiz als Antwort gesendet",
-    "messagePurged": "<b>{{who}}</b> hat den Inhalt einer Nachricht endgültig gelöscht"
+    "messagePurged": "<b>{{who}}</b> hat den Inhalt einer Nachricht endgültig gelöscht",
+    "panelAction": "<b>{{who}}</b> hat <b>{{label}}</b> in {{panel}} ausgeführt",
+    "panelActionFailed": "<b>{{who}}</b> hat <b>{{label}}</b> in {{panel}} versucht, was nicht geklappt hat: {{message}}"
   },
   "typing_one": "{{who}} schreibt",
   "typing_other": "{{who}} schreiben",
@@ -550,6 +580,9 @@
     "theCustomer": "den Kunden",
     "noteHint": "Notizen sieht nur dein Team. Tippe @, um jemanden zu erwähnen.",
     "ccBcc": "Cc / Bcc",
+    "replyAll": "Allen antworten",
+    "replyAllHint": "Allen antworten: diese Antwort auch an {{list}} senden, in Cc",
+    "replyAllOff": "Zurück zu Antworten: nimmt {{list}} aus Cc heraus",
     "cc": "Cc",
     "bcc": "Bcc",
     "replyPlaceholder": "Schreib eine Antwort. Tippe / für Textbausteine, {{braces}} für die Details dieses Tickets.",
@@ -652,7 +685,12 @@
       "member_gone": "Du kannst auf dieses Ticket nicht mehr antworten, daher wurde die Antwort nicht gesendet.",
       "refused": "Die Antwort konnte zum geplanten Zeitpunkt nicht so gesendet werden, wie sie geschrieben war. Prüfe sie und sende sie erneut.",
       "failed": "Die geplante Antwort konnte nicht gesendet werden. Sende sie erneut."
-    }
+    },
+    "whatsappWindowOpen": "WhatsApp-Fenster offen. Noch {{left}} zum Antworten.",
+    "whatsappWindowClosed": "Das 24-Stunden-Fenster ist geschlossen, daher kann nur eine Vorlage gesendet werden.",
+    "whatsappDisconnected": "Diese WhatsApp-Nummer ist nicht verbunden. Ein Admin kann sie unter Einstellungen > WhatsApp wieder verbinden.",
+    "whatsappTemplate": "Vorlage senden",
+    "whatsappOneFile": "WhatsApp nimmt eine Datei pro Nachricht. Entferne die Datei, um eine andere anzuhängen."
   },
   "sharedDraft": {
     "label": "Geteilter Entwurf",
@@ -665,6 +703,41 @@
     "replaceTitle": "Deinen Text ersetzen?",
     "replaceBody": "Der Entwurf von {{name}} ersetzt, was du geschrieben hast.",
     "replaceConfirm": "Ersetzen"
+  },
+  "whatsappTemplate": {
+    "title": "Vorlage senden",
+    "description": "Nur bei Meta genehmigte Vorlagen können gesendet werden, innerhalb des 24-Stunden-Fensters oder danach.",
+    "search": "Vorlagen suchen",
+    "loading": "Vorlagen werden geladen",
+    "noTemplates": "Es kann noch keine Vorlage gesendet werden. Synchronisiere genehmigte Vorlagen unter Einstellungen > WhatsApp.",
+    "emptySearch": "Keine Vorlage passt zu dieser Suche.",
+    "preview": "Vorschau",
+    "header": "Kopfzeile",
+    "headerMedia": "{{kind}}-Kopfzeile",
+    "kind": {
+      "image": "Bild",
+      "video": "Video",
+      "document": "Dokument"
+    },
+    "headerChoose": "Datei wählen",
+    "headerFileHint": "Bis zu {{size}}.",
+    "headerUploading": "Wird hochgeladen",
+    "headerRemove": "Datei der Kopfzeile entfernen",
+    "headerTooLarge": "{{name}} ist größer als {{size}}.",
+    "headerUploadFailed": "{{name}} konnte nicht hochgeladen werden",
+    "headerValue": "Kopfzeile: {{name}}",
+    "headerValueHint": "Bis zu 60 Zeichen.",
+    "params": "Platzhalter ausfüllen",
+    "paramHint": "Wird in diesem Platzhalter in der Nachricht eingesetzt.",
+    "buttons": "Links der Schaltflächen",
+    "buttonValue": "Schaltfläche: {{text}}",
+    "buttonNumber": "Schaltfläche {{number}}",
+    "buttonHint": "Wird in den Link dieser Schaltfläche eingesetzt.",
+    "back": "Zurück",
+    "cancel": "Abbrechen",
+    "send": "Vorlage senden",
+    "sent": "Vorlage gesendet.",
+    "error": "Die Vorlage konnte nicht gesendet werden"
   },
   "message": {
     "from": "Nachricht von {{name}}",
@@ -706,13 +779,12 @@
     "imagesHeld": "Externe Bilder sind zum Schutz deiner Privatsphäre ausgeblendet.",
     "loadImages": "Bilder laden",
     "hideQuoted": "Zitierten Text ausblenden",
-    "preview": "Vorschau von {{name}}",
-    "fullSize": "In voller Größe öffnen",
-    "download": "{{name}} herunterladen",
     "fromAddress": "von {{name}} <{{address}}>",
     "ownAddress": "Eigene Adresse",
     "ownAddressHint": "Vom eigenen E-Mail-Konto der schreibenden Person gesendet statt von der Adresse des Tickets. Die Antworten des Kunden kommen in dieses Ticket zurück.",
     "toAddress": "an {{address}}",
+    "toAndOthers": "an {{to}} +{{others}}",
+    "receivedAt": "eingegangen bei {{address}}",
     "replyTo": "Reply-To <m>{{address}}</m>",
     "replyToUsed": "Antworten gehen an diese Adresse, wie vom Absender gewünscht",
     "replyToOther": "Der Absender möchte Antworten an diese Adresse. Sie gehört nicht zu seiner Organisation, daher gehen Antworten an {{address}}",
@@ -752,7 +824,15 @@
     "showReply": "Antwort anzeigen",
     "showNote": "Notiz anzeigen",
     "hideNote": "Notiz ausblenden",
-    "forward": "Weiterleiten"
+    "forward": "Weiterleiten",
+    "viewSource": "Quelltext anzeigen",
+    "copyForAgent": "Für KI-Agent kopieren",
+    "whatsapp": {
+      "sent": "Gesendet",
+      "delivered": "Zugestellt",
+      "read": "Gelesen",
+      "failed": "Nicht zugestellt"
+    }
   },
   "merge": {
     "title": "#{{number}} mit anderem Ticket zusammenführen",
@@ -788,6 +868,8 @@
     "startTyping": "Tippe los",
     "use": "Verwenden",
     "change": "Ändern",
+    "addTo": "Weitere Person hinzufügen",
+    "addCopies": "Cc oder Bcc hinzufügen",
     "noMailbox": "Kein Postfach",
     "bodyReply": "Schreib deine Nachricht",
     "bodyNote": "Beschreib das Problem",
@@ -819,7 +901,12 @@
     "open": "Kontakt öffnen",
     "copyEmail": "E-Mail kopieren",
     "pastTickets": "Frühere Tickets",
-    "noOther": "Keine anderen Tickets"
+    "noOther": "Keine anderen Tickets",
+    "verified": "Verifiziert",
+    "unverified": "Nicht verifiziert",
+    "verifiedByEmail": "Hat die E-Mail-Adresse über den Link bestätigt, den wir gesendet haben.",
+    "verifiedByIdentity": "Ist auf Ihrer Website angemeldet, die die Identität bestätigt hat.",
+    "unverifiedHint": "Die E-Mail-Adresse kam über den Chat und ist noch nicht bestätigt. Sie gilt als verifiziert, sobald der Link aus unserer E-Mail geöffnet wird."
   },
   "fields": {
     "title": "Felder",
@@ -856,6 +943,7 @@
     "setBy": "Gesetzt von {{name}}",
     "said": "{{name}} hat geantwortet",
     "sure": "{{pct}} % sicher",
+    "threshold": "Schwelle {{pct}} %",
     "setThis": "{{name}} hat das gesetzt"
   },
   "suggest": {
@@ -1047,6 +1135,12 @@
     "line": "Leitung {{line}}",
     "playRecording": "Aufnahme abspielen",
     "playVoicemail": "Mailbox-Nachricht abspielen",
+    "recording": "Aufnahme",
+    "loadingRecording": "Lädt …",
+    "tryAgain": "Erneut versuchen",
+    "recordingNotReady": "Die Aufnahme ist noch nicht bereit. Versuche es in einer Minute erneut.",
+    "recordingRefused": "Der Anbieter hat den Token der Verbindung abgelehnt. Er braucht Zugriff auf Gesprächsaufnahmen.",
+    "recordingError": "Die Aufnahme konnte nicht geladen werden.",
     "openIn": "In {{provider}} öffnen",
     "summary": "Zusammenfassung",
     "showTranscript": "Transkript zeigen",
@@ -1114,7 +1208,13 @@
     "discountCodes_other": "Rabattcodes",
     "refunded": "{{amount}} erstattet",
     "openLink": "{{name}} öffnen",
-    "copyValue": "{{name}} kopieren"
+    "copyValue": "{{name}} kopieren",
+    "actions": {
+      "error": "Das hat nicht geklappt. Versuchen Sie es gleich noch einmal.",
+      "cancel": "Abbrechen",
+      "fill": "Füllen Sie die Pflichtfelder aus.",
+      "choose": "Auswählen"
+    }
   },
   "print": {
     "action": "Drucken oder als PDF speichern",
@@ -1154,5 +1254,15 @@
   "wiki": {
     "title": "Wiki",
     "untitled": "Ohne Titel"
+  },
+  "source": {
+    "title": "Originalnachricht",
+    "download": ".eml herunterladen",
+    "copy": "Quelltext kopieren",
+    "close": "Schließen",
+    "error": "Das Original dieser Nachricht ist nicht verfügbar. Nur E-Mails, die in einem Postfach eingegangen sind, behalten eines, und bei einer endgültig gelöschten Nachricht ist es weg.",
+    "loadError": "Die Originalnachricht konnte nicht geladen werden. Versuche es erneut.",
+    "downloadError": "Die Nachricht konnte nicht heruntergeladen werden.",
+    "truncated": "Es wird nur der erste Teil angezeigt. Der Download enthält die ganze Nachricht ({{size}} KB)."
   }
 }

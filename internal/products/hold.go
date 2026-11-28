@@ -34,13 +34,13 @@ func SnoozeHeld(err error) error {
 	return err
 }
 
-// Reactivate wakes the inbound email, phone and support channel jobs held for a workspace
-// whose Tickets just came back on, oldest first, one millisecond apart.
+// Reactivate wakes the inbound email, phone, WhatsApp and support channel jobs held for a
+// workspace whose Tickets just came back on, oldest first, one millisecond apart.
 func Reactivate(ctx context.Context, q db.Querier, wid uuid.UUID) error {
 	_, err := q.Exec(ctx, `UPDATE river_job j SET scheduled_at = now() + n.i * interval '1 millisecond'
 		FROM (SELECT id, row_number() OVER (ORDER BY created_at, id) AS i FROM river_job
 			WHERE state = 'scheduled' AND (
-				(kind IN ('email.process_inbound', 'phone.inbound') AND args->>'workspace_id' = $1::text)
+				(kind IN ('email.process_inbound', 'phone.inbound', 'whatsapp.inbound') AND args->>'workspace_id' = $1::text)
 				OR (kind = 'support_channels.inbound' AND args->>'connection_id' IN
 					(SELECT id::text FROM support_channel_connections WHERE workspace_id = $1::text::uuid)))) n
 		WHERE j.id = n.id`, wid.String())

@@ -19,15 +19,18 @@ import { ChannelBars } from "@/components/reports/ChannelBars";
 import { SeverityBars } from "@/components/reports/SeverityBars";
 import { AgentTable } from "@/components/reports/AgentTable";
 import { AgentWorkTable } from "@/components/reports/AgentWork";
+import { openWorkTeam, useTeamByPeople } from "@/components/reports/teamMembers";
+import { PersonFilter } from "@/components/reports/PersonFilter";
+import { MailboxFilter, openWorkMailbox, useReportMailboxes } from "@/components/reports/MailboxFilter";
 import { AnimatedNumber } from "@/components/motion";
 import { Bar, BreakdownBars, ShareBar, type BarRow } from "@/components/reports/Bars";
 import { BrandFilter, GroupTable, NO_TEAM, TeamFilter, brandRows, teamRows, useReportScope, type GroupRow } from "@/components/reports/TeamBrand";
 import { PriorityIcon, StatusIcon, priorityLabel, priorityOrder, statusLabel } from "@/components/tickets/bits";
-import type { ReportsOverview, ReportsQuery, ReportsRange, Ticket } from "@/lib/api/types";
+import type { Mailbox, ReportsOverview, ReportsQuery, ReportsRange, Ticket } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { minutes } from "@/lib/format";
 import { q } from "@/lib/queries";
-import { atLeast, useRole } from "@/lib/session";
+import { atLeast, useRole, useSession } from "@/lib/session";
 import { isTone, priorityTone, SERIES, statusTone, tone, toneFor, toneVar, type Tone } from "@/lib/tones";
 import { reportsQuery } from "@/router";
 import { useDisplay } from "@/components/tickets/fields";
@@ -44,8 +47,8 @@ function previous<R extends ReportsRange>(r: R): R {
 const OPEN_STATUSES = ["open", "pending", "on_hold"] as Ticket["status"][];
 
 /** The open tickets behind the backlog and open work cards, narrowed like the report. */
-function openWork(r: ReportsQuery) {
-  return { status: OPEN_STATUSES, team_id: r.team_id, brand_id: r.brand_id };
+function openWork(r: ReportsQuery, mailboxes: Mailbox[], byPeople: boolean) {
+  return { status: OPEN_STATUSES, ...openWorkTeam(r.team_id, byPeople), brand_id: r.brand_id, ...openWorkMailbox(r.mailbox_id, mailboxes), assignee: r.assignee_id };
 }
 
 export default function ReportsPage() {
@@ -56,7 +59,8 @@ export default function ReportsPage() {
   const scope = useReportScope();
   // Tickets by severity show only while the workspace uses severity.
   const severity = useDisplay().severity;
-  const filtered = !!(range.team_id || range.brand_id);
+  const filtered = !!(range.team_id || range.brand_id || range.mailbox_id || range.assignee_id);
+  const mailboxes = useReportMailboxes();
   // A link to a team the caller may not see (a private team they are not on) drops the filter.
   const lostTeam = !!search.team && search.team !== NO_TEAM && scope.teamsLoaded && !scope.team(search.team);
   useEffect(() => {
@@ -71,6 +75,10 @@ export default function ReportsPage() {
   const teamTable = d && scope.hasTeams && !range.team_id ? teamRows(d, scope, t("filter.noTeam")) : null;
   const brandTable = d && scope.multiBrand && !range.brand_id ? brandRows(d, scope) : null;
   const days = differenceInCalendarDays(parseISO(range.to), parseISO(range.from)) + 1;
+  // A member who is not an admin gets their own row alone in by_agent: no leaderboard, and their
+  // own first response instead of a ranking of one.
+  const own = !atLeast(useRole(), "admin");
+  const me = useSession((s) => s.user?.id);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -81,6 +89,10 @@ export default function ReportsPage() {
         actions={
           <>
             {scope.hasTeams && <TeamFilter scope={scope} value={search.team} onChange={(team) => void navigate({ search: (s) => ({ ...s, team }) })} />}
+            <PersonFilter value={search.person} onChange={(person) => void navigate({ search: (s) => ({ ...s, person }) })} />
+            {(mailboxes.length > 1 || search.mailbox) && (
+              <MailboxFilter mailboxes={mailboxes} value={search.mailbox} onChange={(mailbox) => void navigate({ search: (s) => ({ ...s, mailbox }) })} />
+            )}
             {(scope.multiBrand || search.brand) && <BrandFilter scope={scope} value={search.brand} onChange={(brand) => void navigate({ search: (s) => ({ ...s, brand }) })} />}
             <RangePicker value={range} onChange={(r) => void navigate({ search: (s) => ({ ...s, ...r }) })} />
           </>
@@ -104,7 +116,7 @@ export default function ReportsPage() {
             art="search"
             title={t("filtered.emptyTitle")}
             description={t("filtered.emptyDescription")}
-            action={<Button onClick={() => void navigate({ search: (s) => ({ ...s, team: undefined, brand: undefined }) })}>{t("filtered.clear")}</Button>}
+            action={<Button onClick={() => void navigate({ search: (s) => ({ ...s, team: undefined, brand: undefined, mailbox: undefined, person: undefined }) })}>{t("filtered.clear")}</Button>}
           />
         ) : (
           <div className={cn("flex flex-col gap-4 px-4 pb-12 pt-4 transition-opacity duration-150 md:px-6 md:pt-5", refetching && "opacity-60")}>
@@ -131,14 +143,16 @@ export default function ReportsPage() {
               </div>
             )}
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-              <Card title={t("agents.title")} subtitle={t("agents.subtitle")} flush className="xl:col-span-2">
-                {d.by_agent.length ? (
-                  <AgentTable rows={d.by_agent} />
-                ) : (
-                  <EmptyState compact lit={0} title={t("agents.emptyTitle")} description={t("agents.emptyDescription")} />
-                )}
-              </Card>
-              <ResponseCard d={d} />
+              {!own && (
+                <Card title={t("agents.title")} subtitle={t("agents.subtitle")} flush className="xl:col-span-2">
+                  {d.by_agent.length ? (
+                    <AgentTable rows={d.by_agent} />
+                  ) : (
+                    <EmptyState compact lit={0} title={t("agents.emptyTitle")} description={t("agents.emptyDescription")} />
+                  )}
+                </Card>
+              )}
+              <ResponseCard d={d} own={own} me={me} />
             </div>
             <AgentWorkCard filter={range} />
           </div>
@@ -342,9 +356,11 @@ function VolumeCard({ d, className }: { d: ReportsOverview; className?: string }
 function BacklogCard({ filter, openNow }: { filter: ReportsQuery; openNow: number }) {
   const { t } = useTranslation("reports");
   useTranslation("indicators");
-  const narrowed = !!(filter.team_id || filter.brand_id);
+  const narrowed = !!(filter.team_id || filter.brand_id || filter.mailbox_id || filter.assignee_id);
+  const mailboxes = useReportMailboxes();
+  const byPeople = useTeamByPeople();
   const counts = useQuery({ ...q.counts(), enabled: !narrowed });
-  const list = useInfiniteQuery({ ...q.tickets(openWork(filter)), enabled: narrowed });
+  const list = useInfiniteQuery({ ...q.tickets(openWork(filter, mailboxes, byPeople)), enabled: narrowed });
   const tickets = list.data?.pages.flatMap((pg) => pg.data) ?? [];
   const c = narrowed
     ? list.data && {
@@ -423,7 +439,9 @@ function BrandCard({ rows }: { rows: GroupRow[] }) {
 function OpenWorkCards({ filter }: { filter: ReportsQuery }) {
   const { t } = useTranslation("reports");
   useTranslation("indicators");
-  const list = useInfiniteQuery(q.tickets(openWork(filter)));
+  const mailboxes = useReportMailboxes();
+  const byPeople = useTeamByPeople();
+  const list = useInfiniteQuery(q.tickets(openWork(filter, mailboxes, byPeople)));
   const tickets = list.data?.pages.flatMap((pg) => pg.data) ?? [];
   const sample = list.hasNextPage ? t("open.sample", { count: tickets.length }) : t("open.subtitle");
 
@@ -524,11 +542,26 @@ function TableSkeleton() {
   );
 }
 
-/** Medians for the period, then agents ranked by how fast they first reply. */
-function ResponseCard({ d }: { d: ReportsOverview }) {
+/**
+ * Medians for the period, then agents ranked by how fast they first reply. With `own` (a member
+ * who sees their own row alone), their first response beside the medians instead, across the row.
+ */
+export function ResponseCard({ d, own = false, me }: { d: ReportsOverview; own?: boolean; me?: string }) {
   const { t } = useTranslation("reports");
   const ranked = d.by_agent.filter((a) => a.first_response_p50_minutes !== null).sort((a, b) => a.first_response_p50_minutes! - b.first_response_p50_minutes!);
   const max = Math.max(1, ...ranked.map((a) => a.first_response_p50_minutes!));
+  if (own) {
+    const mine = d.by_agent.find((a) => a.user.id === me);
+    return (
+      <Card title={t("response.title")} subtitle={t("response.subtitle")} className="xl:col-span-3">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <Figure label={t("kpi.firstResponse")} value={minutes(d.first_response_p50_minutes)} sub={t("kpi.median")} />
+          <Figure label={t("kpi.resolution")} value={minutes(d.resolution_p50_minutes)} sub={t("kpi.median")} />
+          <Figure label={t("response.yours")} value={minutes(mine?.first_response_p50_minutes)} sub={t("kpi.median")} />
+        </div>
+      </Card>
+    );
+  }
   return (
     <Card title={t("response.title")} subtitle={t("response.subtitle")}>
       <div className="grid grid-cols-2 gap-4 border-b border-line-soft pb-4">

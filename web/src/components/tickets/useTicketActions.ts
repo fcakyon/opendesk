@@ -137,6 +137,7 @@ export function useUpdateTicket() {
       if (patch.contact_id !== undefined) {
         // The ticket moved between the two contacts' past tickets.
         for (const id of [ctx?.prev?.contact?.id, t.contact?.id]) if (id) void qc.invalidateQueries({ queryKey: qk.contactTickets(id) });
+        void qc.invalidateQueries({ queryKey: qk.customerTickets(t.id) });
       }
       if (t.tags.some((x) => !qc.getQueryData<Tag[]>(qk.tags)?.some((k) => k.id === x.id))) void qc.invalidateQueries({ queryKey: qk.tags });
     },

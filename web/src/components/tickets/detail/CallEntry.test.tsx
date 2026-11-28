@@ -1,8 +1,10 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "@/i18n";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ApiError } from "@/lib/api/client";
+import { api } from "@/lib/api/endpoints";
 import type { Activity, CallData } from "@/lib/api/types";
 import { callData } from "@/mock/phone";
 import { CallEntry, clock, playLink, talkSeconds } from "./CallEntry";
@@ -126,5 +128,50 @@ describe("CallEntry", () => {
   it("never opens the provider's API link to the call", async () => {
     const el = await render(entry({ outcome: "missed", link: "https://api.aircall.io/v1/calls/1" } as Partial<CallData>));
     expect(el.querySelectorAll("a")).toHaveLength(0);
+  });
+});
+
+describe("a recording played through the app", () => {
+  const voys = (over: Partial<CallData> = {}) => entry({ provider: "voys", recording: true, recording_stream: true, recording_url: "", ...over });
+  const click = async (el: HTMLElement, id: string) => {
+    await act(async () => (el.querySelector(`[data-testid="${id}"]`) as HTMLButtonElement).click());
+  };
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("offers a button, not a link, then plays the audio it fetched", async () => {
+    const created: string[] = [];
+    URL.createObjectURL = vi.fn(() => {
+      created.push("blob:rec");
+      return "blob:rec";
+    });
+    URL.revokeObjectURL = vi.fn();
+    const spy = vi.spyOn(api.phone, "recording").mockResolvedValue({ blob: new Blob(["x"], { type: "audio/mpeg" }), filename: null });
+    const el = await render(voys({ call_id: "call-1" }));
+    expect(el.querySelectorAll("a")).toHaveLength(0);
+    expect(el.querySelector("audio")).toBeNull();
+    await click(el, "call-play-recording");
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0]?.[0]).toBe("call-1");
+    expect(el.querySelector("audio")?.getAttribute("src")).toBe("blob:rec");
+    expect(el.querySelector('[data-testid="call-play-recording"]')).toBeNull();
+  });
+
+  it("says when the recording is not ready and lets the agent try again", async () => {
+    const spy = vi
+      .spyOn(api.phone, "recording")
+      .mockRejectedValue(new ApiError({ status: 409, code: "recording_not_ready", title: "Conflict", detail: "The recording is not ready yet." }));
+    const el = await render(voys());
+    await click(el, "call-play-recording");
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("not ready yet");
+    expect(el.querySelector('[data-testid="call-play-recording"]')?.textContent).toBe("Try again");
+    await click(el, "call-play-recording");
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a direct link for a provider that gives one", async () => {
+    const el = await render(entry({ recording: true, asset_url: "https://assets.aircall.io/calls/1/recording" }));
+    expect(el.querySelector('[data-testid="call-play-recording"]')).toBeNull();
+    expect(el.querySelectorAll("a").length).toBeGreaterThan(0);
   });
 });

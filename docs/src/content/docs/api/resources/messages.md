@@ -64,7 +64,7 @@ type Message = {
 
 `body_html` is sanitized before storage. For inbound email, quoted history is trimmed from the body and `has_quoted` is true; fetch `/v1/messages/{id}/original` for the full text.
 
-Inbound email also carries what the sender checks found. `reply_to` is the `Reply-To` the message named when it differs from `from_email`. `reply_address` is that `Reply-To` when replies go there: it is at the sender's own organisation (`alerts@updates.example.com` asking for answers at `ana@example.com`) and the sender passed authentication. Otherwise it is empty and replies go to `from_email`. `auth_failed` is true when its `From` failed DMARC at a trusted receiving server: treat the message as unverified. `form_sender` is set when the message came through a trusted website contact form (see [Mailboxes](/api/resources/mailboxes/#contact-forms)); `from_email` is then the visitor. The widget never receives these.
+Inbound email also carries what the sender checks found. `reply_to` is the `Reply-To` the message named when it differs from `from_email`. `reply_address` is that `Reply-To` when replies go there: it is at the sender's own organisation (`alerts@updates.example.com` asking for answers at `ana@example.com`) and the sender passed authentication. Otherwise it is empty and replies go to `from_email`. `auth_failed` is true when its `From` failed DMARC at a trusted receiving server, and that server did not record that the original passed before it was forwarded (see [Sender checks](/self-hosting/email/#sender-checks)): treat the message as unverified. `form_sender` is set when the message came through a trusted website contact form (see [Mailboxes](/api/resources/mailboxes/#contact-forms)); `from_email` is then the visitor. The widget never receives these.
 
 ## Send a reply
 
@@ -185,4 +185,4 @@ curl https://api.opendesk.sh/v1/attachments \
 { "id": "0192f0c5-...", "filename": "invoice.pdf", "content_type": "application/pdf", "size_bytes": 48211, "inline": false, "url": "..." }
 ```
 
-Uploaded attachments are unattached until a message that references them is sent. `GET /v1/attachments/{id}` redirects to a short-lived signed URL, or streams the file when the storage driver cannot sign. For `<img>` tags, where you cannot set headers, the `url` is signed (`?exp=&sig=`) and expires within two hours; fetch the message again for a fresh one.
+Uploaded attachments are unattached until a message that references them is sent. `GET /v1/attachments/{id}` redirects to a short-lived signed URL, or streams the file when the storage driver cannot sign. For `<img>` tags, where you cannot set headers, the `url` is signed (`?exp=&sig=`) and expires within two hours; fetch the message again for a fresh one. Images in a published knowledge base article or changelog entry don't expire: the help center serves them at `/_help/files/<id>`.

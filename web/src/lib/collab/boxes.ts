@@ -4,7 +4,7 @@
 import type { CollabThreadQuery } from "../api/endpoints";
 import type { MailAccount, MailBox, MailFolder, MailFolderRole } from "../api/types";
 
-export const MAIL_BOXES: readonly MailBox[] = ["inbox", "unread", "starred", "sent", "drafts", "archive", "trash", "spam", "all", "shared", "assigned", "needs_action", "snoozed", "ai_review"];
+export const MAIL_BOXES: readonly MailBox[] = ["inbox", "unread", "starred", "sent", "drafts", "archive", "trash", "spam", "all", "shared", "assigned", "mentions", "needs_action", "snoozed", "ai_review"];
 
 /** The route's box: a box, or "folder" when the `folder` search names one. */
 export type MailRouteBox = MailBox | "folder";
@@ -52,6 +52,9 @@ export function mailListQuery(box: string, s: MailSearch): CollabThreadQuery {
   if (s.folder) q.folder_id = s.folder;
   else {
     q.box = isMailBox(box) ? box : "inbox";
+    // Unread filters mail rather than holding it, so a search there finds read mail too: All mail,
+    // which holds everything Unread and Inbox show.
+    if (s.q && q.box === "unread") q.box = "all";
     if (s.account) q.account_id = s.account;
   }
   if (s.q) q.q = s.q;
@@ -137,7 +140,7 @@ export function isTabBox(v: unknown): v is TabBox {
 
 /** Whether an account has a box: the provider lists the folder; Inbox, Starred, Unread and All mail always; Archive on Gmail. */
 export function hasBox(account: Pick<MailAccount, "provider">, folders: MailFolder[] | undefined, box: MailBox): boolean {
-  if (box === "inbox" || box === "starred" || box === "unread" || box === "all" || box === "shared" || box === "assigned" || box === "needs_action" || box === "snoozed" || box === "ai_review") return true;
+  if (box === "inbox" || box === "starred" || box === "unread" || box === "all" || box === "shared" || box === "assigned" || box === "mentions" || box === "needs_action" || box === "snoozed" || box === "ai_review") return true;
   if (box === "archive" && account.provider === "google") return true;
   return !folders || !!folderWithRole(folders, box);
 }

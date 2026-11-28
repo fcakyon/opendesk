@@ -56,6 +56,8 @@ function boot() {
       start(key, base, m.mockFetch, m.mockSocket);
       // Lets a proof flow play the team taking back its latest reply.
       window.addEventListener("opendesk-mock:take-back", () => m.mockTakeBack());
+      // And the visitor opening their verification link.
+      window.addEventListener("opendesk-mock:verify", (e) => m.mockVerify((e as CustomEvent).detail === "merged"));
     });
     return;
   }

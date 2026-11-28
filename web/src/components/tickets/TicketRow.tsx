@@ -17,7 +17,7 @@ import { tone } from "@/lib/tones";
 import { AssigneeMark, Viewers } from "./people";
 import { rowMotion } from "./motion";
 import { Labels } from "@/components/contacts/bits";
-import { LiveChatBadge, NewCount, UrgentEdge, WaitPill, urgentWash, useChatWait, useHandoffBot } from "./waiting";
+import { LiveChatBadge, NewCount, UrgentEdge, WaitPill, urgentWash, useChatWait, useHandoffBot, WhatsAppBadge } from "./waiting";
 import { TicketTeamChips, useTeamsCtx } from "./teams";
 import { requesterLabel } from "./requester";
 import { browserClick } from "@/lib/links";
@@ -242,6 +242,8 @@ const Row = forwardRef<HTMLAnchorElement, RowProps>(function TicketRow(
 
   const channel = t.channel === "chat" ? (
     <LiveChatBadge urgent={urgent} handedOff={wait?.handedOff} bot={bot} />
+  ) : t.channel === "whatsapp" ? (
+    <WhatsAppBadge />
   ) : t.channel !== "email" && (
     <Tooltip content={channelLabel(t.channel)}>
       <span className="flex shrink-0">

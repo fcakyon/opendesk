@@ -9,7 +9,7 @@
 import { OLLIE_LOOK, type BotLook } from "../../src/lib/botlook";
 import type { Fetcher } from "./api";
 import type { RtChannelLike, RtSocketLike, SocketFactory } from "./realtime";
-import type { AIAction, Attachment, BotIdentity, BotRef, Conversation, Message, WidgetConfig } from "./types";
+import type { AIAction, Attachment, BotIdentity, BotRef, Conversation, Message, Verification, WidgetConfig } from "./types";
 
 const WID = "00000000-0000-4000-8000-00000000d3e0";
 const HELP = "https://margin.opendeskhelp.com/a";
@@ -196,6 +196,10 @@ export type Mock = {
   readonly lastTopic: string | null;
   /** The team takes back its latest reply in the latest conversation (deleted, or made a note): it leaves the visitor's chat. */
   takeBack(): boolean;
+  /** Verification links emailed so far. */
+  readonly verificationLinks: number;
+  /** The visitor opens their verification link: contact.verified reaches the widget; `merged`, their address was another contact's. */
+  verify(merged?: boolean): boolean;
   dispose(): void;
 };
 
@@ -221,6 +225,21 @@ export function createMock(o: MockOptions = {}): Mock {
   const uid = () => {
     const h = (++n).toString(16).padStart(4, "0") + Math.random().toString(16).slice(2, 10);
     return `${h.slice(0, 8)}-0000-4000-8000-${Date.now().toString(16).slice(-12).padStart(12, "0")}`;
+  };
+
+  // The visitor's verification: links sent to the address the form took, and whether one was opened.
+  let verified = false;
+  let sentAt = 0;
+  let links = 0;
+  const verification = (): Verification => {
+    if (verified) return { status: "verified", email: null, sent_at: null, resend_at: null };
+    if (!contact.email) return { status: "none", email: null, sent_at: null, resend_at: null };
+    return {
+      status: "unverified",
+      email: contact.email,
+      sent_at: sentAt ? new Date(sentAt).toISOString() : null,
+      resend_at: new Date(Math.max(Date.now(), sentAt + 60_000)).toISOString(),
+    };
   };
 
   // Uploaded files, attached to the message that names them.
@@ -429,7 +448,25 @@ export function createMock(o: MockOptions = {}): Mock {
     if (path === "/v1/widget/session") {
       if (typeof body.email === "string") contact.email = body.email;
       if (typeof body.name === "string") contact.name = body.name;
-      return json({ email_collected: !!contact.email, visitor_token: "od_vis_mock", contact: { ...contact }, ws_token: wsToken(), gateway_url: "wss://mock.invalid/socket/widget" });
+      return json({
+        email_collected: !!contact.email,
+        visitor_token: "od_vis_mock",
+        contact: { ...contact },
+        ws_token: wsToken(),
+        gateway_url: "wss://mock.invalid/socket/widget",
+        verification: verification(),
+      });
+    }
+    // One link while one still works; another a minute after the last (contracts/api.md "Contact verification").
+    if (path === "/v1/widget/verification" && method === "POST") {
+      const v = verification();
+      if (v.status !== "unverified" || (v.sent_at && body.resend !== true)) return json(v);
+      if (v.resend_at && Date.parse(v.resend_at) > Date.now()) {
+        return json({ status: 429, title: "Too Many Requests", code: "verification_too_soon", detail: "A verification email was sent a moment ago." }, 429);
+      }
+      sentAt = Date.now();
+      links++;
+      return json(verification());
     }
     if (path === "/v1/widget/conversations" && method === "GET") return json({ data: conversations, next_cursor: null });
     if (path === "/v1/widget/conversations" && method === "POST") {
@@ -559,6 +596,23 @@ export function createMock(o: MockOptions = {}): Mock {
       broadcast("event", { id: uid(), seq: n, type: "message.withdrawn", data: { ticket_id: latest.id, message_id: gone.id }, topics: [] });
       return true;
     },
+    get verificationLinks() {
+      return links;
+    },
+    verify(merged = false) {
+      if (verified || !contact.email) return false;
+      const id = contact.id;
+      const data = { contact_id: id, verification: { status: "verified", via: "email", verified_at: new Date().toISOString() }, merged };
+      if (merged) {
+        // The address was another contact's: this one merged into it and its session ended. The
+        // next session is a new anonymous visitor's.
+        Object.assign(contact, { id: uid(), email: null, name: "" });
+        sentAt = 0;
+        conversations.length = 0;
+      } else verified = true;
+      broadcast("event", { id: uid(), seq: n, type: "contact.verified", data, topics: [] });
+      return true;
+    },
     playShowcase() {
       if (played) return;
       played = true;
@@ -583,3 +637,5 @@ export const mockFetch: Fetcher = (url, init) => demoMock().fetch(url, init);
 export const mockSocket: SocketFactory = (url, params) => demoMock().socket(url, params);
 /** The team takes back its latest reply in the demo (the proof flow dispatches `opendesk-mock:take-back`). */
 export const mockTakeBack = () => demoMock().takeBack();
+/** The demo visitor opens their verification link (`opendesk-mock:verify`; detail "merged" for an address another contact has). */
+export const mockVerify = (merged = false) => demoMock().verify(merged);

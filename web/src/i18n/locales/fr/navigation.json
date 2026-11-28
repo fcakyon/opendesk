@@ -86,6 +86,7 @@
     "myTeams": "Mes équipes",
     "newTicket": "Nouveau ticket",
     "phone": "Téléphone",
+    "whatsapp": "WhatsApp",
     "print": "Imprimer",
     "wikiGraph": "Graphe",
     "wikiTags": "Tags",
@@ -101,7 +102,8 @@
     "open": "Tous les tickets ouverts",
     "pending": "En attente",
     "solved": "Résolus",
-    "spam": "Indésirables"
+    "spam": "Indésirables",
+    "all": "Tous les tickets"
   },
   "groups": {
     "account": "Compte",
@@ -156,7 +158,8 @@
     "auditLog": "Journal d’audit",
     "trash": "Corbeille",
     "phone": "Téléphone",
-    "pages": "Pages"
+    "pages": "Pages",
+    "whatsapp": "WhatsApp"
   },
   "settingsPage": "Page des paramètres",
   "command": {
@@ -192,7 +195,14 @@
     "aiPlayground": "Espace d’essai de l’agent IA",
     "importHistory": "Importer l’historique depuis Zendesk, Help Scout, FreeScout, Freshdesk, Intercom, Front ou un fichier CSV",
     "pages": "Pages",
-    "newPage": "Nouvelle page"
+    "newPage": "Nouvelle page",
+    "sidebarPlace": "Barre latérale",
+    "docs": "Documentation",
+    "searchSettings": "Rechercher dans les paramètres",
+    "settingsNoResults": "Aucun paramètre ne correspond",
+    "settingsNoResultsHelp": "Essayez d’autres mots, ou cherchez dans la documentation depuis le menu de commandes.",
+    "seeAll": "Voir tous les tickets pour « {{query}} »",
+    "followUp": "Suite"
   },
   "shortcuts": {
     "general": "Général",

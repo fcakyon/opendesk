@@ -87,6 +87,12 @@ func TestAIQueue(t *testing.T) {
 	if n := w.count(`SELECT count(*) FROM collab_ai_skips WHERE thread_id = $1 AND reason = 'not confident'`, t2); n != 1 {
 		t.Fatal("skip not kept")
 	}
+	// A person sees who skipped it and why (GH#431).
+	var skipped MailThreadDetail
+	if st := doJSON(t, "GET", w.api(w.agent).URL+"/v1/collab/threads/"+t2.String(), nil, &skipped); st != 200 ||
+		len(skipped.AISkips) != 1 || skipped.AISkips[0].Client != "Second drafter" || skipped.AISkips[0].Reason != "not confident" {
+		t.Fatalf("skips on the conversation: %d %+v", st, skipped.AISkips)
+	}
 	claim(bot2.URL, uuid.Nil)
 	if st := release(bot.URL, t3, map[string]any{}); st != 204 {
 		t.Fatalf("release: %d", st)
@@ -201,6 +207,65 @@ func queueWorld(t *testing.T, n int) (*world, *fakeGmail, *accountRow, []uuid.UU
 	return w, g, a, threads
 }
 
+// A key clears its own skips, all of them or those of one reason or account, and the
+// conversations are offered again without new mail. Another key's skips stay.
+func TestAIQueueClearSkips(t *testing.T) {
+	w, _, a, threads := queueWorld(t, 3)
+	t1, t2, t3 := threads[0], threads[1], threads[2]
+	botA := w.api(w.key(w.agent, "Drafter A", auth.ScopeCollabDraft))
+	botB := w.api(w.key(w.agent, "Drafter B", auth.ScopeCollabDraft))
+	skip := func(srv string, want uuid.UUID, reason string) {
+		t.Helper()
+		var r claimResp
+		if st := doJSON(t, "POST", srv+"/v1/collab/ai-queue/claim", map[string]any{}, &r); st != 200 || r.Claim == nil ||
+			r.Claim.ConversationID != want {
+			t.Fatalf("claim: %d %+v, want %s", st, r.Claim, want)
+		}
+		if st := doJSON(t, "POST", srv+"/v1/collab/ai-queue/claims/"+want.String()+"/release",
+			map[string]any{"skip": true, "reason": reason}, nil); st != 204 {
+			t.Fatalf("skip: %d", st)
+		}
+	}
+	clearSkips := func(srv string, body map[string]any) int64 {
+		t.Helper()
+		var r struct {
+			Cleared int64 `json:"cleared"`
+		}
+		if st := doJSON(t, "POST", srv+"/v1/collab/ai-queue/skips/clear", body, &r); st != 200 {
+			t.Fatalf("clear: %d", st)
+		}
+		return r.Cleared
+	}
+	skip(botA.URL, t1, "attachment")
+	skip(botA.URL, t2, "not confident")
+	skip(botA.URL, t3, "attachment")
+	skip(botB.URL, t1, "attachment")
+
+	if n := clearSkips(botA.URL, map[string]any{"reason": "unknown"}); n != 0 {
+		t.Fatalf("an unknown reason cleared %d", n)
+	}
+	if n := clearSkips(botA.URL, map[string]any{"account_id": a.ID, "reason": "attachment"}); n != 2 {
+		t.Fatalf("cleared %d, want 2", n)
+	}
+	if n := w.count(`SELECT count(*) FROM collab_ai_skips WHERE thread_id = ANY($1)`, threads); n != 2 {
+		t.Fatalf("%d skips left, want A's other reason and B's", n)
+	}
+	var r claimResp
+	if st := doJSON(t, "POST", botA.URL+"/v1/collab/ai-queue/claim", map[string]any{}, &r); st != 200 || r.Claim == nil ||
+		r.Claim.ConversationID != t1 {
+		t.Fatalf("not offered again: %d %+v", st, r.Claim)
+	}
+	if n := clearSkips(botA.URL, map[string]any{}); n != 1 {
+		t.Fatalf("cleared %d, want 1", n)
+	}
+	if n := w.count(`SELECT count(*) FROM collab_ai_skips WHERE thread_id = $1`, t1); n != 1 {
+		t.Fatal("another key's skip was cleared")
+	}
+	if st := doJSON(t, "POST", w.api(w.agent).URL+"/v1/collab/ai-queue/skips/clear", map[string]any{}, nil); st != 403 {
+		t.Fatalf("a person cleared skips: %d", st)
+	}
+}
+
 // A claim may name categories (GH#262): it is offered only conversations in them, read as
 // the inbox tabs read them, and none still waiting to be sorted. A person's move decides.
 func TestAIQueueCategories(t *testing.T) {
@@ -242,6 +307,8 @@ func TestAIQueueCategories(t *testing.T) {
 	mustExec(t, w.d, `UPDATE collab_threads SET category = 'primary', category_source = 'ai', category_pending = false WHERE id = $1`, q)
 	mustExec(t, w.d, `UPDATE collab_threads SET category = 'updates', category_source = 'rule', category_pending = false WHERE id = $1`, upd)
 	mustExec(t, w.d, `UPDATE collab_threads SET category = 'retired', category_source = 'ai', category_pending = false WHERE id = $1`, gone)
+	// From another sender: a move sorts the mover's sender's other conversations again ("Learning from moves").
+	mustExec(t, w.d, `UPDATE collab_messages SET from_addr = '{"name": "Gina", "email": "gina@elsewhere.example"}' WHERE thread_id = $1`, gone)
 	mustExec(t, w.d, `UPDATE collab_threads SET category = NULL, category_source = NULL, category_pending = true WHERE id = $1`, pending)
 
 	if id, _ := claim([]string{"updates", "updates"}, false); id != upd {
@@ -278,7 +345,7 @@ func TestAIQueueCategories(t *testing.T) {
 	}
 
 	var e apiError
-	for _, bad := range [][]string{{"Not a key"}, {"a", "b", "c", "d", "e", "f", "g", "h", "i"}} {
+	for _, bad := range [][]string{{"Not a key"}, {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"}} {
 		if st := doJSON(t, "POST", bot.URL+"/v1/collab/ai-queue/claim", map[string]any{"categories": bad}, &e); st != 422 {
 			t.Fatalf("categories %v: %d", bad, st)
 		}

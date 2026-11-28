@@ -96,14 +96,23 @@
     "title": "Délais de réponse",
     "subtitle": "Médianes sur la période",
     "fastest": "Première réponse la plus rapide",
-    "none": "Aucune réponse sur cette période pour le moment."
+    "none": "Aucune réponse sur cette période pour le moment.",
+    "yours": "Votre première réponse"
   },
   "filter": {
     "teamLabel": "Équipe : {{value}}",
     "brandLabel": "Marque : {{value}}",
+    "personLabel": "Personne : {{value}}",
+    "allPeople": "Toutes les personnes",
+    "searchPeople": "Rechercher une personne",
     "allTeams": "Toutes les équipes",
     "noTeam": "Aucune équipe",
     "private": "Privée",
+    "mailboxLabel": "Boîte mail : {{value}}",
+    "allMailboxes": "Toutes les boîtes mail",
+    "noMailbox": "Aucune boîte mail",
+    "noMailboxHint": "Chat, téléphone, API",
+    "searchMailboxes": "Rechercher des boîtes mail",
     "allBrands": "Toutes les marques",
     "searchTeams": "Rechercher des équipes",
     "searchBrands": "Rechercher des marques"

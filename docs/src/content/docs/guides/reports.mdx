@@ -16,13 +16,13 @@ The reports page shows how your support is going over a date range you choose, c
 
 <Legend>
 
-1. **Filters**: the team and brand to report on, and the date range every figure covers.
+1. **Filters**: the team, person, mailbox and brand to report on, and the date range every figure covers.
 2. **Headline numbers**: created, solved, open now, median first response and resolution, CSAT and SLA breaches, each compared with the previous period.
 3. **Volume over time**: tickets created and solved each day.
 4. **Backlog**: open work right now, by status, and how much of it is unassigned.
 5. **Breakdowns**: tickets by channel and severity in the period, and open work by priority and label.
 6. **By team** and **By brand**: created, solved, open now and median first response for each.
-7. **Leaderboard** and **Response times**: tickets each agent solved, with their median first response, and the period's medians.
+7. **Leaderboard** and **Response times**: tickets each agent solved, with their median first response, and the period's medians. Each agent's figures are personal: owners and admins see the leaderboard, and everyone else sees their own first response next to the period's medians.
 
 </Legend>
 
@@ -31,7 +31,7 @@ The reports page shows how your support is going over a date range you choose, c
 <Steps>
 <Step title="Pick a date range">
 
-Click the range at the top right and choose **Last 7 days**, **Last 30 days**, **Last 90 days**, **This month** or **Last month**, or pick your own days under **Custom range** and click **Apply range**.
+Click the range at the top right and choose **Today**, **Yesterday**, **Last 7 days**, **Last 30 days**, **Last 90 days**, **This month** or **Last month**, or pick your own days under **Custom range** and click **Apply range**. Days run from midnight to midnight in the workspace's timezone.
 
 <Screenshot src="/guides/reports/range" alt="The date range menu open: the presets from Last 7 days to Last month ringed as 1, and the custom range calendar with Apply range ringed as 2" />
 
@@ -50,9 +50,15 @@ Each headline number shows how it moved against the previous period of the same 
 <Screenshot src="/guides/reports/volume" alt="Volume over time as a table: the Chart and Table switch ringed as 1, and the daily average, busiest day and solve rate ringed as 2" />
 
 </Step>
-<Step title="Narrow to a team or brand">
+<Step title="Narrow to a team, person, mailbox or brand">
 
 Click **All teams** and pick a team, or **No team** for tickets nobody routed, to see every figure for that team only. **All brands** does the same for a brand, and shows once you have more than one. You can also click a team or brand in **By team** or **By brand**.
+
+A team's figures count the tickets routed to it. If your teams group people rather than receive routed tickets, an admin can turn on **Count a team by its people** in **Settings → Workspace**, under **Reports**: a team's figures then also count the tickets assigned to its leads and members, and **Agents** lists only them, each with all their work.
+
+Click **All people** and pick a person to count only the tickets assigned to them; **Agents** then shows their row alone. Owners and admins can pick anyone, everyone else only themselves.
+
+Once you have more than one mailbox, **All mailboxes** narrows every figure to the tickets that reply from one mailbox, or to **No mailbox** for chats, calls and other tickets without one. A ticket counts under the mailbox it replies from now.
 
 <Screenshot src="/guides/reports/teams" alt="The team filter open next to All brands: the two filters ringed as 1, and the Support team ringed as 2" />
 
@@ -83,7 +89,7 @@ Medians are used rather than averages, so one very slow ticket does not hide how
 
 ## Agents
 
-**Agents**, at the bottom of the page, has a row for each owner, admin and agent, with what they did in the period. With a team filter it lists that team's leads and members, plus anyone else who worked its tickets. Click a column heading to sort by it, and again to reverse the order; hover a heading to see what it counts.
+**Agents**, at the bottom of the page, has a row for each owner, admin and agent, with what they did in the period. With a team filter it lists that team's leads and members, plus anyone else who worked its tickets; with **Count a team by its people** on, only its leads and members, with the same figures as without the filter. Click a column heading to sort by it, and again to reverse the order; hover a heading to see what it counts.
 
 | Column | Meaning |
 | --- | --- |
@@ -98,7 +104,7 @@ Medians are used rather than averages, so one very slow ticket does not hide how
 
 <Callout>
 
-Each agent's work is personal, so owners and admins see every row and everyone else sees only their own. **Online** counts while the app is open and checking in: the web app checks in every 2 minutes while its tab is visible and the iPhone app every 5 while it is open, and a silence of more than 10 minutes ends the stretch. Being **Away** or **Offline** does not count. Online time is the whole time in the app, so the team and brand filters do not narrow it. It is kept for 400 days.
+Each agent's work is personal, so owners and admins see every row and everyone else sees only their own. **Online** counts while the app is open and checking in: the web app checks in every 2 minutes while its tab is visible and the iPhone app every 5 while it is open, and a silence of more than 10 minutes ends the stretch. Being **Away** or **Offline** does not count. Online time is the whole time in the app, so the team, mailbox and brand filters do not narrow it. It is kept for 400 days.
 
 Where recording online time needs the team's consent or a works council's agreement, an admin can turn it off in **Settings → Workspace**, under **Reports**. Turning it off deletes the online time recorded so far, nothing is recorded while it is off, and the **Online** column is gone for everyone. Turned back on, it counts from then.
 

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 // Visual mode is the rich editor with tags as pills and "{{" to insert one;
 // HTML mode edits the markup for designed signatures and layouts.
 
-import { AlertCircle, Code2, Type } from "lucide-react";
+import { AlertCircle, Code2, ImageIcon, Type } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { RichEditor, type RichEditorHandle } from "@/components/editor/RichEditor";
 import { useConfirm } from "@/components/ui/confirm";
@@ -15,10 +15,27 @@ import { cn } from "@/lib/cn";
 import { templateGroupLabel, tagFor, useCatalog } from "./catalog";
 import { insertCode, matchVars, refreshTags, templateExtension, VarSuggestPopup, type FilterInfo, type VarItem } from "./extension";
 import { VariablePicker } from "./VariablePicker";
+import { SignatureImageDialog, signatureImageHtml, type SignaturePicture } from "./SignatureImage";
 
-/** Markup the visual editor cannot keep: layout tables, styles, sized images. */
+/** Markup the visual editor cannot keep: layout tables, styles, pictures with more than a source, a description, a title and a size in pixels. */
 export function needsHtml(html: string): boolean {
-  return /<(table|td|tr|div|font|center|span)\b|\sstyle=|<img\b[^>]*\s(width|height)=/i.test(html);
+  return /<(table|td|tr|div|font|center|span)\b|\sstyle=/i.test(html) || hasHtmlImage(html);
+}
+
+const IMG_TAG = /<img\b((?:"[^"]*"|'[^']*'|[^'">])*)>/gi;
+const IMG_ATTR = /([^\s"'=/>]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>]*))?/g;
+
+/** Whether an <img> has what the visual editor drops: an attribute other than src, alt and title, or a width or height that is not a number of pixels (border, align, hspace, class, width="50%"). */
+export function hasHtmlImage(html: string): boolean {
+  for (const [, attrs] of html.matchAll(IMG_TAG)) {
+    for (const [, name, raw = ""] of attrs.matchAll(IMG_ATTR)) {
+      const n = name.toLowerCase();
+      if (n === "src" || n === "alt" || n === "title") continue;
+      if ((n === "width" || n === "height") && /^\d+$/.test(raw.replace(/^(["'])(.*)\1$/, "$2").trim())) continue;
+      return true;
+    }
+  }
+  return false;
 }
 
 /** What in html the visual editor would lose, in plain words (needsHtml's reasons). */
@@ -26,7 +43,7 @@ export function htmlReasons(html: string): string[] {
   const out: string[] = [];
   if (/<(table|td|tr)\b/i.test(html)) out.push("a table layout");
   if (/\sstyle=/i.test(html)) out.push("inline styles");
-  if (/<img\b[^>]*\s(width|height)=/i.test(html)) out.push("sized images");
+  if (hasHtmlImage(html)) out.push("pictures with HTML attributes");
   if (!out.length && /<(div|font|center|span)\b/i.test(html)) out.push("lines and fonts set in HTML");
   return out;
 }
@@ -57,10 +74,12 @@ export type TemplateEditorProps = {
   /** Template tags: the picker, "{{" suggestions and tags as pills. Off for HTML that is not filled (a mail account's signature). */
   variables?: boolean;
   onModeChange?: (mode: "visual" | "html") => void;
+  /** A picture button that uploads to a public address (signatures). */
+  images?: boolean;
 };
 
 export const TemplateEditor = forwardRef<TemplateEditorHandle, TemplateEditorProps>(function TemplateEditor(
-  { value, onChange, kind, ariaLabel, placeholder, html: allowHtml, htmlOnly, toolbar = "compact", minHeight = 96, disabled, framed = true, className, problems, variables = true, onModeChange },
+  { value, onChange, kind, ariaLabel, placeholder, html: allowHtml, htmlOnly, toolbar = "compact", minHeight = 96, disabled, framed = true, className, problems, variables = true, onModeChange, images },
   ref,
 ) {
   const { t: ui } = useTranslation("ui");
@@ -161,6 +180,33 @@ export const TemplateEditor = forwardRef<TemplateEditorHandle, TemplateEditorPro
     setMode(next);
   };
 
+  // A picture: added at the caret, or the selected one changed (its size, its description).
+  const [picture, setPicture] = useState<{ open: boolean; initial?: SignaturePicture }>({ open: false });
+  const openPicture = () => {
+    const editor = mode === "visual" ? rich.current?.editor : null;
+    const a = editor?.isActive("image") ? (editor.getAttributes("image") as { src?: string; alt?: string | null; width?: number | string | null; height?: number | string | null }) : null;
+    const width = Number(a?.width);
+    const height = Number(a?.height);
+    setPicture({
+      open: true,
+      initial: a?.src && width > 0 ? { src: a.src, alt: a.alt ?? "", width, height: height > 0 ? height : undefined } : undefined,
+    });
+  };
+  const placePicture = (p: SignaturePicture) => {
+    const editing = !!picture.initial;
+    setPicture({ open: false });
+    if (mode === "html") {
+      insert(signatureImageHtml(p));
+      return;
+    }
+    const chain = rich.current?.editor?.chain().focus();
+    if (!chain) return;
+    const attrs = { src: p.src, alt: p.alt, width: p.width, height: p.height };
+    if (editing) chain.updateAttributes("image", attrs).run();
+    else chain.setImage(attrs).run();
+  };
+  const pictureOn = images && !disabled;
+
   const picker = variables && <VariablePicker kind={kind} onPick={(k) => insert(tagFor(k))} onInsert={insertWithSelection} />;
   // Why it is HTML: what the visual editor would remove.
   const reasons = mode === "html" && !htmlOnly && allowHtml ? htmlReasons(value) : [];
@@ -195,6 +241,7 @@ export const TemplateEditor = forwardRef<TemplateEditorHandle, TemplateEditorPro
             ariaLabel={ariaLabel}
             editable={!disabled}
             toolbar={toolbar}
+            onImage={pictureOn ? openPicture : undefined}
             extensions={variables ? extensions : undefined}
             contentClassName="min-h-[var(--tpl-min)]"
             toolbarEnd={
@@ -225,6 +272,16 @@ export const TemplateEditor = forwardRef<TemplateEditorHandle, TemplateEditorPro
             <div className="flex items-center gap-1 border-t border-line-soft px-1.5 py-1">
               <span className="px-1.5 text-[11.5px] text-fg-4">{ui("scriptsFormsAndRemoteStylesAreRemovedWhenYou")}</span>
               <div className="ml-auto flex items-center gap-1">
+                {pictureOn && (
+                  <button
+                    type="button"
+                    aria-label={ui("image")}
+                    onClick={openPicture}
+                    className="flex size-7 items-center justify-center rounded-md text-fg-3 transition-colors hover:bg-hover hover:text-fg [&_svg]:size-[15px]"
+                  >
+                    <ImageIcon />
+                  </button>
+                )}
                 {modeToggle}
                 {picker}
               </div>
@@ -235,6 +292,9 @@ export const TemplateEditor = forwardRef<TemplateEditorHandle, TemplateEditorPro
       {problems && problems.length > 0 && <Problems problems={problems} />}
       {!disabled && variables && <TemplateHint />}
       {mode === "visual" && variables && <VarSuggestPopup />}
+      {pictureOn && (
+        <SignatureImageDialog open={picture.open} onOpenChange={(open) => setPicture((s) => ({ ...s, open }))} initial={picture.initial} onDone={placePicture} />
+      )}
     </div>
   );
 });

@@ -194,12 +194,15 @@ func (s *Service) WidgetAnswer(ctx context.Context, a jobs.AIWidgetAnswerArgs) e
 	if last.ID != a.MessageID || last.Direction != "inbound" {
 		return nil // the visitor wrote again (that job replies) or someone replied
 	}
-	if ac.replies >= max(ac.set.WidgetMaxReplies, 1) || wantsPerson.MatchString(messageText(last)) {
-		return s.handoffWithLine(ctx, ac, a)
+	if wantsPerson.MatchString(messageText(last)) {
+		return s.handoffWithLine(ctx, ac, a, hd.HandoffRuleVisitor)
+	}
+	if ac.replies >= max(ac.set.WidgetMaxReplies, 1) {
+		return s.handoffWithLine(ctx, ac, a, hd.HandoffRuleReplyLimit)
 	}
 	if capped, err := s.agentCapped(ctx, a.WorkspaceID, ac.set); err != nil || capped {
 		if capped {
-			return s.decline(ctx, a.WorkspaceID, a.TicketID, a.MessageID)
+			return s.decline(ctx, a.WorkspaceID, a.TicketID, a.MessageID, hd.SkipMonthlyCap, ac.bot)
 		}
 		return err
 	}
@@ -381,6 +384,7 @@ func (s *Service) replyAndPost(ctx context.Context, in agentInput, trigger uuid.
 	}
 	if in.handOver {
 		res.Handoff, res.Action = true, nil
+		res.HandoffRule = in.handRule
 	}
 	messageID, actionID, err := s.postReply(ctx, in, trigger, res)
 	if errors.Is(err, errStale) {
@@ -479,7 +483,7 @@ func (s *Service) postReply(ctx context.Context, in agentInput, trigger uuid.UUI
 			}
 		}
 		if res.Handoff {
-			if _, err := hd.MarkAIHandoff(ctx, tx, wid, tid, "ai", handoffBot(in.bot)); err != nil && !db.IsNotFound(err) {
+			if _, err := hd.MarkAIHandoff(ctx, tx, wid, tid, "ai", handoffBot(in.bot, res.HandoffRule, res.HandoffReason)); err != nil && !db.IsNotFound(err) {
 				return err
 			}
 		}
@@ -488,14 +492,38 @@ func (s *Service) postReply(ctx context.Context, in agentInput, trigger uuid.UUI
 	return messageID, actionID, err
 }
 
-// decline records that the agent did not reply to this message; the team handles it.
-func (s *Service) decline(ctx context.Context, wid, tid, mid uuid.UUID) error {
-	_, err := s.d.DB.Pool.Exec(ctx, `INSERT INTO ai_widget_answers (message_id, workspace_id, ticket_id, answered) VALUES ($1, $2, $3, false)
-		ON CONFLICT DO NOTHING`, mid, wid, tid)
+// decline records that the agent (bot) did not reply to this message and why; the team handles it.
+func (s *Service) decline(ctx context.Context, wid, tid, mid uuid.UUID, reason string, bot bots.Bot) error {
+	err := s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `INSERT INTO ai_widget_answers (message_id, workspace_id, ticket_id, answered) VALUES ($1, $2, $3, false)
+			ON CONFLICT DO NOTHING`, mid, wid, tid)
+		if err != nil || tag.RowsAffected() == 0 {
+			return err
+		}
+		return logAISkipped(ctx, tx, wid, tid, reason, bot)
+	})
 	if err != nil {
 		return err
 	}
 	return s.assignWaitingChat(ctx, wid, tid)
+}
+
+// logAISkipped records on the ticket why the agent left the customer's message unanswered,
+// and the bot it answers as, for the team only (contracts/agent.md "Why it did not answer").
+func logAISkipped(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, reason string, bot bots.Bot) error {
+	var live bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM tickets WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL)`, wid, tid).Scan(&live); err != nil || !live {
+		return err
+	}
+	data := map[string]any{"reason": reason}
+	if bot.Name != "" {
+		data["bot"] = bot.Name
+	}
+	if id := bot.IDPtr(); id != nil {
+		data["bot_id"] = id.String()
+	}
+	_, err := domain.LogActivity(ctx, tx, wid, tid, "ai", nil, "ai_skipped", data)
+	return err
 }
 
 // assignWaitingChat gives a chat the agent leaves unanswered to a member who takes chats.
@@ -509,21 +537,23 @@ func (s *Service) assignWaitingChat(ctx context.Context, wid, tid uuid.UUID) err
 // handoffWithLine hands the conversation off with the agent's line to the visitor first: a
 // person will reply here, and what the team will need. Past the monthly cap, or when the
 // model fails, it hands off without a reply.
-func (s *Service) handoffWithLine(ctx context.Context, ac *agentConv, a jobs.AIWidgetAnswerArgs) error {
+func (s *Service) handoffWithLine(ctx context.Context, ac *agentConv, a jobs.AIWidgetAnswerArgs, rule string) error {
 	if capped, err := s.agentCapped(ctx, a.WorkspaceID, ac.set); err == nil && !capped {
 		in := ac.input(a.WorkspaceID, a.TicketID, a.PageURL)
-		in.handOver = true
+		in.handOver, in.handRule = true, rule
 		if err := s.replyAndPost(ctx, in, a.MessageID); err != nil {
 			s.d.Log.Warn("handoff line failed; handing off without it", "ticket_id", a.TicketID, "err", err)
 		}
 	}
 	// A no-op when the reply handed off; otherwise (capped, failed, or the conversation moved
 	// on while the model ran) the handoff alone.
-	return s.handoff(ctx, a.WorkspaceID, a.TicketID, a.MessageID, handoffBot(ac.bot))
+	return s.handoff(ctx, a.WorkspaceID, a.TicketID, a.MessageID, handoffBot(ac.bot, rule, ""))
 }
 
-// handoffBot is the bot as a handoff records it.
-func handoffBot(b bots.Bot) hd.HandoffBot { return hd.HandoffBot{ID: b.IDPtr(), Name: b.Name} }
+// handoffBot is the bot as a handoff records it, with the rule that handed over and why.
+func handoffBot(b bots.Bot, rule, reason string) hd.HandoffBot {
+	return hd.HandoffBot{ID: b.IDPtr(), Name: b.Name, Rule: rule, Reason: reason}
+}
 
 // handoff stops the agent for this conversation and alerts the team, without a reply.
 // bot is the bot handing over.

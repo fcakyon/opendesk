@@ -5,6 +5,7 @@
 // (its folders unfold on request) with its own Assigned to me under it while it has some. Unread counts come from GET /v1/collab/counts, kept
 // fresh by collab.changed events.
 
+import { accountView, useAccountViews } from "@/lib/collab/accountView";
 import { applyRowOrder } from "@/lib/collab/rowOrder";
 import type { EditSource } from "@/lib/collab/sidebarEditModel";
 import { useQuery } from "@tanstack/react-query";
@@ -159,7 +160,8 @@ function AccountAlert({ account }: { account: MailAccount }) {
 }
 
 /**
- * One account: a single row that opens its inbox, with its unread count. Its other
+ * One account: a single row that opens its inbox (or Unread, when that was used last for
+ * it), with its unread count. Its other
  * folders stay folded until asked for (the mail page's folder bar has every one), so
  * Mail never pushes the ticket inbox out of sight.
  */
@@ -201,7 +203,10 @@ function AccountGroup({
     items: handOver ? [{ label: tInbox("inboxes.useForTickets"), icon: <Inbox />, onSelect: () => quickAdd.inbox({ accountId: account.id }) }] : undefined,
   };
   const expanded = !rail && prefs.expanded_accounts.includes(account.id);
-  const atInbox = here.box === "inbox" && here.account === account.id && !here.folder;
+  // The row opens Inbox or Unread, whichever was used last for the account (GH#523).
+  useAccountViews();
+  const view = accountView(account.id, here);
+  const atView = here.box === view && here.account === account.id && !here.folder;
   const assignedHere = here.box === "assigned" && here.account === account.id;
   const trouble = account.reconnect || account.status === "error";
   if (trouble)
@@ -213,8 +218,8 @@ function AccountGroup({
   if (rail)
     return (
       <MailRow
-        link={{ box: "inbox", account: account.id }}
-        active={atInbox}
+        link={{ box: view, account: account.id }}
+        active={atView}
         icon={<span className="flex size-[15px] shrink-0 items-center justify-center"><AccountDot color={account.color} className="size-2.5" /></span>}
         label={name}
         shown={shown}
@@ -240,8 +245,8 @@ function AccountGroup({
     <div className="flex flex-col gap-px">
       <div className="group/account relative">
         <MailRow
-          link={{ box: "inbox", account: account.id }}
-          active={atInbox}
+          link={{ box: view, account: account.id }}
+          active={atView}
           icon={
             <span className="flex size-[15px] shrink-0 items-center justify-center">
               <AccountDot color={account.color} className={cn("size-2.5 transition-opacity", expanded ? "opacity-0" : "group-hover/account:opacity-0")} />
@@ -340,15 +345,16 @@ function AccountGroup({
   );
 }
 
-export function MailSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail: boolean; first: boolean }) {
+/** `shown`: the prefs it shows by, when a Space arranges it (components/spaces/arranged.ts); its menus change `prefs`. */
+export function MailSection({ prefs, shown: view = prefs, rail, first }: { prefs: SidebarPrefs; shown?: SidebarPrefs; rail: boolean; first: boolean }) {
   const { t } = useTranslation("collab");
   const { data: accounts } = useMailAccounts();
   const { data: counts } = useQuery(q.mailCounts());
   const folders = useAllFolders(accounts);
   const here = useMailLocation();
-  const hidden = new Set(prefs.hidden);
+  const hidden = new Set(view.hidden);
   // In the member's order (contracts/collab.md "Row order").
-  const shown = applyRowOrder((accounts ?? []).filter((a) => !hidden.has(hid.account(a.id))), (a) => hid.account(a.id), prefs.row_order.mail);
+  const shown = applyRowOrder((accounts ?? []).filter((a) => !hidden.has(hid.account(a.id))), (a) => hid.account(a.id), view.row_order.mail);
   const unified = prefs.unified_inbox && (accounts?.length ?? 0) >= 2 && !hidden.has(hid.box("inbox"));
   // Each account shows its own assigned conversations; the row across them shows while they
   // span two accounts, or some are in an account without a row here (and always on the rail,
@@ -417,6 +423,20 @@ export function MailSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail:
           rail={rail}
           prefs={prefs}
           menu={{ badge: { key: "box:assigned", kind: "mail", sections: ["mail"] }, pin: { kind: "box", id: "assigned" }, hideId: hid.box("assigned") }}
+        />
+      )}
+      {/* Conversations where a teammate mentioned or answered you, out of the inbox's way, until
+          you remove yourself (contracts/collab.md "Mentions"). Shown while it holds any, or while open. */}
+      {!hidden.has(hid.box("mentions")) && (here.box === "mentions" || !!counts?.boxes.mentions) && (
+        <MailRow
+          link={{ box: "mentions" }}
+          active={here.box === "mentions"}
+          icon={boxIcon.mentions}
+          label={t("box.mentions")}
+          shown={mailShown(prefs, "box:mentions", ["mail"], listBoxNumbers("mentions", counts))}
+          rail={rail}
+          prefs={prefs}
+          menu={{ badge: { key: "box:mentions", kind: "mail", sections: ["mail"] }, pin: { kind: "box", id: "mentions" }, hideId: hid.box("mentions") }}
         />
       )}
       {/* AI drafts waiting for a person to send, edit or discard (contracts/collab.md "AI queue"). */}
@@ -488,7 +508,7 @@ export function MailSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail:
  * (components/spaces/rows.tsx), and pinned view sections with their views, folded here on
  * their own (app/ViewSectionGroup.tsx).
  */
-export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; rail: boolean; first: boolean }) {
+export function FavoritesSection({ prefs, shown = prefs, rail, first }: { prefs: SidebarPrefs; shown?: SidebarPrefs; rail: boolean; first: boolean }) {
   const { t } = useTranslation("collab");
   const waitingFor = useWaitingFor();
   const here = useMailLocation();
@@ -502,7 +522,8 @@ export function FavoritesSection({ prefs, rail, first }: { prefs: SidebarPrefs; 
   if (!data) return null;
   // A favorite is unpinned rather than hidden, and reads Favorites' number first, then its own section's.
   const ctx = { labels, via: ["favorites"] as SidebarSectionId[], here, waiting: waitingFor };
-  const pins = livePins<Favorite>(prefs, (pin) => {
+  // In a Space that adds rows to Favorites, its rows come first (lib/spaces/arrange.ts).
+  const pins = livePins<Favorite>(shown, (pin) => {
     if (pin.kind !== "view_section") {
       const model = buildRow(pin, data, ctx);
       return model && { kind: "row", model };

@@ -55,7 +55,7 @@ type listIn struct {
 	Tag        string `query:"tag" doc:"Comma-separated label names: tickets carrying any of them"`
 	TagNot     string `query:"tag_not" doc:"Comma-separated label names: tickets carrying none of them"`
 	Untagged   bool   `query:"untagged" doc:"Tickets carrying no label"`
-	Channel    string `query:"channel" enum:"email,chat,api,portal,phone,"`
+	Channel    string `query:"channel" enum:"email,chat,api,portal,phone,whatsapp,"`
 	ChannelNot string `query:"channel_not" doc:"Comma-separated channels: tickets on none of them"`
 	ContactID  string `query:"contact_id"`
 	ContactNot string `query:"contact_not" doc:"Comma-separated contact ids: tickets whose contact is none of them"`
@@ -64,8 +64,10 @@ type listIn struct {
 	Q          string `query:"q" maxLength:"200" doc:"Full text over tickets and contacts, exact ticket alias, or #number"`
 	Spam       string `query:"spam" enum:"true,false,any," doc:"Default false (spam hidden); true lists only spam"`
 	Merged     string `query:"merged" enum:"true,false,any," doc:"Default any; false leaves out tickets merged into another, true lists only those"`
-	Sort       string `query:"sort" maxLength:"60" doc:"last_message_at (default), created_at, priority, severity, due or field.<key>"`
-	Order      string `query:"order" enum:"asc,desc," doc:"Default desc, asc for due"`
+	// TeamMembers is how the reports page lists a team's open work when settings.reports_team_members is on.
+	TeamMembers bool   `query:"team_members" doc:"With team_id: also the tickets assigned to the leads and members of the teams it names"`
+	Sort        string `query:"sort" maxLength:"60" doc:"last_message_at (default), created_at, priority, severity, due or field.<key>"`
+	Order       string `query:"order" enum:"asc,desc," doc:"Default desc, asc for due"`
 
 	fields    []hd.FieldFilter
 	fieldsErr error
@@ -135,7 +137,7 @@ func ticketListQuery(ctx context.Context, q db.Querier, p *auth.Principal, in li
 	if f.ChannelNot, err = validEnum(f.ChannelNot, domain.Channels, "channel_not"); err != nil {
 		return listQuery{}, err
 	}
-	return forCaller(ctx, q, p, listQuery{TicketFilters: f, ContactID: in.ContactID, Spam: in.Spam, Merged: in.Merged})
+	return forCaller(ctx, q, p, listQuery{TicketFilters: f, ContactID: in.ContactID, Spam: in.Spam, Merged: in.Merged, TeamMembers: in.TeamMembers})
 }
 
 // Resolve reads the field.<key> and field.<key>[op] parameters (custom field filters).
@@ -147,6 +149,12 @@ func (in *listIn) Resolve(ctx huma.Context) []error {
 type ticketContactInput struct {
 	Email string `json:"email" maxLength:"254"`
 	Name  string `json:"name,omitempty" maxLength:"200"`
+}
+
+// ticketRecipient is one more person a new ticket's first email goes to, beside its contact.
+type ticketRecipient struct {
+	ContactID string `json:"contact_id,omitempty" doc:"A contact of this workspace with an email address"`
+	Email     string `json:"email,omitempty" maxLength:"254"`
 }
 
 type ticketCreateBody struct {
@@ -166,11 +174,15 @@ type ticketCreateBody struct {
 	BrandID       string              `json:"brand_id,omitempty" doc:"Default: the mailbox's brand, else the default brand"`
 	Tags          []string            `json:"tags,omitempty" maxItems:"50"`
 	Status        string              `json:"status,omitempty" enum:"open,pending,on_hold,solved,closed"`
+	To            []ticketRecipient   `json:"to,omitempty" maxItems:"19" doc:"Email replies: more people the first email goes to, after the contact. Each is contact_id or email"`
 	Cc            []string            `json:"cc,omitempty" maxItems:"20"`
 	Bcc           []string            `json:"bcc,omitempty" maxItems:"20"`
 	AttachmentIDs []string            `json:"attachment_ids,omitempty" maxItems:"20"`
 	Custom        map[string]any      `json:"custom,omitempty"`
 	Fields        map[string]any      `json:"fields,omitempty" doc:"Custom field values by key"`
+	// notice: a ticket of a message to many customers. Made solved, it asks for no satisfaction
+	// rating and for none of the fields an agent fills before solving a ticket.
+	notice bool `json:"-"`
 }
 
 // CreateInput is the trusted internal surface for creating a ticket through the
@@ -285,6 +297,52 @@ func cleanEmail(s string) (string, error) {
 		return "", httpx.Validation(fmt.Sprintf("%q is not a valid email address", hd.Truncate(s, 80)))
 	}
 	return s, nil
+}
+
+// moreRecipients is who else a new ticket's first email goes to: each a contact of the
+// workspace with an address, or an address, lowercased, leaving out the ticket's contact and
+// anyone named twice.
+func moreRecipients(ctx context.Context, q db.Querier, wid uuid.UUID, in []ticketRecipient, contactEmail *string) ([]string, error) {
+	seen := map[string]bool{}
+	if contactEmail != nil {
+		seen[strings.ToLower(*contactEmail)] = true
+	}
+	out := []string{}
+	for _, r := range in {
+		var email string
+		switch {
+		case r.ContactID != "" && r.Email != "":
+			return nil, httpx.Validation("each of to is a contact_id or an email, not both")
+		case r.ContactID != "":
+			id, err := hd.ParseRef(r.ContactID, "to.contact_id")
+			if err != nil {
+				return nil, err
+			}
+			var addr *string
+			err = q.QueryRow(ctx, `SELECT email FROM contacts WHERE workspace_id = $1 AND id = $2`, wid, id).Scan(&addr)
+			if db.IsNotFound(err) {
+				return nil, httpx.Validation("contact not found in this workspace")
+			}
+			if err != nil {
+				return nil, err
+			}
+			if addr == nil || *addr == "" {
+				return nil, httpx.Validation("a contact in to has no email address")
+			}
+			email = strings.ToLower(*addr)
+		default:
+			e, err := cleanEmail(r.Email)
+			if err != nil {
+				return nil, err
+			}
+			email = e
+		}
+		if !seen[email] {
+			seen[email] = true
+			out = append(out, email)
+		}
+	}
+	return out, nil
 }
 
 func cleanEmails(in []string) ([]string, error) {
@@ -658,7 +716,7 @@ func createTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 		if err != nil {
 			return domain.Ticket{}, err
 		}
-		if closing(nt.Status) {
+		if closing(nt.Status) && !b.notice {
 			if err := domain.CheckRequiredOnSolve(defs, fields); err != nil {
 				return domain.Ticket{}, err
 			}
@@ -725,8 +783,8 @@ func createTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 			return domain.Ticket{}, httpx.Validation("an inbound message is a reply, not a note")
 		case nt.ContactID == nil:
 			return domain.Ticket{}, httpx.Validation("an inbound message needs a contact to speak for")
-		case len(b.Cc)+len(b.Bcc) > 0:
-			return domain.Ticket{}, httpx.Validation("cc and bcc are for messages sent")
+		case len(b.To)+len(b.Cc)+len(b.Bcc) > 0:
+			return domain.Ticket{}, httpx.Validation("to, cc and bcc are for messages sent")
 		case nt.Channel == domain.ChannelChat:
 			return domain.Ticket{}, httpx.Validation("a chat's visitor writes their own messages in the widget")
 		}
@@ -746,6 +804,13 @@ func createTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 		if kind == "reply" && !inbound && (contactEmail == nil || *contactEmail == "") {
 			return domain.Ticket{}, httpx.Validation("an email reply needs a contact with an email address")
 		}
+	}
+	if len(b.To) > 0 && (nt.Channel != domain.ChannelEmail || kind != "reply" || inbound) {
+		return domain.Ticket{}, httpx.Validation("to applies to an email ticket's first reply")
+	}
+	moreTo, err := moreRecipients(ctx, tx, wid, b.To, contactEmail)
+	if err != nil {
+		return domain.Ticket{}, err
 	}
 
 	if b.AssigneeID != "" {
@@ -928,7 +993,8 @@ func createTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 			nm.AuthorType = "api"
 		}
 		if kind == "reply" && nt.Channel == domain.ChannelEmail {
-			nm.To, nm.Cc, nm.Bcc = []string{*contactEmail}, cc, bcc
+			// The contact first, then the others it went to: later replies and Reply all read them here.
+			nm.To, nm.Cc, nm.Bcc = append([]string{*contactEmail}, moreTo...), cc, bcc
 			nm.FromEmail, nm.FromName = mailboxEmail, mailboxName
 			nm.MailboxID = nt.MailboxID
 			nm.DeliveryStatus = "pending"
@@ -959,7 +1025,7 @@ func createTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 			return domain.Ticket{}, err
 		}
 	}
-	if nt.Status == domain.StatusSolved {
+	if nt.Status == domain.StatusSolved && !b.notice {
 		if err := requestCSAT(ctx, tx, d, wid, t.ID); err != nil {
 			return domain.Ticket{}, err
 		}
@@ -1212,8 +1278,8 @@ func checkChatStart(b ticketCreateBody, kind string) error {
 	if kind != "reply" {
 		return httpx.Validation("a chat starts with a reply, not a note")
 	}
-	if b.MailboxID != "" || len(b.Cc) > 0 || len(b.Bcc) > 0 {
-		return httpx.Validation("mailbox_id, cc and bcc are for email")
+	if b.MailboxID != "" || len(b.To) > 0 || len(b.Cc) > 0 || len(b.Bcc) > 0 {
+		return httpx.Validation("mailbox_id, to, cc and bcc are for email")
 	}
 	return nil
 }

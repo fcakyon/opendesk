@@ -24,6 +24,9 @@ export type User = {
 export type TimeFormat = "auto" | "12h" | "24h";
 export type UserRef = { id: string; name: string; email: string; avatar_url: string | null };
 
+/** POST /v1/signature-images: a stored signature picture, a PNG of at most 600 px on its longer side. */
+export type SignatureImage = { url: string; width: number; height: number };
+
 export type WorkspaceSettings = {
   /** Whether ticketing is enabled for this workspace. Defaults to true. */
   tickets_enabled?: boolean;
@@ -70,6 +73,8 @@ export type WorkspaceSettings = {
   send_and_finish_button?: boolean;
   /** Heartbeats count toward each member's online time, shown in the agents report. Default true; false records and shows none. */
   agent_online_time?: boolean;
+  /** In the reports, a team is its people: its figures also count the tickets assigned to its leads and members, and the agents report lists them alone. Default false. */
+  reports_team_members?: boolean;
   /** Emails to customers carry the ticket number in their subject as "[#n]". Default true; false leaves it out and replies thread by their headers, except that an email starting a ticket's conversation keeps it where the mailbox's sending changes or hides its Message-ID. */
   ticket_number_in_subject?: boolean;
   /** Tickets have a severity beside their priority. Default true; false leaves it out of the app, and AI never sets it. The API still reads and writes it. */
@@ -333,10 +338,30 @@ export type Contact = {
   ticket_count: number;
   /** The team can start a chat with them: verified in a widget, or with a live widget session. */
   chat_reachable?: boolean;
+  /** Whether they proved who they are (contracts/api.md "Contact verification"). Older servers omit it. */
+  verification?: ContactVerification;
   created_at: string;
   updated_at: string;
 };
-export type ContactRef = { id: string; email: string | null; name: string; avatar_url: string | null };
+/**
+ * verified: they opened a link emailed to their address, or signed in on a widget with identity
+ * verification; unverified: a chat visitor whose address came through the widget, not confirmed yet.
+ */
+export type ContactVerification = {
+  status: "verified" | "unverified" | "none";
+  via: "email" | "identity" | null;
+  verified_at: string | null;
+};
+/** What the chat verification page shows of its link (POST /v1/public/chat-verification). */
+export type ChatVerificationPage = {
+  status: "pending" | "verified";
+  email: string;
+  brand_name: string;
+  brand_color: string;
+  locale: string;
+  locale_fixed: boolean;
+};
+export type ContactRef ={ id: string; email: string | null; name: string; avatar_url: string | null };
 export type Company = {
   id: string;
   name: string;
@@ -359,8 +384,8 @@ export type TicketStatus = "open" | "pending" | "on_hold" | "solved" | "closed";
 export type Priority = "low" | "normal" | "high" | "urgent";
 /** Business impact; sev1 is the most severe. A ticket may have none. */
 export type Severity = "sev1" | "sev2" | "sev3" | "sev4";
-/** phone: a ticket a call opened (contracts/phone.md). */
-export type Channel = "email" | "chat" | "api" | "portal" | "phone";
+/** phone: a ticket a call opened (contracts/phone.md); whatsapp: a WhatsApp number's (contracts/whatsapp.md). */
+export type Channel = "email" | "chat" | "api" | "portal" | "phone" | "whatsapp";
 // Labels ("tags" in the API) and custom fields (contracts/api.md "Labels and custom fields").
 export type LabelColor =
   | "gray" | "red" | "orange" | "amber" | "yellow" | "lime" | "green" | "teal" | "cyan" | "blue" | "indigo" | "violet" | "purple" | "pink" | "rose";
@@ -545,6 +570,12 @@ export type Message = {
   attachments: Attachment[];
   delivery_status: DeliveryStatus;
   delivery_error: string;
+  /**
+   * What the channel's provider reported (contracts/whatsapp.md "Delivery"): a WhatsApp message
+   * carries provider_status (sent, delivered, read, failed), provider_error and the template it
+   * was sent from under whatsapp_template.
+   */
+  delivery_meta?: Record<string, unknown>;
   /** A reply from the widget AI agent (contracts/agent.md). */
   ai: boolean;
   /** An action the agent asks the visitor to confirm; set only on agent messages that carry one. */
@@ -652,6 +683,8 @@ export type CallData = {
   asset_url: string;
   /** Direct links, working until links_expire_at. */
   recording_url: string;
+  /** The provider only serves the recording to the connection: it plays through the app. */
+  recording_stream?: boolean;
   voicemail_url: string;
   links_expire_at: string | null;
   tags: string[];
@@ -1282,6 +1315,76 @@ export type PhoneConnection = {
   created_at: string;
 };
 export type PhoneLine = { id: string; name: string; provider: string };
+/** A WhatsApp Business number connected to the workspace (contracts/whatsapp.md). Credentials are never returned. */
+export type WhatsAppConnection = {
+  id: string;
+  workspace_id?: string;
+  brand_id?: string;
+  name: string;
+  phone_number_id: string;
+  waba_id: string;
+  display_phone_number: string;
+  verified_name: string;
+  api_version: string;
+  status: "connected" | "error";
+  last_error: string;
+  last_event_at?: string | null;
+  /** Where Meta delivers this number's messages: admins only. */
+  webhook_url?: string;
+  created_at: string;
+  updated_at: string;
+};
+/** A WhatsApp ticket's conversation as the server will send on it (contracts/whatsapp.md "Tickets"). */
+export type WhatsAppTicketState = {
+  /** The connection that holds the ticket's number now; null while the number is not connected. */
+  connection_id: string | null;
+  connection_name: string;
+  display_phone_number: string;
+  /** Whether a free-form reply may go out now. A template may go out any time. */
+  window_open: boolean;
+  /** When the 24 hour window closes or closed; null when the customer never wrote to this number. */
+  window_closes_at: string | null;
+};
+/** A template approved at Meta and synced into the workspace (contracts/whatsapp.md "Templates"). */
+export type WhatsAppTemplate = {
+  id: string;
+  connection_id?: string;
+  name: string;
+  language: string;
+  category: string;
+  /** APPROVED, PENDING, REJECTED and anything else Meta reports. */
+  status: string;
+  header_type?: string;
+  header_content?: string;
+  body_content: string;
+  footer_content?: string;
+  buttons?: WhatsAppTemplateButton[];
+  created_at?: string;
+  updated_at?: string;
+};
+export type WhatsAppTemplateButton = {
+  type?: string;
+  text?: string;
+  url?: string;
+  [key: string]: unknown;
+};
+/** What an outbound WhatsApp message's delivery_meta holds. */
+export type WhatsAppDeliveryMeta = {
+  provider_status?: "sent" | "delivered" | "read" | "failed";
+  provider_error?: string;
+  /** Meta's numeric error code, e.g. 131047 for a closed window. */
+  provider_error_code?: number;
+  whatsapp_template?: {
+    id?: string;
+    name?: string;
+    language?: string;
+    body?: string;
+    params?: Record<string, string>;
+    header_type?: string;
+    header_text?: string;
+    button_urls?: Record<string, string>;
+  };
+};
 export type SupportChannelConnection = {
   id: string;
   provider: string;
@@ -1331,12 +1434,16 @@ export type SupportChannelDestination = {
   /** How Ollie sounds in this channel's threads; empty for the default. */
   ollie_personality: string;
   ollie_length: SupportChannelOllieLength;
+  /** The lowest role that may act on tickets from this channel's threads. */
+  min_role: "agent" | "admin";
+  /** When not empty, only these members may act from this channel. */
+  allowed_user_ids: string[];
   created_at: string;
 };
 export type SupportChannelDestinationMode = "route" | "copy";
 export type SupportChannelMirror = "customer_replies" | "agent_replies" | "status_changes" | "assignee_changes" | "priority_changes";
 /** Where a destination's threads start and what they show; the create and update bodies share it. */
-export type SupportChannelRouting = Partial<Pick<SupportChannelDestination, "mode" | "conditions" | "mirror" | "include_notes">>;
+export type SupportChannelRouting = Partial<Pick<SupportChannelDestination, "mode" | "conditions" | "mirror" | "include_notes" | "min_role" | "allowed_user_ids">>;
 export type SupportChannelOllieLength = "brief" | "standard" | "detailed";
 /** Ticket changes Ollie may choose in support channel threads. */
 export type SupportChannelOllieAction = "reply" | "note" | "assign_self" | "status" | "priority" | "create_ticket";
@@ -1432,6 +1539,8 @@ export type PanelValue =
 export type PanelField = { label?: string; value: PanelValue; url?: string };
 export type PanelLine = { quantity?: number; title: string; subtitle?: string; value?: PanelValue; url?: string };
 export type PanelListItem = { title: string; subtitle?: string; value?: PanelValue; badge?: PanelBadge; url?: string; links?: PanelLink[] };
+/** A message's raw source as the app shows it (contracts/api.md, `GET /v1/messages/{id}/source`). */
+export type MailSource = { source: string; size_bytes: number; truncated: boolean };
 /** The record in another tool: a small button by the title. `icon` is one the app draws (TicketPanels' LINK_ICONS or a shipped logo), else the label's first letter shows. */
 export type PanelLink = { label: string; url: string; icon?: string };
 /** A block of an http panel's version 2 answer (contracts/integrations.md "The http answer"). */
@@ -1439,7 +1548,21 @@ export type PanelBlock =
   | { type: "card"; id?: string; title: string; url?: string; subtitle?: string; badges?: PanelBadge[]; links?: PanelLink[]; collapsed?: boolean; fields?: PanelField[]; lines?: PanelLine[]; footer?: PanelField[] }
   | { type: "fields"; title?: string; items: PanelField[] }
   | { type: "list"; title?: string; items: PanelListItem[] }
-  | { type: "note"; text: string; tone: PanelTone };
+  | { type: "note"; text: string; tone: PanelTone }
+  | { type: "actions"; actions: PanelAction[] };
+/** A button of an http panel: it sends a signed request back to the panel's URL (contracts/integrations.md "Actions"). */
+export type PanelAction = { id: string; label: string; tone?: "neutral" | "danger"; confirm?: string; inputs?: PanelInput[] };
+export type PanelInput = {
+  name: string;
+  label: string;
+  type: "text" | "textarea" | "select";
+  required?: boolean;
+  placeholder?: string;
+  default?: string;
+  max_length?: number;
+  options?: { value: string; label: string }[];
+};
+export type PanelActionResult = { ok: boolean; message: string; tone: PanelTone; data?: TicketPanelData };
 export type TicketPanelErrorCode = "timeout" | "rate_limited" | "ticket" | "refused" | "status" | "answer";
 
 export type TicketPanelData = {
@@ -1497,6 +1620,18 @@ export type WebhookDelivery = {
   response_code: number | null;
   duration_ms: number | null;
   created_at: string;
+};
+/** One of the customer's other tickets (GET /v1/tickets/{id}/customer-tickets), with the contact it is filed under. */
+export type CustomerPastTicket = {
+  id: string;
+  number: number;
+  subject: string;
+  status: TicketStatus;
+  channel: string;
+  message_count: number;
+  last_message_at: string;
+  /** email: the contact's address, or the one it typed in the chat. */
+  contact: { id: string; name: string; email: string };
 };
 /** A row of the trash (GET /v1/tickets/deleted): a deleted ticket, who deleted it and when. */
 export type DeletedTicket = {
@@ -2250,8 +2385,14 @@ export type TicketPatch = {
 };
 
 export type ReportsRange = { from: string; to: string };
-/** The overview's query: a range, narrowed to a team (`none`: no team) and a brand. */
-export type ReportsQuery = ReportsRange & { team_id?: string; brand_id?: string };
+/** The overview's query: a range, narrowed to a team (`none`: no team), a brand, a mailbox (`none`: no mailbox) and a member. */
+export type ReportsQuery = ReportsRange & {
+  team_id?: string;
+  brand_id?: string;
+  mailbox_id?: string;
+  /** One member's tickets (overview), their row alone (agents). */
+  assignee_id?: string;
+};
 
 // Billing (contracts/billing.md).
 export type Plan = "free" | "pro" | "collab" | "self_hosted";
@@ -2352,8 +2493,17 @@ export type AutoRecharge = {
   failure: { code: AutoRechargeFailure; at: string } | null;
 };
 export type AutoRechargePatch = Partial<Pick<AutoRecharge, "enabled" | "threshold_usd" | "amount_usd" | "monthly_limit_usd">>;
+/** POST /v1/ai/app-help (contracts/ai.md "Asking about the app"). */
+export type AppHelpInput = {
+  question: string;
+  /** The reader's language, a BCP 47 tag. */
+  language?: string;
+  /** 1 to 8 excerpts: places in the app and docs sections, `title` the path to them. */
+  sources: { title: string; url?: string; text?: string }[];
+};
+
 export type AIFeature =
-  | "summarize" | "rewrite" | "translate" | "triage" | "decide" | "answer_check" | "copilot" | "draft_reply" | "answer" | "answer_email" | "playground" | "kb_draft" | "assistant" | "assistant_peer" | "procedure" | "wiki_write";
+  | "summarize" | "rewrite" | "translate" | "triage" | "decide" | "answer_check" | "copilot" | "draft_reply" | "answer" | "answer_email" | "playground" | "kb_draft" | "assistant" | "assistant_peer" | "procedure" | "wiki_write" | "app_help";
 /**
  * GET /v1/billing/usage (contracts/billing.md). `from`/`to` are RFC 3339; `to` is exclusive.
  * Every usd value is US dollars, a number with up to 6 decimals.
@@ -2545,6 +2695,8 @@ export type Suggestion = {
   probability: number | null;
   model: string;
   decided_at: string;
+  /** Why it was not applied; absent on older suggestions. */
+  reason?: "below_threshold" | "field_off" | "not_on_team";
 };
 export type AISuggestions = Partial<Record<SuggestionField, Suggestion>>;
 export type KBSource = { article_id: string; title: string; url: string };
@@ -2642,10 +2794,21 @@ export type ReplyDraft = {
   body_html: string;
   attachments: Attachment[];
   updated_at: string;
+  /** Who it goes to; null: the customer's reply address. */
+  to?: string[] | null;
+  cc?: string[];
+  bcc?: string[];
+  /** The address it goes from, when another was picked and it is still there. */
+  mailbox_id?: string | null;
+  /** One of my own Collab addresses it goes from, while I still see its account. */
+  from_account?: ReplyDraftFrom | null;
   schedule?: { send_at: string; cc: string[]; bcc: string[]; status: TicketStatus | null; mailbox_id: string } | null;
   /** Why the scheduled reply did not go out, or empty. */
   send_error?: ScheduledReplyError | "";
 };
+
+/** The Collab address a reply draft goes from, as `from_account` of a send. */
+export type ReplyDraftFrom = { account_id: string; email: string; reply_to: string };
 
 /** Why a scheduled reply did not go out (contracts/api.md "Reply drafts"). */
 export type ScheduledReplyError = "merged" | "not_visible" | "cannot_send_from" | "member_gone" | "refused" | "failed";
@@ -3047,7 +3210,33 @@ export type EmailTemplate = {
 };
 export type EmailTemplates = { layout: EmailTemplate; csat: EmailTemplate };
 
-export type PreviewKind = "reply" | "signature" | "personal_signature" | "auto_reply" | "layout" | "csat";
+/** notice: a message to many customers (contracts/api.md "Messages to many customers"): its own subject, no history. */
+export type PreviewKind = "reply" | "notice" | "signature" | "personal_signature" | "auto_reply" | "layout" | "csat";
+/** A message sent to many customers, and how far it got (contracts/api.md "Messages to many customers"). */
+export type ContactMessage = {
+  id: string;
+  subject: string;
+  /** The label every ticket of this message carries. */
+  label: string;
+  /** What the tickets start as. */
+  status: "open" | "pending" | "solved";
+  state: "sending" | "done" | "cancelled";
+  mailbox_id: string | null;
+  created_by: string | null;
+  /** Customers it reaches. */
+  total: number;
+  /** Tickets created so far. */
+  sent: number;
+  failed: number;
+  last_error: string;
+  /** Customers left out when it was made, by reason. */
+  skipped: Partial<Record<"no_email" | "blocked", number>>;
+  created_at: string;
+  finished_at: string | null;
+};
+/** Who a send would reach, and who it would leave out. */
+export type NoticePreview = { reaches: number; skipped: Partial<Record<"no_email" | "blocked", number>> };
+
 export type TemplatePreviewBody = {
   kind: PreviewKind;
   body_html?: string;
@@ -3453,9 +3642,22 @@ export type MailComment = {
   body_html: string;
   /** User ids. */
   mentions: string[];
+  /** The comment of this conversation it replies to (contracts/collab.md "Replies"). */
+  reply_to: string | null;
+  /** That comment's author and first line, with `reply_to`. */
+  parent: MailCommentQuote | null;
+  /** It replied to a comment that has since been deleted. */
+  parent_deleted: boolean;
   created_at: string;
   updated_at: string;
+  /** An AI note: the key's name when it added it (contracts/collab.md "AI notes"). */
+  ai_note_by?: string | null;
 };
+
+export type MailCommentQuote = { author: UserRef | null; excerpt: string; ai_note_by?: string | null };
+
+/** An AI key that skipped a conversation since its last message (contracts/collab.md "AI notes"). */
+export type MailAISkip = { client: string; reason: string; at: string };
 
 export type MailThreadAccount = {
   id: string;
@@ -3484,8 +3686,12 @@ export type MailThreadDetail = {
   can_act: boolean;
   /** The ticket it answered or was answered from, when you see it (contracts/collab.md "Answering tickets"). */
   ticket?: { id: string; number: number; subject: string } | null;
+  /** AI keys that skipped it since its last message, newest first. */
+  ai_skips?: MailAISkip[];
   /** AI drafts discarded, replaced or abandoned and gone, oldest first (contracts/collab.md "AI draft outcomes"). */
   unused_ai_drafts?: (AIDraftRef & { outcome_at: string })[];
+  /** You follow it: it is in your Mentions box (contracts/collab.md "Mentions"). */
+  following?: boolean;
 };
 
 /** One address across the conversations you see (contracts/collab.md "People"). */
@@ -3559,7 +3765,7 @@ export type SidebarPrefs = {
 };
 
 /** A row of a member's own section: a Space row of this workspace. */
-export type SidebarItem = Omit<SpaceItem, "workspace_id" | "kind"> & { kind: Exclude<SpaceItemKind, "section" | "everywhere"> };
+export type SidebarItem = Omit<SpaceItem, "workspace_id" | "kind" | "rows" | "hidden"> & { kind: Exclude<SpaceItemKind, "section" | "everywhere"> };
 
 /** One of a member's own sidebar sections: at most 20, 60 rows each, 300 in all. */
 export type SidebarSection = { id: string; title: string; collapsed: boolean; icon?: string; items: SidebarItem[] };
@@ -3567,8 +3773,11 @@ export type SidebarSection = { id: string; title: string; collapsed: boolean; ic
 /** unread / total / none for mail rows; count / awaiting / urgent / overdue / none for ticket rows, and open for team rows. */
 export type SidebarBadge = "unread" | "total" | "count" | "awaiting" | "urgent" | "overdue" | "open" | "none";
 
-/** ai_review: Ready for review, conversations in an inbox with an AI draft waiting for a person. */
-export type MailBox = "inbox" | "unread" | "starred" | "sent" | "drafts" | "archive" | "trash" | "spam" | "all" | "shared" | "assigned" | "needs_action" | "snoozed" | "ai_review";
+/**
+ * ai_review: Ready for review, conversations in an inbox with an AI draft waiting for a person.
+ * mentions: the conversations you follow, mentioned in a comment or answered (contracts/collab.md "Mentions").
+ */
+export type MailBox = "inbox" | "unread" | "starred" | "sent" | "drafts" | "archive" | "trash" | "spam" | "all" | "shared" | "assigned" | "mentions" | "needs_action" | "snoozed" | "ai_review";
 
 export type MailThreadAction =
   | "read"
@@ -3589,8 +3798,8 @@ export type MailThreadAction =
   | "snooze";
 
 export type MailCounts = {
-  /** Unread conversations; assigned, shared, needs_action, snoozed and ai_review: open ones; spam: unread ones in spam. */
-  boxes: { inbox: number; unread: number; shared: number; assigned: number; drafts: number; needs_action: number; snoozed?: number; ai_review?: number; spam?: number };
+  /** Unread conversations; assigned, shared, needs_action, snoozed and ai_review: open ones; spam: unread ones in spam; mentions: every one you follow and see. */
+  boxes: { inbox: number; unread: number; shared: number; assigned: number; mentions?: number; drafts: number; needs_action: number; snoozed?: number; ai_review?: number; spam?: number };
   accounts: Record<string, number>;
   folders: Record<string, number>;
   /** By account with aliases, then address (its own included): unread conversations in its inbox with it on a message; missing = 0. */
@@ -3644,7 +3853,7 @@ export type SpaceItem = {
   /** A workspace the user is a member of; "" for an everywhere row (it spans them all). */
   workspace_id: string;
   kind: SpaceItemKind;
-  /** section: favorites | inbox | mail | teams | views | workspace; ticket_folder: a folder id; box: inbox | shared | assigned; page: contacts | knowledge | reports; everywhere: mine | mail; else a uuid. */
+  /** section: favorites | inbox | mail | teams | views | workspace; ticket_folder: a folder id; box: inbox | shared | assigned | mentions; page: contacts | knowledge | reports; everywhere: mine | mail; else a uuid. */
   id: string;
   /** The person's own label for the row, 1..64 characters. */
   name?: string;
@@ -3652,6 +3861,14 @@ export type SpaceItem = {
   badge?: SidebarBadge;
   /** One emoji in place of the row's own icon. */
   icon?: string;
+  /**
+   * A whole section only (kind "section"), contracts/spaces.md "Arranging a whole section": its rows
+   * top to bottom as row keys (`team:<id>`, `box:assigned`), the rest following in their usual
+   * order; in Favorites, rows the Space adds before the person's own favorites. At most 300.
+   */
+  rows?: string[];
+  /** A whole section only: the row keys it does not show in this Space. At most 300. */
+  hidden?: string[];
 };
 
 export type SpaceSection = {
@@ -3682,3 +3899,43 @@ export type Space = {
 
 /** GET and PUT /v1/me/spaces. `saved` false: nothing saved yet (no Spaces). */
 export type SpacesResponse = { spaces: Space[]; saved: boolean };
+
+/** The CSV column that fills each contact field ("" or absent leaves it unset); contracts/imports.md "Contacts". */
+export type ContactImportMapping = {
+  name?: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  external_id?: string;
+  notes?: string;
+  labels?: string;
+  /** A custom field's key to its column. */
+  fields?: Record<string, string>;
+};
+export type ContactImportUpload = {
+  upload_id: string;
+  filename: string;
+  rows: number;
+  columns: { name: string; samples: string[] }[];
+  suggested: ContactImportMapping;
+};
+export type ContactImportMatch = "email" | "external_id";
+export type ContactImportOnMatch = "skip" | "fill" | "overwrite";
+export type ContactImport = {
+  id: string;
+  filename: string;
+  status: "running" | "done" | "failed" | "cancelled";
+  match_on: ContactImportMatch;
+  on_match: ContactImportOnMatch;
+  total: number;
+  processed: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  /** The first rows that could not be imported, with the line each is on. */
+  errors: { line: number; message: string }[];
+  error: string;
+  created_at: string;
+  finished_at: string | null;
+};

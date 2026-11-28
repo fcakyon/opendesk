@@ -86,6 +86,7 @@
     "myTeams": "Meine Teams",
     "newTicket": "Neues Ticket",
     "phone": "Telefon",
+    "whatsapp": "WhatsApp",
     "print": "Drucken",
     "wikiGraph": "Graph",
     "wikiTags": "Tags",
@@ -101,7 +102,8 @@
     "open": "Alle offenen",
     "pending": "Wartend",
     "solved": "Gelöst",
-    "spam": "Spam"
+    "spam": "Spam",
+    "all": "Alle Tickets"
   },
   "groups": {
     "account": "Konto",
@@ -156,7 +158,8 @@
     "auditLog": "Audit-Log",
     "trash": "Papierkorb",
     "phone": "Telefon",
-    "pages": "Seiten"
+    "pages": "Seiten",
+    "whatsapp": "WhatsApp"
   },
   "settingsPage": "Einstellungsseite",
   "command": {
@@ -192,7 +195,14 @@
     "aiPlayground": "KI-Agent: Testbereich",
     "importHistory": "Verlauf aus Zendesk, Help Scout, FreeScout, Freshdesk, Intercom, Front oder CSV importieren",
     "pages": "Seiten",
-    "newPage": "Neue Seite"
+    "newPage": "Neue Seite",
+    "sidebarPlace": "Seitenleiste",
+    "docs": "Dokumentation",
+    "searchSettings": "Einstellungen durchsuchen",
+    "settingsNoResults": "Keine passende Einstellung",
+    "settingsNoResultsHelp": "Versuche andere Wörter oder durchsuche die Dokumentation im Befehlsmenü.",
+    "seeAll": "Alle Tickets zu „{{query}}“ anzeigen",
+    "followUp": "Folgeanfrage"
   },
   "shortcuts": {
     "general": "Allgemein",

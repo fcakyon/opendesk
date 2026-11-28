@@ -52,7 +52,8 @@ function downloadTemplate() {
 }
 
 /** A drop area for one CSV file, which also opens the file picker. */
-export function CsvDrop({ onFile, uploading, error }: { onFile: (f: File) => void; uploading: File | null; error: string | null }) {
+/** `template` offers the ticket import's sample file and `hint` says what a file holds; a people import has its own and leaves the template out. */
+export function CsvDrop({ onFile, uploading, error, template: withTemplate = true, hint }: { onFile: (f: File) => void; uploading: File | null; error: string | null; template?: boolean; hint?: string }) {
   const { t } = useTranslation("imports");
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -100,7 +101,7 @@ export function CsvDrop({ onFile, uploading, error }: { onFile: (f: File) => voi
               <UploadCloud className="size-5" aria-hidden />
             </span>
             <span className="text-[13px] font-medium text-fg">{over ? t("csv.dropNow") : t("csv.drop")}</span>
-            <span className="max-w-[420px] text-[12px] leading-[18px] text-fg-3">{t("csv.dropHint")}</span>
+            <span className="max-w-[420px] text-[12px] leading-[18px] text-fg-3">{hint ?? t("csv.dropHint")}</span>
           </>
         )}
       </button>
@@ -112,9 +113,11 @@ export function CsvDrop({ onFile, uploading, error }: { onFile: (f: File) => voi
       )}
       <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-fg-3">
         <span>{t("csv.formats")}</span>
-        <Button size="xs" variant="ghost" icon={<Download />} onClick={downloadTemplate}>
-          {t("csv.template")}
-        </Button>
+        {withTemplate && (
+          <Button size="xs" variant="ghost" icon={<Download />} onClick={downloadTemplate}>
+            {t("csv.template")}
+          </Button>
+        )}
       </div>
     </div>
   );

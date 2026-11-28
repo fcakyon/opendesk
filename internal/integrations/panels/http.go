@@ -34,6 +34,8 @@ const (
 
 // lookupRequest is what OpenDesk posts to an http panel's URL. Later fields only add to it.
 type lookupRequest struct {
+	// Event is "lookup"; an action's request says "action" (actions.go).
+	Event       string        `json:"event"`
 	PanelID     uuid.UUID     `json:"panel_id"`
 	WorkspaceID uuid.UUID     `json:"workspace_id"`
 	Ticket      lookupTicket  `json:"ticket"`
@@ -140,7 +142,7 @@ func (s *Service) readHTTP(ctx context.Context, x *row, sub subject, d *Data) (t
 	if sub.Emails == nil {
 		sub.Emails = []string{}
 	}
-	body, err := json.Marshal(lookupRequest{PanelID: x.ID, WorkspaceID: x.WorkspaceID, Refresh: sub.Refresh, Locale: sub.Locale,
+	body, err := json.Marshal(lookupRequest{Event: "lookup", PanelID: x.ID, WorkspaceID: x.WorkspaceID, Refresh: sub.Refresh, Locale: sub.Locale,
 		Ticket:  lookupTicket{ID: sub.TicketID, Number: sub.TicketNumber, Subject: sub.Subject, References: sub.References},
 		Contact: lookupContact{ID: sub.ContactID, Email: sub.Email, Name: sub.Name, Emails: sub.Emails, Phone: sub.Phone}})
 	if err != nil {
@@ -155,6 +157,7 @@ func (s *Service) readHTTP(ctx context.Context, x *row, sub subject, d *Data) (t
 	req.Header.Set("User-Agent", "opendesk-panels/"+version.Version)
 	req.Header.Set("OD-Signature", sign(secret, time.Now().Unix(), body))
 	req.Header.Set("OD-Panel-Id", x.ID.String())
+	req.Header.Set("OD-Panel-Event", "lookup")
 	res, err := s.http.Do(req)
 	if err != nil {
 		var ue *url.Error

@@ -64,7 +64,7 @@ Calls between colleagues (to an extension, or to another user of your Voys accou
 
 ## In the ticket
 
-Each call is one entry in the timeline, with who called whom, the teammate who took it (matched by the email of their Voys user), when it was answered and ended, the Voys number (line) it came in on, and why it was missed. Recordings stay in Voys: the entry says a call was recorded, and you play it in Freedom. The transcript and summary come from Voys once Voys Intelligence has made them, a little after the call.
+Each call is one entry in the timeline, with who called whom, the teammate who took it (matched by the email of their Voys user), when it was answered and ended, the Voys number (line) it came in on, and why it was missed. A recorded call has a **Play recording** button: opendesk fetches the audio from Voys with the connection's token and plays it in the entry, and keeps no copy. Anyone who can read the ticket can play it, each play is recorded in the audit log, and the token's user needs access to the call recordings. Right after a call the audio may not be ready yet; the entry says so, and you try again in a minute. The transcript and summary come from Voys once Voys Intelligence has made them, a little after the call.
 
 ## Missed calls
 

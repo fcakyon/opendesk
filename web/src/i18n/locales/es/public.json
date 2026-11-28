@@ -73,6 +73,25 @@
     "error": "Algo salió mal. Inténtalo de nuevo.",
     "offline": "No se puede conectar con el servidor. Revisa tu conexión."
   },
+  "chat_verify": {
+    "page_title": "Confirma tu dirección de correo electrónico",
+    "title": "Confirma tu dirección de correo electrónico",
+    "body": "Confirma que esta dirección es tuya para que {{brand}} sepa que el chat es realmente tuyo.",
+    "button": "Confirmar correo electrónico",
+    "not_you": "¿No eres tú? Cierra esta página y no cambiará nada.",
+    "done_title": "Tu dirección de correo electrónico está confirmada",
+    "already_title": "Tu dirección de correo electrónico ya está confirmada",
+    "done_body": "{{brand}} ya sabe que el chat de {{email}} es tuyo. Puedes cerrar esta página y seguir chateando.",
+    "invalid_title": "Este enlace no es válido",
+    "invalid_body": "Puede que haya caducado o que ya se haya usado. Pide un nuevo correo en el chat.",
+    "error": "Algo salió mal. Inténtalo de nuevo.",
+    "offline": "No se puede conectar con el servidor. Revisa tu conexión.",
+    "email_subject": "Confirma tu correo electrónico para {{brand}}",
+    "email_intro": "Gracias por chatear con {{brand}}. Confirma que esta dirección es tuya para que el equipo sepa que de verdad eres tú.",
+    "email_meanwhile": "Mientras tanto, puedes seguir chateando.",
+    "email_expiry": "El enlace funciona durante {{hours}} horas.",
+    "email_reason": "Recibes este correo porque esta dirección se indicó en el chat de un sitio web de {{brand}}. Si no fuiste tú, ignóralo y no cambiará nada."
+  },
   "footer": {
     "powered_by": "Con la tecnología de",
     "language": "Idioma"

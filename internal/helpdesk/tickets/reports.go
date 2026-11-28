@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,18 +55,61 @@ type ReportBrand struct {
 	FirstResponseP50Minutes *float64  `json:"first_response_p50_minutes"`
 }
 
-// reportFilter narrows the overview to a team ("none": no team) and a brand.
+// reportFilter narrows the overview to a team ("none": no team), a brand, a mailbox ("none":
+// no mailbox) and a member's tickets (Assignee). TeamMembers is the workspace's
+// settings.reports_team_members: a team's tickets are also those assigned to its leads and
+// members. AgentRow, when set, keeps by_agent to that member's row: a member who sees their
+// own row alone (onlineScope).
 type reportFilter struct {
-	Team  string
-	Brand string
+	Team        string
+	Brand       string
+	Mailbox     string
+	Assignee    string
+	TeamMembers bool
+	AgentRow    *uuid.UUID
+}
+
+// reportsTeamMembersSQL is settings.reports_team_members (alias w), default false: in the
+// reports, a team is its people (contracts/api.md "Agents report").
+const reportsTeamMembersSQL = `COALESCE((w.settings ->> 'reports_team_members')::boolean, false)`
+
+// teamMemberSQL is "the user in col is a lead or member of the team bound as $n" (observers
+// watch a team without being on it), for a team of the workspace in wcol.
+func teamMemberSQL(n int, col, wcol string) string {
+	return fmt.Sprintf(`EXISTS (SELECT 1 FROM team_members tm JOIN teams tt ON tt.id = tm.team_id
+		WHERE tm.team_id = $%[1]d::uuid AND tt.workspace_id = %[3]s AND tm.user_id = %[2]s AND tm.role <> 'observer')`, n, col, wcol)
+}
+
+// byMembers is whether a team id is picked and counts by its people.
+func (f reportFilter) byMembers() bool {
+	return f.TeamMembers && f.Team != "" && f.Team != hd.TeamNone
 }
 
 // sql binds the filter as $n and $n+1. Merged tickets count nowhere: a merge moved their
 // messages, calls and threads to the ticket they went into and closed what was left, so they
 // would make one conversation two tickets created, and the merge a solve.
+//
+// The mailbox is the one a ticket replies from (tickets.mailbox_id). It and the assignee are
+// uuids validate parsed (or none for the mailbox), written in place so that every query keeps
+// its arguments.
 func (f reportFilter) sql(n int) string {
-	return fmt.Sprintf(` AND ($%[1]d = '' OR ($%[1]d = 'none' AND t.team_id IS NULL) OR t.team_id::text = $%[1]d)
-		AND ($%[2]d = '' OR t.brand_id::text = $%[2]d) AND t.merged_into_id IS NULL`, n, n+1)
+	members := ""
+	if f.byMembers() {
+		members = ` OR ` + teamMemberSQL(n, "t.assignee_id", "t.workspace_id")
+	}
+	s := fmt.Sprintf(` AND ($%[1]d = '' OR ($%[1]d = 'none' AND t.team_id IS NULL) OR t.team_id::text = $%[1]d%[3]s)
+		AND ($%[2]d = '' OR t.brand_id::text = $%[2]d) AND t.merged_into_id IS NULL`, n, n+1, members)
+	switch f.Mailbox {
+	case "":
+	case hd.TeamNone:
+		s += ` AND t.mailbox_id IS NULL`
+	default:
+		s += ` AND t.mailbox_id = '` + uuid.MustParse(f.Mailbox).String() + `'`
+	}
+	if f.Assignee != "" {
+		s += ` AND t.assignee_id = '` + uuid.MustParse(f.Assignee).String() + `'`
+	}
+	return s
 }
 
 // firstResponseSQL is a ticket's first response as the reports measure it (alias t): how long
@@ -99,6 +144,20 @@ func (f reportFilter) validate() (reportFilter, error) {
 			return f, err
 		}
 		f.Brand = id.String()
+	}
+	if f.Mailbox = strings.TrimSpace(f.Mailbox); f.Mailbox != "" && f.Mailbox != hd.TeamNone {
+		id, err := hd.ParseRef(f.Mailbox, "mailbox_id")
+		if err != nil {
+			return f, err
+		}
+		f.Mailbox = id.String()
+	}
+	if f.Assignee = strings.TrimSpace(f.Assignee); f.Assignee != "" {
+		id, err := hd.ParseRef(f.Assignee, "assignee_id")
+		if err != nil {
+			return f, err
+		}
+		f.Assignee = id.String()
 	}
 	return f, nil
 }
@@ -189,6 +248,9 @@ func overview(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS strin
 		ByTeam: []ReportTeam{}, ByBrand: []ReportBrand{}}
 	rf, err := rf.validate()
 	if err != nil {
+		return o, err
+	}
+	if err := q.QueryRow(ctx, `SELECT `+reportsTeamMembersSQL+` FROM workspaces w WHERE w.id = $1`, wid).Scan(&rf.TeamMembers); err != nil {
 		return o, err
 	}
 	from, to, loc, err := reportPeriod(ctx, q, wid, fromS, toS)
@@ -284,16 +346,22 @@ func overview(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS strin
 		return o, err
 	}
 
+	// A team counted by its people lists its people alone, as the agents report does.
+	agents := ""
+	if rf.byMembers() {
+		agents = ` AND ` + teamMemberSQL(4, "t.assignee_id", "t.workspace_id")
+	}
 	rows, err = q.Query(ctx, `SELECT u.id, u.name, u.email, u.avatar_url,
 			count(*) FILTER (WHERE t.solved_at >= $2 AND t.solved_at < $3),
 			percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM `+firstResponseSQL+` - t.created_at) / 60)
 				FILTER (WHERE t.first_responded_at IS NOT NULL AND t.created_at >= $2 AND t.created_at < $3)
 		FROM tickets t JOIN users u ON u.id = t.assignee_id
 		JOIN members m ON m.workspace_id = t.workspace_id AND m.user_id = u.id
-		WHERE t.workspace_id = $1 AND t.deleted_at IS NULL AND NOT t.spam`+rf.sql(4)+`
+		WHERE t.workspace_id = $1 AND t.deleted_at IS NULL AND NOT t.spam`+rf.sql(4)+agents+`
+			AND ($6::uuid IS NULL OR t.assignee_id = $6)
 			AND ((t.solved_at >= $2 AND t.solved_at < $3) OR (t.created_at >= $2 AND t.created_at < $3))
 		GROUP BY u.id, u.name, u.email, u.avatar_url
-		ORDER BY 5 DESC, u.name LIMIT 100`, wid, from, to, rf.Team, rf.Brand)
+		ORDER BY 5 DESC, u.name LIMIT 100`, wid, from, to, rf.Team, rf.Brand, rf.AgentRow)
 	if err != nil {
 		return o, err
 	}
@@ -357,6 +425,9 @@ func overview(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS strin
 	return o, err
 }
 
+// searchTickets is how many tickets GET /v1/search returns; the full list is GET /v1/tickets?q=.
+const searchTickets = 8
+
 // SearchResult is GET /v1/search.
 type SearchResults struct {
 	Tickets  []domain.Ticket  `json:"tickets"`
@@ -381,11 +452,28 @@ func search(ctx context.Context, q db.Querier, p *auth.Principal, query string, 
 		if err != nil {
 			return res, err
 		}
-		page, err := listTickets(ctx, q, p.WorkspaceID, p.ActorUserID(), lq, "", "", 5, "")
-		if err != nil {
-			return res, err
+		// For one address-like word, the tickets of that address come first: the customer's,
+		// and those it wrote or was written to, before others that only mention the word.
+		if domain.AddressQuery(query) != "" {
+			byAddress := lq
+			byAddress.byAddress = true
+			page, err := listTickets(ctx, q, p.WorkspaceID, p.ActorUserID(), byAddress, "", "", searchTickets, "")
+			if err != nil {
+				return res, err
+			}
+			res.Tickets = page.Data
 		}
-		res.Tickets = page.Data
+		if len(res.Tickets) < searchTickets {
+			page, err := listTickets(ctx, q, p.WorkspaceID, p.ActorUserID(), lq, "", "", searchTickets, "")
+			if err != nil {
+				return res, err
+			}
+			for _, t := range page.Data {
+				if len(res.Tickets) < searchTickets && !slices.ContainsFunc(res.Tickets, func(x domain.Ticket) bool { return x.ID == t.ID }) {
+					res.Tickets = append(res.Tickets, t)
+				}
+			}
+		}
 	}
 	if allowed(auth.ScopeContactsRead) {
 		args := []any{p.WorkspaceID, query, strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(strings.ToLower(query)) + "%"}
@@ -394,6 +482,10 @@ func search(ctx context.Context, q db.Querier, p *auth.Principal, query string, 
 		if pq := prefixQuery(query); pq != "" {
 			args = append(args, pq)
 			cond += ` OR ct.search @@ to_tsquery('simple', $4) OR ct.fields_search @@ to_tsquery('simple', $4)`
+		}
+		if aq := domain.AddressQuery(query); aq != "" {
+			args = append(args, aq)
+			cond += ` OR ` + domain.ContactAddressSQL("ct", "$"+strconv.Itoa(len(args)))
 		}
 		rows, err := q.Query(ctx, domain.ContactSelect+` WHERE ct.workspace_id = $1 AND (`+cond+`) ORDER BY ct.updated_at DESC, ct.id LIMIT 5`, args...)
 		if err != nil {
@@ -431,7 +523,7 @@ func search(ctx context.Context, q db.Querier, p *auth.Principal, query string, 
 func registerInsights(d *deps.Deps, api huma.API) {
 	huma.Register(api, huma.Operation{OperationID: "search", Method: http.MethodGet, Path: "/v1/search",
 		Summary: "Search tickets, contacts, articles and wiki pages", Tags: []string{"Search"},
-		Description: "Top 5 of each. API keys see only the kinds their scopes allow."},
+		Description: "The top 8 tickets and top 5 of each other kind. API keys see only the kinds their scopes allow."},
 		func(ctx context.Context, in *struct {
 			Q       string `query:"q" required:"true" minLength:"1" maxLength:"200"`
 			BrandID string `query:"brand_id" doc:"Articles of this brand and of every brand only"`
@@ -461,18 +553,28 @@ func registerInsights(d *deps.Deps, api huma.API) {
 
 	huma.Register(api, huma.Operation{OperationID: "report-overview", Method: http.MethodGet, Path: "/v1/reports/overview",
 		Summary: "Helpdesk overview report", Tags: []string{"Reports"},
-		Description: "from and to are YYYY-MM-DD (days in the workspace timezone, to inclusive) or RFC 3339. Default: the last 30 days. Spam, deleted and merged tickets are excluded. First response is how long a customer waited for a person's reply, never a bot's or an automation's: none on tickets the team started. team_id (or none) and brand_id narrow every figure."},
+		Description: "from and to are YYYY-MM-DD (days in the workspace timezone, to inclusive) or RFC 3339. Default: the last 30 days. Spam, deleted and merged tickets are excluded. First response is how long a customer waited for a person's reply, never a bot's or an automation's: none on tickets the team started. team_id (or none), brand_id and mailbox_id (or none) narrow every figure, and assignee_id to the tickets assigned to one member; a member who is not an admin may only name themselves. " +
+			"by_agent is personal, as the agents report: admins (and API keys) get every member's row, other members their own row alone."},
 		func(ctx context.Context, in *struct {
-			From    string `query:"from"`
-			To      string `query:"to"`
-			TeamID  string `query:"team_id" doc:"A team id, or none for tickets without a team"`
-			BrandID string `query:"brand_id"`
+			From       string `query:"from"`
+			To         string `query:"to"`
+			TeamID     string `query:"team_id" doc:"A team id, or none for tickets without a team"`
+			BrandID    string `query:"brand_id"`
+			MailboxID  string `query:"mailbox_id" doc:"A mailbox id: the tickets that reply from it. Or none for tickets without a mailbox (chat, phone, API)"`
+			AssigneeID string `query:"assignee_id" doc:"A member: only the tickets assigned to them. Members who are not admins may only name themselves"`
 		}) (*struct{ Body ReportOverview }, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeTicketsRead)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			o, err := overview(ctx, d.DB.Pool, p.WorkspaceID, in.From, in.To, reportFilter{Team: in.TeamID, Brand: in.BrandID})
+			if err := allowPerson(ctx, p, in.AssigneeID); err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			rf := reportFilter{Team: in.TeamID, Brand: in.BrandID, Mailbox: in.MailboxID, Assignee: in.AssigneeID}
+			if scope, self := onlineScope(ctx, p); scope == onlineSelf {
+				rf.AgentRow = self
+			}
+			o, err := overview(ctx, d.DB.Pool, p.WorkspaceID, in.From, in.To, rf)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}

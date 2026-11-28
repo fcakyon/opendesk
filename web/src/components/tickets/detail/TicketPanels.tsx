@@ -60,6 +60,7 @@ import { ease } from "@/lib/motion";
 import { DEFAULT_SHOPIFY_FIELDS, MAX_ORDERS_SHOWN, panelShows, shownData } from "@/lib/panelFields";
 import { blockKeys, foldScope, useCardFold } from "@/lib/panelFolds";
 import { q, qk } from "@/lib/queries";
+import { ActionsBlock, PanelContext } from "./PanelActions";
 
 const CLOSED_KEY = "od-ticket-panels-closed";
 
@@ -172,7 +173,9 @@ function PanelSectionView({ ticketId, panel, open, onToggle }: { ticketId: strin
               {isLoading || !data ? (
                 <PanelSkeleton />
               ) : (
-                <PanelBody data={data} fields={shows.fields} ordersShown={shows.ordersShown} onRetry={() => void refresh()} foldScope={foldScope(ticketId, panel.id)} />
+                <PanelContext.Provider value={{ ticketId, panelId: panel.id }}>
+                  <PanelBody data={data} fields={shows.fields} ordersShown={shows.ordersShown} onRetry={() => void refresh()} foldScope={foldScope(ticketId, panel.id)} />
+                </PanelContext.Provider>
               )}
             </div>
           </motion.div>
@@ -506,6 +509,8 @@ function BlockView({ block, foldScope, foldKey }: { block: PanelBlock; foldScope
       return <ListBlock title={block.title} items={block.items} />;
     case "note":
       return <NoteBlock text={block.text} tone={block.tone} />;
+    case "actions":
+      return <ActionsBlock actions={block.actions} />;
     default:
       return null;
   }

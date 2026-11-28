@@ -70,7 +70,16 @@ type Suggestion struct {
 	Probability *float64 `json:"probability"`
 	Model       string   `json:"model"`
 	DecidedAt   string   `json:"decided_at"`
+	// Reason is why it was not applied: SuggestBelowThreshold, SuggestFieldOff or SuggestNotOnTeam.
+	Reason string `json:"reason,omitempty"`
 }
+
+// Why a decision stayed a suggestion (Suggestion.Reason).
+const (
+	SuggestBelowThreshold = "below_threshold" // its confidence is under the workspace's triage threshold
+	SuggestFieldOff       = "field_off"       // triage may not change this field in this workspace
+	SuggestNotOnTeam      = "not_on_team"     // the ticket's assignee is not on the team (a private team)
+)
 
 // SuggestionFields are the keys of custom.ai_suggestions.
 var SuggestionFields = []string{"priority", "severity", "labels", "team", "spam"}
@@ -679,13 +688,21 @@ func applyTriage(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, t *Triage, 
 		m := map[string]any{"via": via, "model": t.Decisions.Model}
 		if c := dec(field).Confidence; c != nil {
 			m["confidence"] = *c
+			m["threshold"] = cfg.Threshold
 		}
 		return m
 	}
-	suggest := func(key, field string, value any) {
+	suggest := func(key, field string, value any, reason string) {
 		d := dec(field)
 		t.Suggestions[key] = Suggestion{Value: value, Confidence: d.Confidence, Probability: d.Probability,
-			Model: t.Decisions.Model, DecidedAt: t.Decisions.DecidedAt}
+			Model: t.Decisions.Model, DecidedAt: t.Decisions.DecidedAt, Reason: reason}
+	}
+	// held is why apply refused: the field is off for triage, else the confidence is under the threshold.
+	held := func(setting string) string {
+		if !cfg.Sets(setting) {
+			return SuggestFieldOff
+		}
+		return SuggestBelowThreshold
 	}
 	logAct := func(typ string, data map[string]any) error {
 		_, err := domain.LogActivity(ctx, tx, wid, tid, "ai", nil, typ, data)
@@ -710,7 +727,7 @@ func applyTriage(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, t *Triage, 
 			dec("priority").Applied = true
 			changes = append(changes, "priority")
 		} else {
-			suggest("priority", "priority", t.Priority)
+			suggest("priority", "priority", t.Priority, held("priority"))
 		}
 	}
 	if t.Severity != nil && severityRank[*t.Severity] > domain.SeverityRank(severity) {
@@ -728,7 +745,7 @@ func applyTriage(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, t *Triage, 
 			dec("severity").Applied = true
 			changes = append(changes, "severity")
 		} else {
-			suggest("severity", "severity", *t.Severity)
+			suggest("severity", "severity", *t.Severity, held("severity"))
 		}
 	}
 	if t.team != nil && team == nil {
@@ -755,18 +772,22 @@ func applyTriage(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, t *Triage, 
 					changes = append(changes, "mailbox_id")
 				}
 			} else {
-				suggest("team", "team", t.team.String())
+				reason := held("team")
+				if onTeam != nil {
+					reason = SuggestNotOnTeam
+				}
+				suggest("team", "team", t.team.String(), reason)
 			}
 		}
 	}
 
 	// Labels go through the shared write so exclusive groups keep one label.
-	var names, held []string
+	var names, heldTags []string
 	for _, name := range t.Tags {
 		if apply("labels", t.tagField[name]) {
 			names = append(names, name)
 		} else {
-			held = append(held, name)
+			heldTags = append(heldTags, name)
 		}
 	}
 	if !explicit && !cfg.Sets("labels") {
@@ -804,12 +825,12 @@ func applyTriage(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, t *Triage, 
 	if len(added)+len(removed) > 0 {
 		changes = append(changes, "tags")
 	}
-	if len(held) > 0 {
-		field := t.tagField[held[0]]
-		suggest("labels", field, held)
+	if len(heldTags) > 0 {
+		field := t.tagField[heldTags[0]]
+		suggest("labels", field, heldTags, held("labels"))
 	}
 	if d := t.Decisions.Fields["spam"]; d != nil && !spam && d.Probability != nil && *d.Probability >= spamSuggestAt {
-		suggest("spam", "spam", true)
+		suggest("spam", "spam", true, "")
 	}
 
 	custom := map[string]any{"ai_sentiment": t.Sentiment, "language": t.Language, "ai_category": t.Category,

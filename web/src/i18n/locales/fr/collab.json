@@ -29,6 +29,7 @@
     "all": "Tous les messages",
     "shared": "Partagés avec moi",
     "assigned": "Attribués à moi",
+    "mentions": "Mentions",
     "needs_action": "À traiter",
     "snoozed": "En pause",
     "ai_review": "À relire",
@@ -140,6 +141,8 @@
       "sharedHint": "Lorsqu’un collègue partage une conversation ou un compte avec vous, cela apparaît ici.",
       "assigned": "Aucune conversation attribuée",
       "assignedHint": "Les conversations que vos collègues vous attribuent apparaissent ici.",
+      "mentions": "Aucune mention",
+      "mentionsHint": "Les conversations où un coéquipier vous mentionne ou répond à votre commentaire apparaissent ici, jusqu’à ce que vous les retiriez.",
       "aiReview": "Aucun brouillon IA à relire",
       "aiReviewHint": "Quand un client IA rédige une réponse, la conversation attend ici jusqu’à ce que quelqu’un envoie, modifie ou supprime le brouillon.",
       "starred": "Aucune conversation suivie",
@@ -204,6 +207,8 @@
     "openAccount": "Paramètres du compte",
     "syncAccount": "Synchroniser le compte maintenant",
     "copyLink": "Copier le lien",
+    "follow": "Ajouter aux Mentions",
+    "unfollow": "Retirer des Mentions",
     "linkCopied": "Lien copié",
     "movePlaceholder": "Déplacer vers un dossier",
     "labelPlaceholder": "Appliquer des étiquettes",
@@ -215,11 +220,17 @@
     "createLabel": "Créer l’étiquette",
     "labelCreated": "Étiquette créée",
     "snooze": "Mettre en pause",
+    "snoozeNeedsHandling": "La mise en pause fonctionne sur les comptes partagés avec le Traitement activé. Activez-le dans les paramètres du compte.",
+    "snoozeNeedsSharing": "La mise en pause fonctionne sur les comptes partagés avec le Traitement activé. Partagez le compte et activez le Traitement dans ses paramètres.",
+    "snoozeGmailNote": "Mettez en pause ici, pas dans Gmail : tout le monde le voit ici. Un e-mail mis en pause dans Gmail apparaît ici comme archivé jusqu’à ce que Gmail le fasse revenir.",
     "assignTo": "Attribuer à…",
     "shareWith": "Partager avec…",
     "moveTo": "Déplacer vers…",
     "labelAs": "Ajouter l’étiquette…",
-    "newTab": "Ouvrir dans un nouvel onglet"
+    "newTab": "Ouvrir dans un nouvel onglet",
+    "copyForAgent": "Copier pour un agent IA",
+    "copiedForAgent": "Copié. Collez-le dans votre agent IA.",
+    "copyFailed": "Impossible de copier. Réessayez."
   },
   "drop": {
     "otherAccount": "Ces conversations sont dans un autre compte.",
@@ -263,6 +274,8 @@
     "starred_other": "{{count}} conversations suivies",
     "starred_many": "{{count}} conversations suivies",
     "undo": "Annuler",
+    "followed": "Ajoutée à vos Mentions",
+    "unfollowed": "Retirée de vos Mentions",
     "failed": "L’action a échoué. Rien n’a changé.",
     "syncing": "Synchronisation de {{name}}",
     "sent": "Envoyé depuis {{email}}",
@@ -279,6 +292,7 @@
     "snoozedUntil": "En pause jusqu’au {{when}}",
     "sharedWith": "Partagée avec {{who}}",
     "assignedTo": "Attribuée à {{who}}",
+    "following": "Dans vos Mentions",
     "everyone": "tout le monde",
     "and": "{{a}} et {{b}}",
     "andMore": "{{list}} et {{count}} de plus",
@@ -300,8 +314,6 @@
     "showQuoted": "Afficher le texte cité",
     "hideQuoted": "Masquer le texte cité",
     "download": "Télécharger {{name}}",
-    "preview": "Aperçu de {{name}}",
-    "fullSize": "Ouvrir en taille réelle",
     "readOnly": "Vous pouvez lire cette conversation. Les agents et les rôles supérieurs peuvent agir dessus.",
     "showComments": "Afficher les commentaires",
     "replyOrComment": "Choisir entre répondre à l’expéditeur ou commenter pour l’équipe",
@@ -338,6 +350,13 @@
     "removeRecipient": "Retirer {{email}}",
     "invalid": "{{value}} n’est pas une adresse e-mail",
     "needRecipient": "Ajoutez au moins un destinataire",
+    "emptyTitle": "Envoyer sans message ?",
+    "emptyConfirm": "Rien n’est écrit au-dessus de la signature. L’envoyer quand même ?",
+    "sendAnyway": "Envoyer quand même",
+    "sendingHeld": "Envoi…",
+    "undo": "Annuler",
+    "sendNow": "Envoyer maintenant",
+    "unsent": "Non envoyé. Le message est revenu là où vous l’avez écrit, enregistré comme brouillon.",
     "tooMany": "100 destinataires au maximum",
     "replyingTo": "Réponse à {{name}}",
     "forwarding": "Transfert en cours",
@@ -378,8 +397,17 @@
     "deleteTitle": "Supprimer le commentaire",
     "edited": "modifié",
     "someone": "Un ancien collègue",
+    "aiNote": "Note IA",
+    "aiNoteVia": "Ajoutée via une clé d’API créée par {{name}}",
+    "aiSkipped": "{{name}} a examiné cette conversation sans rédiger de brouillon : {{reason}}",
+    "aiSkippedNoReason": "{{name}} a examiné cette conversation sans rédiger de brouillon",
     "empty": "Aucun commentaire pour le moment. Discutez de cette conversation avec votre équipe ici.",
-    "menu": "Actions du commentaire"
+    "menu": "Actions du commentaire",
+    "reply": "Répondre",
+    "replyingTo": "En réponse à {{name}} :",
+    "cancelReply": "Annuler la réponse",
+    "parentDeleted": "Commentaire d’origine supprimé",
+    "showParent": "Aller au commentaire d’origine de {{name}}"
   },
   "share": {
     "title": "Partager la conversation",
@@ -578,6 +606,7 @@
       "hint": "Distinguez le travail de la boîte partagée des messages lus et non lus",
       "enabled": "Suivre les conversations à traiter",
       "enabledHint": "Les nouveaux messages entrants restent à traiter jusqu’à ce qu’une personne les marque comme traités. Cela ne modifie pas les messages chez votre fournisseur.",
+      "gmailSnoozeHint": "Mettez en pause ici plutôt que dans Gmail : un e-mail mis en pause dans Gmail apparaît ici comme archivé, hors des messages à traiter, jusqu’à ce que Gmail le fasse revenir.",
       "markInbox": "Partir de la boîte de réception actuelle",
       "markInboxHint": "Mettre à traiter les conversations de la boîte de réception des 30 derniers jours, sauf celles auxquelles vous avez répondu en dernier. Sinon, seuls les messages qui arrivent désormais sont à traiter."
     },
@@ -671,6 +700,8 @@
     "assignedAnon": "Une conversation vous a été attribuée",
     "mention": "{{who}} vous a mentionné dans un commentaire",
     "mentionAnon": "Vous avez été mentionné dans un commentaire",
+    "reply": "{{who}} a répondu à votre commentaire",
+    "replyAnon": "Quelqu’un a répondu à votre commentaire",
     "open": "Ouvrir"
   },
   "shortcuts": {
@@ -782,7 +813,8 @@
     "spoofedTitle": "Méfiez-vous de ce message",
     "spoofedBody": "Il a échoué aux vérifications de son expéditeur et ne vient peut-être pas vraiment de {{domain}}. Évitez ses liens et ses fichiers, et ne répondez pas avec des informations personnelles.",
     "unverifiedTitle": "Cet expéditeur n’a pas pu être vérifié",
-    "unverifiedBody": "Rien ne confirme que ce message vient de {{domain}}. Soyez prudent avec ses liens et ses fichiers."
+    "unverifiedBody": "Rien ne confirme que ce message vient de {{domain}}. Soyez prudent avec ses liens et ses fichiers.",
+    "showSource": "Afficher la source"
   },
   "addresses": {
     "title": "Adresses",
@@ -849,6 +881,12 @@
     "moved_one": "Conversation déplacée vers {{name}}",
     "moved_many": "{{count}} conversations déplacées vers {{name}}",
     "moved_other": "{{count}} conversations déplacées vers {{name}}",
+    "dropRefused_one": "Sa boîte de réception n’a pas de catégorie {{name}}",
+    "dropRefused_many": "Leurs boîtes de réception n’ont pas de catégorie {{name}}",
+    "dropRefused_other": "Leurs boîtes de réception n’ont pas de catégorie {{name}}",
+    "dropSome_one": "{{count}} conversation reste en place : sa boîte de réception n’a pas de catégorie {{name}}",
+    "dropSome_many": "{{count}} conversations restent en place : leurs boîtes de réception n’ont pas de catégorie {{name}}",
+    "dropSome_other": "{{count}} conversations restent en place : leurs boîtes de réception n’ont pas de catégorie {{name}}",
     "always": "Toujours",
     "alwaysHint": "Envoyer ici aussi les prochains e-mails de {{sender}}",
     "ruleSaved": "Les e-mails de {{sender}} vont désormais dans {{name}}",
@@ -857,6 +895,12 @@
       "body": "Les e-mails des personnes restent dans Principale, tandis que les newsletters, les notifications et les promotions ont leurs propres onglets. Ollie peut proposer des catégories à partir de vos e-mails.",
       "action": "Configurer les catégories",
       "dismiss": "Plus tard"
+    },
+    "reorder": {
+      "hint": "Faites glisser pour réordonner, ou appuyez sur {{left}} ou {{right}}",
+      "hintDrag": "Faites glisser pour réordonner",
+      "moved": "{{name}} déplacé en position {{position}} sur {{count}}",
+      "failed": "Impossible d’enregistrer le nouvel ordre des onglets"
     }
   },
   "aiFeedback": {
@@ -957,8 +1001,8 @@
     "add": "Ajouter",
     "newSection": "Nouvelle section",
     "newSectionTitle": "Nouvelle section",
-    "emptySection": "Faites glisser des lignes ici ou ajoutez-en",
-    "emptyFavorites": "Faites glisser des lignes ici pour en faire des favoris",
+    "emptySection": "Déposez des lignes ici",
+    "emptyFavorites": "Déposez des favoris ici",
     "spaceSettings": "Réglages de l’espace",
     "editingSpace": "Modification de {{name}}",
     "hintTitle": "Faites de la barre latérale la vôtre",
@@ -982,9 +1026,7 @@
     "customize": "Personnaliser",
     "customizeHint": "Organiser la barre latérale : déplacer, renommer, masquer",
     "doneHint": "Terminer l’organisation de la barre latérale",
-    "doneEditing": "Terminé",
-    "layoutsShort": "Dispositions",
-    "barHint": "Faites glisser pour déplacer. Cliquez sur un nom pour le renommer. L’œil le masque."
+    "doneEditing": "Terminé"
   },
   "layouts": {
     "title": "Partir d’une disposition",

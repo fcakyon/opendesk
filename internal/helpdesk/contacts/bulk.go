@@ -167,6 +167,25 @@ func bulkUpdated(ctx context.Context, tx pgx.Tx, p *auth.Principal, table, entit
 	return err
 }
 
+// Filter is the People list's filters, as a request carries them.
+type Filter = contactFilter
+
+// Recipients resolves the contacts a send to many names, by ids (any not in the workspace is a
+// 404) or by the People list's filters (at most 1000, else 422 too_many_records), one of the two.
+func Recipients(ctx context.Context, tx pgx.Tx, p *auth.Principal, ids []string, query *Filter) ([]uuid.UUID, error) {
+	if (len(ids) == 0) == (query == nil) {
+		return nil, httpx.Validation("send either ids or query")
+	}
+	if query != nil {
+		where, args, err := query.where(ctx, tx, p)
+		if err != nil {
+			return nil, err
+		}
+		return idsWhere(ctx, tx, "contacts ct", where, args)
+	}
+	return workspaceIDs(ctx, tx, "contacts", "Contact", p.WorkspaceID, ids)
+}
+
 func registerBulk(d *deps.Deps, api huma.API) {
 	huma.Register(api, op("bulk-contacts", http.MethodPost, "/v1/contacts/bulk", "Update or delete many contacts", "Contacts", 0),
 		func(ctx context.Context, in *struct{ Body contactBulkBody }) (*struct{ Body bulkResult }, error) {

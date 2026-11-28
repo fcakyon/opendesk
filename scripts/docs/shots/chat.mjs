@@ -67,6 +67,21 @@ export const shots = [
     ],
   },
   {
+    // A chat whose visitor gave an address in the widget and has not verified it yet.
+    name: 'chat/verification',
+    path: '/inbox/open',
+    run: async (page) => {
+      await page.getByText('Can guests comment without an account?').first().click();
+      await settle(page, 600);
+      await page.locator('[data-testid="contact-verification"]').last().scrollIntoViewIfNeeded();
+      await settle(page);
+    },
+    highlight: [
+      { target: (p) => p.locator('[data-testid="visitor-presence"] [data-testid="contact-verification"]'), label: 1, badge: 'l' },
+      { target: (p) => p.locator('[data-testid="contact-verification"]').last(), label: 2, badge: 'l' },
+    ],
+  },
+  {
     name: 'chat/rotate',
     path: '/settings/brands',
     viewport: tall,

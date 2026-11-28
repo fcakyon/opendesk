@@ -214,7 +214,7 @@ type notification struct {
 
 // Parse normalizes a verified call notification. Transcription and summary events only
 // announce their text: the inbound job fetches it from Voys (Content).
-func (Adapter) Parse(body []byte) (provider.Event, error) {
+func (a Adapter) Parse(body []byte) (provider.Event, error) {
 	var n notification
 	if err := json.Unmarshal(body, &n); err != nil {
 		return provider.Event{}, err
@@ -239,11 +239,16 @@ func (Adapter) Parse(body []byte) (provider.Event, error) {
 		case len(n.Summary) > 0:
 			ev.Kind, ev.Type = provider.KindSummary, "summary"
 		case len(n.RecordingURL) > 0:
-			// The recording's URL is an API URL that needs the API token: it is not kept,
-			// only that the call has a recording. The direction is not known, so the event
-			// only updates a call the engine already has.
+			// The recording's URL is an API URL that needs the API token, so it is no link
+			// for an agent: the app keeps it (only when it is Voys' own) and plays it through
+			// Recording. The direction is not known, so the event only updates a call the
+			// engine already has.
 			ev.Kind, ev.Type = provider.KindCall, "recording"
 			ev.Call = &provider.Call{Recording: true}
+			var u string
+			if json.Unmarshal(n.RecordingURL, &u) == nil {
+				ev.Call.RecordingURL = a.recordingAddress(u)
+			}
 		default:
 			return provider.Event{}, provider.ErrIgnored
 		}
@@ -394,6 +399,52 @@ func clip(s string, n int) string {
 		return s
 	}
 	return strings.TrimSpace(string([]rune(s)[:n-1])) + "…"
+}
+
+// recordingAddress is raw when it is an address on Voys' own API host, else "". Voys signs
+// nothing, so an address in an event is trusted only as a path on the API's own host, and
+// the token is never sent anywhere else.
+func (a Adapter) recordingAddress(raw string) string {
+	raw = strings.TrimSpace(raw)
+	base, err := url.Parse(a.api())
+	if err != nil || len(raw) > 2000 {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != base.Scheme || !strings.EqualFold(u.Host, base.Host) || u.User != nil || !strings.HasPrefix(u.Path, "/") {
+		return ""
+	}
+	return u.String()
+}
+
+// Recording opens a call's recording with the connection's token (provider.Recorder).
+func (a Adapter) Recording(ctx context.Context, c *http.Client, creds map[string]string, rawURL string) (*provider.Recording, error) {
+	addr := a.recordingAddress(rawURL)
+	if addr == "" {
+		return nil, provider.ErrNoRecording
+	}
+	res, err := a.get(ctx, c, creds, "recording", addr, "audio/*, application/octet-stream")
+	if err != nil {
+		if se := (*provider.StatusError)(nil); errors.As(err, &se) && (se.Status == http.StatusNotFound || se.Status == http.StatusConflict || se.Status == http.StatusAccepted) {
+			return nil, provider.ErrNoRecording
+		}
+		return nil, err
+	}
+	if res.StatusCode != http.StatusOK {
+		res.Body.Close()
+		return nil, provider.ErrNoRecording
+	}
+	// Only sound is played: anything else Voys answers is not a recording.
+	kind, _, _ := strings.Cut(strings.ToLower(res.Header.Get("Content-Type")), ";")
+	kind = strings.TrimSpace(kind)
+	if kind == "application/octet-stream" || kind == "" {
+		kind = "audio/mpeg"
+	}
+	if !strings.HasPrefix(kind, "audio/") {
+		res.Body.Close()
+		return nil, provider.ErrNoRecording
+	}
+	return &provider.Recording{Body: res.Body, ContentType: kind, Length: res.ContentLength}, nil
 }
 
 // Content retrieves a call's Voys Intelligence transcript (text) or summary (JSON) from

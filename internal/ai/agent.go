@@ -84,7 +84,9 @@ type agentInput struct {
 	needsHuman bool
 	// handOver asks the model for its handoff line only: the conversation is handed off after
 	// this reply whatever the model does (the visitor asked for a person, or the reply limit).
+	// handRule is which of the two (hd.HandoffRule*).
 	handOver bool
+	handRule string
 	// playground runs only read-only tools; any other tool comes back as the action.
 	playground bool
 	// email answers a customer email (email_agent.go): the email prompt, read-only
@@ -118,11 +120,15 @@ type agentAction struct {
 
 // agentResult is what one reply produced.
 type agentResult struct {
-	Text      string // markdown with [n] markers
-	Passages  []Passage
-	Handoff   bool
-	Action    *agentAction
-	ToolsUsed []string
+	Text     string // markdown with [n] markers
+	Passages []Passage
+	Handoff  bool
+	// HandoffRule and HandoffReason say why it handed off (hd.HandoffRule*; the model's own
+	// words), kept on the ticket's handoff activity for the team.
+	HandoffRule   string
+	HandoffReason string
+	Action        *agentAction
+	ToolsUsed     []string
 	// Procedures are the ones the agent read with use_procedure, once each.
 	Procedures []ProcedureRef
 	USD        plan.Micro // charged to the AI balance
@@ -248,7 +254,15 @@ func (s *Service) runAgent(ctx context.Context, in agentInput, ev agentEvents) (
 				lineAsked = true
 				results = append(results, ToolResult{CallID: call.ID, Content: handoffLineAsk, IsError: true})
 			case sp.builtin == "handoff_to_human":
+				var a struct {
+					Reason string `json:"reason"`
+				}
+				_ = json.Unmarshal(call.Input, &a)
 				res.Handoff, stop = true, true
+				res.HandoffRule, res.HandoffReason = hd.HandoffRuleAgent, a.Reason
+				if in.needsHuman {
+					res.HandoffRule = hd.HandoffRuleNeedsHuman
+				}
 				results = append(results, ToolResult{CallID: call.ID, Content: "Handed off."})
 			case sp.builtin == "use_procedure":
 				var a struct {
@@ -313,6 +327,7 @@ func (s *Service) runAgent(ctx context.Context, in agentInput, ev agentEvents) (
 	}
 	if lineAsked && res.Action == nil {
 		res.Handoff = true
+		res.HandoffRule = hd.HandoffRuleAgent
 	}
 	res.Text = TidyReply(strings.TrimSpace(text.String()))
 	return res, nil

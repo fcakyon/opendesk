@@ -137,6 +137,28 @@ export function seedPhone(ws: WsData, agent: UserRef) {
   addActivity(ws, t, "status_changed", { from: "open", to: "solved" }, agent, iso(answeredAt + 300_000), false);
   t.status = "solved";
 
+  // A Voys call: its recording plays through the app, with no link to open.
+  const voysAt = dayAt(3, 10, 5);
+  entry(
+    voysAt,
+    callData({
+      call_id: "0b5e0f0a-7c1d-4e0a-9d44-5a6f1c2b3d4e",
+      provider: "voys",
+      number: "+32470000000",
+      caller_name: "Lena Hoffmann",
+      line: "+31332022074",
+      line_id: "+31332022074",
+      agent,
+      agent_name: agent.name,
+      started_at: iso(voysAt - 20_000),
+      answered_at: iso(voysAt),
+      ended_at: iso(voysAt + 95_000),
+      duration: 95,
+      recording: true,
+      recording_stream: true,
+      summary: "Lena asked when her export would be fixed.",
+    }),
+  );
   const missedAt = dayAt(1, 19, 42);
   entry(
     missedAt,

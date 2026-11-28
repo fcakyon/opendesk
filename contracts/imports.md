@@ -56,7 +56,9 @@ answers `409 import_running`.
    reply or note added here since, stays and is no longer counted as imported), the
    contacts that only it brought and that have no other tickets or messages, the companies
    no contact belongs to any more, its labels that no ticket, contact or company uses, its
-   articles, and its collections that hold no other article. Records it matched but did not
+   articles (an image one holds passes to an article or entry that stays and shows it;
+   contracts/api.md "Article and changelog files"), and its collections that hold no other
+   article. Records it matched but did not
    create (an existing contact, label, company or collection) are left alone.
 
 ## Shapes
@@ -335,3 +337,55 @@ and articles changed in bulk: refetch lists.
 Notification `import_finished` (to who started it, group `workspace`, admins only): `{import_id, source,
 source_name, account, status: "completed" | "failed" | "needs_credentials", tickets, updated, articles,
 failed, error}`. Canceling and undoing notify no one.
+
+## Contacts (`internal/helpdesk/contacts`)
+
+People come in from a CSV file apart from the history imports above: one row per person, added to
+the directory in a background job (River, `contacts.import`) that checkpoints after every chunk of
+100 rows and resumes after a restart. An agent can start one (`contacts:write`); it never touches
+tickets. Everything it writes goes through the routes' own create and update paths
+(`insertContact`, `patchContact`), so validation, labels, custom fields, events and the audit log
+are the ones of a person added by hand.
+
+| method | path | body → response |
+| --- | --- | --- |
+| POST | `/v1/contacts/import/upload` | multipart `file`, the same files as `/v1/imports/csv` → 201 `{upload_id, filename, rows, columns: [{name, samples}], suggested}`. `suggested` is the mapping guessed from the headers (an export's own headers map themselves). 20 per workspace per hour. The upload lives in `import_uploads`: removed when the import finishes or stops, or after 24 hours |
+| POST | `/v1/contacts/imports` | `{upload_id, mapping, match_on, on_match}` → 201 `ContactImport`. At most two run per workspace (`409 conflict`) |
+| GET | `/v1/contacts/imports` | → `{data: ContactImport[]}`, the latest 20 |
+| GET | `/v1/contacts/imports/{id}` | → `ContactImport` |
+| POST | `/v1/contacts/imports/{id}/cancel` | → `ContactImport`. Stops at the next chunk; what is added stays |
+
+`mapping` names the column of each field: `email`, `name`, `phone`, `company`, `external_id`,
+`notes`, `labels`, and `fields` (a custom field's key to its column). A name or an email is
+needed. `company` is found by name, case-insensitively, and created when there is none; `labels`
+split on commas, semicolons or bars and are created where the person may create labels
+(`hd.CanCreateLabels`). Custom field cells are read by the field's type (numbers, yes or no,
+select options by label or id); a cell that does not fit fails its row.
+
+`match_on` is `email` (a primary or an extra address, case-insensitively) or `external_id`, and
+needs its column mapped. `on_match` says what happens to someone already there: `skip` leaves them
+alone, `fill` sets only what they have empty (labels are always added), `overwrite` sets every
+value the file has (an empty cell changes nothing). A row without the value it is matched by has
+nothing to match and is added.
+
+`ContactImport`: `{id, filename, status: running | done | failed | cancelled, match_on, on_match,
+total, processed, created, updated, skipped, failed, errors: [{line, message}], error, created_at,
+finished_at}`. `errors` holds the first 50 rows that failed, with the line each is on and a message
+that is a typed refusal's own words (never an internal error); `failed` counts them all. A row fails
+alone: it runs in a savepoint, so one that cannot be saved leaves nothing behind.
+
+Event `contact_import.updated`, scoped to the person who started it (`Users`, `user:<uid>`): `{import:
+ContactImport}`, after each chunk and when it ends. It carries rows' messages, so it never reaches
+the rest of the workspace. People it adds publish `contact.created` and `contact.updated` as any
+write does. Audit: `contact.import_started`, `contact.import_done`, `contact.import_failed`,
+`contact.import_cancelled` (counts only, never file content).
+
+### Export
+
+`POST /v1/contacts/export` takes `{ids}` (up to 1000) or `{query}` (the People list's filters; at
+most 50,000 people) and answers `text/csv` as an attachment with a byte order mark so a spreadsheet
+reads it as UTF-8, `Cache-Control: no-store`. Columns: `Name`, `Email`, `Other emails`, `Phone`,
+`Company`, `External ID`, `Notes`, `Labels`, `Blocked`, `Created`, then one for each custom field by
+its name. A cell that would start a formula (`=`, `+`, `-`, `@`, tab or return) is written with a
+leading `'`, and an import takes that one `'` off again, so an export imports as it was. Needs `contacts:read` and an agent role; 30 per workspace per hour; audited as
+`contact.exported` with the count.

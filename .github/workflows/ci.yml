@@ -75,6 +75,8 @@ jobs:
               - 'web/**'
               - 'brand/**'
               - 'contracts/**'
+              # The app's docs index and its tests are built from the docs' pages.
+              - 'docs/src/content/docs/**'
             admin:
               - *shared
               - 'admin/**'
@@ -109,6 +111,7 @@ jobs:
               - '**/*.go'
               - 'migrations/**'
               - 'web/**'
+              - 'docs/src/content/docs/**'
               - 'admin/**'
               - 'realtime/**'
             installer:
@@ -168,7 +171,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
       # internal/webui embeds dist/, which the image build fills with the web
@@ -427,7 +430,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1

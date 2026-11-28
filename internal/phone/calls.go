@@ -652,6 +652,12 @@ func (s *Service) entryData(ctx context.Context, tx pgx.Tx, c phoneCall) (map[st
 		"tags": nonNil(c.Tags), "comments": commentsOrEmpty(c.Comments),
 		"summary": c.Summary, "transcript": c.Transcript, "outside_hours": c.OutsideHours,
 	}
+	// A provider whose recordings only its connection can open has no link to show: the
+	// entry plays it through the app (recording.go), once the provider gave an address.
+	if _, ok := s.adapters[c.Provider].(provider.Recorder); ok {
+		d["recording_url"] = ""
+		d["recording_stream"] = c.HasRecording && c.RecordingURL != ""
+	}
 	if c.AgentUserID != nil {
 		u, err := domain.LoadUserRef(ctx, tx, *c.AgentUserID)
 		if err != nil && !db.IsNotFound(err) {

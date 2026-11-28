@@ -183,7 +183,7 @@ function surveyButtons(accent: string): string {
   const labels = ["", "Very poor", "Poor", "Okay", "Good", "Great"];
   let h = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:4px 0 16px"><tr>`;
   for (let n = 1; n <= 5; n++)
-    h += `<td style="padding:0 6px 0 0"><a href="#" title="${labels[n]}" style="display:inline-block;width:44px;height:44px;line-height:42px;border:2px solid ${accent};border-radius:8px;color:#0A0A0A;text-decoration:none;font-weight:600;font-size:16px;text-align:center">${n}</a></td>`;
+    h += `<td style="padding:0 6px 0 0"><a href="#" title="${labels[n]}" style="display:inline-block;width:44px;height:44px;line-height:42px;border:2px solid ${accent};border-radius:8px;background-color:#FFFFFF;color:#0A0A0A;text-decoration:none;font-weight:600;font-size:16px;text-align:center">${n}</a></td>`;
   return h + `</tr></table>`;
 }
 
@@ -191,7 +191,8 @@ function surveyButtons(accent: string): string {
 function renderEmail(o: EmailLayoutOptions, custom: string, parts: { content: string; signature: string; history: string; footer: string }, brand: { name: string; color: string; logo: string }) {
   const accent = o.accent || brand.color || "#0A0A0A";
   const font = FONTS[o.font] ?? FONTS.system;
-  const sig = parts.signature.trim() ? `<div style="margin-top:20px;color:#404040">${parts.signature}</div>` : "";
+  const sig = parts.signature.trim() ? `<div style="margin-top:20px${o.style === "branded" ? ";color:#404040" : ""}">${parts.signature}</div>` : "";
+  const plain = !(o.mode === "custom" && custom.trim()) && o.style !== "branded";
   let body: string;
   if (o.mode === "custom" && custom.trim()) {
     body = custom.replace(/\{\{\s*content\s*\}\}/g, parts.content).replace(/\{\{\s*signature\s*\}\}/g, parts.signature).replace(/\{\{\s*history\s*\}\}/g, parts.history);
@@ -212,7 +213,7 @@ function renderEmail(o: EmailLayoutOptions, custom: string, parts: { content: st
       `</td></tr></table>`;
   } else {
     body =
-      `<div style="max-width:640px;padding:16px 20px;font-family:${font};font-size:14px;line-height:1.6;color:#171717">` +
+      `<div style="font-family:${font};font-size:14px;line-height:1.6">` +
       (o.logo && brand.logo ? `<div style="margin:0 0 18px"><img src="${esc(brand.logo)}" alt="${esc(brand.name)}" height="28" style="display:block;height:28px;width:auto;max-width:220px;border:0"></div>` : "") +
       parts.content +
       sig +
@@ -222,7 +223,7 @@ function renderEmail(o: EmailLayoutOptions, custom: string, parts: { content: st
   }
   return (
     `<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}p{margin:0 0 12px}a{color:${accent}}blockquote{margin:0 0 12px;padding-left:12px;border-left:2px solid #D4D4D4;color:#525252}</style></head>` +
-    `<body style="margin:0;padding:0">${body}</body></html>`
+    `<body style="margin:0;padding:${plain ? "8px" : "0"}">${body}</body></html>`
   );
 }
 
@@ -282,6 +283,13 @@ function preview(ws: WsData, b: Record<string, unknown>): TemplatePreview {
       // On a ticket, the signature its reply would carry, as the server picks it.
       if (ticket) signature = signatureFor(ws, ticket, mailboxId, vals);
       break;
+    case "notice":
+      // A message to many customers: its own subject as written, filled body, none of a reply's history.
+      probs = problems(body, "reply");
+      content = fill(body, vals);
+      subject = subjectIn.trim() || "Your update";
+      history = "";
+      break;
     case "signature":
     case "personal_signature":
       probs = problems(body, kind);
@@ -311,7 +319,7 @@ function preview(ws: WsData, b: Record<string, unknown>): TemplatePreview {
       break;
     }
     default:
-      throw invalid("kind must be reply, signature, personal_signature, auto_reply, layout or csat");
+      throw invalid("kind must be reply, notice, signature, personal_signature, auto_reply, layout or csat");
   }
   const footer = o.mode !== "custom" && o.footer_html.trim() ? fill(o.footer_html, vals) : "";
   const html = renderEmail(o, fill(custom, vals), { content, signature, history, footer }, { name: brand.name, color: brand.color, logo: brand.images.logo ?? "" });

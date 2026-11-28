@@ -263,7 +263,13 @@
     "invited_other": "{{count}} invitations sent",
     "invitedSome_one": "{{count}} invitation sent, {{skipped}} skipped (no email, blocked or already has access)",
     "invitedSome_other": "{{count}} invitations sent, {{skipped}} skipped (no email, blocked or already has access)",
-    "inviteFailed": "Could not send the invitations"
+    "inviteFailed": "Could not send the invitations",
+    "message": "Send message",
+    "export": "Export",
+    "exported": "Export saved",
+    "exportFailed": "Couldn't export them.",
+    "exportAll": "Export all",
+    "exportMatching": "Export matching"
   },
   "portal": {
     "title": "Customer portal",
@@ -291,5 +297,134 @@
     "needsEmail": "Add an email address to invite this contact.",
     "isBlocked": "Unblock this contact to invite them.",
     "ssoOnly": "Customers sign in through your identity provider, with no invitation needed."
+  },
+  "message": {
+    "title": "Send a message",
+    "description": "One message to everyone you picked, as a separate ticket for each. Replies land in that person's own ticket, and nobody sees another's address.",
+    "cancel": "Cancel",
+    "from": "From",
+    "noAddress": "None of your addresses can send email yet. Connect a mailbox that sends in Settings, then come back.",
+    "subject": "Subject",
+    "subjectHint": "Sent as written.",
+    "subjectPlaceholder": "What the message is about",
+    "body": "Message",
+    "bodyPlaceholder": "Write the message. Type {{ to add the customer's name.",
+    "label": "Label",
+    "labelHint": "Every ticket carries it, so you can follow the replies.",
+    "status": "Tickets start as",
+    "statusSolved": "Solved",
+    "statusPending": "Pending",
+    "statusOpen": "Open",
+    "statusHint": {
+      "solved": "Most people will not answer, so the tickets stay out of your way. Anyone who replies reopens theirs. No satisfaction survey is sent.",
+      "pending": "The tickets wait for an answer. Anyone who replies reopens theirs.",
+      "open": "Every ticket lands in your queue, as if the customer had written first."
+    },
+    "preview": "How it looks to a customer",
+    "tooMany": "Tick up to 100 people, or choose everyone who matches the search and filters.",
+    "reaches_one": "Reaches {{count}} customer.",
+    "reaches_other": "Reaches {{count}} customers.",
+    "send_one": "Send to {{count}} customer",
+    "send_other": "Send to {{count}} customers",
+    "started_one": "Sending to {{count}} customer",
+    "started_other": "Sending to {{count}} customers",
+    "progress": "{{done}} of {{total}} sent",
+    "stop": "Stop",
+    "stopFailed": "Could not stop it",
+    "stopped": "stopped after {{sent}} of {{total}}",
+    "done_one": "sent to {{count}} customer",
+    "done_other": "sent to {{count}} customers",
+    "doneWithFailures": "{{sent}} sent, {{failed}} could not be sent.",
+    "replies": "See replies",
+    "dismiss": "Dismiss",
+    "leftOut": "Left out: {{list}}.",
+    "noEmail_one": "{{count}} without an email address",
+    "noEmail_other": "{{count}} without an email address",
+    "blockedCount_one": "{{count}} blocked",
+    "blockedCount_other": "{{count}} blocked",
+    "confirmTitle_one": "Send to {{count}} customer?",
+    "confirmTitle_other": "Send to {{count}} customers?",
+    "confirmBody_one": "{{count}} customer gets this email, as a ticket of their own. You can stop it while it sends, but emails that went out cannot be taken back.",
+    "confirmBody_other": "{{count}} customers each get this email, as a ticket of their own. You can stop it while it sends, but emails that went out cannot be taken back."
+  },
+  "import": {
+    "open": "Import",
+    "title": "Import people",
+    "runningTitle": "Importing people",
+    "body": "Add people from a CSV file. Match its columns to the fields, and choose what happens to someone who is already here.",
+    "close": "Done",
+    "replace": "Choose another file",
+    "summary": "{{rows}} rows, {{columns}} columns",
+    "start_one": "Import {{count}} row",
+    "start_other": "Import {{count}} rows",
+    "notInFile": "Not in the file",
+    "emptyColumn": "Empty in the first rows",
+    "customField": "Custom field",
+    "fields": {
+      "email": {
+        "label": "Email",
+        "hint": "Finds people already here"
+      },
+      "name": {
+        "label": "Name",
+        "hint": "Taken from the email when empty"
+      },
+      "phone": {
+        "label": "Phone",
+        "hint": "At most 50 characters"
+      },
+      "company": {
+        "label": "Company",
+        "hint": "By name; new ones are created"
+      },
+      "external_id": {
+        "label": "External ID",
+        "hint": "Your other system's id for them"
+      },
+      "notes": {
+        "label": "Notes",
+        "hint": "Shown on their profile"
+      },
+      "labels": {
+        "label": "Labels",
+        "hint": "Separated by commas, semicolons or bars"
+      }
+    },
+    "matchOn": "Find people already here by",
+    "matchEmail": "Email address",
+    "matchExternal": "External ID",
+    "onMatch": "When someone is already here",
+    "skip": "Leave them alone",
+    "fill": "Fill in what's empty",
+    "overwrite": "Update with the file",
+    "skipHint": "Their details stay as they are.",
+    "fillHint": "Only empty fields are set; labels are added.",
+    "overwriteHint": "Every value in the file replaces theirs; empty cells change nothing.",
+    "problem": {
+      "identity": "Pick a column for the name or the email.",
+      "email": "Pick the email column to find people by email.",
+      "external_id": "Pick the external ID column to find people by it."
+    },
+    "status": {
+      "running": "Importing",
+      "done": "Finished",
+      "failed": "Stopped",
+      "cancelled": "Stopped by you"
+    },
+    "of": "{{done}} of {{total}} rows",
+    "stop": "Stop",
+    "cancelFailed": "Couldn't stop the import.",
+    "count": {
+      "created": "Added",
+      "updated": "Updated",
+      "skipped": "Skipped",
+      "failed": "Failed"
+    },
+    "rowErrors_one": "{{count}} row couldn't be imported",
+    "rowErrors_other": "{{count}} rows couldn't be imported",
+    "line": "Line {{line}}",
+    "moreErrors_one": "And {{count}} more",
+    "moreErrors_other": "And {{count}} more",
+    "dropHint": "One row per person, with a header row that names the columns. A name or an email is enough."
   }
 }

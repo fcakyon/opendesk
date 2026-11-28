@@ -1,10 +1,10 @@
 // The bar over a selection on the People and Companies lists: add or remove a label, set or
-// clear a custom field, set a company (People), invite to the customer portal (People) and delete. A selection of rows goes by id, in requests of 100; "everyone who
+// clear a custom field, set a company (People), invite to the customer portal (People), export (People) and delete. A selection of rows goes by id, in requests of 100; "everyone who
 // matches" goes by the list's own filters, which the server applies to at most 1000 records.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { Building2, ListFilter, Send, Tag as TagIcon, Trash2, X } from "lucide-react";
+import { Building2, Download, ListFilter, MessageSquarePlus, Send, Tag as TagIcon, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnimatedNumber } from "@/components/motion";
@@ -12,9 +12,12 @@ import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
 import { Dialog } from "@/components/ui/dialog";
 import { Picker } from "@/components/ui/picker";
+import { Tooltip } from "@/components/ui/tooltip";
+import { MessageDialog } from "./MessageDialog";
 import { toast } from "@/components/ui/toast";
 import { useDebounced } from "@/components/contacts/hooks";
 import { CompanyGlyph } from "@/components/contacts/bits";
+import { exportContacts } from "@/components/contacts/exportCsv";
 import { useRecordFields } from "@/components/contacts/LabelsAndFields";
 import { FieldsSection } from "@/components/tickets/detail/FieldsSection";
 import type { BulkResult, CompanyBulkQuery, ContactBulkQuery, DirectoryBulkPatch } from "@/lib/api/endpoints";
@@ -64,6 +67,9 @@ export function DirectoryBulkBar(props: Props) {
   const n = selection.ids.length;
   const shown = n > 0 || selection.allMatching;
   const [settingField, setSettingField] = useState(false);
+  const [messaging, setMessaging] = useState(false);
+  // A message goes to the rows ticked (at most 100 by id) or to everyone the filters match.
+  const canMessage = scope === "contacts" && (selection.allMatching || n <= 100);
 
   const apply = useMutation({
     mutationFn: (action: { delete: true } | { patch: Patch }) => run(props, action),
@@ -74,6 +80,12 @@ export function DirectoryBulkBar(props: Props) {
       void qc.invalidateQueries({ queryKey: qk.of("companies") });
     },
     onError: (e) => toast.error(e, t("bulk.failed")),
+  });
+
+  const exportPeople = useMutation({
+    mutationFn: () => exportContacts(selection.allMatching ? { query: props.query as ContactBulkQuery } : { ids: selection.ids }),
+    onSuccess: () => toast.success(t("bulk.exported")),
+    onError: (e) => toast.error(e, t("bulk.exportFailed")),
   });
 
   const remove = () => {
@@ -139,6 +151,20 @@ export function DirectoryBulkBar(props: Props) {
             </Button>
             {scope === "contacts" && <CompanyAction onPick={(company_id) => apply.mutate({ patch: { company_id } })} />}
             {scope === "contacts" && !selection.allMatching && <InviteAction ids={selection.ids} onDone={selection.clear} />}
+            {scope === "contacts" && (
+              <>
+                <Tooltip content={canMessage ? undefined : t("message.tooMany")}>
+                  <span className="inline-flex">
+                    <Button variant="ghost" size="sm" icon={<MessageSquarePlus className="size-3.5" />} disabled={!canMessage} onClick={() => setMessaging(true)}>
+                      {t("bulk.message")}
+                    </Button>
+                  </span>
+                </Tooltip>
+                <Button variant="ghost" size="sm" icon={<Download className="size-3.5" />} loading={exportPeople.isPending} onClick={() => exportPeople.mutate()}>
+                  {t("bulk.export")}
+                </Button>
+              </>
+            )}
             <Button variant="ghost" size="sm" icon={<Trash2 className="size-3.5" />} onClick={remove} className="text-danger-fg">
               {t("bulk.delete")}
             </Button>
@@ -147,6 +173,15 @@ export function DirectoryBulkBar(props: Props) {
           </motion.div>
         )}
       </AnimatePresence>
+      {props.scope === "contacts" && (
+        <MessageDialog
+          key={messaging ? "open" : "closed"}
+          open={messaging}
+          onOpenChange={setMessaging}
+          target={selection.allMatching ? { query: props.query } : { ids: selection.ids }}
+          onSent={selection.clear}
+        />
+      )}
       <SetFieldDialog
         key={settingField ? "open" : "closed"}
         kind={scope === "contacts" ? "contact" : "company"}

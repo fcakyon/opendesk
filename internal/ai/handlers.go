@@ -187,7 +187,9 @@ func (s *Service) register(api huma.API) {
 		Summary: "Summarize a ticket", Description: "Stores the summary in custom.ai_summary and publishes ticket.updated.", Tags: tags},
 		func(ctx context.Context, in *struct {
 			ID   string `path:"id"`
-			Body *struct{}
+			Body *struct {
+				Language string `json:"language,omitempty" maxLength:"35" doc:"BCP 47 tag the summary is written in. Empty or invalid uses the workspace's customer language, then English."`
+			}
 		}) (*struct{ Body SummaryOutput }, error) {
 			// The summary is stored on the ticket: a write, as an agent.
 			p, err := auth.RequireWorkspace(ctx, auth.RoleAgent, auth.ScopeTicketsWrite)
@@ -201,7 +203,11 @@ func (s *Service) register(api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			out, err := s.Summarize(ctx, p.WorkspaceID, p.ActorUserID(), tid)
+			lang := ""
+			if in.Body != nil {
+				lang = in.Body.Language
+			}
+			out, err := s.Summarize(ctx, p.WorkspaceID, p.ActorUserID(), tid, lang)
 			if err != nil {
 				return nil, apiErr(err)
 			}
@@ -306,6 +312,24 @@ func (s *Service) register(api huma.API) {
 				return nil, apiErr(err)
 			}
 			return &struct{ Body KBDraftOutput }{*out}, nil
+		})
+
+	huma.Register(api, huma.Operation{OperationID: "ai-app-help", Method: http.MethodPost, Path: "/v1/ai/app-help",
+		Summary: "Answer a question about the app", Description: "A few sentences on how to do something in opendesk, from the places in the app and the " +
+			"documentation sections the app's own search found for the question (contracts/ai.md \"Asking about the app\"). People only.", Tags: tags},
+		func(ctx context.Context, in *struct{ Body AppHelpInput }) (*struct{ Body AppHelpOutput }, error) {
+			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, "")
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if !s.d.Limiter.Allow("ai:app-help:"+p.UserID.String(), 20, time.Minute) {
+				return nil, httpx.E(http.StatusTooManyRequests, "rate_limited", "Too many questions; try again in a minute.")
+			}
+			out, err := s.AppHelp(ctx, p, in.Body)
+			if err != nil {
+				return nil, apiErr(err)
+			}
+			return &struct{ Body AppHelpOutput }{*out}, nil
 		})
 
 	huma.Register(api, huma.Operation{OperationID: "ai-search", Method: http.MethodGet, Path: "/v1/ai/search",

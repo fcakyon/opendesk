@@ -19,7 +19,9 @@ curl "https://api.opendesk.sh/v1/search?q=refund" -H "Authorization: Bearer od_l
 { "tickets": [ ... ], "contacts": [ ... ], "articles": [ ... ], "wiki_pages": [ ... ] }
 ```
 
-Up to five of each, of the kinds the key's scopes can read. For more tickets, use `GET /v1/tickets?q=`; for more wiki pages, [`GET /v1/wiki/search?q=`](/api/resources/wiki/).
+Up to eight tickets and five of each other kind, of the kinds the key's scopes can read. For more tickets, use `GET /v1/tickets?q=`; for more wiki pages, [`GET /v1/wiki/search?q=`](/api/resources/wiki/).
+
+Tickets match by number, alias, subject, custom fields, message text (whole words or their start) and the contact's name, email and phone. A `q` that is one address-like word, such as `buyer@example.com`, `example.com` or `example`, also matches the tickets whose contact has that address (primary or extra) or with a message from, to or cc'd to it, and those come first. Contacts match by part of an address the same way. `GET /v1/tickets?q=` matches the same way, in the list's order.
 
 ## Reports overview
 
@@ -40,6 +42,10 @@ curl "https://api.opendesk.sh/v1/reports/overview?from=2026-09-01&to=2026-09-30"
 }
 ```
 
+`team_id` (a team, or `none`), `brand_id` and `mailbox_id` (a mailbox, or `none` for tickets without one, such as chats and calls) narrow every figure, and `assignee_id` narrows it to the tickets assigned to one member. A ticket counts under the mailbox it replies from. Signed in, a member who is not an owner or admin may only name themselves in `assignee_id`.
+
+`by_agent` is personal, as in the agents report: API keys, owners and admins get every member's row, and other members their own row alone. The other figures are the same for everyone.
+
 See [Reports](/guides/reports/) for what each metric means.
 
 ## Agents report
@@ -59,4 +65,4 @@ curl "https://api.opendesk.sh/v1/reports/agents?from=2026-09-01&to=2026-09-30"  
 }
 ```
 
-One row per owner, admin and agent, most solved first, narrowed like the overview by `team_id` and `brand_id`. Online time is personal: `online_minutes` is filled in for every row only for API keys with the `settings:read` scope (`online_time` is then `all`). Signed in, owners and admins get every row and members their own row only (`online_time` is then `self`). A workspace that turned online time off (`settings.agent_online_time: false`) answers `off` to everyone, with no online time on any row. See [Agents](/guides/reports/#agents) for what each column counts.
+One row per owner, admin and agent, most solved first, narrowed like the overview by `team_id`, `brand_id` and `mailbox_id`. When the workspace counts a team by its people (`settings.reports_team_members`), a team id answers its leads and members alone, each with the figures they have without it. `assignee_id` answers that member's row alone, with the same figures as without it. Online time is personal: `online_minutes` is filled in for every row only for API keys with the `settings:read` scope (`online_time` is then `all`). Signed in, owners and admins get every row and members their own row only (`online_time` is then `self`). A workspace that turned online time off (`settings.agent_online_time: false`) answers `off` to everyone, with no online time on any row. See [Agents](/guides/reports/#agents) for what each column counts.

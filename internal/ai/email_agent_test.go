@@ -2,6 +2,7 @@ package ai
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -11,8 +12,10 @@ import (
 
 	"github.com/useopendesk/opendesk/internal/crypto"
 	"github.com/useopendesk/opendesk/internal/domain"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 	"github.com/useopendesk/opendesk/internal/ids"
 	"github.com/useopendesk/opendesk/internal/jobs"
+	"github.com/useopendesk/opendesk/internal/plan"
 )
 
 // emailMailbox inserts a mailbox; mode "" leaves email answers off.
@@ -190,7 +193,7 @@ func TestEmailAgent(t *testing.T) {
 	if tk := e.loadTicket(tid); tk.Custom["ai_handoff"] != true || tk.Assignee != nil || len(publicMessages(e, tid)) != 1 || e.F.calls() != before+1 {
 		t.Fatalf("handoff %+v", tk.Custom)
 	}
-	if n := e.count(`SELECT count(*) FROM activities WHERE ticket_id = $1 AND type = 'ai_handoff' AND actor_type = 'ai'`, tid); n != 1 {
+	if n := e.count(`SELECT count(*) FROM activities WHERE ticket_id = $1 AND type = 'ai_handoff' AND actor_type = 'ai' AND data->>'rule' IN ('agent', 'reply_limit', 'needs_human')`, tid); n != 1 {
 		t.Fatalf("handoff activity %d", n)
 	}
 	// The handoff names the bot that handed over.
@@ -315,5 +318,70 @@ func TestEmailAgentOnJev(t *testing.T) {
 	e.emailAnswer(tid, mid)
 	if ms := publicMessages(e, tid); len(ms) != 2 || !ms[1].AI {
 		t.Fatalf("not answered %+v", ms)
+	}
+}
+
+// A message the agent leaves alone on purpose says why on the ticket, once, for the team.
+func TestEmailAgentSaysWhyItStaysSilent(t *testing.T) {
+	e := newEnv(t, opts{billing: true})
+	mb := e.emailMailbox("send")
+	skipped := func(tid uuid.UUID) []string {
+		rows, err := e.D.DB.Pool.Query(e.Ctx, `SELECT data->>'reason' FROM activities WHERE ticket_id = $1 AND type = 'ai_skipped' AND actor_type = 'ai'`, tid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+
+	// The monthly cap is used.
+	e.settings(map[string]any{"widget_monthly_cap_usd": 0.01})
+	e.Exec(`INSERT INTO ai_usage (workspace_id, feature, micro_usd) VALUES ($1, 'answer_email', 100000000)`, e.WS.ID)
+	tid, mid := e.emailTicket(mb, customerEmail(), "Password", "How do I reset my password?")
+	before := e.F.calls()
+	e.emailAnswer(tid, mid)
+	e.emailAnswer(tid, mid) // the same job again adds nothing
+	if e.F.calls() != before {
+		t.Fatal("answered over the cap")
+	}
+	if got := skipped(tid); !slices.Equal(got, []string{hd.SkipMonthlyCap}) {
+		t.Fatalf("cap reasons %v", got)
+	}
+	var bot string
+	e.Scalar(`SELECT coalesce(data->>'bot', '') FROM activities WHERE ticket_id = $1 AND type = 'ai_skipped'`, &bot, tid)
+	if bot == "" {
+		t.Fatal("the skipped line names no bot")
+	}
+	e.settings(map[string]any{"widget_monthly_cap_usd": 0})
+
+	// The customer reached the hourly limit.
+	from := customerEmail()
+	for i := 0; i < emailContactHourly; i++ {
+		tk, _ := e.emailTicket(mb, from, "Earlier", "Question")
+		e.Exec(`INSERT INTO messages (id, workspace_id, ticket_id, kind, direction, author_type, ai, body_html, body_text)
+			VALUES ($1, $2, $3, 'reply', 'outbound', 'system', true, '<p>a</p>', 'a')`, ids.New(), e.WS.ID, tk)
+	}
+	tid, mid = e.emailTicket(mb, from, "Password", "How do I reset my password?")
+	before = e.F.calls()
+	e.emailAnswer(tid, mid)
+	if e.F.calls() != before {
+		t.Fatal("answered past the hourly limit")
+	}
+	if got := skipped(tid); !slices.Equal(got, []string{hd.SkipContactLimit}) {
+		t.Fatalf("limit reasons %v", got)
+	}
+
+	// The AI balance is used up.
+	if err := plan.Ensure(e.Ctx, e.D.DB.Pool, e.WS.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.Exec(`UPDATE ai_balances SET included_used_micro_usd = $2 WHERE workspace_id = $1`, e.WS.ID, plan.FreeMonthlyUSD)
+	tid, mid = e.emailTicket(mb, customerEmail(), "Password", "How do I reset my password?")
+	e.emailAnswer(tid, mid)
+	if got := skipped(tid); !slices.Equal(got, []string{hd.SkipNoBalance}) {
+		t.Fatalf("balance reasons %v", got)
 	}
 }

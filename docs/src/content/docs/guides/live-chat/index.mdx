@@ -89,6 +89,19 @@ If your visitors are signed in to your product, pass their user id, email and na
 
 <Screenshot src="/guides/chat/identify" alt="The Identify signed-in users section: the identify snippet ringed as 1, and the Widget secret with Rotate secret ringed as 2" />
 
+## Verified and unverified visitors
+
+An email address a visitor types in the chat proves nothing on its own: anyone can type anyone's address. So when a visitor leaves their address in the widget's email form, opendesk emails them a link to confirm it, in their language and your brand's email design, and the chat shows them a note that the email went out. They keep chatting meanwhile. Nothing is blocked while they are unverified.
+
+- In the chat, at the top of the conversation (1) and beside the visitor's name (2), your team sees **Unverified** until the visitor opens the link and clicks **Confirm email address**, then **Verified**. It changes live, with no reload. Hover it to see why.
+- A visitor signed in through [identity verification](/guides/live-chat/identity-verification/) is **Verified** from the start, and gets no email.
+- One link goes out at a time, so sending the form again sends no second email. The visitor can ask for another from the note in the chat after a minute, up to five a day. A link works for 48 hours.
+- Opening the link shows a page with the address and a **Confirm email address** button. Only that click verifies, so a mail scanner that opens links verifies no one.
+- If the address changes later, the visitor is unverified again until they verify the new one.
+- A visitor who types the address of someone you already know gets a contact of their own until they verify, so they never see that person's conversations. Once they verify, their contact merges into the existing one: the chat moves there, your team sees one contact, and replies reach them by email at that address. For safety, the chat in their browser starts over, since whoever typed the address may not be whoever opened the email. A blocked contact, or two contacts with different external ids, stay apart.
+
+<Screenshot src="/guides/chat/verification" alt="A chat whose visitor has not verified their email: Unverified at the top of the conversation ringed as 1, and beside the visitor's name in the contact card ringed as 2" />
+
 <Fold>
 
 ## Look and home screen

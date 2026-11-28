@@ -1,22 +1,31 @@
 // The fields a new ticket starts from, the same in the dialog and on the page:
-// email, chat, log the customer's request or log internally, who it goes to, and the
-// address or widget it goes from.
+// email, chat, log the customer's request or log internally, who it goes to (the
+// contact, and on an email anyone else, with Cc and Bcc), and the address or widget it
+// goes from.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { Plus, X } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Segmented } from "@/components/ui/tabs";
 import { Picker } from "@/components/ui/picker";
 import { Avatar } from "@/components/ui/avatar";
+import { Tooltip } from "@/components/ui/tooltip";
 import { api } from "@/lib/api/endpoints";
 import { q, qk } from "@/lib/queries";
 import { addressLabel, TeamDot } from "./teams";
+import { AddressInput, TypedAddress } from "./detail/addressEdit";
+import { EmailChips } from "./detail/composerParts";
+import { allTo, isEmailed, toAddress, type NewTicketTo as Recipient } from "./newTicket";
 import type { NewTicketState } from "./useNewTicket";
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** The most an email's To takes (POST /v1/tickets: the contact and 19 more). */
+const MAX_TO = 20;
 
 export function NewTicketKind({ s }: { s: NewTicketState }) {
   const { t: tr } = useTranslation("inbox");
@@ -40,52 +49,70 @@ export function NewTicketKind({ s }: { s: NewTicketState }) {
 
 export function NewTicketTo({ s }: { s: NewTicketState }) {
   const { t: tr } = useTranslation("inbox");
-  const qc = useQueryClient();
-  const [toQuery, setToQuery] = useState("");
-  const contacts = useQuery({
-    queryKey: qk.of("contacts", "pick", toQuery),
-    queryFn: () => api.contacts.search({ q: toQuery, limit: 8 }),
-    enabled: toQuery.trim().length > 0,
-  });
-  const to = s.draft.to;
+  const { to, moreTo } = s.draft;
   const chat = s.chat;
-  // A chat reaches only contacts the widget knows; the others say why and take an email instead.
-  const toItems = (contacts.data?.data ?? []).map((c) => ({
-    value: c.id,
-    label: c.name || c.email || tr("newTicket.unnamed"),
-    hint: chat && !c.chat_reachable ? tr("newTicket.notOnChatShort") : (c.email ?? undefined),
-    icon: <Avatar name={c.name || c.email || "?"} src={c.avatar_url} size="xs" />,
-  }));
   const unreachable = chat && !!to && !to.contact?.chat_reachable;
+  // An email goes to the contact and anyone else; a chat, a logged request and a note have the contact alone.
+  const several = isEmailed(s.draft);
+  const people = allTo(s.draft);
+  const add = (r: Recipient) => {
+    if (!to) return s.set({ to: r });
+    if (!people.some((p) => toAddress(p) === toAddress(r))) s.set({ moreTo: [...moreTo, r] });
+  };
+  // The contact leaving hands the ticket to the next one.
+  const remove = (i: number) => (i === 0 ? s.set({ to: moreTo[0] ?? null, moreTo: moreTo.slice(1) }) : s.set({ moreTo: moreTo.filter((_, j) => j !== i - 1) }));
+  // A typed address fixed in place: emptied, or now the same as another, it leaves.
+  const edit = (i: number, email: string | null) => {
+    if (!email || people.some((p, j) => j !== i && toAddress(p) === email.toLowerCase())) return remove(i);
+    if (i === 0) s.set({ to: { email } });
+    else s.set({ moreTo: moreTo.map((r, j) => (j === i - 1 ? { email } : r)) });
+  };
   return (
     <Field label={tr("newTicket.to")} error={unreachable ? tr("newTicket.notOnChat") : undefined}>
       {({ id }) =>
-        to ? (
+        to && several ? (
+          <div className="flex min-h-8 flex-wrap items-center gap-1 rounded-md border border-line bg-surface px-1 py-1 text-sm">
+            {people.map((r, i) => (
+              <RecipientChip key={toAddress(r) || i} r={r} onRemove={() => remove(i)} onEdit={(email) => edit(i, email)} />
+            ))}
+            {people.length < MAX_TO && (
+            <ContactPicker
+              s={s}
+              exclude={people}
+              onPick={add}
+              trigger={
+                <button
+                  id={id}
+                  type="button"
+                  className="flex h-6 items-center gap-1 rounded-sm px-1.5 text-xs text-fg-3 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)]"
+                >
+                  <Plus className="size-3" />
+                  {tr("newTicket.addTo")}
+                </button>
+              }
+            />
+            )}
+          </div>
+        ) : to ? (
           <div className="flex h-8 items-center gap-2 rounded-md border border-line bg-surface pl-2 pr-1 text-sm">
             <Avatar name={to.contact?.name || to.email || "?"} size="xs" />
-            <span className="min-w-0 flex-1 truncate" data-ph-mask>
-              {to.contact ? `${to.contact.name} ` : ""}
-              <span className="text-fg-3">{to.contact?.email ?? to.email}</span>
-            </span>
+            {to.contact || !to.email ? (
+              <span className="min-w-0 flex-1 truncate" data-ph-mask>
+                {to.contact ? `${to.contact.name} ` : ""}
+                <span className="text-fg-3">{to.contact?.email ?? to.email}</span>
+              </span>
+            ) : (
+              <TypedAddress email={to.email} isEmail={(v) => emailRe.test(v)} onChange={(email) => s.set({ to: email ? { email } : null })} />
+            )}
             <Button size="xs" variant="ghost" onClick={() => s.set({ to: null })}>
               {tr("newTicket.change")}
             </Button>
           </div>
         ) : (
-          <Picker
-            items={toItems}
-            value={null}
-            width={380}
-            placeholder={chat ? tr("newTicket.toPlaceholderChat") : tr("newTicket.toPlaceholder")}
-            emptyText={toQuery ? (chat ? tr("newTicket.noContactsChat") : tr("newTicket.noContacts")) : tr("newTicket.startTyping")}
-            onSelect={(v) => {
-              const contact = contacts.data?.data.find((c) => c.id === v);
-              // The page's contact card shows them at once, before its own fetch answers.
-              if (contact && !qc.getQueryData(qk.contact(v))) qc.setQueryData(qk.contact(v), contact);
-              s.set({ to: { contact } });
-            }}
-            onCreate={chat ? undefined : (v) => emailRe.test(v) && s.set({ to: { email: v } })}
-            createLabel={chat ? undefined : tr("newTicket.use")}
+          <ContactPicker
+            s={s}
+            exclude={people}
+            onPick={add}
             trigger={
               <button
                 id={id}
@@ -95,11 +122,128 @@ export function NewTicketTo({ s }: { s: NewTicketState }) {
                 {chat ? tr("newTicket.toPlaceholderChat") : tr("newTicket.toPlaceholder")}
               </button>
             }
-            onQueryChange={setToQuery}
           />
         )
       }
     </Field>
+  );
+}
+
+/** Contacts as you type, or a full address typed (not for a chat, which reaches contacts it knows). */
+function ContactPicker({ s, exclude, onPick, trigger }: { s: NewTicketState; exclude: Recipient[]; onPick: (r: Recipient) => void; trigger: ReactNode }) {
+  const { t: tr } = useTranslation("inbox");
+  const qc = useQueryClient();
+  const [toQuery, setToQuery] = useState("");
+  const contacts = useQuery({
+    queryKey: qk.of("contacts", "pick", toQuery),
+    queryFn: () => api.contacts.search({ q: toQuery, limit: 8 }),
+    enabled: toQuery.trim().length > 0,
+  });
+  const chat = s.chat;
+  const taken = new Set(exclude.map(toAddress));
+  // A chat reaches only contacts the widget knows; the others say why and take an email instead.
+  const toItems = (contacts.data?.data ?? [])
+    .filter((c) => !c.email || !taken.has(c.email.toLowerCase()))
+    .map((c) => ({
+      value: c.id,
+      label: c.name || c.email || tr("newTicket.unnamed"),
+      hint: chat && !c.chat_reachable ? tr("newTicket.notOnChatShort") : (c.email ?? undefined),
+      icon: <Avatar name={c.name || c.email || "?"} src={c.avatar_url} size="xs" />,
+    }));
+  return (
+    <Picker
+      items={toItems}
+      value={null}
+      width={380}
+      placeholder={chat ? tr("newTicket.toPlaceholderChat") : tr("newTicket.toPlaceholder")}
+      emptyText={toQuery ? (chat ? tr("newTicket.noContactsChat") : tr("newTicket.noContacts")) : tr("newTicket.startTyping")}
+      onSelect={(v) => {
+        const contact = contacts.data?.data.find((c) => c.id === v);
+        // The page's contact card shows them at once, before its own fetch answers.
+        if (contact && !qc.getQueryData(qk.contact(v))) qc.setQueryData(qk.contact(v), contact);
+        if (contact) onPick({ contact });
+      }}
+      onCreate={chat ? undefined : (v) => emailRe.test(v.trim()) && onPick({ email: v.trim() })}
+      createLabel={chat ? undefined : tr("newTicket.use")}
+      trigger={trigger}
+      onQueryChange={setToQuery}
+    />
+  );
+}
+
+/** One of an email's To: a typed address (no contact) is edited in place with a click. */
+function RecipientChip({ r, onRemove, onEdit }: { r: Recipient; onRemove: () => void; onEdit: (email: string | null) => void }) {
+  const { t } = useTranslation("indicators");
+  const [editing, setEditing] = useState(false);
+  const email = r.contact?.email ?? r.email ?? "";
+  const name = r.contact?.name;
+  const typed = !r.contact && !!r.email;
+  if (editing) {
+    return (
+      <span className="inline-flex h-6 items-center rounded-sm bg-surface text-[12.5px]">
+        <AddressInput
+          className="h-6 rounded-sm px-1.5"
+          initial={email}
+          label={t("tickets.editAddress", { name: email })}
+          onCancel={() => setEditing(false)}
+          onCommit={(text) => {
+            const v = text.trim();
+            if (v && !emailRe.test(v)) return false;
+            setEditing(false);
+            if (v !== email) onEdit(v || null);
+            return true;
+          }}
+        />
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex h-6 min-w-0 max-w-full items-center gap-1.5 rounded-sm bg-hover pl-1 pr-0.5 text-[12.5px] animate-pop-in motion-reduce:animate-none" data-ph-mask>
+      <Avatar name={name || email || "?"} src={r.contact?.avatar_url} size="xs" />
+      {typed ? (
+        <Tooltip content={t("tickets.editAddress", { name: email })}>
+          <button type="button" aria-label={t("tickets.editAddress", { name: email })} onClick={() => setEditing(true)} className="min-w-0 cursor-text truncate hover:text-fg">
+            {email}
+          </button>
+        </Tooltip>
+      ) : (
+        <span className="min-w-0 truncate">
+          {name ? `${name} ` : ""}
+          <span className={cn(name && "text-fg-3")}>{email}</span>
+        </span>
+      )}
+      <button
+        type="button"
+        aria-label={t("tickets.remove", { name: name || email })}
+        onClick={onRemove}
+        className="flex size-5 shrink-0 items-center justify-center rounded-xs text-fg-4 transition-colors hover:text-fg"
+      >
+        <X className="size-3" />
+      </button>
+    </span>
+  );
+}
+
+/**
+ * The dialog's Cc and Bcc, shown on an email once asked for (the page has them above its
+ * message). They go with the first email only.
+ */
+export function NewTicketCopies({ s }: { s: NewTicketState }) {
+  const { t: tr } = useTranslation("inbox");
+  if (!isEmailed(s.draft)) return null;
+  const { draft, set } = s;
+  const open = draft.showCc || draft.cc.length > 0 || draft.bcc.length > 0;
+  if (!open)
+    return (
+      <button type="button" onClick={() => set({ showCc: true })} className="-mt-2 self-start rounded-sm px-1 py-0.5 text-xs text-fg-3 transition-colors hover:bg-hover hover:text-fg">
+        {tr("newTicket.addCopies")}
+      </button>
+    );
+  return (
+    <div className="overflow-hidden rounded-md border border-line bg-surface animate-fade-in motion-reduce:animate-none [&>div:last-child]:border-b-0">
+      <EmailChips label={tr("composer.cc")} values={draft.cc} onChange={(cc) => set({ cc })} />
+      <EmailChips label={tr("composer.bcc")} values={draft.bcc} onChange={(bcc) => set({ bcc })} />
+    </div>
   );
 }
 

@@ -24,6 +24,13 @@ describe("decisions", () => {
     expect(aiSuggestions(ticket())).toEqual([]);
   });
 
+  it("keeps why a suggestion was not applied, and ignores a reason it does not know", () => {
+    const t = ticket({ custom: { ai_suggestions: { priority: { ...sugg("high"), reason: "below_threshold" }, severity: { ...sugg("sev2"), reason: "something_new" } } } });
+    const [sev, pri] = aiSuggestions(t);
+    expect(pri[1].reason).toBe("below_threshold");
+    expect(sev[1].reason).toBeUndefined();
+  });
+
   it("removes one suggestion without touching the rest", () => {
     const t = ticket({ custom: { ai_suggestions: { priority: sugg("high"), severity: sugg("sev3") }, other: 1 } });
     const next = withoutSuggestion(t, "priority");
@@ -39,10 +46,10 @@ describe("decisions", () => {
     const d = aiDecisions(t);
     expect(d?.threshold).toBe(0.8);
     expect(d?.fields.severity?.applied).toBe(true);
-    expect(decisionNote(d, "severity")).toEqual({ sure: 92, jev: true });
+    expect(decisionNote(d, "severity")).toEqual({ sure: 92, jev: true, threshold: 80 });
     expect(decisionNote(d, "priority")).toBeNull();
     const llm = aiDecisions(ticket({ custom: { ai_decisions: { engine: "llm", fields: { priority: { value: "high", confidence: 0.9 } } } } }));
-    expect(decisionNote(llm, "priority")).toEqual({ sure: null, jev: false });
+    expect(decisionNote(llm, "priority")).toEqual({ sure: null, jev: false, threshold: null });
     expect(aiDecisions(ticket({ custom: { ai_decisions: "nope" } }))).toBeNull();
   });
 

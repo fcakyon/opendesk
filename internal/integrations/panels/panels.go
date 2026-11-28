@@ -161,9 +161,11 @@ func listRows(ctx context.Context, q db.Querier, wid uuid.UUID) ([]*row, error) 
 // Service holds the outbound client, the caches of answers and of ticket readings, and the
 // Shopify app tokens (one per process).
 type Service struct {
-	d        *deps.Deps
-	http     *http.Client
-	guard    netsafe.Guard
+	d     *deps.Deps
+	http  *http.Client
+	guard netsafe.Guard
+	// actions sends an http panel's actions: its requests may take longer than a lookup.
+	actions  *http.Client
 	cache    *ttlCache[cacheKey, Data]
 	contexts *ttlCache[contextKey, ticketContext]
 	tokens   *appTokens
@@ -184,7 +186,7 @@ func For(d *deps.Deps) *Service {
 		return s
 	}
 	dev := !d.Cfg.IsProduction()
-	s := &Service{d: d, http: netsafe.Client(dev, fetchTimeout), guard: netsafe.Guard{Dev: dev}, cache: newTTLCache[cacheKey, Data](1000),
+	s := &Service{d: d, http: netsafe.Client(dev, fetchTimeout), guard: netsafe.Guard{Dev: dev}, actions: netsafe.Client(dev, actionTimeout), cache: newTTLCache[cacheKey, Data](1000),
 		contexts: newTTLCache[contextKey, ticketContext](1000),
 		tokens:   newAppTokens(), shopifyBase: shopifyOrigin}
 	services[d] = s
@@ -620,6 +622,8 @@ func (s *Service) registerRoutes(api huma.API) {
 			s.tokens.forget(id)
 			return nil, nil
 		})
+
+	s.registerActionRoute(api)
 
 	huma.Register(api, huma.Operation{OperationID: "get-ticket-panel", Method: http.MethodGet, Path: "/v1/tickets/{id}/panels/{panelId}",
 		Summary: "Read a ticket panel for a ticket", Tags: []string{"Tickets"},

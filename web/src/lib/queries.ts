@@ -38,8 +38,11 @@ export function keyBody(key: readonly unknown[]): readonly unknown[] {
   return keyWorkspace(key) === null ? key : key.slice(1);
 }
 
-/** The roots a user-level key may start with (src/lib/queryKeys.test.ts holds every literal key to it). */
-export const USER_ROOTS = new Set(["auth-config", "me", "public", "invitation-lookup", "oauth", "totp-setup", "customerPortal"]);
+/**
+ * The roots a user-level key may start with (src/lib/queryKeys.test.ts holds every literal key to it).
+ * `appSearch` holds the indexes built with the app itself (lib/appSearch), the same in every workspace.
+ */
+export const USER_ROOTS = new Set(["auth-config", "me", "public", "invitation-lookup", "oauth", "totp-setup", "customerPortal", "appSearch"]);
 
 /** Conversations per page of a Collab mail list. */
 export const MAIL_PAGE_SIZE = 50;
@@ -84,6 +87,8 @@ export const qk = {
   /** The ticket's shared draft (contracts/api.md "Drafts"). */
   ticketDraft: (id: string) => w(["tickets", "draft", id] as const),
   replyDraft: (id: string) => w(["tickets", "reply-draft", id] as const),
+  /** The customer's other tickets, from every address they wrote from. */
+  customerTickets: (id: string) => w(["tickets", "customer-tickets", id] as const),
   get contactLists() {
     return w(["contacts", "list"] as const);
   },
@@ -126,6 +131,9 @@ export const qk = {
   },
   get mailboxes() {
     return w(["mailboxes"] as const);
+  },
+  get contactMessages() {
+    return w(["contact-messages"] as const);
   },
   mailboxImapFolders: (id: string) => w(["mailboxes", id, "imap-folders"] as const),
   get members() {
@@ -175,6 +183,13 @@ export const qk = {
   get phoneLines() {
     return w(["phone", "lines"] as const);
   },
+  get whatsappConnections() {
+    return w(["whatsapp", "connections"] as const);
+  },
+  /** A WhatsApp ticket's connection and 24 hour window, as the server will send. */
+  whatsappTicket: (ticketId: string) => w(["whatsapp", "ticket", ticketId] as const),
+  /** A connection's templates; every connection's under "all". */
+  whatsappTemplates: (connectionId?: string) => w(["whatsapp", "templates", connectionId ?? "all"] as const),
   get ticketPanels() {
     return w(["ticket-panels"] as const);
   },
@@ -271,12 +286,17 @@ export const qk = {
   wikiComments: (id: string) => w(["wiki", "comments", id] as const),
   wikiRows: (id: string) => w(["wiki", "rows", id] as const),
   wikiDaily: (from: string, to: string, area: WikiArea) => w(["wiki", "daily", from, to, area] as const),
+  /** Under every report: the overview's and the agents' for any range and filter. */
+  get reportsAll() {
+    return w(["reports"] as const);
+  },
   reports: (r: ReportsQuery) => w(["reports", r] as const),
   reportAgents: (r: ReportsQuery) => w(["reports", "agents", r] as const),
   get widgetSettings() {
     return w(["widget-settings"] as const);
   },
   csat: (token: string) => ["public", "csat", token] as const,
+  chatVerification: (token: string) => ["public", "chat-verification", token] as const,
   invitationLookup: (token: string) => ["invitation-lookup", token] as const,
   get billing() {
     return w(["billing"] as const);
@@ -375,6 +395,7 @@ export const qk = {
   mailPerson: (email: string, exclude: string) => w(["collab", "person", email, exclude] as const),
   // Outside "collab": a message's source never changes, and reading it is a call to the provider.
   mailMessageDetails: (id: string) => w(["collabMessageDetails", id] as const),
+  mailMessageSource: (id: string) => w(["collabMessageSource", id] as const),
 };
 
 const list = <R>(key: readonly unknown[], fn: () => Promise<R[] | Page<R> | { data: R[] }>, opts: { staleTime?: number } = {}) =>
@@ -469,6 +490,7 @@ export const q = {
     }),
   contact: (id: string) => queryOptions({ queryKey: qk.contact(id), queryFn: () => api.contacts.get(id) }),
   contactTickets: (id: string) => list(qk.contactTickets(id), () => api.contacts.tickets(id, { limit: 20 })),
+  customerTickets: (id: string) => queryOptions({ queryKey: qk.customerTickets(id), queryFn: () => api.tickets.customerTickets(id) }),
   contactPortal: (id: string) => queryOptions({ queryKey: qk.contactPortal(id), queryFn: () => api.contacts.portal(id) }),
   companies: (query: Omit<CompanyListQuery, "limit" | "cursor">) =>
     infiniteQueryOptions({
@@ -490,6 +512,8 @@ export const q = {
   slaPolicies: () => list(qk.slaPolicies, () => api.slaPolicies.list({ limit: 100 })),
   automations: () => list(qk.automations, () => api.automations.list({ limit: 100 })),
   mailboxes: () => list(qk.mailboxes, () => api.mailboxes.list({ limit: 100 })),
+  /** The latest messages sent to many customers, with how far each got. */
+  contactMessages: () => queryOptions({ queryKey: qk.contactMessages, queryFn: async () => (await api.contactMessages.list()).data }),
   members: () => queryOptions({ queryKey: qk.members, queryFn: () => allPages(api.members.list) }),
   invitations: () => list(qk.invitations, () => api.invitations.list()),
   teams: () => list(qk.teams, () => api.teams.list({ limit: 100 })),
@@ -506,6 +530,11 @@ export const q = {
   phoneProviders: () => list(qk.phoneProviders, api.phone.providers, { staleTime: 60 * 60_000 }),
   phoneConnections: () => list(qk.phoneConnections, api.phone.connections),
   phoneLines: () => list(qk.phoneLines, api.phone.lines, { staleTime: 5 * 60_000 }),
+  whatsappConnections: () => list(qk.whatsappConnections, api.whatsapp.connections),
+  whatsappTicket: (ticketId: string) =>
+    queryOptions({ queryKey: qk.whatsappTicket(ticketId), queryFn: () => api.whatsapp.ticket(ticketId), staleTime: 30_000 }),
+  whatsappTemplates: (connectionId?: string) =>
+    list(qk.whatsappTemplates(connectionId), () => api.whatsapp.templates(connectionId), { staleTime: 60_000 }),
   supportChannelProviders: () => list(qk.supportChannelProviders, api.supportChannels.providers, { staleTime: 60 * 60_000 }),
   supportChannelConnections: () => list(qk.supportChannelConnections, api.supportChannels.connections),
   supportChannelDestinations: () => list(qk.supportChannelDestinations, api.supportChannels.destinations),
@@ -652,6 +681,8 @@ export const q = {
   mailMessageDetails: (id: string) =>
     queryOptions({ queryKey: qk.mailMessageDetails(id), queryFn: () => api.collab.messageDetails(id), staleTime: Infinity, gcTime: 30 * 60_000, retry: 1 }),
   csat: (token: string) => queryOptions({ queryKey: qk.csat(token), queryFn: () => api.public.csat(token), retry: false }),
+  chatVerification: (token: string) =>
+    queryOptions({ queryKey: qk.chatVerification(token), queryFn: () => api.public.chatVerification(token), retry: false, enabled: !!token }),
   invitationLookup: (token: string) =>
     queryOptions({ queryKey: qk.invitationLookup(token), queryFn: () => api.invitations.lookup(token), retry: false }),
 };

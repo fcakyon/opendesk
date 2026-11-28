@@ -1,20 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { AlertCircle, ArrowDown, Check, CheckCheck, Download, FileText, Forward, Globe, ImageOff, Lock, Mail, MessagesSquare, MoreHorizontal, Pencil, Printer, Quote, Reply, RotateCcw, RotateCw, Send, ShieldAlert, Trash2, Undo2 } from "lucide-react";
+import { AlertCircle, ArrowDown, Check, CheckCheck, ClipboardCopy, FileCode, Forward, Globe, ImageOff, Lock, Mail, MessagesSquare, MoreHorizontal, Pencil, Printer, Quote, Reply, RotateCcw, RotateCw, Send, ShieldAlert, Trash2, Undo2 } from "lucide-react";
 import { memo, useMemo, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { tone } from "@/lib/tones";
-import type { Attachment, Member, Message, Thread } from "@/lib/api/types";
+import type { Attachment, Member, Message, Thread, WhatsAppDeliveryMeta } from "@/lib/api/types";
 import { api } from "@/lib/api/endpoints";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole, useSession } from "@/lib/session";
 import { isBlankHtml } from "@/lib/collab/html";
 import { loadImagesFor, useAlwaysShowImages, useImagesLoadedFor } from "@/lib/alwaysShowImages";
-import { bytes, fullDate, messageTime } from "@/lib/format";
+import { fullDate, messageTime } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { OllieAvatar, useAssistantName } from "../ollie";
@@ -27,6 +26,8 @@ import { SentEmail } from "./SentEmail";
 import { RichEditor } from "@/components/editor/RichEditor";
 import { mentionExtension, useSuggest } from "./suggestions";
 import { useConfirm } from "@/components/ui/confirm";
+import { SourceDialog } from "@/components/messages/SourceDialog";
+import { AttachmentList } from "@/components/messages/Attachments";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { toast } from "@/components/ui/toast";
 import { useNow } from "@/lib/useNow";
@@ -35,6 +36,8 @@ import { authorName, messageHtml, sanitizeBody, type SanitizedBody } from "./mes
 import { asNote, release, undo, useHeld } from "./outbox";
 import { showInTimeline } from "./Timeline";
 import { inConversation } from "./SideIncludes";
+import { InboundRecipients } from "./ReplyAll";
+import { inboundRecipients } from "./replyAllRecipients";
 
 /** A message body, sanitized once (sanitizeBody). */
 function useBody(html: string, inbound: boolean, designable: boolean, remote: boolean, note = false): SanitizedBody {
@@ -80,82 +83,9 @@ function Original({ id, inbound, remote, onLoadImages }: { id: string; inbound: 
   );
 }
 
-function isImage(a: Attachment) {
-  return a.content_type.startsWith("image/");
-}
-
-function isAudio(a: Attachment) {
-  return a.content_type.startsWith("audio/");
-}
-
 export function Attachments({ items }: { items: Attachment[] }) {
-  const { t } = useTranslation("inbox");
-  const [preview, setPreview] = useState<Attachment | null>(null);
-  const visible = items.filter((a) => !a.inline);
-  if (!visible.length) return null;
-  const images = visible.filter(isImage);
-  const audio = visible.filter(isAudio);
-  const files = visible.filter((a) => !isImage(a) && !isAudio(a));
-  return (
-    <div className="mt-3 flex flex-col gap-2">
-      {images.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {images.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              onClick={() => setPreview(a)}
-              className="group relative h-[88px] w-[124px] overflow-hidden rounded-md border border-line bg-sunken"
-              aria-label={t("message.preview", { name: a.filename })}
-            >
-              <img src={a.url} alt="" loading="lazy" className="ph-no-capture size-full object-cover transition-transform duration-200 group-hover:scale-[1.03]" />
-              <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/55 to-transparent px-1.5 pb-1 pt-4 text-left text-[10.5px] text-white">
-                {a.filename}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-      {audio.map((a) => (
-        <div key={a.id} className="flex max-w-[360px] items-center gap-2">
-          <audio controls preload="metadata" src={a.url} aria-label={a.filename} className="ph-no-capture h-9 min-w-0 flex-1" />
-          <a href={a.url} target="_blank" rel="noopener noreferrer" aria-label={t("message.download", { name: a.filename })} className="shrink-0 text-fg-4 hover:text-fg">
-            <Download className="size-3.5" />
-          </a>
-        </div>
-      ))}
-      {files.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {files.map((a) => (
-            <a
-              key={a.id}
-              href={a.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group flex h-10 max-w-[260px] items-center gap-2.5 rounded-md border border-line bg-surface pl-2.5 pr-3 hover:border-line-strong"
-            >
-              <FileText className="size-4 shrink-0 text-fg-3" />
-              <span className="min-w-0">
-                <span className="block truncate text-[12.5px] text-fg">{a.filename}</span>
-                <span className="mono block text-[10.5px] text-fg-4">{bytes(a.size_bytes)}</span>
-              </span>
-              <Download className="ml-1 size-3.5 shrink-0 text-fg-4 group-hover:text-fg" />
-            </a>
-          ))}
-        </div>
-      )}
-      <Dialog open={!!preview} onOpenChange={(o) => !o && setPreview(null)} title={preview?.filename ?? ""} size="xl">
-        {preview && (
-          <div className="flex flex-col items-center gap-3 pb-2">
-            <img src={preview.url} alt={preview.filename} className="ph-no-capture max-h-[60vh] max-w-full rounded-md border border-line" />
-            <a href={preview.url} target="_blank" rel="noopener noreferrer" className="text-xs text-fg-3 underline underline-offset-2 hover:text-fg">
-              {t("message.fullSize")}
-            </a>
-          </div>
-        )}
-      </Dialog>
-    </div>
-  );
+  const files = items.filter((a) => !a.inline).map((a) => ({ ...a, size: a.size_bytes, imageUrl: a.url }));
+  return <AttachmentList files={files} />;
 }
 
 /** A note sent as a reply: it stays where it was written, pointing at the reply below. What it
@@ -327,9 +257,25 @@ function Delivery({ m, onRetry }: { m: Message; onRetry?: () => void }) {
         <Spinner className="size-3" /> {t("message.sending")}
       </span>
     );
+  // WhatsApp reports its own receipt on the message: one tick sent, two delivered, blue read.
+  const wa = m.delivery_meta as WhatsAppDeliveryMeta | undefined;
+  const waStatus = m.delivery_status === "failed" || m.delivery_status === "bounced" ? undefined : wa?.provider_status;
+  if (waStatus && waStatus !== "failed")
+    return (
+      <Tooltip content={t(`message.whatsapp.${waStatus}`)}>
+        <span className="flex items-center gap-1 text-[11px] text-fg-4 animate-fade-in">
+          {waStatus === "sent" ? (
+            <Check className="size-3" />
+          ) : (
+            <CheckCheck className={`size-3 ${waStatus === "read" ? tone.blue.text : ""}`} />
+          )}
+          {t(`message.whatsapp.${waStatus}`)}
+        </span>
+      </Tooltip>
+    );
   if (m.delivery_status === "sent")
     return (
-      <Tooltip content={t("message.deliveredTo", { to: m.to.join(", ") || t("composer.theCustomer") })}>
+      <Tooltip content={<span data-ph-mask>{t("message.deliveredTo", { to: m.to.join(", ") || t("composer.theCustomer") })}</span>}>
         <span className="flex items-center gap-1 text-[11px] text-fg-4 animate-fade-in">
           <Check className={`size-3 ${tone.green.text}`} /> {t("message.sent")}
         </span>
@@ -337,7 +283,7 @@ function Delivery({ m, onRetry }: { m: Message; onRetry?: () => void }) {
     );
   return (
     <span className="flex items-center gap-2">
-      <Tooltip content={m.delivery_error || t("message.refused")}>
+      <Tooltip content={<span data-ph-mask>{m.delivery_error || t("message.refused")}</span>}>
         <span className={`inline-flex h-5 items-center gap-1.5 rounded-sm px-1.5 text-[11px] font-medium ${tone.red.chip}`}>
           <span className={`size-1.5 rounded-full ${tone.red.solid}`} />
           {m.delivery_status === "bounced" ? t("message.bounced") : t("message.notDelivered")}
@@ -399,6 +345,41 @@ function useMessageAddress(m: Message, receivedAt?: string | null) {
     return m.to.find(ours) ?? mb?.email ?? (receivedAt || null);
   }
   return m.from_email || mb?.email || null;
+}
+
+/**
+ * The To header of an inbound email that names none of our addresses: a copy forwarded from another
+ * address, or one we got in Cc or Bcc. Null when it names the address the email was received at.
+ */
+export function originalRecipients(m: Message): { to: string[]; address: string } | null {
+  const at = m.received_at?.trim().toLowerCase();
+  if (m.direction !== "inbound" || !at) return null;
+  const to = m.to.map((a) => a.trim()).filter(Boolean);
+  return to.length > 0 && !to.some((a) => a.toLowerCase() === at) ? { to, address: at } : null;
+}
+
+/** Who an inbound email was written to when that is not us, and the address of ours that got it. */
+function OriginalRecipients({ to, address }: { to: string[]; address: string }) {
+  const { t } = useTranslation("inbox");
+  const first = to.length > 1 ? t("message.toAndOthers", { to: to[0], others: to.length - 1 }) : t("message.to", { to: to[0] });
+  const received = t("message.receivedAt", { address });
+  return (
+    <Tooltip
+      content={
+        <span className="block max-w-[320px] break-words font-normal leading-snug" data-ph-mask>
+          {t("message.to", { to: to.join(", ") })}
+          <br />
+          {received}
+        </span>
+      }
+    >
+      <span tabIndex={0} className="rounded-sm text-fg-4 outline-none focus-visible:shadow-[inset_0_0_0_1px_var(--focus)]">
+        <span className="text-fg-3">{first}</span>
+        {" · "}
+        {received}
+      </span>
+    </Tooltip>
+  );
 }
 
 /** What can be done to a thread from its latest message. */
@@ -511,6 +492,7 @@ export const MessageItem = memo(function MessageItem({
   onToReply,
   onRetract,
   onForward,
+  onCopyForAgent,
   highlight,
   receivedAt,
   thread,
@@ -527,6 +509,8 @@ export const MessageItem = memo(function MessageItem({
   onRetract?: (m: Message) => void;
   /** Starts a side conversation that forwards this email in full. */
   onForward?: (m: Message) => void;
+  /** Copies it as a prompt for an AI agent (copyForAgent.ts). */
+  onCopyForAgent?: (m: Message) => void;
   highlight?: boolean;
   /** The ticket's first address, for inbound messages that don't record one; null when the ticket isn't email. */
   receivedAt?: string | null;
@@ -541,6 +525,7 @@ export const MessageItem = memo(function MessageItem({
   seenAt?: string;
 }) {
   const [showOriginal, setShowOriginal] = useState(false);
+  const [source, setSource] = useState(false);
   const [viewingSent, setViewingSent] = useState(false);
   const ollie = useAssistantName();
   // A message sent as a bot shows it (contracts/bots.md): an AI reply's, or the bot an API
@@ -560,7 +545,10 @@ export const MessageItem = memo(function MessageItem({
   const confirm = useConfirm();
   const meUser = useSession((s) => s.user);
   const me = meUser?.id;
-  const admin = atLeast(useRole(), "admin");
+  const role = useRole();
+  const admin = atLeast(role, "admin");
+  // An email that arrived at a mailbox keeps its raw source, which agents may read (contracts/api.md, `GET /v1/messages/{id}/source`).
+  const hasSource = atLeast(role, "agent") && m.kind === "reply" && m.direction === "inbound" && !!m.mailbox_id && !m.deleted_at;
   const mine = !!me && m.author.user?.id === me;
   const editableNote = note && mine;
   // Who may delete what is the workspace's rule for agents (settings.message_delete); admins any message.
@@ -598,6 +586,7 @@ export const MessageItem = memo(function MessageItem({
     );
   const address = useMessageAddress(m, receivedAt);
   const inbound = m.direction === "inbound" && !note;
+  const originalTo = inbound ? originalRecipients(m) : null;
   // Loaded for this message, or for every email (Settings → Profile → Appearance).
   const loaded = useImagesLoadedFor(m.id);
   const remote = useAlwaysShowImages() || loaded;
@@ -605,6 +594,8 @@ export const MessageItem = memo(function MessageItem({
   const translated = !!(tr.showing && tr.html);
   const body = useBody(translated ? tr.html! : messageHtml(m), inbound, !translated, remote, note);
   const replyTo = inbound && m.reply_to && m.reply_to.toLowerCase() !== m.from_email.toLowerCase() ? m.reply_to : null;
+  // An email written to several people lists them all, To then Cc, under its header.
+  const recipients = inbound ? inboundRecipients(m) : null;
 
   // A note sent as a reply is hidden like a deleted message, and says where its words went.
   if (m.sent_as_reply_id) return <SentAsReply m={m} name={name} admin={admin} />;
@@ -647,7 +638,12 @@ export const MessageItem = memo(function MessageItem({
           ) : (
             <span className="min-w-0 truncate text-[11.5px] text-fg-3" data-ph-mask>
               {m.from_email}
-              {address && <span className="text-fg-4"> {t("message.toAddress", { address })}</span>}
+              {originalTo && " "}
+              {originalTo ? (
+                <OriginalRecipients {...originalTo} />
+              ) : (
+                address && <span className="text-fg-4"> {t("message.toAddress", { address })}</span>
+              )}
             </span>
           )}
         </div>
@@ -698,6 +694,16 @@ export const MessageItem = memo(function MessageItem({
                   {t("message.retract")}
                 </MenuItem>
               )}
+              {hasSource && (
+                <MenuItem icon={<FileCode />} onSelect={() => setSource(true)}>
+                  {t("message.viewSource")}
+                </MenuItem>
+              )}
+              {onCopyForAgent && (
+                <MenuItem icon={<ClipboardCopy />} onSelect={() => onCopyForAgent(m)}>
+                  {t("message.copyForAgent")}
+                </MenuItem>
+              )}
               <MenuItem icon={<Printer />} onSelect={print}>
                 {t("print.action")}
               </MenuItem>
@@ -715,8 +721,9 @@ export const MessageItem = memo(function MessageItem({
       </header>
       <div className="px-4 pb-3.5 pl-[50px] pt-1">
         {inThread && thread && <ThreadBar thread={thread} actions={threadActions} first={threadFirst} />}
-        {(replyTo || (inbound && m.form_sender)) && (
+        {(replyTo || (inbound && m.form_sender) || recipients) && (
           <div className="mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11.5px] text-fg-3" data-ph-mask>
+            {recipients && <InboundRecipients to={recipients.to} cc={recipients.cc} />}
             {inbound && m.form_sender && (
               <span className="flex min-w-0 items-center gap-1.5">
                 <Globe className="size-3 shrink-0 text-fg-4" />
@@ -727,9 +734,7 @@ export const MessageItem = memo(function MessageItem({
             )}
             {replyTo && (
               <Tooltip
-                content={
-                  m.reply_address ? t("message.replyToUsed") : t("message.replyToOther", { address: m.from_email })
-                }
+                content={<span data-ph-mask>{m.reply_address ? t("message.replyToUsed") : t("message.replyToOther", { address: m.from_email })}</span>}
               >
                 <span className="flex min-w-0 items-center gap-1.5">
                   <Reply className="size-3 shrink-0 text-fg-4" />
@@ -775,6 +780,9 @@ export const MessageItem = memo(function MessageItem({
           </div>
         )}
         <Attachments items={m.attachments} />
+        {hasSource && (
+          <SourceDialog open={source} onOpenChange={setSource} title={m.subject} queryKey={qk.of("message-source", m.id)} load={() => api.messages.source(m.id)} file={() => api.messages.sourceFile(m.id)} />
+        )}
         {m.ai_action && <AiActionCard action={m.ai_action} />}
         {failed && m.delivery_error && (
           <p className="mt-3 flex items-start gap-1.5 rounded-md bg-sunken px-2.5 py-2 text-xs text-fg-2">

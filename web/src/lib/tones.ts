@@ -73,7 +73,7 @@ export const SERIES: Tone[] = ["blue", "violet", "teal", "amber", "pink", "green
 export const statusTone = { open: "blue", pending: "amber", on_hold: "violet", solved: "green", closed: "gray" } as const satisfies Record<string, Tone>;
 export const priorityTone = { urgent: "red", high: "orange", normal: "blue", low: "gray" } as const satisfies Record<string, Tone>;
 export const severityTone = { sev1: "red", sev2: "orange", sev3: "amber", sev4: "gray" } as const satisfies Record<string, Tone>;
-export const channelTone = { email: "blue", chat: "teal", api: "violet", portal: "indigo", phone: "green" } as const satisfies Record<string, Tone>;
+export const channelTone = { email: "blue", chat: "teal", api: "violet", portal: "indigo", phone: "green", whatsapp: "lime" } as const satisfies Record<string, Tone>;
 export const sentimentTone = { positive: "green", neutral: "gray", negative: "red", mixed: "amber" } as const satisfies Record<string, Tone>;
 /** AI surfaces carry one accent so they read as one family. */
 export const AI_TONE: Tone = "violet";

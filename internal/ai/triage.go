@@ -203,7 +203,7 @@ func (w *SummarizeWorker) Work(ctx context.Context, job *river.Job[jobs.AISummar
 	if t.Spam || t.MessageCount < autoSummarizeMin || storedSummary(t.Custom).MessageCount >= t.MessageCount {
 		return nil
 	}
-	_, err = s.Summarize(ctx, a.WorkspaceID, nil, a.TicketID)
+	_, err = s.Summarize(ctx, a.WorkspaceID, nil, a.TicketID, "")
 	if err != nil && skippable(err) {
 		if errors.Is(err, ErrBusy) || errors.Is(err, ErrUnavailable) {
 			return err // retried with backoff by River

@@ -215,6 +215,8 @@ func (w *cleanupWorker) Work(ctx context.Context, _ *river.Job[cleanupArgs]) err
 		`DELETE FROM agent_presence WHERE ended_at < now() - interval '400 days'`,
 		// Visitor sessions past auth.VisitorSessionLive.
 		`DELETE FROM widget_sessions WHERE last_seen_at < now() - interval '90 days' OR (verified AND created_at < now() - interval '30 days')`,
+		// Chat verification links, past their expiry and the day the resend limits count.
+		`DELETE FROM contact_email_verifications WHERE expires_at < now() - interval '1 day'`,
 		// Shared sign-in throttle windows; every period is shorter than a day.
 		`DELETE FROM auth_throttle WHERE window_start < now() - interval '2 days'`,
 		// App Attest: spent-by-time challenges and keys no install has used for 180 days.

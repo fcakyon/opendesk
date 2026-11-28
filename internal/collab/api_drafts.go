@@ -16,6 +16,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/email"
 	"github.com/useopendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/ids"
 )
 
 // Drafts (contracts/collab.md "Drafts"): saved at the provider first, then stored like
@@ -66,6 +67,7 @@ type draftCreateInput struct {
 		FromEmail          string      `json:"from_email,omitempty" maxLength:"254" doc:"One of the account's usable addresses"`
 		ClaimToken         *uuid.UUID  `json:"claim_token,omitempty" doc:"AI queue: the claim this reply reports back on; refused once that claim has expired or passed on"`
 		ClientRef          string      `json:"client_ref,omitempty" maxLength:"200" doc:"AI keys: a label of your own for the instructions behind this draft, returned with its outcome"`
+		AINote             string      `json:"ai_note,omitempty" maxLength:"20000" doc:"AI keys: an internal note for the team, saved as an AI note on the conversation with the draft (never sent)"`
 	}
 }
 
@@ -97,6 +99,19 @@ func (s *service) registerDraftRoutes(api huma.API) {
 				if len(b.AttachmentIDs) > 0 || b.ForwardAttachments {
 					return nil, errAIDraftFiles
 				}
+			} else if b.AINote != "" {
+				return nil, httpx.Validation("ai_note is for AI keys; a person comments on the conversation.")
+			}
+			note := ""
+			if b.AINote != "" {
+				// The note counts against the key's AI note limit and is checked before the
+				// provider is called; it is stored in the draft's transaction ("AI notes").
+				if !s.allowAINote(p) {
+					return nil, httpx.RateLimited()
+				}
+				if note, err = cleanAINote(b.AINote); err != nil {
+					return nil, err
+				}
 			}
 			t, err := s.composeTarget(ctx, p, b.AccountID, b.Mode, b.MessageID)
 			if err != nil {
@@ -121,7 +136,7 @@ func (s *service) registerDraftRoutes(api huma.API) {
 			}
 			id, _, err := s.saveDraft(ctx, p, t, nil, threadRemote, threadID, composeIn{Mode: b.Mode, To: b.To, Cc: b.Cc, Bcc: b.Bcc,
 				Subject: b.Subject, BodyHTML: b.BodyHTML, AttachmentIDs: b.AttachmentIDs, ForwardAttachments: b.ForwardAttachments, FromEmail: b.FromEmail,
-				ClientRef: b.ClientRef})
+				ClientRef: b.ClientRef, AINote: note})
 			if err != nil {
 				return nil, err
 			}
@@ -211,8 +226,9 @@ func (s *service) registerDraftRoutes(api huma.API) {
 	collabOp(api, huma.Operation{OperationID: "send-collab-draft", Method: http.MethodPost, Path: "/v1/collab/drafts/{id}/send",
 		Summary: "Send a draft"},
 		func(ctx context.Context, in *struct {
-			ID   string        `path:"id"`
-			Body *draftContent `doc:"What the composer shows: saved first. Left out: the draft is sent as saved"`
+			ID          string        `path:"id"`
+			SnoozeUntil string        `query:"snooze_until" maxLength:"40" doc:"RFC3339 follow-up time for a shared account with Handling on"`
+			Body        *draftContent `doc:"What the composer shows: saved first. Left out: the draft is sent as saved"`
 		}) (*messageBody, error) {
 			p, err := s.require(ctx, auth.RoleAgent)
 			if err != nil {
@@ -226,6 +242,10 @@ func (s *service) registerDraftRoutes(api huma.API) {
 				return nil, err
 			}
 			defer unlock()
+			snoozeUntil, err := sendSnoozeTime(a, in.SnoozeUntil)
+			if err != nil {
+				return nil, err
+			}
 			var raw []byte
 			var recipients []string
 			from := a.Email
@@ -283,7 +303,7 @@ func (s *service) registerDraftRoutes(api huma.API) {
 				s.log.Warn("collab draft send refused", "account_id", a.ID, "err", err)
 				return nil, errSend(safeError(err))
 			}
-			id, err := s.storeSentDraft(ctx, a, raw, ref, p.UserID, m)
+			id, err := s.storeSentDraft(ctx, a, raw, ref, p.UserID, m, snoozeUntil)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -445,7 +465,7 @@ func (s *service) saveDraft(ctx context.Context, p *auth.Principal, t target, dr
 		return uuid.Nil, nil, httpx.Wrap(err)
 	}
 	if ai != nil {
-		ai.Ref = in.ClientRef
+		ai.Ref, ai.Note = in.ClientRef, in.AINote
 	}
 	ref, err := dp.SaveDraft(pctx, d)
 	if err != nil {
@@ -547,6 +567,12 @@ func (s *service) storeDraft(ctx context.Context, a *accountRow, raw []byte, ref
 				return err
 			}
 		}
+		if ai != nil && ai.Note != "" && id != uuid.Nil && in.ThreadID != nil {
+			// The note that came with the draft: both are stored or neither ("AI notes").
+			if err := insertComment(ctx, tx, ai.P, *in.ThreadID, ids.New(), ai.Note, []uuid.UUID{}, nil, ai); err != nil {
+				return err
+			}
+		}
 		if ai != nil && id != uuid.Nil {
 			// The content is the client's; the entry names the conversation, never the words.
 			// The actor is ai, through the key, on behalf of the member who created it.
@@ -576,7 +602,7 @@ func (s *service) storeDraft(ctx context.Context, a *accountRow, raw []byte, ref
 
 // storeSentDraft stores a sent draft as the sent message, in the draft's conversation and
 // in Sent, and removes the draft, in one transaction.
-func (s *service) storeSentDraft(ctx context.Context, a *accountRow, raw []byte, ref SentRef, by uuid.UUID, draft *messageRow) (uuid.UUID, error) {
+func (s *service) storeSentDraft(ctx context.Context, a *accountRow, raw []byte, ref SentRef, by uuid.UUID, draft *messageRow, snoozeUntil time.Time) (uuid.UUID, error) {
 	p, err := s.newPass(ctx, s.d.DB.Pool, a)
 	if err != nil {
 		return uuid.Nil, err
@@ -608,6 +634,9 @@ func (s *service) storeSentDraft(ctx context.Context, a *accountRow, raw []byte,
 		}
 		var err error
 		if id, err = p.insert(ctx, tx, in); err != nil || id == uuid.Nil {
+			return err
+		}
+		if err := p.snoozeAfterSend(ctx, tx, id, snoozeUntil); err != nil {
 			return err
 		}
 		draftID := draft.ID

@@ -28,6 +28,14 @@ const (
 	maxLinks       = 5 // a card's links, a list row's
 	maxLinkLabel   = 40
 	maxCardID      = 80
+	// Action blocks (contracts/integrations.md "Actions").
+	maxActions       = 4
+	maxActionInputs  = 4
+	maxInputOptions  = 20
+	maxActionLabel   = 40
+	maxActionConfirm = 200
+	maxInputText     = 500
+	maxOptionValue   = 100
 	// maxCacheSeconds bounds how long an answer may ask to be kept.
 	maxCacheSeconds = 600
 )
@@ -39,20 +47,50 @@ const (
 // PanelBlock is one block of an http panel's answer, cleaned: a card (an order, an invoice, a
 // subscription, a deal), a list of labelled values, a list of rows or a short note.
 type PanelBlock struct {
-	Type      string       `json:"type" enum:"card,fields,list,note"`
-	ID        string       `json:"id,omitempty" doc:"card: the record's identity across answers (an order's number), which an agent's fold or unfold follows; the title without it"`
-	Title     string       `json:"title,omitempty" doc:"card: required; fields and list: optional"`
-	URL       string       `json:"url,omitempty" doc:"card: https only"`
-	Subtitle  string       `json:"subtitle,omitempty" doc:"card"`
-	Badges    []PanelBadge `json:"badges,omitempty" doc:"card: at most 4"`
-	Links     []PanelLink  `json:"links,omitempty" doc:"card: the same record in other tools, shown as small buttons beside the title, at most 5"`
-	Collapsed bool         `json:"collapsed,omitempty" doc:"card: starts folded to its title, links, subtitle and badges; the reader folds and opens any card"`
-	Fields    []PanelItem  `json:"fields,omitempty" doc:"card: labelled values, at most 30"`
-	Lines     []PanelItem  `json:"lines,omitempty" doc:"card: rows such as an order's lines, at most 20"`
-	Footer    []PanelItem  `json:"footer,omitempty" doc:"card: labelled values under the lines, such as a total, at most 6"`
-	Items     []PanelItem  `json:"items,omitempty" doc:"fields: labelled values, at most 30; list: rows, at most 20"`
-	Text      string       `json:"text,omitempty" doc:"note"`
-	Tone      string       `json:"tone,omitempty" enum:"neutral,info,success,warning,danger" doc:"note"`
+	Type      string        `json:"type" enum:"card,fields,list,note,actions"`
+	ID        string        `json:"id,omitempty" doc:"card: the record's identity across answers (an order's number), which an agent's fold or unfold follows; the title without it"`
+	Title     string        `json:"title,omitempty" doc:"card: required; fields and list: optional"`
+	URL       string        `json:"url,omitempty" doc:"card: https only"`
+	Subtitle  string        `json:"subtitle,omitempty" doc:"card"`
+	Badges    []PanelBadge  `json:"badges,omitempty" doc:"card: at most 4"`
+	Links     []PanelLink   `json:"links,omitempty" doc:"card: the same record in other tools, shown as small buttons beside the title, at most 5"`
+	Collapsed bool          `json:"collapsed,omitempty" doc:"card: starts folded to its title, links, subtitle and badges; the reader folds and opens any card"`
+	Fields    []PanelItem   `json:"fields,omitempty" doc:"card: labelled values, at most 30"`
+	Lines     []PanelItem   `json:"lines,omitempty" doc:"card: rows such as an order's lines, at most 20"`
+	Footer    []PanelItem   `json:"footer,omitempty" doc:"card: labelled values under the lines, such as a total, at most 6"`
+	Items     []PanelItem   `json:"items,omitempty" doc:"fields: labelled values, at most 30; list: rows, at most 20"`
+	Text      string        `json:"text,omitempty" doc:"note"`
+	Tone      string        `json:"tone,omitempty" enum:"neutral,info,success,warning,danger" doc:"note"`
+	Actions   []PanelAction `json:"actions,omitempty" doc:"actions: buttons that send a signed request back to the panel's URL, at most 4"`
+}
+
+// PanelAction is a button of an actions block: when an agent presses it (after the confirmation
+// and the inputs it asks for), OpenDesk posts it to the panel's URL, signed like a lookup, and
+// shows what the URL answers.
+type PanelAction struct {
+	ID      string       `json:"id" doc:"The action's identity, 1 to 64 characters of letters, digits and _ . : -, unique in the answer: what the request carries"`
+	Label   string       `json:"label" doc:"The button's name, at most 40 characters"`
+	Tone    string       `json:"tone,omitempty" enum:"neutral,danger" doc:"danger draws the button as a destructive one"`
+	Confirm string       `json:"confirm,omitempty" doc:"A sentence the agent confirms before the request goes out, at most 200 characters"`
+	Inputs  []PanelInput `json:"inputs,omitempty" doc:"A small form the agent fills in first, at most 4"`
+}
+
+// PanelInput is one field of an action's form.
+type PanelInput struct {
+	Name        string        `json:"name" doc:"The key in the request's action.inputs: a lowercase letter, then lowercase letters, digits and _, 32 characters at most"`
+	Label       string        `json:"label" doc:"At most 40 characters"`
+	Type        string        `json:"type" enum:"text,textarea,select"`
+	Required    bool          `json:"required,omitempty"`
+	Placeholder string        `json:"placeholder,omitempty"`
+	Default     string        `json:"default,omitempty"`
+	MaxLength   int           `json:"max_length,omitempty" doc:"text and textarea: at most 500, the default"`
+	Options     []PanelOption `json:"options,omitempty" doc:"select: the choices, 1 to 20"`
+}
+
+// PanelOption is a choice of a select input.
+type PanelOption struct {
+	Value string `json:"value" doc:"What the request carries, at most 100 characters"`
+	Label string `json:"label" doc:"At most 40 characters"`
 }
 
 // PanelItem is a field (label, value, url), a card's line (quantity, title, subtitle, value, url) or
@@ -182,6 +220,29 @@ func (s *Service) cleanBlocks(raw []json.RawMessage) []PanelBlock {
 			out = append(out, b)
 		}
 	}
+	return dedupeActions(out)
+}
+
+// dedupeActions keeps the first action of each id across the answer, since an id names what the
+// request asks for, and drops a block left without any.
+func dedupeActions(blocks []PanelBlock) []PanelBlock {
+	seen := map[string]bool{}
+	out := blocks[:0]
+	for _, b := range blocks {
+		if b.Type == "actions" {
+			kept := b.Actions[:0]
+			for _, a := range b.Actions {
+				if !seen[a.ID] {
+					seen[a.ID] = true
+					kept = append(kept, a)
+				}
+			}
+			if b.Actions = kept; len(b.Actions) == 0 {
+				continue
+			}
+		}
+		out = append(out, b)
+	}
 	return out
 }
 
@@ -218,6 +279,9 @@ func (s *Service) cleanBlock(in blockIn) (PanelBlock, bool) {
 		b.Title = ""
 		b.Text, b.Tone = cleanText(in.Text, maxNote), toneOf(in.Tone)
 		return b, b.Text != ""
+	case "actions":
+		b.Actions = cleanActions(in.Items)
+		return b, len(b.Actions) > 0
 	}
 	return PanelBlock{}, false // a type this version does not know
 }
@@ -446,4 +510,124 @@ func cacheFor(raw json.RawMessage) time.Duration {
 		return cacheTTL
 	}
 	return time.Duration(math.Min(math.Floor(*n), maxCacheSeconds)) * time.Second
+}
+
+var (
+	actionIDRe  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$`)
+	inputNameRe = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+)
+
+// cleanActions reads an actions block's buttons: at most maxActions with a valid id and a label.
+func cleanActions(raw []json.RawMessage) []PanelAction {
+	var out []PanelAction
+	for _, r := range raw {
+		if len(out) == maxActions {
+			break
+		}
+		var in struct {
+			ID      string            `json:"id"`
+			Label   string            `json:"label"`
+			Tone    string            `json:"tone"`
+			Confirm string            `json:"confirm"`
+			Inputs  []json.RawMessage `json:"inputs"`
+		}
+		if json.Unmarshal(r, &in) != nil {
+			continue
+		}
+		a := PanelAction{ID: strings.TrimSpace(in.ID), Label: cleanText(in.Label, maxActionLabel), Confirm: cleanText(in.Confirm, maxActionConfirm)}
+		if !actionIDRe.MatchString(a.ID) || a.Label == "" {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(in.Tone), "danger") {
+			a.Tone = "danger"
+		}
+		a.Inputs = cleanInputs(in.Inputs)
+		if a.Inputs == nil && len(in.Inputs) > 0 {
+			continue // a form that did not read would send something the agent never filled in
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
+// cleanInputs reads an action's form. It answers nil when any field does not read: the whole
+// action is then left out, never sent without the field the URL asked for.
+func cleanInputs(raw []json.RawMessage) []PanelInput {
+	if len(raw) == 0 || len(raw) > maxActionInputs {
+		return nil
+	}
+	var out []PanelInput
+	seen := map[string]bool{}
+	for _, r := range raw {
+		var in struct {
+			Name        string            `json:"name"`
+			Label       string            `json:"label"`
+			Type        string            `json:"type"`
+			Required    bool              `json:"required"`
+			Placeholder string            `json:"placeholder"`
+			Default     string            `json:"default"`
+			MaxLength   int               `json:"max_length"`
+			Options     []json.RawMessage `json:"options"`
+		}
+		if json.Unmarshal(r, &in) != nil {
+			return nil
+		}
+		x := PanelInput{Name: strings.TrimSpace(in.Name), Label: cleanText(in.Label, maxActionLabel), Type: strings.ToLower(strings.TrimSpace(in.Type)),
+			Required: in.Required, Placeholder: cleanText(in.Placeholder, maxActionLabel*2), Default: cleanText(in.Default, maxInputText)}
+		if !inputNameRe.MatchString(x.Name) || seen[x.Name] || x.Label == "" {
+			return nil
+		}
+		seen[x.Name] = true
+		switch x.Type {
+		case "text", "textarea":
+			x.MaxLength = maxInputText
+			if in.MaxLength > 0 && in.MaxLength < maxInputText {
+				x.MaxLength = in.MaxLength
+			}
+			x.Default = clip(x.Default, x.MaxLength)
+		case "select":
+			x.Default, x.Placeholder = "", ""
+			for _, or := range in.Options {
+				if len(x.Options) == maxInputOptions {
+					break
+				}
+				var o struct {
+					Value string `json:"value"`
+					Label string `json:"label"`
+				}
+				if json.Unmarshal(or, &o) != nil {
+					continue
+				}
+				opt := PanelOption{Value: cleanText(o.Value, maxOptionValue), Label: cleanText(o.Label, maxActionLabel)}
+				if opt.Value == "" {
+					continue
+				}
+				if opt.Label == "" {
+					opt.Label = opt.Value
+				}
+				x.Options = append(x.Options, opt)
+			}
+			if len(x.Options) == 0 {
+				return nil
+			}
+			if in.Default != "" && !hasOption(x.Options, strings.TrimSpace(in.Default)) {
+				x.Default = ""
+			} else {
+				x.Default = strings.TrimSpace(in.Default)
+			}
+		default:
+			return nil
+		}
+		out = append(out, x)
+	}
+	return out
+}
+
+func hasOption(opts []PanelOption, v string) bool {
+	for _, o := range opts {
+		if o.Value == v {
+			return true
+		}
+	}
+	return false
 }

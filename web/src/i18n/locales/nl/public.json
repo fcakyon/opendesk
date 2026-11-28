@@ -71,6 +71,25 @@
     "error": "Er ging iets mis. Probeer het opnieuw.",
     "offline": "De server is niet bereikbaar. Controleer je verbinding."
   },
+  "chat_verify": {
+    "page_title": "Bevestig je e-mailadres",
+    "title": "Bevestig je e-mailadres",
+    "body": "Bevestig dat dit adres van jou is, zodat {{brand}} weet dat de chat echt van jou komt.",
+    "button": "E-mailadres bevestigen",
+    "not_you": "Ben jij dit niet? Sluit deze pagina en er verandert niets.",
+    "done_title": "Je e-mailadres is bevestigd",
+    "already_title": "Je e-mailadres is al bevestigd",
+    "done_body": "{{brand}} weet nu dat de chat van {{email}} van jou is. Je kunt deze pagina sluiten en verder chatten.",
+    "invalid_title": "Deze link is niet geldig",
+    "invalid_body": "Hij is misschien verlopen of al gebruikt. Vraag in de chat om een nieuwe e-mail.",
+    "error": "Er ging iets mis. Probeer het opnieuw.",
+    "offline": "De server is niet bereikbaar. Controleer je verbinding.",
+    "email_subject": "Bevestig je e-mailadres voor {{brand}}",
+    "email_intro": "Bedankt voor je chat met {{brand}}. Bevestig dat dit adres van jou is, zodat het team weet dat jij het echt bent.",
+    "email_meanwhile": "Je kunt intussen gewoon verder chatten.",
+    "email_expiry": "De link werkt {{hours}} uur.",
+    "email_reason": "Je krijgt deze e-mail omdat dit adres is opgegeven in de chat op een website van {{brand}}. Was jij dat niet? Negeer deze e-mail dan, er verandert niets."
+  },
   "footer": {
     "powered_by": "Mogelijk gemaakt door",
     "language": "Taal"

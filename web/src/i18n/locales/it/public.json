@@ -73,6 +73,25 @@
     "error": "Qualcosa è andato storto. Riprova.",
     "offline": "Impossibile raggiungere il server. Controlla la connessione."
   },
+  "chat_verify": {
+    "page_title": "Conferma il tuo indirizzo email",
+    "title": "Conferma il tuo indirizzo email",
+    "body": "Conferma che questo indirizzo è tuo, così {{brand}} sa che la chat è davvero tua.",
+    "button": "Conferma indirizzo email",
+    "not_you": "Non sei tu? Chiudi questa pagina e non cambierà nulla.",
+    "done_title": "Il tuo indirizzo email è confermato",
+    "already_title": "Il tuo indirizzo email è già confermato",
+    "done_body": "Ora {{brand}} sa che la chat di {{email}} è tua. Puoi chiudere questa pagina e continuare a chattare.",
+    "invalid_title": "Questo link non è valido",
+    "invalid_body": "Potrebbe essere scaduto o essere già stato usato. Chiedi una nuova email nella chat.",
+    "error": "Qualcosa è andato storto. Riprova.",
+    "offline": "Impossibile raggiungere il server. Controlla la connessione.",
+    "email_subject": "Conferma il tuo indirizzo email per {{brand}}",
+    "email_intro": "Grazie per aver chattato con {{brand}}. Conferma che questo indirizzo è tuo, così il team sa che sei davvero tu.",
+    "email_meanwhile": "Nel frattempo puoi continuare a chattare.",
+    "email_expiry": "Il link funziona per {{hours}} ore.",
+    "email_reason": "Ricevi questa email perché questo indirizzo è stato indicato nella chat di un sito di {{brand}}. Se non sei stato tu, ignorala e non cambierà nulla."
+  },
   "footer": {
     "powered_by": "Realizzato con",
     "language": "Lingua"

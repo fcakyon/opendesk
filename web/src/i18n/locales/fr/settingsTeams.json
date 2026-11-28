@@ -579,7 +579,8 @@
       "chat": "Chat",
       "api": "API",
       "portal": "Portail",
-      "phone": "Téléphone"
+      "phone": "Téléphone",
+      "whatsapp": "WhatsApp"
     },
     "via": {
       "address": "L’équipe de l’adresse",

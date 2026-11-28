@@ -556,3 +556,56 @@ func (WikiTrashPurgeArgs) Kind() string { return "wiki.trash_purge" }
 type WikiRemindersArgs struct{}
 
 func (WikiRemindersArgs) Kind() string { return "wiki.reminders" }
+
+// WhatsAppInboundArgs processes one verified Meta webhook delivery. Owner: whatsapp.
+type WhatsAppInboundArgs struct {
+	WorkspaceID  uuid.UUID `json:"workspace_id"`
+	ConnectionID uuid.UUID `json:"connection_id"`
+	EventID      uuid.UUID `json:"event_id"`
+}
+
+func (WhatsAppInboundArgs) Kind() string { return "whatsapp.inbound" }
+
+// WhatsAppSendAttempts is how often a WhatsApp send runs: Meta's rate limit and server errors
+// are retried, every other refusal fails the message at once.
+const WhatsAppSendAttempts = 5
+
+// WhatsAppSendArgs sends one outbound WhatsApp reply. Owner: whatsapp.
+type WhatsAppSendArgs struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	MessageID   uuid.UUID `json:"message_id"`
+}
+
+func (WhatsAppSendArgs) Kind() string { return "whatsapp.send" }
+
+// WhatsAppPruneArgs removes applied Meta deliveries older than the channel's retention.
+// Owner: whatsapp.
+type WhatsAppPruneArgs struct{}
+
+func (WhatsAppPruneArgs) Kind() string { return "whatsapp.prune" }
+
+// WhatsAppTemplateSyncArgs refreshes every WhatsApp connection's message templates from Meta.
+// Owner: whatsapp.
+type WhatsAppTemplateSyncArgs struct{}
+
+func (WhatsAppTemplateSyncArgs) Kind() string { return "whatsapp.template_sync" }
+
+// ContactMessageArgs creates the next few tickets of a message sent to many customers, then
+// queues itself again until every customer was reached. NextIndex is where the message stands
+// when this run was queued; a run that finds it elsewhere does nothing. Owner: helpdesk.
+type ContactMessageArgs struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	MessageID   uuid.UUID `json:"message_id"`
+	NextIndex   int       `json:"next_index"`
+}
+
+func (ContactMessageArgs) Kind() string { return "helpdesk.contact_message" }
+
+// ContactImportArgs adds the people of an uploaded CSV file to the directory
+// (contracts/imports.md "Contacts"), working from the import's checkpoint and snoozing when
+// its time is up. Owner: helpdesk.
+type ContactImportArgs struct {
+	ImportID uuid.UUID `json:"import_id"`
+}
+
+func (ContactImportArgs) Kind() string { return "contacts.import" }

@@ -95,7 +95,11 @@
     "notFoundHint": "It may have been deleted or merged.",
     "loadError": "Couldn't load this ticket",
     "back": "Back to the list",
-    "movedPrivate": "This ticket moved to a private team"
+    "movedPrivate": "This ticket moved to a private team",
+    "followUpOf": "Follow-up of #{{number}}",
+    "followUpHidden": "Follow-up of an earlier ticket",
+    "followUpHint": "The customer wrote again after #{{number}} was closed",
+    "copyForAgent": "Copy ticket for AI agent"
   },
   "commands": {
     "reply": "Reply",
@@ -120,7 +124,9 @@
     "unspammed": "Moved out of spam",
     "deleted": "Deleted #{{number}}",
     "snoozed": "Snoozed",
-    "linkCopied": "Link copied"
+    "linkCopied": "Link copied",
+    "copiedForAgent": "Copied. Paste it into your AI agent.",
+    "copyFailed": "Couldn't copy. Try again."
   },
   "finish": {
     "close": {
@@ -180,7 +186,9 @@
     "soundOn": "Mute chat alert sounds",
     "soundOff": "Play a sound when a visitor is waiting",
     "title_one": "● {{count}} customer waiting",
-    "title_other": "● {{count}} customers waiting"
+    "title_other": "● {{count}} customers waiting",
+    "whatsapp": "WhatsApp",
+    "whatsappHint": "WhatsApp. Replies from here go to the customer's WhatsApp."
   },
   "presence": {
     "viewing": "{{name}} is viewing",
@@ -270,6 +278,10 @@
       "description": "New conversations land here when an address, a widget or a routing rule sends them to this team.",
       "seeOpen": "See open tickets",
       "seeUnassigned": "See unassigned"
+    },
+    "all": {
+      "title": "No tickets yet",
+      "description": "Every ticket shows here, whatever its status, except spam."
     }
   },
   "error": {
@@ -476,6 +488,8 @@
     "automation": "An automation",
     "customer": "The customer",
     "ai": "AI",
+    "why": "Why?",
+    "whyInternal": "Only the team sees this.",
     "noteEdited": "<b>{{who}}</b> edited an internal note",
     "noteDeleted": "<b>{{who}}</b> deleted an internal note",
     "status": "<b>{{who}}</b> marked this <b>{{status}}</b>",
@@ -494,6 +508,7 @@
     "unassigned": "<b>{{who}}</b> unassigned this ticket",
     "team": "<b>{{who}}</b> moved this to <b>{{team}}</b>",
     "contactChanged": "<b>{{who}}</b> changed the contact from <b>{{from}}</b> to <b>{{to}}</b>",
+    "contactAnswered": "<b>{{to}}</b> answered mail from <b>{{from}}</b> and is now the contact",
     "noContact": "no contact",
     "teamRemoved": "<b>{{who}}</b> removed the team",
     "tagged": "<b>{{who}}</b> added",
@@ -524,6 +539,12 @@
     "triagedAs": "<b>{{who}}</b> triaged this as <b>{{category}}</b>",
     "aiAnswered": "<b>{{who}}</b> answered from the knowledge base",
     "aiAnsweredEmail": "<b>{{who}}</b> answered by email",
+    "aiSkipped": "<b>{{who}}</b> left this message for the team",
+    "skippedReason": {
+      "contact_limit": "The customer reached the limit of answers {{who}} gives one person in an hour.",
+      "monthly_cap": "{{who}} had used its monthly cap.",
+      "no_balance": "The AI balance is used up, so {{who}} could not answer."
+    },
     "procedureRan": "<b>{{who}}</b> ran <b>{{name}}</b>",
     "procedureNothing": "<b>{{who}}</b> ran <b>{{name}}</b>: nothing to do",
     "procedureFailed": "<b>{{who}}</b> couldn't finish <b>{{name}}</b>",
@@ -531,6 +552,13 @@
     "aiSuggestedSent": "<b>{{who}}</b> sent {{ollie}}'s suggested reply",
     "handoffCustomer": "The customer asked for a person",
     "handoffAi": "<b>{{who}}</b> handed this to the team",
+    "handoffReason": "Reason",
+    "handoffRule": {
+      "agent": "{{who}} decided a person was needed.",
+      "visitor_request": "The visitor asked for a person.",
+      "reply_limit": "The conversation reached {{who}}'s reply limit.",
+      "needs_human": "{{who}} judged that a person is needed."
+    },
     "other": "<b>{{who}}</b> updated this ticket <m>{{type}}</m>",
     "teamFrom": "<b>{{who}}</b> moved this from <b>{{from}}</b> to <b>{{team}}</b>",
     "teamRule": "Routed to <b>{{team}}</b> by rule <b>{{rule}}</b>",
@@ -539,7 +567,9 @@
     "messageDeleted": "<b>{{who}}</b> deleted a message",
     "messageRestored": "<b>{{who}}</b> restored a deleted message",
     "noteSentAsReply": "<b>{{who}}</b> sent an internal note as a reply",
-    "messagePurged": "<b>{{who}}</b> permanently deleted a message’s content"
+    "messagePurged": "<b>{{who}}</b> permanently deleted a message’s content",
+    "panelAction": "<b>{{who}}</b> ran <b>{{label}}</b> in {{panel}}",
+    "panelActionFailed": "<b>{{who}}</b> tried <b>{{label}}</b> in {{panel}}, which did not go through: {{message}}"
   },
   "typing_one": "{{who}} is typing",
   "typing_other": "{{who}} are typing",
@@ -554,6 +584,9 @@
     "theCustomer": "the customer",
     "noteHint": "Only your team sees notes. Type @ to mention someone.",
     "ccBcc": "Cc / Bcc",
+    "replyAll": "Reply all",
+    "replyAllHint": "Reply all: also send this reply to {{list}}, in Cc",
+    "replyAllOff": "Back to Reply: takes {{list}} out of Cc",
     "cc": "Cc",
     "bcc": "Bcc",
     "replyPlaceholder": "Write a reply. Type / for saved replies, {{braces}} for this ticket's details.",
@@ -656,7 +689,12 @@
       "member_gone": "You can no longer reply on this ticket, so the reply was not sent.",
       "refused": "The reply could no longer be sent as it was written when it was due. Check it and send it again.",
       "failed": "The scheduled reply could not be sent. Send it again."
-    }
+    },
+    "whatsappWindowOpen": "WhatsApp window open. {{left}} left to reply.",
+    "whatsappWindowClosed": "The 24 hour window is closed, so only a template can go out.",
+    "whatsappDisconnected": "This WhatsApp number is not connected. An admin can connect it again in Settings > WhatsApp.",
+    "whatsappTemplate": "Send template",
+    "whatsappOneFile": "WhatsApp takes one file per message. Remove the file to attach another."
   },
   "sharedDraft": {
     "label": "Shared draft",
@@ -669,6 +707,41 @@
     "replaceTitle": "Replace what you wrote?",
     "replaceBody": "The draft by {{name}} replaces what you have written.",
     "replaceConfirm": "Replace"
+  },
+  "whatsappTemplate": {
+    "title": "Send a template",
+    "description": "Only templates approved at Meta can go out, inside the 24 hour window or after it.",
+    "search": "Search templates",
+    "loading": "Loading templates",
+    "noTemplates": "No template can be sent from here yet. Sync approved templates in Settings > WhatsApp.",
+    "emptySearch": "No template matches that search.",
+    "preview": "Preview",
+    "header": "Header",
+    "headerMedia": "{{kind}} header",
+    "kind": {
+      "image": "Image",
+      "video": "Video",
+      "document": "Document"
+    },
+    "headerChoose": "Choose a file",
+    "headerFileHint": "Up to {{size}}.",
+    "headerUploading": "Uploading",
+    "headerRemove": "Remove the header file",
+    "headerTooLarge": "{{name}} is larger than {{size}}.",
+    "headerUploadFailed": "Couldn't upload {{name}}",
+    "headerValue": "Header: {{name}}",
+    "headerValueHint": "Up to 60 characters.",
+    "params": "Fill in the placeholders",
+    "paramHint": "Goes in this placeholder in the message.",
+    "buttons": "Button links",
+    "buttonValue": "Button: {{text}}",
+    "buttonNumber": "Button {{number}}",
+    "buttonHint": "Goes in this button's link.",
+    "back": "Back",
+    "cancel": "Cancel",
+    "send": "Send template",
+    "sent": "Template sent.",
+    "error": "Couldn't send this template"
   },
   "message": {
     "from": "Message from {{name}}",
@@ -710,13 +783,12 @@
     "imagesHeld": "Remote images are hidden to protect your privacy.",
     "loadImages": "Load images",
     "hideQuoted": "Hide quoted text",
-    "preview": "Preview {{name}}",
-    "fullSize": "Open full size",
-    "download": "Download {{name}}",
     "fromAddress": "from {{name}} <{{address}}>",
     "ownAddress": "Own address",
     "ownAddressHint": "Sent from the writer's own mail account instead of the ticket's address. The customer's answers come back to this ticket.",
     "toAddress": "to {{address}}",
+    "toAndOthers": "to {{to}} +{{others}}",
+    "receivedAt": "received at {{address}}",
     "replyTo": "Reply-To <m>{{address}}</m>",
     "replyToUsed": "Replies go to this address, which the sender asked for",
     "replyToOther": "The sender asked for replies here. It is outside their organisation, so replies go to {{address}}",
@@ -756,7 +828,15 @@
     "showReply": "Show reply",
     "showNote": "Show note",
     "hideNote": "Hide note",
-    "forward": "Forward"
+    "forward": "Forward",
+    "viewSource": "View source",
+    "copyForAgent": "Copy for AI agent",
+    "whatsapp": {
+      "sent": "Sent",
+      "delivered": "Delivered",
+      "read": "Read",
+      "failed": "Not delivered"
+    }
   },
   "merge": {
     "title": "Merge #{{number}} into another ticket",
@@ -792,6 +872,8 @@
     "startTyping": "Start typing",
     "use": "Use",
     "change": "Change",
+    "addTo": "Add someone",
+    "addCopies": "Add Cc or Bcc",
     "noMailbox": "No mailbox",
     "bodyReply": "Write your message",
     "bodyNote": "Describe the issue",
@@ -823,7 +905,12 @@
     "open": "Open contact",
     "copyEmail": "Copy email",
     "pastTickets": "Past tickets",
-    "noOther": "No other tickets"
+    "noOther": "No other tickets",
+    "verified": "Verified",
+    "unverified": "Unverified",
+    "verifiedByEmail": "They confirmed their email address with the link we emailed them.",
+    "verifiedByIdentity": "They signed in on your website, which vouched for who they are.",
+    "unverifiedHint": "Their email address came through the chat and isn't confirmed yet. It turns Verified when they open the link we email them."
   },
   "fields": {
     "title": "Fields",
@@ -860,6 +947,7 @@
     "setBy": "Set by {{name}}",
     "said": "{{name}} replied",
     "sure": "{{pct}}% sure",
+    "threshold": "threshold {{pct}}%",
     "setThis": "{{name}} set this"
   },
   "suggest": {
@@ -1051,6 +1139,12 @@
     "line": "Line {{line}}",
     "playRecording": "Play recording",
     "playVoicemail": "Play voicemail",
+    "recording": "Recording",
+    "loadingRecording": "Loading…",
+    "tryAgain": "Try again",
+    "recordingNotReady": "The recording is not ready yet. Try again in a minute.",
+    "recordingRefused": "The provider refused the connection's token. It needs access to call recordings.",
+    "recordingError": "The recording could not be loaded.",
     "openIn": "Open in {{provider}}",
     "summary": "Summary",
     "showTranscript": "Show transcript",
@@ -1118,7 +1212,13 @@
     "discountCodes_other": "Discount codes",
     "refunded": "{{amount}} refunded",
     "openLink": "Open {{name}}",
-    "copyValue": "Copy {{name}}"
+    "copyValue": "Copy {{name}}",
+    "actions": {
+      "error": "That didn't go through. Try again in a moment.",
+      "cancel": "Cancel",
+      "fill": "Fill in the required fields.",
+      "choose": "Choose"
+    }
   },
   "print": {
     "action": "Print or save as PDF",
@@ -1158,5 +1258,15 @@
   "wiki": {
     "title": "Wiki",
     "untitled": "Untitled"
+  },
+  "source": {
+    "title": "Original message",
+    "download": "Download .eml",
+    "copy": "Copy source",
+    "close": "Close",
+    "error": "The original of this message isn't available. Only email that arrived at a mailbox keeps one, and a purged message's is gone.",
+    "loadError": "Couldn't load the original message. Try again.",
+    "downloadError": "Couldn't download the message.",
+    "truncated": "Only the first part is shown. The download has the whole message ({{size}} KB)."
   }
 }
