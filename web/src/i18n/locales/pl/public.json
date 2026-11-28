@@ -75,6 +75,25 @@
     "error": "Coś poszło nie tak. Spróbuj ponownie.",
     "offline": "Nie można połączyć się z serwerem. Sprawdź połączenie."
   },
+  "chat_verify": {
+    "page_title": "Potwierdź swój adres e-mail",
+    "title": "Potwierdź swój adres e-mail",
+    "body": "Potwierdź, że ten adres należy do Ciebie, aby zespół {{brand}} wiedział, że czat naprawdę pochodzi od Ciebie.",
+    "button": "Potwierdź adres e-mail",
+    "not_you": "To nie Ty? Zamknij tę stronę, a nic się nie zmieni.",
+    "done_title": "Twój adres e-mail został potwierdzony",
+    "already_title": "Twój adres e-mail jest już potwierdzony",
+    "done_body": "Zespół {{brand}} wie już, że czat z adresu {{email}} należy do Ciebie. Możesz zamknąć tę stronę i dalej rozmawiać.",
+    "invalid_title": "Ten link jest nieprawidłowy",
+    "invalid_body": "Mógł wygasnąć lub zostać już użyty. Poproś o nowy e-mail na czacie.",
+    "error": "Coś poszło nie tak. Spróbuj ponownie.",
+    "offline": "Nie można połączyć się z serwerem. Sprawdź połączenie.",
+    "email_subject": "Potwierdź swój adres e-mail dla {{brand}}",
+    "email_intro": "Dziękujemy za rozmowę z {{brand}}. Potwierdź, że ten adres należy do Ciebie, aby zespół wiedział, że to naprawdę Ty.",
+    "email_meanwhile": "W międzyczasie możesz dalej rozmawiać.",
+    "email_expiry": "Link działa przez {{hours}} godzin.",
+    "email_reason": "Otrzymujesz tę wiadomość, ponieważ ten adres podano na czacie w witrynie {{brand}}. Jeśli to nie Ty, zignoruj ją, a nic się nie zmieni."
+  },
   "footer": {
     "powered_by": "Obsługiwane przez",
     "language": "Język"

@@ -5,7 +5,9 @@
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import type {
   Activity,
+  ContactMessage,
   Contact,
+  ContactImport,
   Envelope,
   Import,
   KnowledgeSource,
@@ -78,6 +80,7 @@ const simpleLists: Record<string, { key: () => readonly unknown[]; field: string
   ticket_panel: { key: () => qk.ticketPanels, field: "panel" },
   support_channel_connection: { key: () => qk.supportChannelConnections, field: "support_channel_connection" },
   phone_connection: { key: () => qk.phoneConnections, field: "phone_connection" },
+  whatsapp_connection: { key: () => qk.whatsappConnections, field: "whatsapp_connection" },
   support_channel_destination: { key: () => qk.supportChannelDestinations, field: "support_channel_destination" },
 };
 
@@ -268,6 +271,8 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
       if (!m || !tid) return;
       mergeMessage(qc, tid, m);
       if (m.author?.type === "api" && !m.author.api_key) void qc.invalidateQueries({ queryKey: qk.messages(tid), exact: true });
+      // A customer's WhatsApp message opens the 24 hour window again.
+      if (env.type === "message.created" && m.direction === "inbound") void qc.invalidateQueries({ queryKey: qk.whatsappTicket(tid), exact: true });
       // A newer message means Ollie's suggestion no longer answers the latest one.
       if (env.type === "message.created" && m.kind === "reply") {
         const s = qc.getQueryData<SuggestedReply | null>(qk.suggestedReply(tid));
@@ -343,6 +348,22 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
       void qc.invalidateQueries({ queryKey: qk.billingInvoices });
       return;
     }
+    case "contact_import.updated": {
+      // Progress goes to the person who started the import, on user:<me> only.
+      if (!ctx.viaUser && !env.topics?.includes(`user:${ctx.me}`)) return;
+      const x = d.import as ContactImport | undefined;
+      if (!x) return;
+      const before = qc.getQueryData<ContactImport>(qk.of("contacts", "import", x.id));
+      qc.setQueryData(qk.of("contacts", "import", x.id), x);
+      // People are added in chunks: the lists catch up as the run moves and when it ends.
+      if (x.status !== "running" || (before && before.created !== x.created)) {
+        later("contact-import", 1500, () => {
+          void qc.invalidateQueries({ queryKey: qk.of("contacts") });
+          void qc.invalidateQueries({ queryKey: qk.of("companies") });
+        });
+      }
+      return;
+    }
     case "notification.created": {
       // Notifications arrive on user:<me> only; a replay carries the recipient in topics.
       if (!ctx.viaUser && !env.topics?.includes(`user:${ctx.me}`)) return;
@@ -352,6 +373,13 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
         old ? [n, ...old.filter((x) => x.id !== n.id)] : old,
       );
       ctx.onNotification?.(n);
+      return;
+    }
+    case "contact_message.updated": {
+      // A message to many customers, as it goes: it reaches the member who sent it only.
+      if (!ctx.viaUser && !env.topics?.includes(`user:${ctx.me}`)) return;
+      const m = d.contact_message as ContactMessage | undefined;
+      if (m) qc.setQueryData<ContactMessage[]>(qk.contactMessages, (old) => (old ? [m, ...old.filter((x) => x.id !== m.id)] : [m]));
       return;
     }
     case "notification.read": {
@@ -423,6 +451,8 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
   }
 
   if (resource === "contact") {
+    // contact.verified is the visitor's widget's copy; contact.updated carries the contact.
+    if (verb === "verified") return;
     if (verb === "deleted") {
       const id = d.contact_id as string;
       qc.removeQueries({ queryKey: qk.contact(id) });
@@ -565,6 +595,8 @@ function applyInScope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
       const id = d.support_channel_connection_id as string;
       qc.setQueryData<{ connection_id: string }[]>(qk.supportChannelDestinations, (old) => old?.filter((x) => x.connection_id !== id));
     }
+    // A removed number takes its synced templates with it.
+    if (resource === "whatsapp_connection" && verb === "deleted") void qc.invalidateQueries({ queryKey: qk.of("whatsapp", "templates") });
     if (resource === "view") refreshCounts(qc);
     // A changed or removed panel's answers are from before the change.
     if (resource === "ticket_panel" && verb !== "created") void qc.invalidateQueries({ queryKey: qk.of("tickets", "panels") });

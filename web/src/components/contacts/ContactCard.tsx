@@ -5,11 +5,13 @@ import { useTranslation } from "react-i18next";
 import { Avatar } from "@/components/ui/avatar";
 import { CompanyGlyph } from "./bits";
 import { PhoneNumber } from "./PhoneNumber";
+import { VerificationBadge } from "./VerificationBadge";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { CopyButton } from "@/components/ui/copy-button";
 import { StatusIcon, TicketNumber } from "@/components/tickets/bits";
+import type { Ticket } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { relShort } from "@/lib/format";
 import { q } from "@/lib/queries";
@@ -22,7 +24,11 @@ export function ContactCard({ contactId, compact, excludeTicketId }: { contactId
   const { t: ui } = useTranslation("ui");
   const { t } = useTranslation("inbox");
   const { data: c, isLoading } = useQuery(q.contact(contactId));
-  const tickets = useQuery(q.contactTickets(contactId));
+  // In a ticket, the customer's tickets from every address they wrote from; elsewhere, or when
+  // that answer fails, the contact's own.
+  const customer = useQuery({ ...q.customerTickets(excludeTicketId ?? ""), enabled: !!excludeTicketId });
+  const byCustomer = !!excludeTicketId && !customer.isError;
+  const tickets = useQuery({ ...q.contactTickets(contactId), enabled: !byCustomer });
 
   if (isLoading || !c)
     return (
@@ -38,7 +44,13 @@ export function ContactCard({ contactId, compact, excludeTicketId }: { contactId
       </div>
     );
 
-  const past = (tickets.data ?? []).filter((t) => t.id !== excludeTicketId).slice(0, compact ? 4 : 8);
+  // A ticket filed under another contact (the same customer's other address) names that address.
+  const past: (Pick<Ticket, "id" | "number" | "subject" | "status" | "last_message_at"> & { via: string })[] = (
+    byCustomer
+      ? (customer.data?.data ?? []).map((t) => ({ ...t, via: t.contact.id === c.id ? "" : t.contact.email.trim() || t.contact.name }))
+      : (tickets.data ?? []).filter((t) => t.id !== excludeTicketId).map((t) => ({ ...t, via: "" }))
+  ).slice(0, compact ? 4 : 8);
+  const pastLoading = byCustomer ? customer.isLoading : tickets.isLoading;
 
   return (
     <div className="flex flex-col gap-3">
@@ -50,6 +62,7 @@ export function ContactCard({ contactId, compact, excludeTicketId }: { contactId
               {c.name || c.email || t("contact.unnamed")}
             </span>
             {c.blocked && <Badge tone="danger">{t("contact.blocked")}</Badge>}
+            <VerificationBadge v={c.verification} />
           </div>
           {c.company && (
             <Link
@@ -103,9 +116,9 @@ export function ContactCard({ contactId, compact, excludeTicketId }: { contactId
       <div>
         <div className="mb-1 flex items-center justify-between">
           <span className="label-caps">{t("contact.pastTickets")}</span>
-          <span className="mono text-[11px] text-fg-4 tabular-nums">{c.ticket_count}</span>
+          <span className="mono text-[11px] text-fg-4 tabular-nums">{byCustomer ? (customer.data?.total ?? "") : c.ticket_count}</span>
         </div>
-        {tickets.isLoading ? (
+        {pastLoading ? (
           <div className="flex flex-col gap-2 py-1">
             <Skeleton className="h-2.5 w-4/5" />
             <Skeleton className="h-2.5 w-3/5" />
@@ -119,11 +132,19 @@ export function ContactCard({ contactId, compact, excludeTicketId }: { contactId
                 <Link
                   to="/inbox/$folder/{-$ticketId}"
                   params={{ folder: "open", ticketId: t.id }}
-                  className="flex h-7 items-center gap-2 rounded-md px-1.5 text-[12.5px] outline-none transition-colors hover:bg-hover focus-visible:shadow-[0_0_0_2px_var(--focus)]"
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-1.5 text-[12.5px] outline-none transition-colors hover:bg-hover focus-visible:shadow-[0_0_0_2px_var(--focus)]",
+                    t.via ? "min-h-7 py-0.5" : "h-7",
+                  )}
                 >
                   <StatusIcon status={t.status} />
-                  <span className="min-w-0 flex-1 truncate text-fg-2" data-ph-mask>
-                    {t.subject}
+                  <span className="min-w-0 flex-1" data-ph-mask>
+                    <span className="block truncate text-fg-2">{t.subject}</span>
+                    {t.via && (
+                      <span className="mono block truncate text-[10.5px] leading-4 text-fg-4" title={t.via}>
+                        {t.via}
+                      </span>
+                    )}
                   </span>
                   {!compact && <TicketNumber n={t.number} />}
                   <span className="mono shrink-0 text-[10.5px] text-fg-4">{relShort(t.last_message_at)}</span>

@@ -263,7 +263,13 @@
     "invited_other": "{{count}} Einladungen gesendet",
     "invitedSome_one": "{{count}} Einladung gesendet, {{skipped}} übersprungen (keine E-Mail, gesperrt oder schon mit Zugang)",
     "invitedSome_other": "{{count}} Einladungen gesendet, {{skipped}} übersprungen (keine E-Mail, gesperrt oder schon mit Zugang)",
-    "inviteFailed": "Die Einladungen konnten nicht gesendet werden"
+    "inviteFailed": "Die Einladungen konnten nicht gesendet werden",
+    "message": "Nachricht senden",
+    "export": "Exportieren",
+    "exported": "Export gespeichert",
+    "exportFailed": "Der Export hat nicht geklappt.",
+    "exportAll": "Alle exportieren",
+    "exportMatching": "Treffer exportieren"
   },
   "portal": {
     "title": "Kundenportal",
@@ -291,5 +297,134 @@
     "needsEmail": "Fügen Sie eine E-Mail-Adresse hinzu, um diesen Kontakt einzuladen.",
     "isBlocked": "Heben Sie die Sperre auf, um diesen Kontakt einzuladen.",
     "ssoOnly": "Kunden melden sich über Ihren Identitätsanbieter an, ohne Einladung."
+  },
+  "message": {
+    "title": "Nachricht senden",
+    "description": "Eine Nachricht an alle Ausgewählten, als eigenes Ticket für jede Person. Antworten landen im Ticket der jeweiligen Person, und niemand sieht die Adresse eines anderen.",
+    "cancel": "Abbrechen",
+    "from": "Von",
+    "noAddress": "Keine Ihrer Adressen kann E-Mails senden. Verbinden Sie in den Einstellungen ein Postfach, das sendet, und kommen Sie zurück.",
+    "subject": "Betreff",
+    "subjectHint": "Wird unverändert gesendet.",
+    "subjectPlaceholder": "Worum es in der Nachricht geht",
+    "body": "Nachricht",
+    "bodyPlaceholder": "Schreiben Sie die Nachricht. Mit {{ fügen Sie den Namen der Person ein.",
+    "label": "Label",
+    "labelHint": "Jedes Ticket trägt es, damit Sie die Antworten verfolgen können.",
+    "status": "Tickets beginnen als",
+    "statusSolved": "Gelöst",
+    "statusPending": "Ausstehend",
+    "statusOpen": "Offen",
+    "statusHint": {
+      "solved": "Die meisten antworten nicht, daher stören die Tickets nicht. Wer antwortet, öffnet das eigene wieder. Es wird keine Zufriedenheitsumfrage gesendet.",
+      "pending": "Die Tickets warten auf eine Antwort. Wer antwortet, öffnet das eigene wieder.",
+      "open": "Jedes Ticket landet in Ihrer Warteschlange, als hätte die Person zuerst geschrieben."
+    },
+    "preview": "So sieht es für eine Person aus",
+    "tooMany": "Wählen Sie bis zu 100 Personen oder alle, die zur Suche und den Filtern passen.",
+    "reaches_one": "Erreicht {{count}} Person.",
+    "reaches_other": "Erreicht {{count}} Personen.",
+    "send_one": "An {{count}} Person senden",
+    "send_other": "An {{count}} Personen senden",
+    "started_one": "Wird an {{count}} Person gesendet",
+    "started_other": "Wird an {{count}} Personen gesendet",
+    "progress": "{{done}} von {{total}} gesendet",
+    "stop": "Stoppen",
+    "stopFailed": "Konnte nicht gestoppt werden",
+    "stopped": "nach {{sent}} von {{total}} gestoppt",
+    "done_one": "an {{count}} Person gesendet",
+    "done_other": "an {{count}} Personen gesendet",
+    "doneWithFailures": "{{sent}} gesendet, {{failed}} konnten nicht gesendet werden.",
+    "replies": "Antworten ansehen",
+    "dismiss": "Schließen",
+    "leftOut": "Ausgelassen: {{list}}.",
+    "noEmail_one": "{{count}} ohne E-Mail-Adresse",
+    "noEmail_other": "{{count}} ohne E-Mail-Adresse",
+    "blockedCount_one": "{{count}} gesperrt",
+    "blockedCount_other": "{{count}} gesperrt",
+    "confirmTitle_one": "An {{count}} Person senden?",
+    "confirmTitle_other": "An {{count}} Personen senden?",
+    "confirmBody_one": "{{count}} Person erhält diese E-Mail als eigenes Ticket. Sie können das Senden stoppen, aber bereits verschickte E-Mails lassen sich nicht zurückholen.",
+    "confirmBody_other": "{{count}} Personen erhalten diese E-Mail, jede als eigenes Ticket. Sie können das Senden stoppen, aber bereits verschickte E-Mails lassen sich nicht zurückholen."
+  },
+  "import": {
+    "open": "Importieren",
+    "title": "Personen importieren",
+    "runningTitle": "Personen werden importiert",
+    "body": "Füge Personen aus einer CSV-Datei hinzu. Ordne die Spalten den Feldern zu und lege fest, was mit Personen passiert, die schon da sind.",
+    "close": "Fertig",
+    "replace": "Andere Datei wählen",
+    "summary": "{{rows}} Zeilen, {{columns}} Spalten",
+    "start_one": "{{count}} Zeile importieren",
+    "start_other": "{{count}} Zeilen importieren",
+    "notInFile": "Nicht in der Datei",
+    "emptyColumn": "In den ersten Zeilen leer",
+    "customField": "Eigenes Feld",
+    "fields": {
+      "email": {
+        "label": "E-Mail",
+        "hint": "Findet Personen, die schon da sind"
+      },
+      "name": {
+        "label": "Name",
+        "hint": "Wird aus der E-Mail genommen, wenn leer"
+      },
+      "phone": {
+        "label": "Telefon",
+        "hint": "Höchstens 50 Zeichen"
+      },
+      "company": {
+        "label": "Firma",
+        "hint": "Nach Name; neue werden angelegt"
+      },
+      "external_id": {
+        "label": "Externe ID",
+        "hint": "Die ID im anderen System"
+      },
+      "notes": {
+        "label": "Notizen",
+        "hint": "Im Profil sichtbar"
+      },
+      "labels": {
+        "label": "Labels",
+        "hint": "Durch Komma, Semikolon oder Strich getrennt"
+      }
+    },
+    "matchOn": "Vorhandene Personen finden über",
+    "matchEmail": "E-Mail-Adresse",
+    "matchExternal": "Externe ID",
+    "onMatch": "Wenn jemand schon da ist",
+    "skip": "Nicht anfassen",
+    "fill": "Leeres auffüllen",
+    "overwrite": "Mit der Datei aktualisieren",
+    "skipHint": "Ihre Angaben bleiben, wie sie sind.",
+    "fillHint": "Nur leere Felder werden gesetzt; Labels werden hinzugefügt.",
+    "overwriteHint": "Jeder Wert aus der Datei ersetzt den bisherigen; leere Zellen ändern nichts.",
+    "problem": {
+      "identity": "Wähle eine Spalte für den Namen oder die E-Mail.",
+      "email": "Wähle die E-Mail-Spalte, um Personen per E-Mail zu finden.",
+      "external_id": "Wähle die Spalte der externen ID, um Personen darüber zu finden."
+    },
+    "status": {
+      "running": "Import läuft",
+      "done": "Fertig",
+      "failed": "Angehalten",
+      "cancelled": "Von dir gestoppt"
+    },
+    "of": "{{done}} von {{total}} Zeilen",
+    "stop": "Stoppen",
+    "cancelFailed": "Der Import ließ sich nicht stoppen.",
+    "count": {
+      "created": "Hinzugefügt",
+      "updated": "Aktualisiert",
+      "skipped": "Übersprungen",
+      "failed": "Fehlgeschlagen"
+    },
+    "rowErrors_one": "{{count}} Zeile konnte nicht importiert werden",
+    "rowErrors_other": "{{count}} Zeilen konnten nicht importiert werden",
+    "line": "Zeile {{line}}",
+    "moreErrors_one": "Und {{count}} weitere",
+    "moreErrors_other": "Und {{count}} weitere",
+    "dropHint": "Eine Zeile pro Person, mit einer Kopfzeile, die die Spalten benennt. Ein Name oder eine E-Mail genügt."
   }
 }

@@ -54,7 +54,7 @@ export const severityFilterItems = (): PickerItem[] => [
   ...severityItems(),
   { value: "none", label: i18n.t("settingsInbox:edit.noSeverity"), icon: <span className="h-[16px] w-[22px] rounded-[4px] border border-dashed border-line-strong" /> },
 ];
-export const channelItems = (): PickerItem[] => (["email", "chat", "api", "portal", "phone"] as Channel[]).map((c) => ({
+export const channelItems = (): PickerItem[] => (["email", "chat", "api", "portal", "phone", "whatsapp"] as Channel[]).map((c) => ({
   value: c,
   label: channelLabel(c),
   icon: <ChannelIcon channel={c} />,

@@ -225,14 +225,14 @@ export function ListToolbar({
             <Button variant="ghost" size="sm" square aria-label={t("toolbar.closeSearch")} icon={<X className="size-3.5" />} onClick={closeSearch} />
           </motion.div>
         ) : (
-          <div className="ml-1 flex min-w-0 flex-1 items-baseline gap-2">
-            <h1 className="truncate text-[14px] font-semibold tracking-[-0.01em]" {...(dragItem ? sidebarDragProps(dragItem) : {})}>
+          <div className="ml-1 flex min-w-0 flex-1 items-center gap-2">
+            <h1 className="truncate text-[14px] font-semibold leading-5 tracking-[-0.01em]" {...(dragItem ? sidebarDragProps(dragItem) : {})}>
               {title}
             </h1>
             {count !== null && count !== undefined && (
-              <AnimatedNumber value={count} flash className="mono text-[11.5px] text-fg-4" />
+              <AnimatedNumber value={count} flash className="mono text-[11.5px] leading-5 text-fg-4" />
             )}
-            {titleAction && <span className="flex self-center">{titleAction}</span>}
+            {titleAction && <span className="flex">{titleAction}</span>}
           </div>
         )}
         {!searchOpen && (
@@ -284,7 +284,7 @@ export function ListToolbar({
               </MenuSub>
             )}
             <MenuSub label={t("filter.channel")}>
-              {(["email", "chat", "api", "portal", "phone"] as Channel[]).map((c) => (
+              {(["email", "chat", "api", "portal", "phone", "whatsapp"] as Channel[]).map((c) => (
                 <MenuCheckItem
                   key={c}
                   checked={search.channel === c}
@@ -506,7 +506,7 @@ export function ListToolbar({
                 {search.channel && (
                   <Chip key="channel" label={t("filter.remove")} onRemove={() => onSearch({ ...search, channel: undefined })}>
                     <ChannelIcon channel={search.channel as Channel} />
-                    {["email", "chat", "api", "portal", "phone"].includes(search.channel) ? channelLabel(search.channel as Channel) : search.channel}
+                    {["email", "chat", "api", "portal", "phone", "whatsapp"].includes(search.channel) ? channelLabel(search.channel as Channel) : search.channel}
                   </Chip>
                 )}
                 {search.tag && (

@@ -72,6 +72,25 @@
   "quote": "Zitat",
   "codeBlock": "Codeblock",
   "image": "Bild",
+  "signatureImage": {
+    "title": "Bild hinzufügen",
+    "editTitle": "Bild",
+    "choose": "Bild auswählen",
+    "replace": "Bild ersetzen",
+    "uploading": "Wird hochgeladen…",
+    "uploadFailed": "Das Bild konnte nicht hochgeladen werden.",
+    "formats": "PNG, JPEG, GIF oder WebP, höchstens 5 MB. Alle, die die Signatur erhalten, können es sehen.",
+    "file": "Bilddatei",
+    "alt": "Beschreibung",
+    "altHint": "Wird statt des Bildes angezeigt, wenn das E-Mail-Programm Bilder blockiert, und von Screenreadern vorgelesen.",
+    "altPlaceholder": "Firmenlogo",
+    "size": "Größe",
+    "small": "Klein",
+    "medium": "Mittel",
+    "large": "Groß",
+    "original": "Original",
+    "current": "Aktuell"
+  },
   "link": "Link",
   "linkAddress": "Linkadresse",
   "searchCompanies": "Unternehmen suchen",
@@ -205,5 +224,18 @@
     "automations": "Automatisierungen",
     "slaPolicies": "SLA-Richtlinien",
     "teams": "Teams"
+  },
+  "attachments": {
+    "preview": "Vorschau von {{name}}",
+    "download": "{{name}} herunterladen",
+    "downloadShort": "Herunterladen",
+    "position": "{{n}} von {{total}}",
+    "previous": "Vorherige Datei",
+    "next": "Nächste Datei",
+    "loading": "Vorschau wird geladen",
+    "failed": "Die Vorschau konnte nicht geladen werden. Lade die Datei herunter, um sie zu öffnen.",
+    "refused": "Diese Datei kann hier nicht angezeigt werden. Lade sie herunter, um sie auf deinem Gerät zu öffnen.",
+    "tooLarge": "Diese Datei ist zu groß für die Vorschau. Lade sie herunter, um sie zu öffnen.",
+    "noViewer": "PDFs können in dieser App nicht angezeigt werden. Lade die Datei herunter, um sie zu öffnen."
   }
 }

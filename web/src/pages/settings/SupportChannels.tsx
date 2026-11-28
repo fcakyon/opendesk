@@ -67,8 +67,8 @@ function useProviderCopy() {
     help: (p: SupportChannelProvider, f: SupportChannelProvider["fields"][number]) =>
       knownProvider(p.key) ? t(`supportChannels.provider.${p.key}.help.${f.name}`, { defaultValue: "" }) || undefined : f.help,
     // What an account is called to choose: a Discord server, a Mattermost team.
-    account: (p: SupportChannelProvider, key: "findAccounts" | "accountPlaceholder" | "refreshAccounts" | "noAccounts" | "discoveryError", values?: Record<string, string>) =>
-      t(`supportChannels.provider.${p.key}.${key}`, { defaultValue: t(`supportChannels.connect.${key}`, values), ...values }),
+    account: (p: SupportChannelProvider, key: "findAccounts" | "accountPlaceholder" | "refreshAccounts" | "noAccounts" | "discoveryError") =>
+      t(`supportChannels.provider.${p.key}.${key}`, { defaultValue: t(`supportChannels.connect.${key}`, { name: p.name }), name: p.name }),
     noChannels: (key: string) => (knownProvider(key) ? t(`supportChannels.provider.${key}.noChannels`) : t("supportChannels.destination.none")),
   };
 }
@@ -857,7 +857,7 @@ function ConnectDialog({ provider, onClose, onConnected }: { provider: SupportCh
       // A bot in one server has nothing to choose.
       if (result.data.length === 1) for (const field of discoveredFields) setCredentials((old) => ({ ...old, [field.name]: result.data[0].id }));
     },
-    onError: (e) => setError(errorMessage(e, copy.account(provider, "discoveryError", { name: provider.name }))),
+    onError: (e) => setError(errorMessage(e, copy.account(provider, "discoveryError"))),
   });
   const baseValid = fields.every((field) => credentials[field.name]?.trim());
   const valid = baseValid && discoveredFields.every((field) => credentials[field.name]?.trim());

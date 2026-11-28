@@ -71,6 +71,25 @@
     "error": "Nəsə alınmadı. Yenidən cəhd edin.",
     "offline": "Serverə qoşulmaq mümkün olmadı. İnternet bağlantınızı yoxlayın."
   },
+  "chat_verify": {
+    "page_title": "E-poçt ünvanınızı təsdiqləyin",
+    "title": "E-poçt ünvanınızı təsdiqləyin",
+    "body": "Bu ünvanın sizə aid olduğunu təsdiqləyin ki, {{brand}} söhbətin həqiqətən sizdən gəldiyini bilsin.",
+    "button": "E-poçt ünvanını təsdiqlə",
+    "not_you": "Siz deyilsiniz? Bu səhifəni bağlayın, heç nə dəyişməyəcək.",
+    "done_title": "E-poçt ünvanınız təsdiqləndi",
+    "already_title": "E-poçt ünvanınız artıq təsdiqlənib",
+    "done_body": "{{brand}} artıq {{email}} ünvanından gələn söhbətin sizə aid olduğunu bilir. Bu səhifəni bağlayıb söhbətə davam edə bilərsiniz.",
+    "invalid_title": "Bu keçid etibarlı deyil",
+    "invalid_body": "Onun müddəti bitmiş və ya artıq istifadə olunmuş ola bilər. Söhbətdə yeni e-poçt istəyin.",
+    "error": "Nəsə alınmadı. Yenidən cəhd edin.",
+    "offline": "Serverə qoşulmaq mümkün olmadı. İnternet bağlantınızı yoxlayın.",
+    "email_subject": "{{brand}} üçün e-poçt ünvanınızı təsdiqləyin",
+    "email_intro": "{{brand}} ilə söhbət etdiyiniz üçün təşəkkür edirik. Bu ünvanın sizə aid olduğunu təsdiqləyin ki, komanda həqiqətən siz olduğunuzu bilsin.",
+    "email_meanwhile": "Bu arada söhbətə davam edə bilərsiniz.",
+    "email_expiry": "Keçid {{hours}} saat etibarlıdır.",
+    "email_reason": "Bu e-poçtu ona görə alırsınız ki, bu ünvan {{brand}} saytındakı söhbətdə göstərilib. Bu siz deyildinizsə, ona məhəl qoymayın, heç nə dəyişməyəcək."
+  },
   "footer": {
     "powered_by": "Texnoloji dəstək:",
     "language": "Dil"

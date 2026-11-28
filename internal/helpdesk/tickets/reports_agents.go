@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"net/http"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
@@ -13,6 +14,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/deps"
 	"github.com/useopendesk/opendesk/internal/domain"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 	"github.com/useopendesk/opendesk/internal/httpx"
 )
 
@@ -45,6 +47,25 @@ const (
 	onlineOff  = "off"
 )
 
+// allowPerson answers 403 to a member who is not an admin naming someone other than
+// themselves in assignee_id: they see their own row alone. API keys read every ticket already.
+func allowPerson(ctx context.Context, p *auth.Principal, raw string) error {
+	if strings.TrimSpace(raw) == "" || p.Kind != auth.KindUser {
+		return nil
+	}
+	if _, err := auth.RequireWorkspace(ctx, auth.RoleAdmin, auth.ScopeSettingsRead); err == nil {
+		return nil
+	}
+	id, err := hd.ParseRef(strings.TrimSpace(raw), "assignee_id")
+	if err != nil {
+		return err
+	}
+	if id != p.UserID {
+		return httpx.Forbidden()
+	}
+	return nil
+}
+
 func onlineScope(ctx context.Context, p *auth.Principal) (string, *uuid.UUID) {
 	if _, err := auth.RequireWorkspace(ctx, auth.RoleAdmin, auth.ScopeSettingsRead); err == nil {
 		return onlineAll, nil
@@ -65,8 +86,8 @@ func agentsReport(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS s
 	if scope == onlineSelf {
 		rowsFor = onlineFor
 	}
-	var on bool
-	if err := q.QueryRow(ctx, `SELECT `+domain.OnlineTimeSQL+` FROM workspaces w WHERE w.id = $1`, wid).Scan(&on); err != nil {
+	var on, byPeople bool
+	if err := q.QueryRow(ctx, `SELECT `+domain.OnlineTimeSQL+`, `+reportsTeamMembersSQL+` FROM workspaces w WHERE w.id = $1`, wid).Scan(&on, &byPeople); err != nil {
 		return ReportAgents{Data: []ReportAgentRow{}, OnlineTime: scope}, err
 	}
 	if !on {
@@ -78,6 +99,23 @@ func agentsReport(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS s
 	rf, err := rf.validate()
 	if err != nil {
 		return out, err
+	}
+	// A team counted by its people (settings.reports_team_members) names whose rows, not which
+	// tickets: its leads and members alone, each with the figures they have without it.
+	var rowTeam *string
+	if rf.TeamMembers = byPeople; rf.byMembers() {
+		team := rf.Team
+		rowTeam, rf.Team = &team, ""
+	}
+	if rf.Assignee != "" {
+		// One member's row, with their whole work on the filtered tickets (a reply on a
+		// teammate's ticket counts), so the person picks the row, not the tickets. With a team
+		// counted by its people too, the row shows only when they are one of its people.
+		person := uuid.MustParse(rf.Assignee)
+		if rowsFor != nil && *rowsFor != person {
+			return out, nil
+		}
+		rowsFor, rf.Assignee = &person, ""
 	}
 	from, to, _, err := reportPeriod(ctx, q, wid, fromS, toS)
 	if err != nil {
@@ -166,7 +204,9 @@ func agentsReport(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS s
 				SELECT 1 FROM team_members tm JOIN teams tt ON tt.id = tm.team_id
 				WHERE tt.workspace_id = $1 AND tt.id::text = $4 AND tm.user_id = m.user_id AND tm.role <> 'observer'))))
 			AND ($7::uuid IS NULL OR m.user_id = $7)
-		ORDER BY 6 DESC, 7 DESC, u.name, u.id LIMIT 500`, wid, from, to, rf.Team, rf.Brand, onlineFor, rowsFor)
+			AND ($8::text IS NULL OR EXISTS (SELECT 1 FROM team_members tm JOIN teams tt ON tt.id = tm.team_id
+				WHERE tt.workspace_id = $1 AND tt.id::text = $8 AND tm.user_id = m.user_id AND tm.role <> 'observer'))
+		ORDER BY 6 DESC, 7 DESC, u.name, u.id LIMIT 500`, wid, from, to, rf.Team, rf.Brand, onlineFor, rowsFor, rowTeam)
 	if err != nil {
 		return out, err
 	}
@@ -198,18 +238,24 @@ func registerAgentsReport(d *deps.Deps, api huma.API) {
 	huma.Register(api, huma.Operation{OperationID: "report-agents", Method: http.MethodGet, Path: "/v1/reports/agents",
 		Summary: "Agents report", Tags: []string{"Reports"},
 		Description: "One row per member for the range: tickets assigned and solved, replies and notes, replies per solved ticket, " +
-			"median first response and handle time, and online time. from, to, team_id and brand_id as in /v1/reports/overview; " +
-			"online time is not narrowed by team or brand. Admins (and API keys with settings:read) see every member's row with online time, " +
+			"median first response and handle time, and online time. from, to, team_id, brand_id and mailbox_id as in /v1/reports/overview; " +
+			"assignee_id answers that member's row alone, with the same figures as without it; " +
+			"online time is not narrowed by team, brand or mailbox. Admins (and API keys with settings:read) see every member's row with online time, " +
 			"other members only their own row, other API keys every row without online time. A workspace with online time off " +
 			"(settings agent_online_time false) answers online_time off and no online time to anyone."},
 		func(ctx context.Context, in *struct {
-			From    string `query:"from"`
-			To      string `query:"to"`
-			TeamID  string `query:"team_id" doc:"A team id, or none for tickets without a team"`
-			BrandID string `query:"brand_id"`
+			From       string `query:"from"`
+			To         string `query:"to"`
+			TeamID     string `query:"team_id" doc:"A team id, or none for tickets without a team"`
+			BrandID    string `query:"brand_id"`
+			MailboxID  string `query:"mailbox_id" doc:"A mailbox id: the tickets that reply from it. Or none for tickets without a mailbox (chat, phone, API)"`
+			AssigneeID string `query:"assignee_id" doc:"A member: their row alone. Members who are not admins may only name themselves"`
 		}) (*struct{ Body ReportAgents }, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeTicketsRead)
 			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if err := allowPerson(ctx, p, in.AssigneeID); err != nil {
 				return nil, httpx.Wrap(err)
 			}
 			scope, onlineFor := onlineScope(ctx, p)
@@ -218,7 +264,7 @@ func registerAgentsReport(d *deps.Deps, api huma.API) {
 				nobody := uuid.Nil
 				onlineFor = &nobody
 			}
-			res, err := agentsReport(ctx, d.DB.Pool, p.WorkspaceID, in.From, in.To, reportFilter{Team: in.TeamID, Brand: in.BrandID}, scope, onlineFor)
+			res, err := agentsReport(ctx, d.DB.Pool, p.WorkspaceID, in.From, in.To, reportFilter{Team: in.TeamID, Brand: in.BrandID, Mailbox: in.MailboxID, Assignee: in.AssigneeID}, scope, onlineFor)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}

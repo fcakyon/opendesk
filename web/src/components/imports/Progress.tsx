@@ -7,6 +7,7 @@ import { Link } from "@tanstack/react-router";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, Hourglass, KeyRound, MoreHorizontal, Pause, Play, Lock, RefreshCw, Undo2, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
@@ -72,7 +73,7 @@ function useTimeLeft(x: Import, share: number | null, now: number): number | nul
   return Math.max(0, left / rate - (now - last.at));
 }
 
-function duration(ms: number, t: (k: "progress.lessThanMinute" | "progress.minutes" | "progress.hours", o?: Record<string, unknown>) => string) {
+function duration(ms: number, t: TFunction<"imports">) {
   const m = Math.round(ms / 60_000);
   if (m < 1) return t("progress.lessThanMinute");
   if (m < 90) return t("progress.minutes", { count: m });

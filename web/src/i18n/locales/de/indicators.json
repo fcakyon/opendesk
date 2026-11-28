@@ -29,7 +29,8 @@
     "chat": "Chat",
     "api": "API",
     "portal": "Portal",
-    "phone": "Telefon"
+    "phone": "Telefon",
+    "whatsapp": "WhatsApp"
   },
   "sentiment": {
     "positive": "Positiv",
@@ -60,6 +61,8 @@
     "chartLabel_one": "Erstellte und gelöste Tickets pro Tag, {{count}} Tag. Mit den Pfeiltasten liest du jeden Tag.",
     "chartLabel_other": "Erstellte und gelöste Tickets pro Tag, {{count}} Tage. Mit den Pfeiltasten liest du jeden Tag.",
     "range": {
+      "today": "Heute",
+      "yesterday": "Gestern",
       "last7": "Letzte 7 Tage",
       "last30": "Letzte 30 Tage",
       "last90": "Letzte 90 Tage",
@@ -85,6 +88,7 @@
     "mentionTeammate": "Teammitglied erwähnen",
     "mergeSearch": "Nach Betreff, Kunde oder #Nummer suchen",
     "remove": "{{name}} entfernen",
+    "editAddress": "{{name}} bearbeiten",
     "addAddress": "{{address}} hinzufügen",
     "openFile": "{{name}} öffnen"
   }

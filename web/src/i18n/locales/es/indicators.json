@@ -29,7 +29,8 @@
     "chat": "Chat",
     "api": "API",
     "portal": "Portal",
-    "phone": "Teléfono"
+    "phone": "Teléfono",
+    "whatsapp": "WhatsApp"
   },
   "sentiment": {
     "positive": "Positivo",
@@ -61,6 +62,8 @@
     "chartLabel_other": "Tickets creados y resueltos por día, {{count}} días. Usa las teclas de flecha para leer cada día.",
     "chartLabel_many": "Tickets creados y resueltos por día, {{count}} de días. Usa las teclas de flecha para leer cada día.",
     "range": {
+      "today": "Hoy",
+      "yesterday": "Ayer",
       "last7": "Últimos 7 días",
       "last30": "Últimos 30 días",
       "last90": "Últimos 90 días",
@@ -86,6 +89,7 @@
     "mentionTeammate": "Mencionar a un compañero",
     "mergeSearch": "Buscar por asunto, cliente o #número",
     "remove": "Quitar {{name}}",
+    "editAddress": "Editar {{name}}",
     "addAddress": "Añadir {{address}}",
     "openFile": "Abrir {{name}}"
   }

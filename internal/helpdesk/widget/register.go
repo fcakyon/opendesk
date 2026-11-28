@@ -23,6 +23,7 @@ func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	h := &handler{d: d, api: api}
 	h.registerAttachments(api, r)
 	h.registerPublic(api)
+	h.registerVerification(api)
 	h.registerConversations(api)
 	h.registerAgentRoutes(api)
 	h.registerSettings(api)

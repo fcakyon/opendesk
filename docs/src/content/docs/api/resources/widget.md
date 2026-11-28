@@ -9,6 +9,7 @@ The widget endpoints are called by the visitor's browser. Apart from config and 
 | --- | --- | --- |
 | `GET` | `/v1/widget/config?key=<widget_key>` | Public config for the widget |
 | `POST` | `/v1/widget/session` | Start or resume a visitor session |
+| `POST` | `/v1/widget/verification` | Email the visitor a link to verify their address |
 | `GET` | `/v1/widget/conversations` | The visitor's chat conversations |
 | `POST` | `/v1/widget/conversations` | Start a conversation |
 | `GET` | `/v1/widget/conversations/{id}/messages` | Public messages only, never notes |
@@ -49,6 +50,23 @@ curl https://api.opendesk.sh/v1/widget/session \
 | `fields` | with a verified identity only: contact custom fields by key. Only keys that start with `widget_` are set; others are ignored |
 
 `ws_token` is a 5-minute `widget_ws` token for the [realtime gateway](/api/realtime/#the-chat-widget)'s widget endpoint. It lets the visitor join only their own contact topic.
+
+The session also carries `verification`: `status` is `verified` (the visitor confirmed their address, or signed in with `user_hash`), `unverified` (they gave an address that is not confirmed) or `none` (no address). While unverified, `email` is the address, `sent_at` when the newest working link went out, and `resend_at` the earliest time another can.
+
+## Verification
+
+```sh
+curl https://api.opendesk.sh/v1/widget/verification \
+  -H "Authorization: Visitor od_vis_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "resend": false, "locale": "fr" }'
+```
+
+```json
+{ "status": "unverified", "email": "ana@example.com", "sent_at": "2026-11-13T10:00:00Z", "resend_at": "2026-11-13T10:01:00Z" }
+```
+
+Emails the visitor a link to verify the address they gave, in `locale` (the language the widget shows them; else the brand's, else the workspace's) and in the brand's email design. While a link still works, nothing is sent unless `resend` is `true`, so calling it again never sends a duplicate. A verified visitor, or one without an address, gets nothing. Resending waits a minute after the last link, and one visitor or one address gets at most five a day: before `resend_at` the answer is `429 verification_too_soon`. The chat works whether or not the visitor verifies. When they confirm the link, the widget's socket gets `contact.verified`, and agents see the contact's `verification` change through `contact.updated`.
 
 ## Conversations
 

@@ -132,7 +132,7 @@ ticket and the address: the same layout, signature and quoted conversation sendi
 keeps its copy as it went out (contracts/api.md `GET /v1/messages/{id}/original`), which the conversation
 opens as its recipients got it.
 
-Every signature is edited in one editor: a designed one (tables, inline styles, sized images) opens
+Every signature is edited in one editor: a designed one (tables, inline styles, pictures with more than a source, a description, a title and a size in pixels) opens
 as HTML, its tags kept as typed, and is never simplified unless the person chooses to; a save sends
 it only when it changed. Wherever the app shows a signature (the reply composer's preview, the
 editors' previews) it shows it as recipients get it, its layout and image sizes kept.
@@ -203,6 +203,8 @@ Endpoints (backend-email):
   as the customer would see it: a signature or auto-reply inside its brand's layout, a layout or
   CSAT email around sample content. Values come from `ticket_id` (a ticket the caller can see),
   else sample data, with the caller as the agent. Referenced ids must be the workspace's.
+  `kind: "notice"` previews a message to many customers (contracts/api.md "Messages to many customers"): `body_html` is
+  filled like a reply, `subject` is the email's subject as written (default "Your update"), and there is no history.
 - `POST /v1/templates/test` (agent+) takes the same body and sends the rendered email to the caller's
   own login address through the platform mailer, subject prefixed `[Test]`. Limited to 10 an hour
   per user (`429`).

@@ -82,6 +82,8 @@
 					delete state
 					delete sig
 					delete exp
+					# The WhatsApp webhook handshake echoes its verify token in the query.
+					delete hub.verify_token
 				}
 				request>headers>Authorization delete
 				request>headers>Cookie delete
@@ -118,6 +120,8 @@ https:// {
 					delete state
 					delete sig
 					delete exp
+					# The WhatsApp webhook handshake echoes its verify token in the query.
+					delete hub.verify_token
 				}
 				request>headers>Authorization delete
 				request>headers>Cookie delete

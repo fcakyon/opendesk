@@ -47,8 +47,8 @@ type TicketFilters struct {
 	Tag        string   `json:"tag,omitempty" doc:"Comma-separated label names: tickets carrying any of them"`
 	TagNot     string   `json:"tag_not,omitempty" doc:"Comma-separated label names: tickets carrying none of them"`
 	Untagged   bool     `json:"untagged,omitempty" doc:"Tickets carrying no label"`
-	Channel    string   `json:"channel,omitempty" enum:"email,chat,api,portal,phone"`
-	ChannelNot []string `json:"channel_not,omitempty" enum:"email,chat,api,portal,phone" doc:"Tickets on none of these channels"`
+	Channel    string   `json:"channel,omitempty" enum:"email,chat,api,portal,phone,whatsapp"`
+	ChannelNot []string `json:"channel_not,omitempty" enum:"email,chat,api,portal,phone,whatsapp" doc:"Tickets on none of these channels"`
 	Q          string   `json:"q,omitempty" maxLength:"200"`
 	// Fields are custom field filters, ANDed.
 	Fields []FieldFilter `json:"fields,omitempty" maxItems:"20"`

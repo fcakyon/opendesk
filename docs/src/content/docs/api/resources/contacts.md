@@ -13,8 +13,18 @@ Scopes: `contacts:read` to read, `contacts:write` to change.
 | `PATCH` | `/v1/contacts/{id}` | Update a contact |
 | `DELETE` | `/v1/contacts/{id}` | Delete a contact |
 | `GET` | `/v1/contacts/{id}/tickets` | The contact's tickets |
+| `GET` | `/v1/tickets/{id}/customer-tickets` | The customer's other tickets, from any of their addresses: those of the ticket's contact, of every contact who wrote in it, and of every contact with one of their addresses (primary, extra, or typed in the chat). Not the ticket itself, deleted or merged tickets. Newest first, at most 50, with `total`; each names the contact it is filed under. Needs `tickets:read` too |
 | `POST` | `/v1/contacts/bulk` | Label, set a custom field or the company of, or delete many contacts: `ids` (up to 100) or `query` (the list's filters, at most 1000 contacts), with `patch` or `delete: true` |
+| `POST` | `/v1/contacts/export` | Download contacts as a CSV file: `ids` (up to 1000) or `query` (the list's filters, at most 50,000 people) |
+| `POST` | `/v1/contacts/import/upload` | Upload a CSV file of people (multipart `file`); answers its columns and the mapping guessed from the headers |
+| `POST` | `/v1/contacts/imports` | Start importing an uploaded file: `upload_id`, `mapping`, `match_on` (`email` or `external_id`) and `on_match` (`skip`, `fill` or `overwrite`) |
+| `GET` | `/v1/contacts/imports`, `/v1/contacts/imports/{id}` | List imports, or follow one: its status, counts and the first rows that failed |
+| `POST` | `/v1/contacts/imports/{id}/cancel` | Stop an import; the people it added stay |
 | `GET` | `/v1/contacts/{id}/portal` | The contact's customer portal access: `status` (`none`, `invited`, `active`), the last sign-in and the brands an invitation can come from |
+| `POST` | `/v1/contacts/message/preview` | Count who a message to many contacts would reach, by `ids` or `query`, and who it leaves out |
+| `POST` | `/v1/contacts/message` | Send one message to many contacts, one ticket each with a shared `label` (a signed-in member, not an API key). Answers `202` with how it stands |
+| `GET` | `/v1/contact-messages`, `/v1/contact-messages/{id}` | The latest messages sent to many contacts and how far each got: `state`, `total`, `sent`, `failed` |
+| `POST` | `/v1/contact-messages/{id}/cancel` | Stop one that is still sending |
 | `POST` | `/v1/contacts/{id}/portal/invite` | Email the contact a 7-day link to choose a portal password, from `brand_id` or the default brand |
 | `POST` | `/v1/contacts/portal/invite` | Invite up to 100 contacts by `ids`; answers `{sent, skipped}` with the skipped counted by reason |
 | `DELETE` | `/v1/contacts/{id}/portal` | Remove the portal password, sign out portal sessions and close open links |

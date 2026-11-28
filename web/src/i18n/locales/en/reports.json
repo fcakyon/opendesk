@@ -99,9 +99,17 @@
   "filter": {
     "teamLabel": "Team: {{value}}",
     "brandLabel": "Brand: {{value}}",
+    "personLabel": "Person: {{value}}",
+    "allPeople": "All people",
+    "searchPeople": "Search people",
     "allTeams": "All teams",
     "noTeam": "No team",
     "private": "Private",
+    "mailboxLabel": "Mailbox: {{value}}",
+    "allMailboxes": "All mailboxes",
+    "noMailbox": "No mailbox",
+    "noMailboxHint": "Chat, phone, API",
+    "searchMailboxes": "Search mailboxes",
     "allBrands": "All brands",
     "searchTeams": "Search teams",
     "searchBrands": "Search brands"

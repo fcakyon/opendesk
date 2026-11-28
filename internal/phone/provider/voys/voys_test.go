@@ -155,7 +155,8 @@ func TestParseIntelligenceAndIgnored(t *testing.T) {
 	for _, name := range []string{"intelligence", "intelligence_status"} {
 		ai := recorded(t, name)
 		rec := parse(t, ai[0])
-		if rec.Kind != provider.KindCall || rec.Call == nil || !rec.Call.Recording || rec.Call.Direction != "" || rec.Call.RecordingURL != "" {
+		if rec.Kind != provider.KindCall || rec.Call == nil || !rec.Call.Recording || rec.Call.Direction != "" ||
+			!strings.HasPrefix(rec.Call.RecordingURL, "https://api.voys.nl/api/v2/clients/") {
 			t.Fatalf("%s: recording %+v %+v", name, rec, rec.Call)
 		}
 		// The notification's own text is never taken: it is fetched from Voys.

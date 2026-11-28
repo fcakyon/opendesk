@@ -175,10 +175,11 @@ describe("mock phone API", () => {
     }
   });
 
-  it("seeds a phone ticket with an answered and a missed call", async () => {
+  it("seeds a phone ticket with answered calls, one a Voys recording played through the app, and a missed call", async () => {
     const ws = db.workspaces[0];
     const calls = ws.activities.filter((a) => a.type === "call");
-    expect(calls.map((a) => a.data.outcome)).toEqual(["answered", "missed"]);
+    expect(calls.map((a) => a.data.outcome)).toEqual(["answered", "answered", "missed"]);
+    expect(calls.filter((a) => a.data.recording_stream === true).map((a) => a.data.provider)).toEqual(["voys"]);
     const t = ws.tickets.find((x) => x.id === calls[0].ticket_id)!;
     expect(t.channel).toBe("phone");
     expect(t.status).toBe("open");

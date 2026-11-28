@@ -46,7 +46,15 @@ export type State = {
   preview: boolean;
   /** Forced dark (true) or light (false) for config.theme "auto"; null follows the system. */
   dark: boolean | null;
+  /** The verification notice: a send on its way, the last send's outcome, verified while shown, closed. */
+  verify: VerifyUi;
 };
+
+/**
+ * "resent": another link went out; "wait": too soon for another; "failed": it could not be sent.
+ * merged: the address the visitor verified, when their chat went to the contact that has it.
+ */
+export type VerifyUi = { busy: boolean; note: "resent" | "wait" | "failed" | null; verifiedNow: boolean; closed: boolean; merged: string | null };
 
 export const initialState = (): State => ({
   open: false,
@@ -72,6 +80,7 @@ export const initialState = (): State => ({
   actions: {},
   preview: false,
   dark: null,
+  verify: { busy: false, note: null, verifiedNow: false, closed: false, merged: null },
 });
 
 export type Patch = Partial<State> | ((s: State) => Partial<State>);

@@ -29,7 +29,8 @@
     "chat": "聊天",
     "api": "API",
     "portal": "客户门户",
-    "phone": "电话"
+    "phone": "电话",
+    "whatsapp": "WhatsApp"
   },
   "sentiment": {
     "positive": "正面",
@@ -59,6 +60,8 @@
     "tableCaption": "每天新建和解决的工单",
     "chartLabel_other": "每天新建和解决的工单，共 {{count}} 天。用方向键逐天查看。",
     "range": {
+      "today": "今天",
+      "yesterday": "昨天",
       "last7": "最近 7 天",
       "last30": "最近 30 天",
       "last90": "最近 90 天",
@@ -84,6 +87,7 @@
     "mentionTeammate": "提及同事",
     "mergeSearch": "按主题、客户或 #number 搜索",
     "remove": "移除 {{name}}",
+    "editAddress": "编辑 {{name}}",
     "addAddress": "添加 {{address}}",
     "openFile": "打开 {{name}}"
   }

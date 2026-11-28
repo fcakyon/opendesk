@@ -37,7 +37,7 @@ export async function requireTickets(qc: QueryClient) {
 /** Settings that only shape tickets. */
 const TICKET_SETTINGS = [
   "/settings/tags", "/settings/custom-fields", "/settings/assignment", "/settings/triage", "/settings/business-hours",
-  "/settings/views", "/settings/sla", "/settings/automations", "/settings/mailboxes", "/settings/phone",
+  "/settings/views", "/settings/sla", "/settings/automations", "/settings/mailboxes", "/settings/phone", "/settings/whatsapp",
   "/settings/support-channels", "/settings/routing", "/settings/brands", "/settings/email-design", "/settings/trash",
 ];
 

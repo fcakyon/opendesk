@@ -95,7 +95,11 @@
     "notFoundHint": "Puede que se haya eliminado o fusionado.",
     "loadError": "No se pudo cargar este ticket",
     "back": "Volver a la lista",
-    "movedPrivate": "Este ticket pasó a un equipo privado"
+    "movedPrivate": "Este ticket pasó a un equipo privado",
+    "followUpOf": "Seguimiento de #{{number}}",
+    "followUpHidden": "Seguimiento de un ticket anterior",
+    "followUpHint": "El cliente volvió a escribir después de cerrarse #{{number}}",
+    "copyForAgent": "Copiar ticket para agente de IA"
   },
   "commands": {
     "reply": "Responder",
@@ -120,7 +124,9 @@
     "unspammed": "Sacado de spam",
     "deleted": "Eliminado #{{number}}",
     "snoozed": "Pospuesto",
-    "linkCopied": "Enlace copiado"
+    "linkCopied": "Enlace copiado",
+    "copiedForAgent": "Copiado. Pégalo en tu agente de IA.",
+    "copyFailed": "No se pudo copiar. Inténtalo de nuevo."
   },
   "finish": {
     "close": {
@@ -183,7 +189,9 @@
     "soundOff": "Reproducir un sonido cuando un visitante espera",
     "title_one": "● {{count}} cliente esperando",
     "title_other": "● {{count}} clientes esperando",
-    "title_many": "● {{count}} de clientes esperando"
+    "title_many": "● {{count}} de clientes esperando",
+    "whatsapp": "WhatsApp",
+    "whatsappHint": "WhatsApp. Las respuestas desde aquí llegan al WhatsApp del cliente."
   },
   "presence": {
     "viewing": "{{name}} está viendo",
@@ -276,6 +284,10 @@
       "description": "Las conversaciones nuevas llegan aquí cuando una dirección, un widget o una regla de enrutamiento las envía a este equipo.",
       "seeOpen": "Ver los tickets abiertos",
       "seeUnassigned": "Ver sin asignar"
+    },
+    "all": {
+      "title": "Aún no hay tickets",
+      "description": "Aquí aparece cada ticket, sea cual sea su estado, salvo el spam."
     }
   },
   "error": {
@@ -518,6 +530,7 @@
     "unassigned": "<b>{{who}}</b> quitó la asignación de este ticket",
     "team": "<b>{{who}}</b> movió esto a <b>{{team}}</b>",
     "contactChanged": "<b>{{who}}</b> cambió el contacto de <b>{{from}}</b> a <b>{{to}}</b>",
+    "contactAnswered": "<b>{{to}}</b> respondió al correo de <b>{{from}}</b> y ahora es el contacto",
     "noContact": "sin contacto",
     "teamRemoved": "<b>{{who}}</b> quitó el equipo",
     "tagged": "<b>{{who}}</b> añadió",
@@ -580,6 +593,9 @@
     "theCustomer": "el cliente",
     "noteHint": "Solo tu equipo ve las notas. Escribe @ para mencionar a alguien.",
     "ccBcc": "Cc / CCO",
+    "replyAll": "Responder a todos",
+    "replyAllHint": "Responder a todos: enviar también esta respuesta a {{list}}, en Cc",
+    "replyAllOff": "Volver a Responder: quita {{list}} de Cc",
     "cc": "Cc",
     "bcc": "CCO",
     "replyPlaceholder": "Escribe una respuesta. Escribe / para las respuestas guardadas, {{braces}} para los detalles de este ticket.",
@@ -683,7 +699,12 @@
       "member_gone": "Ya no puedes responder en este ticket, así que la respuesta no se envió.",
       "refused": "La respuesta ya no se pudo enviar tal como estaba cuando tocaba enviarla. Revísala y envíala de nuevo.",
       "failed": "No se pudo enviar la respuesta programada. Envíala de nuevo."
-    }
+    },
+    "whatsappWindowOpen": "Ventana de WhatsApp abierta. Quedan {{left}} para responder.",
+    "whatsappWindowClosed": "La ventana de 24 horas está cerrada, así que solo se puede enviar una plantilla.",
+    "whatsappDisconnected": "Este número de WhatsApp no está conectado. Un administrador puede volver a conectarlo en Ajustes > WhatsApp.",
+    "whatsappTemplate": "Enviar plantilla",
+    "whatsappOneFile": "WhatsApp admite un archivo por mensaje. Quita el archivo para adjuntar otro."
   },
   "sharedDraft": {
     "label": "Borrador compartido",
@@ -737,9 +758,6 @@
     "imagesHeld": "Las imágenes remotas están ocultas para proteger tu privacidad.",
     "loadImages": "Cargar imágenes",
     "hideQuoted": "Ocultar el texto citado",
-    "preview": "Vista previa de {{name}}",
-    "fullSize": "Abrir a tamaño completo",
-    "download": "Descargar {{name}}",
     "fromAddress": "de {{name}} <{{address}}>",
     "ownAddress": "Dirección propia",
     "ownAddressHint": "Enviado desde la cuenta de correo de quien escribe, en lugar de la dirección del ticket. Las respuestas del cliente vuelven a este ticket.",
@@ -786,7 +804,14 @@
     "showNote": "Mostrar la nota",
     "hideNote": "Ocultar la nota",
     "forward": "Reenviar",
-    "viewSource": "Ver el origen"
+    "viewSource": "Ver el origen",
+    "copyForAgent": "Copiar para agente de IA",
+    "whatsapp": {
+      "sent": "Enviado",
+      "delivered": "Entregado",
+      "read": "Leído",
+      "failed": "No entregado"
+    }
   },
   "merge": {
     "title": "Fusionar #{{number}} en otro ticket",
@@ -822,6 +847,8 @@
     "startTyping": "Empieza a escribir",
     "use": "Usar",
     "change": "Cambiar",
+    "addTo": "Añadir a alguien",
+    "addCopies": "Añadir Cc o CCO",
     "noMailbox": "Sin buzón",
     "bodyReply": "Escribe tu mensaje",
     "bodyNote": "Describe el problema",
@@ -1211,5 +1238,40 @@
     "loadError": "No se pudo cargar el mensaje original. Inténtalo de nuevo.",
     "downloadError": "No se pudo descargar el mensaje.",
     "truncated": "Solo se muestra la primera parte. La descarga tiene el mensaje completo ({{size}} KB)."
+  },
+  "whatsappTemplate": {
+    "title": "Enviar una plantilla",
+    "description": "Solo se pueden enviar plantillas aprobadas por Meta, dentro de la ventana de 24 horas o después.",
+    "search": "Buscar plantillas",
+    "loading": "Cargando plantillas",
+    "noTemplates": "Todavía no se puede enviar ninguna plantilla desde aquí. Sincroniza las plantillas aprobadas en Ajustes > WhatsApp.",
+    "emptySearch": "Ninguna plantilla coincide con esa búsqueda.",
+    "preview": "Vista previa",
+    "header": "Encabezado",
+    "headerMedia": "Encabezado: {{kind}}",
+    "kind": {
+      "image": "Imagen",
+      "video": "Vídeo",
+      "document": "Documento"
+    },
+    "headerChoose": "Elegir un archivo",
+    "headerFileHint": "Hasta {{size}}.",
+    "headerUploading": "Subiendo",
+    "headerRemove": "Quitar el archivo del encabezado",
+    "headerTooLarge": "{{name}} ocupa más de {{size}}.",
+    "headerUploadFailed": "No se pudo subir {{name}}",
+    "headerValue": "Encabezado: {{name}}",
+    "headerValueHint": "Hasta 60 caracteres.",
+    "params": "Rellena los marcadores",
+    "paramHint": "Va en este marcador del mensaje.",
+    "buttons": "Enlaces de los botones",
+    "buttonValue": "Botón: {{text}}",
+    "buttonNumber": "Botón {{number}}",
+    "buttonHint": "Va en el enlace de este botón.",
+    "back": "Atrás",
+    "cancel": "Cancelar",
+    "send": "Enviar plantilla",
+    "sent": "Plantilla enviada.",
+    "error": "No se pudo enviar esta plantilla"
   }
 }

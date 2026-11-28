@@ -164,7 +164,7 @@ export function ConditionValue({
           aria-label={t("routing.value")}
           value={c.value || "email"}
           onChange={(value) => onChange({ value })}
-          options={(["email", "chat", "api", "portal", "phone"] as const).map((x) => ({ value: x, label: t(`routing.channels.${x}`) }))}
+          options={(["email", "chat", "api", "portal", "phone", "whatsapp"] as const).map((x) => ({ value: x, label: t(`routing.channels.${x}`) }))}
         />
       );
     case "address": {

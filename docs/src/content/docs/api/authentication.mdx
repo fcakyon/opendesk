@@ -56,7 +56,7 @@ Access tokens are short-lived JWTs (15 minutes) issued when a user signs in.
 
 1. `POST /v1/auth/login` with `{ "email", "password" }` returns `{ access_token, expires_in, user }` and sets a refresh cookie. If the account has two-factor authentication, it returns `{ "mfa_required": true, "mfa_token" }` instead; send that with the code to `POST /v1/auth/mfa`.
 2. Send `Authorization: Bearer <access_token>` and `OD-Workspace: <id>` on each request.
-3. Before it expires, `POST /v1/auth/refresh` with the cookie returns a new access token. The refresh token rotates on every use.
+3. Before it expires, `POST /v1/auth/refresh` with the cookie returns a new access token. The refresh token rotates on every use. When another tab rotated it in the last 30 seconds, the answer is `409 refresh_in_progress`: the session is still alive, try again in a moment.
 4. `POST /v1/auth/logout` revokes the session and closes its live sockets.
 
 The refresh token lives in a cookie named after the account, `__Host-od_rt_<user id>` (HttpOnly, Secure, SameSite=Lax, host-only), so it is never readable by page scripts and no other site can set it.

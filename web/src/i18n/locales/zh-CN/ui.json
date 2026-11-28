@@ -72,6 +72,25 @@
   "quote": "引用",
   "codeBlock": "代码块",
   "image": "图片",
+  "signatureImage": {
+    "title": "添加图片",
+    "editTitle": "图片",
+    "choose": "选择图片",
+    "replace": "替换图片",
+    "uploading": "正在上传…",
+    "uploadFailed": "图片上传失败。",
+    "formats": "PNG、JPEG、GIF 或 WebP，最大 5 MB。收到签名的任何人都能看到它。",
+    "file": "图片文件",
+    "alt": "描述",
+    "altHint": "当邮件应用屏蔽图片时代替图片显示，并由屏幕阅读器朗读。",
+    "altPlaceholder": "公司徽标",
+    "size": "大小",
+    "small": "小",
+    "medium": "中",
+    "large": "大",
+    "original": "原始",
+    "current": "当前"
+  },
   "link": "链接",
   "linkAddress": "链接地址",
   "searchCompanies": "搜索公司",
@@ -204,5 +223,18 @@
     "automations": "自动化",
     "slaPolicies": "SLA 政策",
     "teams": "团队"
+  },
+  "attachments": {
+    "preview": "预览 {{name}}",
+    "download": "下载 {{name}}",
+    "downloadShort": "下载",
+    "position": "第 {{n}} 个，共 {{total}} 个",
+    "previous": "上一个文件",
+    "next": "下一个文件",
+    "loading": "正在加载预览",
+    "failed": "无法加载预览。请下载文件后打开。",
+    "refused": "此文件无法在此处显示。请下载后在设备上打开。",
+    "tooLarge": "文件太大，无法预览。请下载后打开。",
+    "noViewer": "此应用无法显示 PDF。请下载文件后打开。"
   }
 }

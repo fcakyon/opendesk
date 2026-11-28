@@ -40,6 +40,7 @@ export const LinkIc = () => svg(<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.
 export const Person = (s = 14) => svg(<><circle cx="12" cy="8" r="3.5" /><path d="M5 20a7 7 0 0 1 14 0" /></>, s);
 export const Check = (s = 14) => svg(<path d="M20 6 9 17l-5-5" />, s, 2.25);
 export const Cross = (s = 12) => svg(<path d="M17 7 7 17M7 7l10 10" />, s, 2.25);
+export const MailIc = (s = 14) => svg(<><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="m4 7 8 6 8-6" /></>, s, 2);
 export const Clock = (s = 12) => svg(<><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>, s, 2);
 export const Bolt = (s = 12) => svg(<path d="M13 3 5 13.5h6L10 21l8-10.5h-6L13 3Z" />, s, 2);
 export const ThumbUp = () =>

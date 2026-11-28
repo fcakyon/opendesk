@@ -86,6 +86,7 @@
     "myTeams": "我的团队",
     "newTicket": "新建工单",
     "phone": "电话",
+    "whatsapp": "WhatsApp",
     "print": "打印",
     "wikiGraph": "关系图",
     "wikiTags": "标记",
@@ -101,7 +102,8 @@
     "open": "全部待处理",
     "pending": "等待中",
     "solved": "已解决",
-    "spam": "垃圾邮件"
+    "spam": "垃圾邮件",
+    "all": "全部工单"
   },
   "groups": {
     "account": "账户",
@@ -156,7 +158,8 @@
     "auditLog": "审计日志",
     "trash": "垃圾箱",
     "phone": "电话",
-    "pages": "页面"
+    "pages": "页面",
+    "whatsapp": "WhatsApp"
   },
   "settingsPage": "设置页面",
   "command": {
@@ -197,7 +200,9 @@
     "docs": "文档",
     "searchSettings": "搜索设置",
     "settingsNoResults": "没有匹配的设置",
-    "settingsNoResultsHelp": "换个说法试试，或在命令菜单中搜索文档。"
+    "settingsNoResultsHelp": "换个说法试试，或在命令菜单中搜索文档。",
+    "seeAll": "查看“{{query}}”的全部工单",
+    "followUp": "后续"
   },
   "shortcuts": {
     "general": "常规",

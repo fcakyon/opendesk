@@ -38,6 +38,7 @@ var Columns = []Column{
 	{"phone_connections", "id", "credentials_enc"},           // phone provider API credentials
 	{"phone_connections", "id", "webhook_secret_enc"},        // phone provider webhook tokens
 	{"ticket_panels", "id", "secret_enc"},                    // ticket panel Shopify tokens and signing secrets
+	{"whatsapp_connections", "id", "credentials_enc"},        // WhatsApp Cloud API token, app secret and verify token
 }
 
 // NotSealed are the bytea columns that hold no d.Box output: hashes, public keys and
@@ -51,6 +52,7 @@ var NotSealed = []string{
 	"app_attest_challenges.challenge_hash",
 	"app_attest_keys.public_key",
 	"auth_throttle.key",
+	"contact_email_verifications.token_hash",
 	"customer_password_resets.token_hash",
 	"customer_sessions.refresh_hash",
 	"idempotency_keys.request_hash",

@@ -72,6 +72,25 @@
   "quote": "Citace",
   "codeBlock": "Blok kódu",
   "image": "Obrázek",
+  "signatureImage": {
+    "title": "Přidat obrázek",
+    "editTitle": "Obrázek",
+    "choose": "Vybrat obrázek",
+    "replace": "Nahradit obrázek",
+    "uploading": "Nahrává se…",
+    "uploadFailed": "Obrázek se nepodařilo nahrát.",
+    "formats": "PNG, JPEG, GIF nebo WebP, nejvýše 5 MB. Uvidí ho každý, kdo podpis dostane.",
+    "file": "Soubor obrázku",
+    "alt": "Popis",
+    "altHint": "Zobrazí se místo obrázku, když e-mailový program obrázky blokuje, a předčítají ho čtečky obrazovky.",
+    "altPlaceholder": "Logo firmy",
+    "size": "Velikost",
+    "small": "Malý",
+    "medium": "Střední",
+    "large": "Velký",
+    "original": "Původní",
+    "current": "Současný"
+  },
   "link": "Odkaz",
   "linkAddress": "Adresa odkazu",
   "searchCompanies": "Hledat firmy",
@@ -207,5 +226,18 @@
     "automations": "Automatizace",
     "slaPolicies": "Pravidla SLA",
     "teams": "Týmy"
+  },
+  "attachments": {
+    "preview": "Náhled souboru {{name}}",
+    "download": "Stáhnout {{name}}",
+    "downloadShort": "Stáhnout",
+    "position": "{{n}} z {{total}}",
+    "previous": "Předchozí soubor",
+    "next": "Další soubor",
+    "loading": "Načítání náhledu",
+    "failed": "Náhled se nepodařilo načíst. Stáhněte si soubor a otevřete ho.",
+    "refused": "Tento soubor tady nelze zobrazit. Stáhněte si ho a otevřete ho v zařízení.",
+    "tooLarge": "Soubor je na náhled příliš velký. Stáhněte si ho a otevřete ho.",
+    "noViewer": "PDF tady nelze zobrazit. Stáhněte si soubor a otevřete ho."
   }
 }

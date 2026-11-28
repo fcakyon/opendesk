@@ -93,7 +93,8 @@
     "wikiTrash": "Koš",
     "pages": "Stránky",
     "pagesPage": "Stránka",
-    "pagesSettings": "Stránky"
+    "pagesSettings": "Stránky",
+    "whatsapp": "WhatsApp"
   },
   "folders": {
     "unassigned": "Nepřiřazené",
@@ -101,7 +102,8 @@
     "open": "Všechny otevřené",
     "pending": "Čekající",
     "solved": "Vyřešené",
-    "spam": "Spam"
+    "spam": "Spam",
+    "all": "Všechny tikety"
   },
   "groups": {
     "account": "Účet",
@@ -156,7 +158,8 @@
     "auditLog": "Protokol auditu",
     "trash": "Koš",
     "phone": "Telefon",
-    "pages": "Stránky"
+    "pages": "Stránky",
+    "whatsapp": "WhatsApp"
   },
   "settingsPage": "Stránka nastavení",
   "command": {
@@ -197,7 +200,9 @@
     "docs": "Dokumentace",
     "searchSettings": "Hledat v nastavení",
     "settingsNoResults": "Žádné nastavení neodpovídá",
-    "settingsNoResultsHelp": "Zkuste jiná slova, nebo hledejte v dokumentaci z nabídky příkazů."
+    "settingsNoResultsHelp": "Zkuste jiná slova, nebo hledejte v dokumentaci z nabídky příkazů.",
+    "seeAll": "Zobrazit všechny tikety pro „{{query}}“",
+    "followUp": "Navazující"
   },
   "shortcuts": {
     "general": "Obecné",

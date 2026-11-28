@@ -71,6 +71,25 @@
     "error": "Something went wrong. Please try again.",
     "offline": "Can't reach the server. Check your connection."
   },
+  "chat_verify": {
+    "page_title": "Confirm your email address",
+    "title": "Confirm your email address",
+    "body": "Confirm that this address is yours, so {{brand}} knows the chat is really from you.",
+    "button": "Confirm email address",
+    "not_you": "Not you? Close this page and nothing changes.",
+    "done_title": "Your email address is confirmed",
+    "already_title": "Your email address is already confirmed",
+    "done_body": "{{brand}} now knows the chat from {{email}} is yours. You can close this page and keep chatting.",
+    "invalid_title": "This link isn't valid",
+    "invalid_body": "It may have expired or been used already. Ask for a new email in the chat.",
+    "error": "Something went wrong. Please try again.",
+    "offline": "Can't reach the server. Check your connection.",
+    "email_subject": "Confirm your email address for {{brand}}",
+    "email_intro": "Thanks for chatting with {{brand}}. Confirm that this address is yours, so the team knows it's really you.",
+    "email_meanwhile": "You can keep chatting in the meantime.",
+    "email_expiry": "The link works for {{hours}} hours.",
+    "email_reason": "You get this email because this address was given in the chat on a website of {{brand}}. If that wasn't you, ignore it and nothing changes."
+  },
   "footer": {
     "powered_by": "Powered by",
     "language": "Language"

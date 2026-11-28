@@ -171,3 +171,19 @@ func guidance(workspace string, s hd.AISettings, toneOverride, customerLang stri
 	}
 	return block("workspace_guidance", nil, b.String())
 }
+
+// summaryGuidance is the workspace guidance for a ticket summary written in lang,
+// a BCP 47 tag (the reader's language, or the workspace's customer language).
+// It does not use the workspace-language line, which means English.
+func summaryGuidance(workspace string, s hd.AISettings, lang string) string {
+	var b strings.Builder
+	b.WriteString("Company name: " + attr(workspace) + "\n")
+	if t, ok := toneText["concise"]; ok {
+		b.WriteString("Tone: " + t + "\n")
+	}
+	b.WriteString("Language: write the summary and the key_points in " + attr(lang) + ". Keep product names, order numbers and error messages as written in the thread. The sentiment value stays one of positive, neutral, negative or frustrated.\n")
+	if ins := strings.TrimSpace(s.Instructions); ins != "" {
+		b.WriteString("Instructions from the workspace admins:\n" + angle.Replace(ins) + "\n")
+	}
+	return block("workspace_guidance", nil, b.String())
+}

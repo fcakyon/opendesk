@@ -530,7 +530,7 @@ function Usage() {
   const { t } = useTranslation("billing");
   const fmt = useFmt();
   const canManage = useCanManageBilling();
-  const [range, setRange] = useState<ReportsRange>(() => presets()[1].range);
+  const [range, setRange] = useState<ReportsRange>(() => presets().find((p) => p.id === "30")!.range);
   const [asTable, setAsTable] = useState(false);
   const { data, isPending, isError, error, refetch } = useQuery({ ...q.billingUsage(range), enabled: canManage, retry: (n, e) => !isApiError(e, "billing_disabled") && n < 2 });
   const stacked = useMemo(() => (data ? stackDays(data, range) : null), [data, range]);

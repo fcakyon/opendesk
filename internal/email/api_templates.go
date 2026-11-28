@@ -49,7 +49,7 @@ type EmailTemplates struct {
 }
 
 type previewBody struct {
-	Kind     string                   `json:"kind" enum:"reply,signature,personal_signature,auto_reply,layout,csat"`
+	Kind     string                   `json:"kind" enum:"reply,signature,personal_signature,auto_reply,layout,csat,notice"`
 	BodyHTML string                   `json:"body_html,omitempty"`
 	Subject  string                   `json:"subject,omitempty" maxLength:"200"`
 	Options  *templates.LayoutOptions `json:"options,omitempty" doc:"Layout options to preview (kind layout)"`
@@ -339,6 +339,9 @@ func (s *service) optionalRef(ctx context.Context, wid uuid.UUID, raw, table, wh
 	return &id, nil
 }
 
+// kindNotice previews a message to many customers (contracts/api.md "Messages to many customers").
+const kindNotice = "notice"
+
 const sampleContent = `<p>Hi {{ contact.first_name | default: "there" }},</p>` +
 	`<p>Thanks for getting in touch. This is how your emails look to customers: your layout, signature and footer around each message.</p>` +
 	`<p>Let us know if there is anything else we can do.</p>`
@@ -431,6 +434,12 @@ func (s *service) preview(ctx context.Context, p *auth.Principal, b previewBody)
 	case templates.KindReply:
 		out.Problems = templates.Check(b.BodyHTML, templates.KindReply, fields)
 		content = hd.SanitizeRich(templates.Render(hd.SanitizeRichTemplate(b.BodyHTML), tc.Values, templates.HTML))
+	case kindNotice:
+		// A message to many customers: written like a reply, with its own subject and no history.
+		out.Problems = templates.Check(b.BodyHTML, templates.KindReply, fields)
+		content = hd.SanitizeRich(templates.Render(hd.SanitizeRichTemplate(b.BodyHTML), tc.Values, templates.HTML))
+		subject = firstNonEmpty(strings.TrimSpace(b.Subject), "Your update")
+		history = nil
 	case templates.KindSignature:
 		out.Problems = templates.Check(body, templates.KindSignature, fields)
 		signature = tc.Fill(body)
@@ -477,7 +486,7 @@ func (s *service) preview(ctx context.Context, p *auth.Principal, b previewBody)
 		subject = autoSubject(tc.FillText(subj), "", number, tag)
 		history = nil
 	default:
-		return nil, httpx.Validation("kind must be reply, signature, personal_signature, auto_reply, layout or csat")
+		return nil, httpx.Validation("kind must be reply, notice, signature, personal_signature, auto_reply, layout or csat")
 	}
 	mail := tc.RenderEmail(design, templates.Parts{Content: content, ContentText: templates.TextOf(content), Signature: signature, History: history})
 	out.Subject, out.HTML, out.Text = subject, mail.HTML, mail.Text

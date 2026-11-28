@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/i18n";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Message } from "@/lib/api/types";
 import { EmailChips } from "./composerParts";
 import { replyRecipient } from "./replyRecipient";
@@ -44,7 +45,11 @@ describe("EmailChips suggestions", () => {
   it("offers addresses not in the list and adds one on click", async () => {
     const onChange = vi.fn();
     await act(async () =>
-      root.render(<EmailChips label="To" values={["jane@acme.test"]} onChange={onChange} suggestions={["JANE@acme.test", "alerts@updates.acme.test"]} />),
+      root.render(
+        <TooltipProvider>
+          <EmailChips label="To" values={["jane@acme.test"]} onChange={onChange} suggestions={["JANE@acme.test", "alerts@updates.acme.test"]} />
+        </TooltipProvider>,
+      ),
     );
     const offered = [...host.querySelectorAll("button")].filter((b) => b.getAttribute("aria-label")?.startsWith("Add "));
     expect(offered.map((b) => b.textContent)).toEqual(["alerts@updates.acme.test"]);

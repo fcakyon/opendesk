@@ -69,6 +69,25 @@
     "error": "出了点问题，请重试。",
     "offline": "无法连接服务器，请检查网络连接。"
   },
+  "chat_verify": {
+    "page_title": "确认您的邮箱地址",
+    "title": "确认您的邮箱地址",
+    "body": "请确认此邮箱地址属于您，以便 {{brand}} 知道这段聊天确实来自您本人。",
+    "button": "确认邮箱地址",
+    "not_you": "不是您本人？关闭此页面即可，不会有任何更改。",
+    "done_title": "您的邮箱地址已确认",
+    "already_title": "您的邮箱地址已经确认过了",
+    "done_body": "{{brand}} 现在知道来自 {{email}} 的聊天是您本人。您可以关闭此页面，继续聊天。",
+    "invalid_title": "此链接无效",
+    "invalid_body": "链接可能已过期或已被使用。请在聊天中重新请求一封邮件。",
+    "error": "出了点问题，请重试。",
+    "offline": "无法连接服务器，请检查网络连接。",
+    "email_subject": "为 {{brand}} 确认您的邮箱地址",
+    "email_intro": "感谢您与 {{brand}} 聊天。请确认此地址属于您，以便团队知道确实是您本人。",
+    "email_meanwhile": "在此期间，您可以继续聊天。",
+    "email_expiry": "链接在 {{hours}} 小时内有效。",
+    "email_reason": "您收到这封邮件，是因为有人在 {{brand}} 网站的聊天中填写了此地址。如果不是您本人，请忽略此邮件，什么都不会改变。"
+  },
   "footer": {
     "powered_by": "技术支持",
     "language": "语言"

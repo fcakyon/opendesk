@@ -241,6 +241,22 @@ export function registerPictures() {
     publishMe();
     return u;
   });
+  // A signature picture: a public URL (here the picture itself) and its size, at most 600 px on its longer side.
+  post("/v1/signature-images", async (ctx) => {
+    const url = await readUpload(ctx);
+    const f = ctx.form?.get("file") as File;
+    let width = 200;
+    let height = 50;
+    try {
+      const bmp = await createImageBitmap(f);
+      const scale = Math.min(1, 600 / Math.max(bmp.width, bmp.height));
+      width = Math.max(1, Math.round(bmp.width * scale));
+      height = Math.max(1, Math.round(bmp.height * scale));
+    } catch {
+      // No decoder here (tests): a logo's usual shape.
+    }
+    return respond(201, { url, width, height });
+  });
   del("/v1/me/avatar", () => {
     const u = me();
     u.avatar_url = null;

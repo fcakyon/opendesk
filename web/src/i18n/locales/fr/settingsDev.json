@@ -636,7 +636,7 @@
   "panels": {
     "empty": "Aucun panneau pour l’instant. Une boutique Shopify affiche les commandes de chaque contact ; une URL à vous peut afficher tout le reste.",
     "title": "Panneaux de ticket",
-    "hint": "Affichez à côté du ticket ce que Shopify, ou un système à vous, sait du contact. En lecture seule, consulté à l’ouverture du ticket.",
+    "hint": "Affichez à côté du ticket ce que Shopify, ou un système à vous, sait du contact, consulté à l’ouverture du ticket. Une URL à vous peut aussi proposer des boutons qui lui envoient une requête.",
     "adminsOnly": "Les administrateurs ajoutent et modifient les panneaux de ticket.",
     "add": "Ajouter un panneau",
     "kind": {
@@ -664,7 +664,7 @@
     "removed": "{{name}} supprimé",
     "updateError": "Impossible d’enregistrer le panneau",
     "addTitle": "Ajouter un panneau de ticket",
-    "addDescription": "OpenDesk ne fait que lire : il consulte le contact du ticket quand quelqu’un ouvre le ticket.",
+    "addDescription": "OpenDesk consulte le contact du ticket quand quelqu’un ouvre le ticket. Shopify est seulement lu ; une URL à vous peut aussi proposer des boutons.",
     "shop": "Boutique",
     "shopHint": "Son domaine myshopify.com, par exemple ma-boutique.myshopify.com.",
     "auth": {
@@ -679,7 +679,7 @@
     "token": "Jeton d’accès Admin API",
     "tokenHint": "Seulement pour une application créée dans l’admin Shopify avant 2026 (Paramètres → Applications → Développer des applications) avec les accès read_customers et read_orders : son jeton d’accès Admin API.",
     "url": "URL",
-    "urlHint": "OpenDesk envoie à cette URL le ticket, son contact et les références qu’il y trouve, avec une signature, et affiche ce qu’elle répond.",
+    "urlHint": "OpenDesk envoie à cette URL le ticket, son contact et les références qu’il y trouve, avec une signature, et affiche ce qu’elle répond. Quand un agent appuie sur l’un de ses boutons, il envoie aussi l’action, ce que l’agent a rempli, ainsi que son nom et son e-mail.",
     "name": "Nom",
     "namePlaceholder": "Odoo",
     "connect": "Ajouter le panneau",
@@ -694,7 +694,7 @@
     "secretTitle": "Secret de signature",
     "secretDescription": "Copiez-le maintenant. Vous ne le reverrez plus.",
     "secretVerify": "Chaque requête porte OD-Signature, comme les envois de webhooks. Vérifiez-la avant de répondre :",
-    "secretAnswer": "Répondez par des blocs JSON (cartes, valeurs avec libellé, listes, notes), 64 Ko au plus :",
+    "secretAnswer": "Répondez par des blocs JSON (cartes, valeurs avec libellé, listes, notes, boutons), 64 Ko au plus :",
     "secretSaved": "Je l’ai enregistré",
     "fields": {
       "menu": "Choisir ce qui s’affiche",

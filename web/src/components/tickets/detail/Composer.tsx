@@ -43,6 +43,8 @@ import { backToNote, deliver, hold, undoSeconds as undoSecondsFor, useUnsent, ty
 import { EmailChips, SavedReplyButton, UploadChip, uploadFiles } from "./composerParts";
 import { mergeReplyActions, ReplyActionChips, replyActionLabels } from "./ReplyActions";
 import { NoFollowUpSender } from "./NoFollowUpSender";
+import { useWhatsAppTicket, WhatsAppTemplateDialog, WhatsAppWindow, whatsAppWindowOpen } from "./WhatsAppTemplate";
+import { ReplyAllButton, useReplyAll } from "./ReplyAll";
 import { addressLabel, followUpMailbox, fromLine, replyAddresses, TeamDot, useTeamsCtx, type TeamsCtx } from "../teams";
 import { AccountDot } from "@/components/collab/bits";
 import { conversationMaxWidth, useConversationWidth } from "@/lib/conversationWidth";
@@ -78,6 +80,8 @@ type Draft = {
   threadForward?: string;
   /** The note this reply is written from: it is removed once the reply is sent. */
   fromNote?: string;
+  /** The Cc addresses Reply all added, taken out again by Reply. */
+  replyAll?: string[];
   /** Saved replies used: their actions apply to the ticket once the message is sent. */
   savedReplyIds?: string[];
 };
@@ -226,12 +230,16 @@ export const Composer = forwardRef<
   // Focus on the controls above the editor (mode, Cc, the reply address) does not
   // open it up: growing moves those controls under the pointer mid-click.
   const [focused, setFocused] = useState(false);
+  // The WhatsApp template picker, when it is open.
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const writingArea = useRef<HTMLDivElement>(null);
   const leaving = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(leaving.current), []);
   const draft = useDrafts((s) => s[ticket.id]) ?? emptyDraft;
   const setDraft = useCallback((p: Partial<Draft>) => useDrafts.setState((s) => ({ [ticket.id]: { ...(s[ticket.id] ?? emptyDraft), ...p } })), [ticket.id]);
   const { mode } = draft;
+  // A WhatsApp ticket's connection and 24 hour window, as the server will send.
+  const whatsapp = useWhatsAppTicket(ticket);
 
   const { data: members } = useQuery(q.members());
   const { data: threads } = useQuery(q.threads(ticket.id));
@@ -430,8 +438,12 @@ export const Composer = forwardRef<
     enabled: mode === "reply" && !disabled,
     html: draft.html,
     attachmentIds: uploads.filter((u) => u.status === "done" && u.attachment).map((u) => u.attachment!.id),
-    onRestore: (d) => {
-      setDraft({ mode: "reply", html: d.body_html });
+    recipients: draft,
+    ticketMailboxId: ticket.mailbox_id,
+    onRestore: (d, recipients) => {
+      // Its recipients and address come back with it; Cc opens when it holds any. Its Cc is its
+      // own: Reply all adds to it only when clicked again.
+      setDraft({ mode: "reply", html: d.body_html, ...recipients, replyAll: undefined, showCc: !!(recipients.to || recipients.cc.length || recipients.bcc.length) });
       editor.current?.setHtml(d.body_html);
       setUploads(d.attachments.map((a) => ({ key: a.id, file: new File([], a.filename, { type: a.content_type }), status: "done" as const, attachment: a })));
     },
@@ -440,7 +452,7 @@ export const Composer = forwardRef<
   const wasScheduled = useRef(false);
   useEffect(() => {
     if (wasScheduled.current && ownDraft.draft === null && mode === "reply") {
-      setDraft({ html: "", cc: [], bcc: [], savedReplyIds: undefined });
+      setDraft({ html: "", cc: [], bcc: [], replyAll: undefined, savedReplyIds: undefined });
       editor.current?.clear();
       setUploads([]);
     }
@@ -453,7 +465,18 @@ export const Composer = forwardRef<
     realtime()?.setPresenceState(hasDraft && mode === "reply" ? "replying" : "viewing");
   }, [hasDraft, mode]);
 
-  const upload = (files: FileList | File[]) => uploadFiles(files, setUploads);
+  // WhatsApp takes one file per message (a free-form reply); a second one would be refused.
+  const whatsappReply = ticket.channel === "whatsapp" && mode === "reply";
+  const upload = (files: FileList | File[]) => {
+    const list = Array.from(files);
+    if (!whatsappReply) {
+      uploadFiles(list, setUploads);
+      return;
+    }
+    const room = Math.max(0, 1 - uploads.length);
+    if (list.length > room) toast.error(t("composer.whatsappOneFile"));
+    if (room > 0) uploadFiles(list.slice(0, room), setUploads);
+  };
 
   const busyUploads = uploads.some((u) => u.status === "uploading");
   // A reply from an address that has no way to send is refused (mailbox_cannot_send): say so up front.
@@ -550,6 +573,16 @@ export const Composer = forwardRef<
     const kind = opts.as ?? mode;
     const reply = kind === "reply";
     if (opts.sendAt && (mentionedTeammates(draft.html, members ?? [], me).length || findPlaceholders(draft.html).length)) { toast.error(t("composer.scheduleReview")); return; }
+    // WhatsApp only takes a free-form reply inside the customer's 24 hour window; a template goes out any time.
+    if (reply && ticket.channel === "whatsapp" && whatsapp && !whatsAppWindowOpen(whatsapp)) {
+      toast.error(t(whatsapp.connection_id ? "composer.whatsappWindowClosed" : "composer.whatsappDisconnected"));
+      return;
+    }
+    // One file per WhatsApp message, even when a note's files stayed on the way back to a reply.
+    if (reply && ticket.channel === "whatsapp" && uploads.length > 1) {
+      toast.error(t("composer.whatsappOneFile"));
+      return;
+    }
     if (reply && !opts.checked) {
       const names = mentionedTeammates(draft.html, members ?? [], me);
       if (names.length) return setMentionWarn({ names, status });
@@ -568,7 +601,7 @@ export const Composer = forwardRef<
       void backToNote(tempMessage({ kind: "note", body_html: draft.html }, `tmp-${Date.now().toString(36)}`), draft.fromNote, draft.html, attachments, me);
       uploads.forEach((u) => u.preview && URL.revokeObjectURL(u.preview));
       setUploads([]);
-      setDraft({ html: "", to: undefined, cc: [], bcc: [], showCc: false, mailboxId: undefined, fromAccount: undefined, fromNote: undefined, savedReplyIds: undefined, mode: "reply" });
+      setDraft({ html: "", to: undefined, cc: [], bcc: [], replyAll: undefined, showCc: false, mailboxId: undefined, fromAccount: undefined, fromNote: undefined, savedReplyIds: undefined, mode: "reply" });
       editor.current?.clear();
       ai.dismissSources();
       return;
@@ -610,7 +643,7 @@ export const Composer = forwardRef<
     setSentWith(status);
     setSent(true);
     setUploads([]);
-    setDraft({ html: "", to: undefined, cc: [], bcc: [], showCc: false, mailboxId: undefined, fromAccount: undefined, fromNote: undefined, savedReplyIds: undefined, ...(opts.as ? { mode: "reply" } : {}) });
+    setDraft({ html: "", to: undefined, cc: [], bcc: [], replyAll: undefined, showCc: false, mailboxId: undefined, fromAccount: undefined, fromNote: undefined, savedReplyIds: undefined, ...(opts.as ? { mode: "reply" } : {}) });
     editor.current?.clear();
     ai.dismissSources();
     // A held reply's toast says what it will do; it sets the status only once it is sent.
@@ -633,6 +666,14 @@ export const Composer = forwardRef<
   const note = mode === "note";
   const threadMode = mode === "thread";
   const defaultTo = ticket.contact?.email ? replyRecipient(ticket.contact.email, messages) : undefined;
+  // Reply all puts the latest email's other recipients in Cc: those the reply's To does not already reach.
+  const all = useReplyAll(ticket, ticket.channel === "email" && mode === "reply", {
+    to: draft.to ?? (defaultTo ? [defaultTo] : []),
+    contactEmail: ticket.contact?.email ?? "",
+    cc: draft.cc,
+    bcc: draft.bcc,
+    replyAll: draft.replyAll,
+  });
   const recipient = draft.to?.length ? draft.to.join(", ") : (defaultTo ?? ticket.contact?.name ?? t("composer.theCustomer"));
   // One click away in the To row: the customer's address and the Reply-To of their latest email.
   const toSuggestions = useMemo(() => {
@@ -679,6 +720,7 @@ export const Composer = forwardRef<
         {!disabled && <SharedDraftBar ticket={ticket} html={draft.html} onUse={takeShared} onClear={dropShared} hold={!ownDraft.settled} />}
         {mode === "reply" && <ScheduledReplyControls ticketId={ticket.id} draft={ownDraft.draft} onSent={() => { if (modeRef.current === "reply") { setDraft({ html: "" }); editor.current?.clear(); setUploads([]); } }} />}
         <ScheduleReplyDialog open={scheduleOpen} onOpenChange={setScheduleOpen} busy={scheduleReply.isPending} onSchedule={(at) => submit(undefined, { sendAt: at })} />
+        {ticket.channel === "whatsapp" && mode === "reply" && whatsapp && <WhatsAppWindow state={whatsapp} onTemplates={() => setTemplatesOpen(true)} />}
         <AnimatePresence initial={false}>
           {others.length > 0 && mode === "reply" && (
             <motion.div
@@ -809,7 +851,7 @@ export const Composer = forwardRef<
             note ? "border-dashed border-note-line bg-note" : threadMode ? cn(tone.cyan.line, "bg-surface") : "border-line bg-surface",
           )}
         >
-          <div className="flex h-10 items-center gap-2 border-b border-line-soft px-2">
+          <div className="@container/reply-head flex h-10 items-center gap-2 border-b border-line-soft px-2">
             <Segmented
               size="xs"
               value={mode}
@@ -855,6 +897,7 @@ export const Composer = forwardRef<
                 {t("composer.to")} <span className="mono text-fg-2" data-ph-mask>{recipient}</span>
               </button>
             )}
+            {ticket.channel === "email" && !note && !threadMode && <ReplyAllButton r={all} onChange={setDraft} />}
             {!note && !threadMode && (
               <button
                 type="button"
@@ -955,7 +998,7 @@ export const Composer = forwardRef<
                 <>
                   {/* Ollie writes from the ticket, so it stays out of what goes to a third party. */}
                   {!threadMode && <ComposerAiMenu ai={ai} hasDraft={!!draft.html} disabled={disabled} />}
-                  <input ref={fileInput} type="file" multiple hidden onChange={(e) => e.target.files && upload(e.target.files)} />
+                  <input ref={fileInput} type="file" multiple={!whatsappReply} hidden onChange={(e) => e.target.files && upload(e.target.files)} />
                   <Tooltip content={t("composer.attach")}>
                     <button
                       type="button"
@@ -1023,6 +1066,9 @@ export const Composer = forwardRef<
         </div>
         <SuggestionPopup />
         <VarSuggestPopup />
+        {templatesOpen && whatsapp?.connection_id && (
+          <WhatsAppTemplateDialog ticket={ticket} connectionId={whatsapp.connection_id} onClose={() => setTemplatesOpen(false)} />
+        )}
         {emailReply && (
           <ReplyPreview
             open={previewing && !!draft.html}

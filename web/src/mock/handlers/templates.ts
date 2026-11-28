@@ -283,6 +283,13 @@ function preview(ws: WsData, b: Record<string, unknown>): TemplatePreview {
       // On a ticket, the signature its reply would carry, as the server picks it.
       if (ticket) signature = signatureFor(ws, ticket, mailboxId, vals);
       break;
+    case "notice":
+      // A message to many customers: its own subject as written, filled body, none of a reply's history.
+      probs = problems(body, "reply");
+      content = fill(body, vals);
+      subject = subjectIn.trim() || "Your update";
+      history = "";
+      break;
     case "signature":
     case "personal_signature":
       probs = problems(body, kind);
@@ -312,7 +319,7 @@ function preview(ws: WsData, b: Record<string, unknown>): TemplatePreview {
       break;
     }
     default:
-      throw invalid("kind must be reply, signature, personal_signature, auto_reply, layout or csat");
+      throw invalid("kind must be reply, notice, signature, personal_signature, auto_reply, layout or csat");
   }
   const footer = o.mode !== "custom" && o.footer_html.trim() ? fill(o.footer_html, vals) : "";
   const html = renderEmail(o, fill(custom, vals), { content, signature, history, footer }, { name: brand.name, color: brand.color, logo: brand.images.logo ?? "" });

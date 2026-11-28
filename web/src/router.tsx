@@ -107,6 +107,15 @@ const csatLegacyRoute = createRoute({
   staticData: { title: "rateYourConversation" },
 });
 
+// A chat visitor's verification link (/chat/verify#token=…): the token rides in the fragment,
+// and the page verifies only on the visitor's click, never on load (mail scanners open links).
+const chatVerifyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/chat/verify",
+  component: page(() => import("./pages/public/ChatVerify")),
+  staticData: { title: "verifyYourEmail" },
+});
+
 // Capture before createRouter subscribes to browser history.
 const initialPortalResetPath = window.location.pathname;
 const initialPortalResetToken = captureResetToken();
@@ -699,9 +708,9 @@ export function reportsRange(s: { from?: string; to?: string }) {
   return { from: s.from ?? d.from, to: s.to ?? d.to };
 }
 
-/** The overview query from the URL: the range, and the team (`none`: no team) and brand filters. */
-export function reportsQuery(s: { from?: string; to?: string; team?: string; brand?: string }) {
-  return { ...reportsRange(s), team_id: s.team, brand_id: s.brand };
+/** The overview query from the URL: the range, and the team (`none`: no team), brand, mailbox (`none`: no mailbox) and person filters. */
+export function reportsQuery(s: { from?: string; to?: string; team?: string; brand?: string; mailbox?: string; person?: string }) {
+  return { ...reportsRange(s), team_id: s.team, brand_id: s.brand, mailbox_id: s.mailbox, assignee_id: s.person };
 }
 
 const isRef = (v: unknown): v is string => typeof v === "string" && /^[\w-]{1,64}$/.test(v);
@@ -709,11 +718,13 @@ const isRef = (v: unknown): v is string => typeof v === "string" && /^[\w-]{1,64
 const reportsRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/reports",
-  validateSearch: (s: Record<string, unknown>): { from?: string; to?: string; team?: string; brand?: string } => ({
+  validateSearch: (s: Record<string, unknown>): { from?: string; to?: string; team?: string; brand?: string; mailbox?: string; person?: string } => ({
     from: isDay(s.from) ? s.from : undefined,
     to: isDay(s.to) ? s.to : undefined,
     team: isRef(s.team) ? s.team : undefined,
     brand: isRef(s.brand) ? s.brand : undefined,
+    mailbox: isRef(s.mailbox) ? s.mailbox : undefined,
+    person: isRef(s.person) ? s.person : undefined,
   }),
   loaderDeps: ({ search }) => search,
   loader: async ({ context, deps }) => {
@@ -891,6 +902,9 @@ const sSupportChannels = settingsPage("/support-channels", "supportChannels", ()
 );
 const sPhone = settingsPage("/phone", "phone", () => import("./pages/settings/Phone"), (qc) =>
   Promise.all([qc.ensureQueryData(q.phoneProviders()), qc.ensureQueryData(q.phoneConnections())]),
+);
+const sWhatsApp = settingsPage("/whatsapp", "whatsapp", () => import("./pages/settings/WhatsApp"), (qc) =>
+  Promise.all([qc.ensureQueryData(q.whatsappConnections()), qc.ensureQueryData(q.whatsappTemplates())]),
 );
 const sMailboxNew = createRoute({
   getParentRoute: () => settingsLayout,
@@ -1147,6 +1161,7 @@ const routeTree = rootRoute.addChildren([
   helpRoute,
   csatRoute,
   csatLegacyRoute,
+  chatVerifyRoute,
   portalRoute, portalForgotRoute, portalResetRoute, portalNewRoute, portalTicketRoute,
   ticketPrintRoute,
   authLayout.addChildren([
@@ -1204,6 +1219,7 @@ const routeTree = rootRoute.addChildren([
       sMailboxes,
       sSupportChannels,
       sPhone,
+      sWhatsApp,
       sMailboxNew,
       sMailboxDetail,
       sMailAccounts,

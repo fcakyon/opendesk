@@ -53,7 +53,7 @@ const (
 
 // Processed is a picture ready to store.
 type Processed struct {
-	Large  []byte // 256 px PNG
+	Large  []byte // 256 px PNG; a signature picture's own shape, at most 600 px (RenderSignature)
 	Small  []byte // 64 px PNG
 	SHA256 string // of Large
 	Width  int    // of the decoded source

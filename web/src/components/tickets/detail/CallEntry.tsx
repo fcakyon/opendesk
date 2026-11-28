@@ -3,10 +3,12 @@
 // team's comments and the provider's AI summary.
 
 import { ChevronRight, ExternalLink, PhoneIncoming, PhoneMissed, PhoneOutgoing, Play, Voicemail } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PROVIDER_NAMES } from "@/components/contacts/PhoneNumber";
 import { Badge, TagChip } from "@/components/ui/badge";
+import { api } from "@/lib/api/endpoints";
+import { ApiError } from "@/lib/api/client";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { Activity, CallData } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
@@ -63,6 +65,50 @@ export function playLink(direct: string, asset: string, expiresAt: string | null
   return https(asset);
 }
 
+/**
+ * Plays a recording the provider serves only to the connection: the app fetches it with the
+ * session (no link can carry the token) and plays it here from memory. Nothing is saved.
+ */
+function RecordingPlayer({ callId }: { callId: string }) {
+  const { t } = useTranslation("inbox");
+  const [state, setState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [src, setSrc] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => () => void (src && URL.revokeObjectURL(src)), [src]);
+
+  async function load() {
+    setState("loading");
+    setMessage("");
+    try {
+      const { blob } = await api.phone.recording(callId);
+      setSrc(URL.createObjectURL(blob));
+      setState("ready");
+    } catch (e) {
+      const code = e instanceof ApiError ? e.code : "";
+      setMessage(code === "recording_not_ready" ? t("call.recordingNotReady") : code === "recording_refused" ? t("call.recordingRefused") : t("call.recordingError"));
+      setState("error");
+    }
+  }
+
+  if (state === "ready" && src) {
+    return <audio controls autoPlay src={src} className="h-8 w-full max-w-[320px]" aria-label={t("call.recording")} />;
+  }
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+      <button type="button" onClick={load} disabled={state === "loading"} className={linkCls} data-testid="call-play-recording">
+        <Play className="size-3" aria-hidden />
+        {state === "loading" ? t("call.loadingRecording") : state === "error" ? t("call.tryAgain") : t("call.playRecording")}
+      </button>
+      {state === "error" && (
+        <span role="alert" className="text-[11.5px] text-fg-3">
+          {message}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function CallEntry({ a }: { a: Activity }) {
   const { t } = useTranslation("inbox");
   const d = a.data as Partial<CallData>;
@@ -99,7 +145,8 @@ export function CallEntry({ a }: { a: Activity }) {
       : t("call.inbound", { caller });
   const reason = d.missed_reason ? (knownReason(d.missed_reason) ? t(`call.reason.${d.missed_reason}`) : d.missed_reason.replace(/_/g, " ")) : "";
   const talk = d.outcome === "answered" ? talkSeconds({ answered_at: d.answered_at ?? null, ended_at: d.ended_at ?? null, duration: d.duration ?? 0 }) : 0;
-  const recording = d.recording ? playLink(d.recording_url ?? "", d.asset_url ?? "", d.links_expire_at ?? null) : null;
+  const streamed = Boolean(d.recording && d.recording_stream && d.call_id);
+  const recording = d.recording && !streamed ? playLink(d.recording_url ?? "", d.asset_url ?? "", d.links_expire_at ?? null) : null;
   const voicemail = d.voicemail ? playLink(d.voicemail_url ?? "", d.asset_url ?? "", d.links_expire_at ?? null) : null;
   // The provider's lasting page for the call's media is also where it opens there.
   const open = https(d.asset_url);
@@ -135,8 +182,9 @@ export function CallEntry({ a }: { a: Activity }) {
                 </span>
               )}
             </div>
-            {(recording || voicemail || open) && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
+            {(recording || streamed || voicemail || open) && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {streamed && <RecordingPlayer callId={d.call_id as string} />}
                 {recording && (
                   <a href={recording} target="_blank" rel="noopener noreferrer" className={linkCls}>
                     <Play className="size-3" aria-hidden />

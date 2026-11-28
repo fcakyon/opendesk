@@ -626,7 +626,7 @@
   "panels": {
     "empty": "Noch keine Panels. Ein Shopify-Shop zeigt die Bestellungen jedes Kontakts; eine eigene URL kann alles andere zeigen.",
     "title": "Ticket-Panels",
-    "hint": "Zeig neben dem Ticket, was Shopify oder ein eigenes System über den Kontakt weiß. Nur lesend, abgefragt, wenn ein Ticket geöffnet wird.",
+    "hint": "Zeig neben dem Ticket, was Shopify oder ein eigenes System über den Kontakt weiß, abgefragt, wenn ein Ticket geöffnet wird. Eine eigene URL kann auch Buttons anbieten, die ihr eine Anfrage senden.",
     "adminsOnly": "Administratoren fügen Ticket-Panels hinzu und ändern sie.",
     "add": "Panel hinzufügen",
     "kind": {
@@ -654,7 +654,7 @@
     "removed": "{{name}} entfernt",
     "updateError": "Das Panel konnte nicht gespeichert werden",
     "addTitle": "Ticket-Panel hinzufügen",
-    "addDescription": "OpenDesk liest nur: Es fragt den Kontakt des Tickets ab, wenn jemand das Ticket öffnet.",
+    "addDescription": "OpenDesk fragt den Kontakt des Tickets ab, wenn jemand das Ticket öffnet. Shopify wird nur gelesen; eine eigene URL kann auch Buttons anbieten.",
     "shop": "Shop",
     "shopHint": "Seine myshopify.com-Domain, etwa mein-shop.myshopify.com.",
     "auth": {
@@ -669,7 +669,7 @@
     "token": "Admin-API-Zugriffstoken",
     "tokenHint": "Nur für eine App, die vor 2026 im Shopify-Admin erstellt wurde (Einstellungen → Apps → Apps entwickeln), mit den Berechtigungen read_customers und read_orders: ihr Admin-API-Zugriffstoken.",
     "url": "URL",
-    "urlHint": "OpenDesk sendet das Ticket, seinen Kontakt und die gefundenen Referenzen signiert an diese URL und zeigt, was sie antwortet.",
+    "urlHint": "OpenDesk sendet das Ticket, seinen Kontakt und die gefundenen Referenzen signiert an diese URL und zeigt, was sie antwortet. Drückt ein Agent einen ihrer Buttons, sendet es auch die Aktion, was der Agent ausgefüllt hat, sowie Name und E-Mail des Agents.",
     "name": "Name",
     "namePlaceholder": "Odoo",
     "connect": "Panel hinzufügen",
@@ -684,7 +684,7 @@
     "secretTitle": "Signatur-Secret",
     "secretDescription": "Kopiere es jetzt. Du siehst es nicht wieder.",
     "secretVerify": "Jede Anfrage trägt OD-Signature, wie Webhook-Zustellungen. Prüfe sie, bevor du antwortest:",
-    "secretAnswer": "Antworten Sie mit JSON-Blöcken (Karten, beschriftete Werte, Listen, Hinweise), höchstens 64 KB:",
+    "secretAnswer": "Antworten Sie mit JSON-Blöcken (Karten, beschriftete Werte, Listen, Hinweise, Buttons), höchstens 64 KB:",
     "secretSaved": "Gespeichert",
     "fields": {
       "menu": "Auswählen, was angezeigt wird",

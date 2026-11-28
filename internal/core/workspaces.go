@@ -57,6 +57,7 @@ type CoreWorkspaceSettings struct {
 	UndoSendChatSecs      *int    `json:"undo_send_chat_seconds,omitempty" enum:"0,5,10,20,30" doc:"The same for replies on chat tickets. Default 0: a chat reply goes at once"`
 	SendAndFinish         *bool   `json:"send_and_finish_button,omitempty" doc:"Show a button that sends and solves, using the workspace's finish label next to Send in the reply composer, instead of only in its menu. Default false"`
 	AgentOnlineTime       *bool   `json:"agent_online_time,omitempty" doc:"Record each member's online time from the app's heartbeats and show it in the agents report. Default true; false records none, deletes what was recorded, and the report shows none"`
+	ReportsTeamMembers    *bool   `json:"reports_team_members,omitempty" doc:"In the reports, a team is its people: its figures also count the tickets assigned to its leads and members, and the agents report lists them alone, each with all their work. Default false: a team's figures count the tickets routed to it"`
 	TicketNumberInSubject *bool   `json:"ticket_number_in_subject,omitempty" doc:"Put the ticket number as [#n] in the subjects of emails sent to customers. Default true; false sends subjects without it, and replies are matched to their ticket by their headers. An email that starts a ticket's conversation keeps it when the mailbox sends through Microsoft, Amazon SES or a Gmail connection that cannot read back the Message-ID it went out with, so the answer always finds its ticket. The number stays in the app, the API and the {{ticket.number}} variable"`
 	SeverityEnabled       *bool   `json:"severity_enabled,omitempty" doc:"Tickets have a severity beside their priority. Default true; false leaves severity out of the app (ticket, lists, filters, views, bulk actions, automations, reports) and AI never sets or proposes one. The API still reads and writes it, and tickets keep theirs"`
 	// SnoozePresets are the times a ticket's snooze menu offers, in order, besides a date picked by hand.
@@ -348,6 +349,9 @@ func validateSettings(s *CoreWorkspaceSettings) (map[string]any, error) {
 	}
 	if s.AgentOnlineTime != nil {
 		out["agent_online_time"] = *s.AgentOnlineTime
+	}
+	if s.ReportsTeamMembers != nil {
+		out["reports_team_members"] = *s.ReportsTeamMembers
 	}
 	if s.TicketNumberInSubject != nil {
 		out["ticket_number_in_subject"] = *s.TicketNumberInSubject

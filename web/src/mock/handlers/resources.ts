@@ -3,13 +3,16 @@
 
 import { registerPortalRoutes } from "./portal";
 import { registerPortalInviteRoutes } from "./portalInvites";
+import { registerContactMessageRoutes } from "./contactMessages";
 import type {
   Action,
   Automation,
   Brand,
+  ChatVerificationPage,
   Company,
   Condition,
   Contact,
+  ContactVerification,
   FieldValues,
   ImapFolder,
   KbArticle,
@@ -44,7 +47,48 @@ import { checkSendAs, normalizeAliases, writeAliasSettings } from "../aliases";
 function contactOut(ws: WsData, c: Contact): Contact {
   c.ticket_count = ws.tickets.filter((t) => t.contact?.id === c.id && !ws.deletedTickets.has(t.id)).length;
   c.chat_reachable = chatReachable(ws, c);
+  c.verification = verificationOf(ws, c);
   return c;
+}
+
+/**
+ * The mock's contact verification (contracts/api.md "Contact verification"): a chat visitor with an
+ * external id signed in with identity verification; one with only an address has not confirmed it.
+ * A verified contact stays so.
+ */
+function verificationOf(ws: WsData, c: Contact): ContactVerification {
+  if (c.verification?.status === "verified") return c.verification;
+  const none: ContactVerification = { status: "none", via: null, verified_at: null };
+  if (!ws.tickets.some((t) => t.contact?.id === c.id && t.channel === "chat")) return none;
+  if (c.external_id) return { status: "verified", via: "identity", verified_at: c.created_at };
+  return c.email ? { status: "unverified", via: null, verified_at: null } : none;
+}
+
+/** The mock's one verification link, token "demo": the first chat visitor who had not verified. */
+let demoVerify: { ws: WsData; c: Contact } | null = null;
+function findVerifyLink(token: string) {
+  if (token !== "demo") throw new HttpError(404, "invalid_link", "This link has expired or was already used.");
+  if (!demoVerify) {
+    for (const ws of db.workspaces) {
+      const c = ws.contacts.find((x) => verificationOf(ws, x).status === "unverified");
+      if (c) {
+        demoVerify = { ws, c };
+        break;
+      }
+    }
+  }
+  if (!demoVerify) throw new HttpError(404, "invalid_link", "This link has expired or was already used.");
+  const { ws, c } = demoVerify;
+  const brand = defaultBrand(ws);
+  const page: ChatVerificationPage = {
+    status: verificationOf(ws, c).status === "verified" ? "verified" : "pending",
+    email: c.email ?? "",
+    brand_name: brand?.name ?? ws.workspace.name,
+    brand_color: ws.workspace.settings.brand_color ?? "",
+    locale: ws.workspace.settings.locale ?? "",
+    locale_fixed: !!ws.workspace.settings.locale_fixed && !!ws.workspace.settings.locale,
+  };
+  return { ws, c, page };
 }
 
 function companyOut(ws: WsData, c: Company): Company {
@@ -113,6 +157,7 @@ function syncContactRefs(ws: WsData, c: Contact) {
 export function registerResources() {
   registerPortalRoutes();
   registerPortalInviteRoutes();
+  registerContactMessageRoutes();
   // Contacts.
   get("/v1/contacts", (ctx) => {
     const q = (ctx.query.get("q") ?? "").toLowerCase().trim();
@@ -227,6 +272,32 @@ export function registerResources() {
       publish(ctx.ws, "contact.updated", { contact: contactOut(ctx.ws, c) });
     }
     return { updated: rows.length, deleted: 0 };
+  });
+  // A CSV file of the people named by id or by the list's filters (contracts/imports.md "Contacts").
+  post("/v1/contacts/export", (ctx) => {
+    const query = isRecord(ctx.body.query) ? ctx.body.query : null;
+    const idList = Array.isArray(ctx.body.ids) ? ctx.body.ids : [];
+    if ((idList.length === 0) === (query === null)) throw invalid("send either ids or query");
+    const needle = String(query?.q ?? "").toLowerCase().trim();
+    const rows = idList.length
+      ? idList.map((id) => ctx.ws.contacts.find((c) => c.id === id) ?? (() => { throw notFound("Contact"); })())
+      : ctx.ws.contacts.filter(
+          (c) =>
+            (!needle || [c.name, c.email ?? "", c.company?.name ?? ""].join(" ").toLowerCase().includes(needle)) &&
+            (!query?.company_id || (query.company_id === "none" ? !c.company : c.company?.id === query.company_id)) &&
+            (!query?.tag || c.tags.some((x) => x.name.toLowerCase() === String(query.tag).toLowerCase())) &&
+            (!query?.blocked || c.blocked === (query.blocked === "true")),
+        );
+    const cell = (v: string) => {
+      const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
+      return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+    };
+    const head = ["Name", "Email", "Other emails", "Phone", "Company", "External ID", "Notes", "Labels", "Blocked", "Created"];
+    const lines = [head, ...rows.map((c) => [c.name, c.email ?? "", c.emails.join("; "), c.phone, c.company?.name ?? "", c.external_id ?? "", c.notes, c.tags.map((x) => x.name).join("; "), String(c.blocked), c.created_at])];
+    return new Response("\uFEFF" + lines.map((l) => l.map(cell).join(",")).join("\r\n") + "\r\n", {
+      status: 200,
+      headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="people-${nowIso().slice(0, 10)}.csv"`, "cache-control": "no-store" },
+    });
   });
   // Extra addresses (contracts/api.md "Contact emails"): an address belongs to one contact, primary or extra.
   const changed = (ctx: Ctx, c: Contact) => {
@@ -874,6 +945,18 @@ export function registerResources() {
       .slice(0, 20);
   });
 
+  // Public chat verification: reading the link changes nothing; confirming verifies the visitor.
+  post("/v1/public/chat-verification", (ctx) => respond(200, findVerifyLink(String(ctx.body.token ?? "")).page));
+  post("/v1/public/chat-verification/confirm", (ctx) => {
+    const { ws, c, page } = findVerifyLink(String(ctx.body.token ?? ""));
+    if (page.status !== "verified") {
+      c.verification = { status: "verified", via: "email", verified_at: nowIso() };
+      c.updated_at = nowIso();
+      publish(ws, "contact.updated", { contact: contactOut(ws, c) });
+    }
+    return respond(200, { ...page, status: "verified" });
+  });
+
   // Public CSAT.
   const findCsat = (token: string) => {
     for (const ws of db.workspaces) {
@@ -1297,6 +1380,58 @@ function writeAddressing(ctx: Ctx, m: Mailbox) {
   if (m.private && Object.keys(m.alias_teams ?? {}).length && ("alias_teams" in b || "team_id" in b)) {
     throw invalid("A private team's address delivers all its aliases to that team.");
   }
+}
+
+/** What a CSV row can carry into the directory (contracts/imports.md "Contacts"). */
+export type ImportedPerson = { email?: string; name?: string; phone?: string; company?: string; external_id?: string; notes?: string; labels?: string[] };
+
+/**
+ * Adds or updates the person one imported row describes, as the server's import does, and says
+ * which it did. `skip` leaves who is already here alone, `fill` sets what they have empty.
+ */
+export function importPerson(
+  ws: WsData,
+  row: ImportedPerson,
+  matchOn: "email" | "external_id",
+  onMatch: "skip" | "fill" | "overwrite",
+): "created" | "updated" | "skipped" {
+  const email = row.email?.trim().toLowerCase() || null;
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw invalid("The email address is not valid.");
+  const ext = row.external_id?.trim() || null;
+  if (!email && !row.name?.trim()) throw invalid("A contact needs an email or a name");
+  const found = matchOn === "email" ? (email ? holder(ws, email) : undefined) : ext ? ws.contacts.find((c) => c.external_id === ext) : undefined;
+  let company: Company | undefined;
+  if (row.company?.trim()) {
+    const name = row.company.trim();
+    company = ws.companies.find((c) => c.name.toLowerCase() === name.toLowerCase());
+    if (!company) {
+      company = { id: uuid(), name, domain: "", avatar_url: null, avatar_source: null, external_id: null, notes: "", custom: {}, tags: [], fields: {}, contact_count: 0, created_at: nowIso(), updated_at: nowIso() };
+      ws.companies.unshift(company);
+      publish(ws, "company.created", { company });
+    }
+  }
+  const ref = company ? { id: company.id, name: company.name, domain: company.domain, avatar_url: company.avatar_url } : null;
+  const labels = (row.labels ?? []).map((l) => l.trim()).filter(Boolean);
+  if (!found) {
+    const c: Contact = { id: uuid(), email, emails: [], name: (row.name?.trim() || email!.split("@")[0]!).slice(0, 80), phone: row.phone ?? "", avatar_url: null, avatar_source: null, company: ref, external_id: ext, notes: row.notes ?? "", custom: {}, tags: [], fields: {}, blocked: false, ticket_count: 0, created_at: nowIso(), updated_at: nowIso() };
+    if (labels.length) c.tags = applyLabels(ws, "contacts", c.tags, { add: labels }, { create: true }).next;
+    ws.contacts.unshift(c);
+    publish(ws, "contact.created", { contact: c });
+    return "created";
+  }
+  if (onMatch === "skip") return "skipped";
+  const fill = onMatch === "fill";
+  if (row.name?.trim() && (!fill || !found.name)) found.name = row.name.trim().slice(0, 80);
+  if (row.phone && (!fill || !found.phone)) found.phone = row.phone;
+  if (row.notes && (!fill || !found.notes)) found.notes = row.notes;
+  if (ext && (!fill || !found.external_id)) found.external_id = ext;
+  if (email && (!fill || !found.email)) found.email = email;
+  if (ref && (!fill || !found.company)) found.company = ref;
+  if (labels.length) found.tags = applyLabels(ws, "contacts", found.tags, { add: labels }, { create: true }).next;
+  found.updated_at = nowIso();
+  syncContactRefs(ws, found);
+  publish(ws, "contact.updated", { contact: contactOut(ws, found) });
+  return "updated";
 }
 
 /** The contact an address belongs to, as its primary or one of its extras. */

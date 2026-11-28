@@ -28,7 +28,7 @@ export type RichEditorProps = {
   placeholder?: string;
   className?: string;
   contentClassName?: string;
-  /** "compact" shows inline formatting only; "full" adds headings, quotes, code and images. */
+  /** "compact" shows inline formatting only; "full" adds headings, quotes and code. Images show with onImage. */
   toolbar?: "none" | "compact" | "full";
   /** Before the formatting buttons: a mail composer's Send, first and on the left, as mail clients put it. */
   toolbarStart?: ReactNode;
@@ -234,12 +234,12 @@ export function Toolbar({
           <TB label={ui("codeBlock")} active={editor.isActive("codeBlock")} onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
             <Code />
           </TB>
-          {onImage && (
-            <TB label={ui("image")} onClick={onImage}>
-              <ImageIcon />
-            </TB>
-          )}
         </>
+      )}
+      {onImage && (
+        <TB label={ui("image")} active={editor.isActive("image")} onClick={onImage}>
+          <ImageIcon />
+        </TB>
       )}
     </>
   );

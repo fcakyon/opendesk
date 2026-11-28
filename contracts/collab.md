@@ -344,9 +344,14 @@ action and comes back to it on its own.
   `collab.changed` goes to who sees it. The AI queue then offers it like any other ("AI queue").
 - New mail from someone else in its inbox wakes it sooner (as a customer reply wakes a ticket); the
   account's own reply, sent from opendesk or elsewhere, keeps it snoozed.
-- `box=snoozed` lists snoozed conversations still in an inbox and `counts.boxes.snoozed` counts
-  them. It is kept in opendesk only: the provider's message state, read state and folders do not
-  change, and the conversation stays in the inbox.
+- `box=snoozed` and `box=needs_action` include conversations in Inbox or Sent, excluding Spam and
+  Trash, so an outgoing conversation can be followed up before anyone replies. Snooze stays in
+  opendesk: the provider's message state, read state and folders do not change.
+- **Send and snooze** takes a preset or custom time in the composer. A person may pass the
+  future RFC3339 time as `?snooze_until=` on `POST /v1/collab/messages` or
+  `POST /v1/collab/drafts/{id}/send`. Only shared accounts with Handling on accept it. The server
+  applies the snooze to the sent message's conversation when it stores the successful send, not
+  when it saves the draft. Undo cancels both, and a provider refusal does not set a snooze.
 
 ### Spam beside Needs action
 
@@ -837,6 +842,10 @@ with a claim that expires on its own, and reports back. Nobody has to assign it.
   `204` gives it back; `404` when the key holds no live claim on it. With `skip` the key is not
   offered it again until new mail arrives; the reason (for example "not confident") is kept with
   the skip (`collab_ai_skips`).
+- **Clearing skips**: `POST /v1/collab/ai-queue/skips/clear` `{account_id?, reason?}` → `{cleared}`
+  removes the calling key's own skips, all of them, those of one account the member sees (`404`
+  otherwise) or those kept with exactly that reason, so the key is offered those conversations
+  again without new mail, for example after its drafting improved. Another key's skips stay.
 - **Approval**: an AI draft does not clear Needs action (only a sent reply does), so the
   conversation waits in Needs action, its draft labelled "AI draft by <name>", until a person sends
   a reply or marks it done; discarding the draft leaves it in Needs action. **Ready for review** (`box=ai_review`, `boxes.ai_review`) lists the conversations
@@ -1464,7 +1473,7 @@ addresses alike; "Get from Gmail" (`…/signature/pull`, `…/display-name/pull`
 from then on the setting syncs as before. A literal `{agent}` or `{{ … }}` never reaches Gmail.
 
 A signature is never changed by being opened: the settings page edits one the rich editor cannot
-hold (tables, inline styles, sized images, divs) as HTML with a live preview, and sends
+hold (tables, inline styles, pictures with HTML attributes beyond a size, divs) as HTML with a live preview, and sends
 `signature_html` in the PATCH only when the person changed it, so opening and saving other settings
 never writes a signature back to Gmail.
 

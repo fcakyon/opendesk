@@ -1,6 +1,6 @@
 // Typed wrappers for every endpoint in contracts/api.md.
 
-import { download, http, stream, streamEvents, type StreamHandlers } from "./client";
+import { download, downloadPost, http, stream, streamEvents, type StreamHandlers } from "./client";
 import type * as T from "./types";
 import { creatingTicket } from "../ownTickets";
 import { uiLanguage } from "@/i18n";
@@ -17,6 +17,8 @@ export type TicketListQuery = ListQuery & {
   team_id?: string;
   /** The same values as team_id: tickets of none of them. */
   team_not?: string;
+  /** With team_id: also the tickets assigned to the leads and members of the teams it names. */
+  team_members?: boolean;
   mailbox_id?: string;
   /** Mailbox ids, comma separated: tickets whose reply address is none of them. */
   mailbox_not?: string;
@@ -132,11 +134,24 @@ export type CreateTicketBody = {
   tags?: string[];
   fields?: T.FieldValues;
   status?: T.TicketStatus;
+  /** An email reply: more people it goes to, after the contact. */
+  to?: ({ contact_id: string } | { email: string })[];
   /** An email reply's copies. */
   cc?: string[];
   bcc?: string[];
   /** Files on the first message (POST /v1/attachments). */
   attachment_ids?: string[];
+};
+
+/** PUT /v1/tickets/{id}/reply-draft: the reply as it is being written. */
+export type ReplyDraftBody = {
+  body_html: string;
+  attachment_ids: string[];
+  to?: string[];
+  cc?: string[];
+  bcc?: string[];
+  mailbox_id?: string;
+  from_account?: { account_id: string; email?: string; reply_to?: string };
 };
 
 export type SendMessageBody = {
@@ -156,6 +171,45 @@ export type SendMessageBody = {
   from_account?: { account_id: string; email?: string; reply_to?: string };
   /** Saved replies used in this message: their actions apply to the ticket once it is added. */
   saved_reply_ids?: string[];
+};
+
+/** The credentials an admin pastes to connect a WhatsApp number (contracts/whatsapp.md). */
+export type WhatsAppCredentialsBody = {
+  phone_number_id: string;
+  waba_id: string;
+  access_token: string;
+  app_secret: string;
+  /** One is generated when empty; update keeps the connection's. */
+  verify_token?: string;
+  /** The Graph API version; the server's default when empty. */
+  api_version?: string;
+};
+
+export type WhatsAppConnectBody = {
+  /** The number's verified name when empty. */
+  name?: string;
+  /** The brand its tickets belong to; the workspace's default brand when empty. */
+  brand_id?: string;
+  credentials: WhatsAppCredentialsBody;
+};
+
+export type WhatsAppUpdateBody = {
+  name?: string;
+  /** Replacement credentials for the same phone number. */
+  credentials?: WhatsAppCredentialsBody;
+};
+
+/** Sends an approved template, also outside the 24 hour window (contracts/whatsapp.md "Templates"). */
+export type WhatsAppTemplateSendBody = {
+  template_id: string;
+  /** One value per `{{1}}` or `{{name}}` placeholder of the body, keyed by it. */
+  params?: Record<string, string>;
+  /** The value (not the approved text) of a text header's one placeholder. */
+  header_text?: string;
+  /** An uploaded attachment for an image, video or document header: its opendesk attachment id. */
+  header_media_id?: string;
+  /** URL button values, keyed by the button's index. */
+  button_urls?: Record<string, string>;
 };
 
 /** Starts a third-party thread (contracts/api.md "Threads"). */
@@ -270,6 +324,10 @@ export const api = {
     totpEnable: (code: string) =>
       http.post<{ recovery_codes: string[] }>("/v1/auth/totp/enable", { code }, { workspace: false }),
     totpDisable: (code: string) => http.post<void>("/v1/auth/totp/disable", { code }, { workspace: false }),
+  },
+  signatureImages: {
+    /** PNG, JPEG, GIF or WebP, at most 5 MB: a public, stable URL for an <img> in a signature. */
+    upload: (file: File | Blob) => http.create<T.SignatureImage>("/v1/signature-images", imageForm(file)),
   },
   me: {
     get: () => http.get<T.Me>("/v1/me", { workspace: false }),
@@ -486,6 +544,29 @@ export const api = {
     rotateWebhook: (id: string) => http.post<T.PhoneConnection>(`/v1/phone/connections/${id}/rotate-webhook`),
     disconnect: (id: string) => http.del(`/v1/phone/connections/${id}`),
     lines: () => http.get<{ data: T.PhoneLine[] }>("/v1/phone/lines"),
+    /** A call's recording, for a provider that only serves it to the connection (the audio, not a link). */
+    recording: (callId: string) => download(`/v1/phone/calls/${callId}/recording`),
+  },
+  /** Settings > WhatsApp: numbers connected through Meta's Cloud API (contracts/whatsapp.md). */
+  whatsapp: {
+    connections: () => http.get<{ data: T.WhatsAppConnection[] }>("/v1/whatsapp/connections"),
+    connect: (b: WhatsAppConnectBody) => http.create<T.WhatsAppConnection>("/v1/whatsapp/connections", b),
+    update: (id: string, b: WhatsAppUpdateBody) => http.patch<T.WhatsAppConnection>(`/v1/whatsapp/connections/${id}`, b),
+    /** Checks the credentials at Meta and records the outcome on the connection. */
+    test: (id: string) => http.post<T.WhatsAppConnection>(`/v1/whatsapp/connections/${id}/test`),
+    /** Points the Meta app's webhook at this connection. */
+    subscribe: (id: string) => http.post<T.WhatsAppConnection>(`/v1/whatsapp/connections/${id}/subscribe`),
+    disconnect: (id: string) => http.del(`/v1/whatsapp/connections/${id}`),
+    /** Synced templates; every connection's when none is named. */
+    templates: (connectionId?: string) =>
+      http.get<{ data: T.WhatsAppTemplate[] }>("/v1/whatsapp/templates", { query: connectionId ? { connection_id: connectionId } : undefined }),
+    /** Pulls the templates an admin approved at Meta; every connection's when none is named. */
+    syncTemplates: (connectionId?: string) =>
+      http.post<{ data: T.WhatsAppTemplate[]; synced: number }>("/v1/whatsapp/templates/sync", connectionId ? { connection_id: connectionId } : {}),
+    /** The connection a WhatsApp ticket's replies go out from and its 24 hour window. */
+    ticket: (ticketId: string) => http.get<T.WhatsAppTicketState>(`/v1/tickets/${ticketId}/whatsapp`),
+    /** Sends a template on the ticket's WhatsApp conversation, in the window or outside it. */
+    sendTemplate: (ticketId: string, b: WhatsAppTemplateSendBody) => http.create<T.Message>(`/v1/tickets/${ticketId}/whatsapp-template`, b),
   },
   ticketPanels: {
     list: () => http.get<{ data: T.TicketPanel[] }>("/v1/ticket-panels"),
@@ -622,6 +703,8 @@ export const api = {
     /** Admin: removes a deleted message's text, files and original email for good. */
     purgeMessage: (id: string, messageId: string) => http.post<T.Message>(`/v1/tickets/${id}/messages/${messageId}/purge`),
     activities: (id: string) => http.get<T.Page<T.Activity>>(`/v1/tickets/${id}/activities`),
+    /** The customer's other tickets, from any of their addresses: newest first, at most 50, with how many in all. */
+    customerTickets: (id: string) => http.get<{ data: T.CustomerPastTicket[]; total: number }>(`/v1/tickets/${encodeURIComponent(id)}/customer-tickets`),
     /** A teammate is writing a reply: the chat's visitor sees them typing. */
     typing: (id: string, opts?: { workspace?: string }) => http.post<void>(`/v1/tickets/${id}/typing`, undefined, opts),
     /** The ticket's shared draft (contracts/api.md "Drafts"): staged for the team, sent by whoever picks it up. */
@@ -632,7 +715,7 @@ export const api = {
     /** My own unsent reply on the ticket, saved as I type (contracts/api.md "Reply drafts"). */
     replyDraft: {
       get: (id: string) => http.get<{ draft: T.ReplyDraft | null }>(`/v1/tickets/${id}/reply-draft`),
-      save: (id: string, b: { body_html: string; attachment_ids: string[] }) => http.put<{ draft: T.ReplyDraft | null }>(`/v1/tickets/${id}/reply-draft`, b),
+      save: (id: string, b: ReplyDraftBody) => http.put<{ draft: T.ReplyDraft | null }>(`/v1/tickets/${id}/reply-draft`, b),
       discard: (id: string) => http.del(`/v1/tickets/${id}/reply-draft`),
       schedule: (id: string, send_at: string, reply?: SendMessageBody) =>
         http.post<{ draft: T.ReplyDraft | null }>(`/v1/tickets/${id}/reply-draft/schedule`, { send_at, reply }),
@@ -653,6 +736,9 @@ export const api = {
     links: (id: string) => http.get<{ data: T.TicketLink[] }>(`/v1/tickets/${id}/links`),
     /** Wiki pages the caller can see that mention the ticket, newest edit first. */
     wiki: (id: string) => http.get<{ data: T.WikiNode[] }>(`/v1/tickets/${encodeURIComponent(id)}/wiki`),
+    /** Presses an action of an http panel's answer; the URL's own words come back, and the panel as it is now. */
+    panelAction: (id: string, panelId: string, b: { action: string; inputs?: Record<string, string> }) =>
+      http.post<T.PanelActionResult>(`/v1/tickets/${id}/panels/${panelId}/actions`, { ...b, locale: uiLanguage() }),
     /**
      * What a ticket panel's product knows about the ticket's contact; `refresh` asks it again. An
      * http panel's URL is told the app's language, so it can answer in it.
@@ -676,10 +762,27 @@ export const api = {
     merge: (id: string, into: string) => http.post<T.Contact>(`/v1/contacts/${id}/merge`, { into }),
     bulk: (b: DirectoryBulkTarget<ContactBulkQuery> & ({ delete: true } | { patch: DirectoryBulkPatch & { company_id?: string | null } })) =>
       http.post<BulkResult>("/v1/contacts/bulk", b),
+    /** A CSV file of the people named by id (at most 1000) or by the People list's filters. */
+    exportCsv: (target: { ids: string[] } | { query: ContactBulkQuery }) => downloadPost("/v1/contacts/export", target),
+    /** Contact imports (contracts/imports.md "Contacts"): upload a file, map its columns, then follow the run. */
+    importUpload: (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      return http.create<T.ContactImportUpload>("/v1/contacts/import/upload", fd);
+    },
+    importStart: (b: { upload_id: string; mapping: T.ContactImportMapping; match_on: T.ContactImportMatch; on_match: T.ContactImportOnMatch }) =>
+      http.create<T.ContactImport>("/v1/contacts/imports", b),
+    importGet: (id: string) => http.get<T.ContactImport>(`/v1/contacts/imports/${id}`),
+    importCancel: (id: string) => http.post<T.ContactImport>(`/v1/contacts/imports/${id}/cancel`),
     /** Extra addresses (contracts/api.md "Contact emails"); each answers with the contact. */
     addEmail: (id: string, email: string) => http.post<T.Contact>(`/v1/contacts/${id}/emails`, { email }),
     removeEmail: (id: string, email: string) => http.del<T.Contact>(`/v1/contacts/${id}/emails/${encodeURIComponent(email)}`),
     makePrimaryEmail: (id: string, email: string) => http.post<T.Contact>(`/v1/contacts/${id}/emails/${encodeURIComponent(email)}/make-primary`),
+    /** Who a message to many customers would reach: by ids, or by the list's filters (at most 1000). */
+    messagePreview: (target: DirectoryBulkTarget<ContactBulkQuery>) => http.post<T.NoticePreview>("/v1/contacts/message/preview", target),
+    /** Sends one message to many customers, one ticket each (422 no_recipients, unknown_label; 409 message_in_progress; 429). */
+    sendMessage: (b: DirectoryBulkTarget<ContactBulkQuery> & { mailbox_id: string; subject: string; body_html: string; label: string; status?: T.ContactMessage["status"] }) =>
+      http.post<T.ContactMessage>("/v1/contacts/message", b),
     /** Customer portal access (contracts/customer-portal.md "Invitations"). */
     portal: (id: string) => http.get<T.PortalAccess>(`/v1/contacts/${id}/portal`),
     /** Emails a one-time link to choose a portal password, valid 7 days (422 no_email, contact_blocked, help_center_off, brand_required, password_sign_in_off; 429). */
@@ -841,6 +944,10 @@ export const api = {
     connectOptions: () => http.get<T.MailboxConnectOptions>("/v1/mailboxes/connect-options"),
     detect: (email: string) => http.post<T.MailDetection>("/v1/mailboxes/detect", { email }),
   },
+  contactMessages: {
+    list: () => http.get<{ data: T.ContactMessage[] }>("/v1/contact-messages"),
+    cancel: (id: string) => http.post<T.ContactMessage>(`/v1/contact-messages/${id}/cancel`, {}),
+  },
   billing: {
     get: () => http.get<T.Billing>("/v1/billing"),
     checkout: (interval: "month" | "year", plan?: T.PaidPlan) => http.post<{ url: string }>("/v1/billing/checkout", plan ? { interval, plan } : { interval }),
@@ -861,7 +968,7 @@ export const api = {
     /** Streams `delta` text; resolves with the full draft at `done`. */
     draft: (ticketId: string, b: { instructions?: string; tone?: string }, h?: StreamHandlers) =>
       stream<T.AIDraft>(`/v1/tickets/${ticketId}/ai/draft`, b, h),
-    summary: (ticketId: string) => http.post<T.AISummary>(`/v1/tickets/${ticketId}/ai/summary`, {}),
+    summary: (ticketId: string, language: string) => http.post<T.AISummary>(`/v1/tickets/${ticketId}/ai/summary`, { language }),
     ask: (ticketId: string, question: string, h?: StreamHandlers) => stream<T.AIAnswer>(`/v1/tickets/${ticketId}/ai/ask`, { question }, h),
     triage: (ticketId: string, apply: boolean) => http.post<T.Triage>(`/v1/tickets/${ticketId}/ai/triage`, { apply }),
     /** Ollie's pending suggested reply on an email ticket, sent or discarded by a teammate. */
@@ -1042,7 +1149,7 @@ export const api = {
       removeRule: (id: string, ruleId: string) => http.del(`/v1/collab/accounts/${id}/category-rules/${ruleId}`),
     },
     /** Sent through the provider within the request (502 send_failed, nothing stored). */
-    send: (b: CollabSendBody) => http.create<T.MailMessage>("/v1/collab/messages", b),
+    send: (b: CollabSendBody, snoozeUntil?: string) => http.create<T.MailMessage>("/v1/collab/messages", b, { query: { snooze_until: snoozeUntil } }),
     /** Read from the message's source at the provider (502 provider_error). */
     messageDetails: (id: string) => http.get<T.MailMessageDetails>(`/v1/collab/messages/${id}/details`),
     messageSource: (id: string) => http.get<T.MailSource>(`/v1/collab/messages/${id}/source`),
@@ -1055,7 +1162,7 @@ export const api = {
       remove: (id: string) => http.del(`/v1/collab/drafts/${id}`),
       /** With a body the draft is saved with it first. `opts` pins the account and workspace a
        * held send started in (components/collab/outbox.ts), and lets it outlive the page. */
-      send: (id: string, b?: CollabDraftBody, opts?: { keepalive?: boolean; as?: string; workspace?: string }) =>
+      send: (id: string, b?: CollabDraftBody, opts?: { keepalive?: boolean; as?: string; workspace?: string; query?: { snooze_until: string } }) =>
         http.post<T.MailMessage>(`/v1/collab/drafts/${id}/send`, b, opts),
     },
     /** A person's feedback on an AI draft, for the key that wrote it (contracts/collab.md "AI draft outcomes"). */
@@ -1069,6 +1176,9 @@ export const api = {
     csat: (token: string) =>
       http.post<T.CsatSurvey>("/v1/public/csat/survey", { token }, pub),
     submitCsat: (token: string, b: { score: number; comment?: string }) => http.post<void>("/v1/public/csat/rating", { token, ...b }, pub),
+    /** A chat visitor's verification link (contracts/api.md "Contact verification"): reading it changes nothing. */
+    chatVerification: (token: string) => http.post<T.ChatVerificationPage>("/v1/public/chat-verification", { token }, pub),
+    confirmChatVerification: (token: string) => http.post<T.ChatVerificationPage>("/v1/public/chat-verification/confirm", { token }, pub),
   },
 };
 

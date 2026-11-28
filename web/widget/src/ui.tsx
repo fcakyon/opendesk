@@ -9,9 +9,19 @@ import { homeConversations, isFinished, sortConversations } from "./conversation
 import { NEW, type Controller } from "./controller";
 import { canRecord, clock, useRecorder, VoicePlayer, type Recording } from "./voice";
 import { current, dayLabel, isRtl, relTime, t } from "./i18n";
-import { Arrow, Back, ChatIc, Clip, Clock, Down, Ext, FileIc, Mic, StopIc, Trash, Up, X } from "./icons";
+import { Arrow, Back, ChatIc, Check, Clip, Clock, Down, Ext, FileIc, MailIc, Mic, StopIc, Trash, Up, X } from "./icons";
 import { repliesFor, type LiveReply } from "./live";
-import { AiMessage, AvatarStack, BotGreeting, Bubble, Dots, HandedOff, LiveReplyView, reducedMotion, type Offer } from "./messages";
+import {
+  AiMessage,
+  AvatarStack,
+  BotGreeting,
+  Bubble,
+  Dots,
+  HandedOff,
+  LiveReplyView,
+  reducedMotion,
+  type Offer,
+} from "./messages";
 import { primeSound } from "./sound";
 import { useStore, type State } from "./store";
 import type { BotIdentity, UiMessage, WidgetConfig, WidgetTopic } from "./types";
@@ -37,7 +47,8 @@ const typingReply = (ticket: string): LiveReply => ({
 const DEFAULT_BOT = readBot(null);
 const botOf = (cfg: WidgetConfig | null): BotIdentity => cfg?.bot ?? DEFAULT_BOT;
 const titleOf = (cfg: WidgetConfig | null) => cfg?.title || cfg?.brand?.name || cfg?.workspace_name || t("support");
-const subtitleOf = (cfg: WidgetConfig | null) => cfg?.subtitle || (cfg?.ai_answers ? t("replyTimeAi", { name: botOf(cfg).name }) : t("replyTime"));
+const subtitleOf = (cfg: WidgetConfig | null) =>
+  cfg?.subtitle || (cfg?.ai_answers ? t("replyTimeAi", { name: botOf(cfg).name }) : t("replyTime"));
 
 /** The theme attribute: forced light or dark, or "auto" (follows the system, or the preview's choice). */
 function themeOf(s: State): "light" | "dark" | "auto" {
@@ -97,7 +108,10 @@ export function App({ c }: { c: Controller }) {
       if (s.open && !wasOpen.current) {
         requestAnimationFrame(() => {
           const p = panel.current;
-          const el = p?.querySelector<HTMLElement>("textarea:not(:disabled)") ?? p?.querySelector<HTMLElement>(".primary:not(:disabled), .topic:not(:disabled)") ?? p?.querySelector<HTMLElement>("button");
+          const el =
+            p?.querySelector<HTMLElement>("textarea:not(:disabled)") ??
+            p?.querySelector<HTMLElement>(".primary:not(:disabled), .topic:not(:disabled)") ??
+            p?.querySelector<HTMLElement>("button");
           el?.focus({ preventScroll: true });
         });
       } else if (!s.open && wasOpen.current) launcher.current?.focus();
@@ -112,7 +126,11 @@ export function App({ c }: { c: Controller }) {
       return;
     }
     if (e.key !== "Tab" || !panel.current) return;
-    const items = Array.from(panel.current.querySelectorAll<HTMLElement>("button:not(:disabled), textarea:not(:disabled), input:not([hidden]), a[href]")).filter((el) => el.offsetParent !== null);
+    const items = Array.from(
+      panel.current.querySelectorAll<HTMLElement>(
+        "button:not(:disabled), textarea:not(:disabled), input:not([hidden]), a[href]",
+      ),
+    ).filter((el) => el.offsetParent !== null);
     if (!items.length) return;
     const root = panel.current.getRootNode() as ShadowRoot;
     const first = items[0];
@@ -132,7 +150,9 @@ export function App({ c }: { c: Controller }) {
     if (!all.length) return;
     const exts = cfg?.attachment_extensions;
     const bad = all.find((f) => fileProblem(f, exts));
-    setFileNote(bad ? t(fileProblem(bad, exts) === "size" ? "fileTooLarge" : "fileTypeRefused", { name: bad.name }) : "");
+    setFileNote(
+      bad ? t(fileProblem(bad, exts) === "size" ? "fileTooLarge" : "fileTypeRefused", { name: bad.name }) : "",
+    );
     if (s.view !== "thread") c.newConversation();
     const arr = all.filter((f) => !fileProblem(f, exts)).slice(0, 5);
     if (arr.length) setFiles((f) => [...f, ...arr].slice(0, 5));
@@ -150,7 +170,13 @@ export function App({ c }: { c: Controller }) {
     .join(" ");
 
   return (
-    <div class={rootClass} data-theme={themeOf(s)} dir={isRtl(s.lang) ? "rtl" : "ltr"} lang={current()} onPointerDown={() => cfg?.sound && primeSound()}>
+    <div
+      class={rootClass}
+      data-theme={themeOf(s)}
+      dir={isRtl(s.lang) ? "rtl" : "ltr"}
+      lang={current()}
+      onPointerDown={() => cfg?.sound && primeSound()}
+    >
       <div class="sr" aria-live="polite">
         {live}
       </div>
@@ -177,7 +203,18 @@ export function App({ c }: { c: Controller }) {
             addFiles(e.dataTransfer?.files ?? null);
           }}
         >
-          {s.view === "home" ? <Home c={c} /> : <Thread c={c} files={files} setFiles={setFiles} addFiles={addFiles} fileNote={fileNote} setFileNote={setFileNote} />}
+          {s.view === "home" ? (
+            <Home c={c} />
+          ) : (
+            <Thread
+              c={c}
+              files={files}
+              setFiles={setFiles}
+              addFiles={addFiles}
+              fileNote={fileNote}
+              setFileNote={setFileNote}
+            />
+          )}
           {drag && <div class="drop">{t("dropFiles")}</div>}
         </div>
       )}
@@ -191,7 +228,13 @@ export function App({ c }: { c: Controller }) {
           onClick={() => c.toggle()}
         >
           <span class="l-ic">
-            <span class="ic ic-open">{cfg.launcher_icon_url ? <img src={cfg.launcher_icon_url} alt="" referrerpolicy="no-referrer" /> : ChatIc(label ? 20 : 24)}</span>
+            <span class="ic ic-open">
+              {cfg.launcher_icon_url ? (
+                <img src={cfg.launcher_icon_url} alt="" referrerpolicy="no-referrer" />
+              ) : (
+                ChatIc(label ? 20 : 24)
+              )}
+            </span>
             <span class="ic ic-x">{X(label ? 18 : 22)}</span>
           </span>
           {label && (
@@ -218,7 +261,11 @@ function Teaser({ c, s }: { c: Controller; s: State }) {
   const text = (m.body_text || m.body_html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
   return (
     <div class="teaser" key={m.id}>
-      <button class="teaser-main" onClick={() => c.openTeaser()} aria-label={t("newMessage", { name: who, text: text.slice(0, 200) })}>
+      <button
+        class="teaser-main"
+        onClick={() => c.openTeaser()}
+        aria-label={t("newMessage", { name: who, text: text.slice(0, 200) })}
+      >
         <span class="teaser-who">{who}</span>
         <span class="teaser-text">{text || t("conversation")}</span>
       </button>
@@ -249,7 +296,11 @@ function Logo({ cfg }: { cfg: WidgetConfig | null }) {
   const name = titleOf(cfg);
   return (
     <span class="ws-glyph" aria-hidden="true">
-      {cfg?.avatar_url ? <img src={cfg.avatar_url} alt="" referrerpolicy="no-referrer" /> : name.charAt(0).toUpperCase()}
+      {cfg?.avatar_url ? (
+        <img src={cfg.avatar_url} alt="" referrerpolicy="no-referrer" />
+      ) : (
+        name.charAt(0).toUpperCase()
+      )}
     </span>
   );
 }
@@ -288,6 +339,7 @@ function Home({ c }: { c: Controller }) {
       </div>
       <div class="body">
         <div class="home-body">
+          {s.verify.merged !== null && <VerifyNotice c={c} s={s} />}
           {cfg?.open === false && !(s.error && !s.session) && <Away cfg={cfg} />}
           {s.error && !s.session ? (
             <div class="empty">
@@ -299,7 +351,12 @@ function Home({ c }: { c: Controller }) {
               <div class="card-h" id="od-topics-h">
                 {t("topicsTitle")}
               </div>
-              <Topics topics={topics} labelledBy="od-topics-h" disabled={!ready} onPick={(id) => c.newConversation(id)} />
+              <Topics
+                topics={topics}
+                labelledBy="od-topics-h"
+                disabled={!ready}
+                onPick={(id) => c.newConversation(id)}
+              />
             </div>
           ) : (
             <button class="primary start" disabled={!ready} onClick={() => c.newConversation()}>
@@ -312,7 +369,14 @@ function Home({ c }: { c: Controller }) {
           {suggestions.length > 0 && (
             <div class="suggest" role="group" aria-label={t("suggested")}>
               {suggestions.map((q, i) => (
-                <button key={q} class="sugg" style={{ "--i": i }} disabled={!ready} onClick={() => void c.startWith(q)} dir="auto">
+                <button
+                  key={q}
+                  class="sugg"
+                  style={{ "--i": i }}
+                  disabled={!ready}
+                  onClick={() => void c.startWith(q)}
+                  dir="auto"
+                >
                   {q}
                 </button>
               ))}
@@ -336,7 +400,9 @@ function Home({ c }: { c: Controller }) {
                       <span class={`conv-subject${v.unread ? " unread" : ""}`}>{v.subject || t("conversation")}</span>
                       <span class="time">{relTime(v.last_message_at)}</span>
                     </span>
-                    <span class="conv-prev">{s.typing[v.id] ? t("typing", { name: s.typing[v.id] }) : v.last_message_preview}</span>
+                    <span class="conv-prev">
+                      {s.typing[v.id] ? t("typing", { name: s.typing[v.id] }) : v.last_message_preview}
+                    </span>
                   </span>
                 </button>
               ))}
@@ -391,7 +457,12 @@ function Thread({
   const needsTopic = c.needsTopic();
   const topic = !s.active && s.topic ? cfg?.topics?.find((x) => x.id === s.topic) : undefined;
   const handed = !!s.active && (conv?.ai_handoff === true || s.handoff[s.active] === "done");
-  const handling = aiHandling({ aiAnswers: cfg?.ai_answers === true, conversation: conv, handedOff: handed, msgs: msgs ?? [] });
+  const handling = aiHandling({
+    aiAnswers: cfg?.ai_answers === true,
+    conversation: conv,
+    handedOff: handed,
+    msgs: msgs ?? [],
+  });
   const replies = s.active ? repliesFor(s.live, s.active) : [];
   const writing = replies.some((r) => r.phase !== "leaving");
   const composing = replies.some((r) => r.phase === "typing" || r.phase === "streaming");
@@ -400,7 +471,14 @@ function Thread({
   // The agent will answer the visitor's message: show it typing until its first live event.
   const last = msgs?.[msgs.length - 1];
   const decided = !!last?.ai_action && (last.ai_action.status !== "pending" || !!s.actions[last.ai_action.id]?.status);
-  const thinking = handling && !!last && since !== undefined && now - since < THINK_MS && !typing && !replies.length && (last.direction === "inbound" || decided);
+  const thinking =
+    handling &&
+    !!last &&
+    since !== undefined &&
+    now - since < THINK_MS &&
+    !typing &&
+    !replies.length &&
+    (last.direction === "inbound" || decided);
 
   useEffect(() => {
     if (since === undefined) return;
@@ -431,7 +509,14 @@ function Thread({
       prev.author.type === m.author.type &&
       prev.author.user?.id === m.author.user?.id &&
       Date.parse(m.created_at) - Date.parse(prev.created_at) < 5 * 60_000;
-    const offer: Offer = ai && s.active && m.id === latest?.id && handling && !writing && i === msgs!.length - 1 ? (s.handoff[s.active] === "failed" ? "failed" : s.handoff[s.active] === "pending" ? "pending" : "idle") : null;
+    const offer: Offer =
+      ai && s.active && m.id === latest?.id && handling && !writing && i === msgs!.length - 1
+        ? s.handoff[s.active] === "failed"
+          ? "failed"
+          : s.handoff[s.active] === "pending"
+            ? "pending"
+            : "idle"
+        : null;
     items.push(
       <Fragment key={m.id}>
         {newDay ? <div class="day">{dayLabel(m.created_at)}</div> : null}
@@ -448,7 +533,13 @@ function Thread({
             landed={m.id === landed}
           />
         ) : (
-          <Bubble m={m} me={me} grouped={grouped} brand={{ name: titleOf(cfg), avatar_url: cfg?.avatar_url || null }} onRetry={() => void c.retry(key, m.id)} />
+          <Bubble
+            m={m}
+            me={me}
+            grouped={grouped}
+            brand={{ name: titleOf(cfg), avatar_url: cfg?.avatar_url || null }}
+            onRetry={() => void c.retry(key, m.id)}
+          />
         )}
       </Fragment>,
     );
@@ -460,7 +551,10 @@ function Thread({
   const avatars = handling ? { bot, team: [] } : { bot: null, team: cfg?.team ?? [] };
   // The bot's greeting opens a new chat while the agent answers, and stays at the top of the conversations it took.
   const hello = cfg?.ai_answers && bot.greeting ? bot.greeting : "";
-  const opener = hello && (!s.active || handling || (msgs ?? []).some(isAiAnswer)) ? <BotGreeting key="greeting" bot={bot} text={hello} /> : null;
+  const opener =
+    hello && (!s.active || handling || (msgs ?? []).some(isAiAnswer)) ? (
+      <BotGreeting key="greeting" bot={bot} text={hello} />
+    ) : null;
 
   return (
     <>
@@ -468,17 +562,23 @@ function Thread({
         <button class="icon-btn flip" aria-label={t("back")} onClick={() => c.home()}>
           <Back />
         </button>
-        {avatars.bot || avatars.team.length > 0 ? <AvatarStack team={avatars.team} bot={avatars.bot} size={26} /> : <Logo cfg={cfg} />}
+        {avatars.bot || avatars.team.length > 0 ? (
+          <AvatarStack team={avatars.team} bot={avatars.bot} size={26} />
+        ) : (
+          <Logo cfg={cfg} />
+        )}
         <div class="head-main">
           <div class="title">{conv?.subject || (s.active ? t("conversation") : titleOf(cfg))}</div>
-          <div class="title-sub">{handling ? subtitleOf(cfg) : conv?.subject || s.active ? titleOf(cfg) : subtitleOf(cfg)}</div>
+          <div class="title-sub">
+            {handling ? subtitleOf(cfg) : conv?.subject || s.active ? titleOf(cfg) : subtitleOf(cfg)}
+          </div>
         </div>
         <button class="icon-btn" aria-label={t("closeChat")} onClick={() => c.close()}>
           {X()}
         </button>
       </div>
       <Scroller watch={`${key}:${msgs?.length ?? -1}:${items.length}:${needsTopic}:${!!s.queued}`}>
-        {needsEmail && <Capture c={c} />}
+        {needsEmail ? <Capture c={c} /> : <VerifyNotice c={c} s={s} />}
         {s.queued && (
           <div class="thread queued">
             <div class="row me is-pending">
@@ -511,7 +611,9 @@ function Thread({
           ) : cfg?.chat_welcome === false ? null : (
             <div class="empty">
               <b dir="auto">{greeting(cfg?.greeting)}</b>
-              <span class="intro" dir="auto">{cfg?.intro?.trim() || t("emptyHint")}</span>
+              <span class="intro" dir="auto">
+                {cfg?.intro?.trim() || t("emptyHint")}
+              </span>
             </div>
           )
         ) : items.length > 0 ? (
@@ -529,7 +631,17 @@ function Thread({
         )}
       </Scroller>
       {cfg?.open === false && <Away cfg={cfg} bar />}
-      <Composer c={c} files={files} setFiles={setFiles} addFiles={addFiles} fileNote={fileNote} setFileNote={setFileNote} disabled={needsEmail || needsTopic || !s.session} hint={needsEmail ? t("placeholderEmail") : needsTopic ? t("placeholderTopic") : undefined} focusOn={s.preview || s.active ? null : s.topic} />
+      <Composer
+        c={c}
+        files={files}
+        setFiles={setFiles}
+        addFiles={addFiles}
+        fileNote={fileNote}
+        setFileNote={setFileNote}
+        disabled={needsEmail || needsTopic || !s.session}
+        hint={needsEmail ? t("placeholderEmail") : needsTopic ? t("placeholderTopic") : undefined}
+        focusOn={s.preview || s.active ? null : s.topic}
+      />
     </>
   );
 }
@@ -561,18 +673,31 @@ function useLanded(key: string, msgs: UiMessage[] | undefined): string | null {
 // ── Topics and closed hours ──────────────────────────────────────────────────
 
 /** The widget's topics as one list of buttons: Tab reaches each, arrow keys move between them. */
-function Topics({ topics, onPick, disabled, labelledBy }: { topics: WidgetTopic[]; onPick: (id: string) => void; disabled?: boolean; labelledBy: string }) {
+function Topics({
+  topics,
+  onPick,
+  disabled,
+  labelledBy,
+}: {
+  topics: WidgetTopic[];
+  onPick: (id: string) => void;
+  disabled?: boolean;
+  labelledBy: string;
+}) {
   const onKeyDown = (e: KeyboardEvent) => {
     const keys: Record<string, number> = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
     if (!(e.key in keys) && e.key !== "Home" && e.key !== "End") return;
-    const list = Array.from((e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
+    const list = Array.from(
+      (e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>("button:not(:disabled)"),
+    );
     const at = list.indexOf(e.target as HTMLButtonElement);
     if (at < 0 || !list.length) return;
     e.preventDefault();
     const dir = keys[e.key] ?? 0;
     // In a right-to-left layout, left and right swap; up and down don't.
     const flip = (e.key === "ArrowLeft" || e.key === "ArrowRight") && isRtl() ? -1 : 1;
-    const next = e.key === "Home" ? 0 : e.key === "End" ? list.length - 1 : (at + dir * flip + list.length) % list.length;
+    const next =
+      e.key === "Home" ? 0 : e.key === "End" ? list.length - 1 : (at + dir * flip + list.length) % list.length;
     list[next].focus();
   };
   return (
@@ -596,7 +721,9 @@ function TopicPicker({ c }: { c: Controller }) {
   // Keyboard users land on the first topic (never in the dashboard preview).
   useEffect(() => {
     if (s.preview) return;
-    const id = requestAnimationFrame(() => box.current?.querySelector<HTMLButtonElement>(".topic:not(:disabled)")?.focus({ preventScroll: true }));
+    const id = requestAnimationFrame(() =>
+      box.current?.querySelector<HTMLButtonElement>(".topic:not(:disabled)")?.focus({ preventScroll: true }),
+    );
     return () => cancelAnimationFrame(id);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
@@ -604,7 +731,12 @@ function TopicPicker({ c }: { c: Controller }) {
       <b id="od-pick-h">{t("topicsTitle")}</b>
       <p>{t("topicsHint")}</p>
       <div class="card">
-        <Topics topics={s.config?.topics ?? []} labelledBy="od-pick-h" disabled={!s.session} onPick={(id) => void c.pickTopic(id)} />
+        <Topics
+          topics={s.config?.topics ?? []}
+          labelledBy="od-pick-h"
+          disabled={!s.session}
+          onPick={(id) => void c.pickTopic(id)}
+        />
       </div>
     </div>
   );
@@ -640,7 +772,8 @@ function Scroller({ watch, children }: { watch: string; children: ComponentChild
   const toBottom = (smooth: boolean) => {
     const e = el.current;
     if (!e) return;
-    if (smooth && !reducedMotion() && typeof e.scrollTo === "function") e.scrollTo({ top: e.scrollHeight, behavior: "smooth" });
+    if (smooth && !reducedMotion() && typeof e.scrollTo === "function")
+      e.scrollTo({ top: e.scrollHeight, behavior: "smooth" });
     else e.scrollTop = e.scrollHeight;
   };
 
@@ -716,13 +849,116 @@ function Capture({ c }: { c: Controller }) {
   return (
     <form class="capture" onSubmit={submit}>
       <p>{t("captureHint")}</p>
-      <input class="field" placeholder={t("name")} aria-label={t("name")} value={name} onInput={(e) => setName(e.currentTarget.value)} autocomplete="name" />
-      <input class="field" type="email" placeholder={t("emailPlaceholder")} aria-label={t("email")} dir="ltr" value={email} onInput={(e) => setEmail(e.currentTarget.value)} autocomplete="email" required />
+      <input
+        class="field"
+        placeholder={t("name")}
+        aria-label={t("name")}
+        value={name}
+        onInput={(e) => setName(e.currentTarget.value)}
+        autocomplete="name"
+      />
+      <input
+        class="field"
+        type="email"
+        placeholder={t("emailPlaceholder")}
+        aria-label={t("email")}
+        dir="ltr"
+        value={email}
+        onInput={(e) => setEmail(e.currentTarget.value)}
+        autocomplete="email"
+        required
+      />
       {err && <div class="err">{err}</div>}
       <button class="primary" type="submit" disabled={busy} style={{ height: "36px" }}>
         {busy ? t("saving") : t("continue")}
       </button>
     </form>
+  );
+}
+
+// ── Verification ─────────────────────────────────────────────────────────────
+
+/**
+ * After the email form: a link went to the address the visitor gave, and the chat goes on while
+ * they have not opened it (contracts/api.md "Contact verification"). Resending waits for the
+ * API's resend_at. Once they verify (contact.verified), the notice says so.
+ */
+function VerifyNotice({ c, s }: { c: Controller; s: State }) {
+  const v = s.session?.verification;
+  const ui = s.verify;
+  const [now, setNow] = useState(Date.now());
+  const resendAt = v?.resend_at ? Date.parse(v.resend_at) : 0;
+  useEffect(() => {
+    const left = resendAt - Date.now();
+    if (left <= 0) return;
+    const id = setTimeout(() => setNow(Date.now()), left + 50);
+    return () => clearTimeout(id);
+  }, [resendAt]);
+  if (ui.closed || s.preview) return null;
+  const close = (
+    <button class="icon-btn verify-x" aria-label={t("dismiss")} onClick={() => c.closeVerifyNotice()}>
+      {X(13)}
+    </button>
+  );
+  // Verified, and their chat went to the account that has the address: this widget starts over.
+  if (ui.merged !== null)
+    return (
+      <div class="verify ok merged" role="status" data-testid="verify-merged">
+        <span class="verify-ic" aria-hidden="true">
+          {Check(13)}
+        </span>
+        <span class="verify-text">
+          <b>{t("verifiedNow")}</b>
+          <span dir="auto">{t("verifiedMerged", { email: ui.merged })}</span>
+        </span>
+        {close}
+      </div>
+    );
+  if (v?.status === "verified")
+    return ui.verifiedNow ? (
+      <div class="verify ok" role="status" data-testid="verify-done">
+        <span class="verify-ic" aria-hidden="true">
+          {Check(13)}
+        </span>
+        <span class="verify-text">
+          <b>{t("verifiedNow")}</b>
+        </span>
+        {close}
+      </div>
+    ) : null;
+  if (v?.status !== "unverified" || (!v.sent_at && !ui.note)) return null;
+  const sent = !!v.sent_at;
+  const wait = resendAt > Math.max(now, Date.now());
+  const note =
+    ui.note === "resent"
+      ? t("verifyResent")
+      : ui.note === "wait"
+        ? t("verifyWait")
+        : ui.note === "failed"
+          ? t("verifyFailed")
+          : null;
+  return (
+    <div class="verify" role="status" data-testid="verify-notice">
+      <span class="verify-ic" aria-hidden="true">
+        {MailIc(14)}
+      </span>
+      <div class="verify-text">
+        <b>{sent ? t("verifyThanks") : t("verifyNotSent")}</b>
+        {sent && <span dir="auto">{t("verifySent", { email: v.email ?? "" })}</span>}
+        <div class="verify-row">
+          <button
+            class="btn ghost"
+            disabled={ui.busy || wait}
+            aria-busy={ui.busy ? "true" : undefined}
+            onClick={() => void c.requestVerification(sent)}
+          >
+            {sent ? t("verifyResend") : t("verifySend")}
+          </button>
+          {note && <span class={ui.note === "resent" ? "verify-note is-ok" : "verify-note"}>{note}</span>}
+        </div>
+      </div>
+      {close}
+    </div>
   );
 }
 
@@ -817,7 +1053,10 @@ function Composer({
             <span class="chip" key={`${f.name}-${i}`}>
               <FileIc />
               <span>{f.name}</span>
-              <button aria-label={t("removeFile", { name: f.name })} onClick={() => setFiles(files.filter((_, j) => j !== i))}>
+              <button
+                aria-label={t("removeFile", { name: f.name })}
+                onClick={() => setFiles(files.filter((_, j) => j !== i))}
+              >
                 {X(12)}
               </button>
             </span>
@@ -838,7 +1077,12 @@ function Composer({
                 e.currentTarget.value = "";
               }}
             />
-            <button class="icon-btn" aria-label={t("attach")} disabled={disabled} onClick={() => picker.current?.click()}>
+            <button
+              class="icon-btn"
+              aria-label={t("attach")}
+              disabled={disabled}
+              onClick={() => picker.current?.click()}
+            >
               <Clip />
             </button>
           </>
@@ -906,7 +1150,12 @@ function Composer({
         ) : (
           mic &&
           !voice && (
-            <button class="icon-btn" aria-label={t("recordVoice")} disabled={disabled || recorder.phase === "asking"} onClick={() => void recorder.start()}>
+            <button
+              class="icon-btn"
+              aria-label={t("recordVoice")}
+              disabled={disabled || recorder.phase === "asking"}
+              onClick={() => void recorder.start()}
+            >
               <Mic />
             </button>
           )

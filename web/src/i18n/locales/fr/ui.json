@@ -72,6 +72,25 @@
   "quote": "Citation",
   "codeBlock": "Bloc de code",
   "image": "Image",
+  "signatureImage": {
+    "title": "Ajouter une image",
+    "editTitle": "Image",
+    "choose": "Choisir une image",
+    "replace": "Remplacer l’image",
+    "uploading": "Envoi…",
+    "uploadFailed": "L’image n’a pas pu être envoyée.",
+    "formats": "PNG, JPEG, GIF ou WebP, 5 Mo maximum. Toute personne qui reçoit la signature peut la voir.",
+    "file": "Fichier image",
+    "alt": "Description",
+    "altHint": "Affichée à la place de l’image quand la messagerie bloque les images, et lue par les lecteurs d’écran.",
+    "altPlaceholder": "Logo de l’entreprise",
+    "size": "Taille",
+    "small": "Petite",
+    "medium": "Moyenne",
+    "large": "Grande",
+    "original": "Originale",
+    "current": "Actuelle"
+  },
   "link": "Lien",
   "linkAddress": "Adresse du lien",
   "searchCompanies": "Rechercher des entreprises",
@@ -206,5 +225,18 @@
     "automations": "Automatisations",
     "slaPolicies": "Politiques SLA",
     "teams": "Équipes"
+  },
+  "attachments": {
+    "preview": "Aperçu de {{name}}",
+    "download": "Télécharger {{name}}",
+    "downloadShort": "Télécharger",
+    "position": "{{n}} sur {{total}}",
+    "previous": "Fichier précédent",
+    "next": "Fichier suivant",
+    "loading": "Chargement de l’aperçu",
+    "failed": "Impossible de charger l’aperçu. Téléchargez le fichier pour l’ouvrir.",
+    "refused": "Ce fichier ne peut pas être affiché ici. Téléchargez-le pour l’ouvrir sur votre appareil.",
+    "tooLarge": "Ce fichier est trop volumineux pour l’aperçu. Téléchargez-le pour l’ouvrir.",
+    "noViewer": "Les PDF ne peuvent pas être affichés dans cette app. Téléchargez le fichier pour l’ouvrir."
   }
 }

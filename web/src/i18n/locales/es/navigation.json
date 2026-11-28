@@ -93,7 +93,8 @@
     "wikiTrash": "Papelera",
     "pages": "Páginas",
     "pagesPage": "Página",
-    "pagesSettings": "Páginas"
+    "pagesSettings": "Páginas",
+    "whatsapp": "WhatsApp"
   },
   "folders": {
     "unassigned": "Sin asignar",
@@ -101,7 +102,8 @@
     "open": "Todos los abiertos",
     "pending": "Pendientes",
     "solved": "Resueltos",
-    "spam": "Spam"
+    "spam": "Spam",
+    "all": "Todos los tickets"
   },
   "groups": {
     "account": "Cuenta",
@@ -156,7 +158,8 @@
     "auditLog": "Registro de auditoría",
     "trash": "Papelera",
     "phone": "Teléfono",
-    "pages": "Páginas"
+    "pages": "Páginas",
+    "whatsapp": "WhatsApp"
   },
   "settingsPage": "Página de ajustes",
   "command": {
@@ -197,7 +200,9 @@
     "docs": "Documentación",
     "searchSettings": "Buscar en los ajustes",
     "settingsNoResults": "Ningún ajuste coincide",
-    "settingsNoResultsHelp": "Prueba con otras palabras o busca en la documentación desde el menú de comandos."
+    "settingsNoResultsHelp": "Prueba con otras palabras o busca en la documentación desde el menú de comandos.",
+    "seeAll": "Ver todos los tickets de «{{query}}»",
+    "followUp": "Seguimiento"
   },
   "shortcuts": {
     "general": "General",

@@ -39,7 +39,7 @@ import { sameJSON } from "@/lib/sameJSON";
 type DisplaySettings = { status_labels?: Overrides<TicketStatus>; priority_labels?: Overrides<Priority>; send_and_finish_button?: boolean; severity_enabled?: boolean };
 type Draft = {
   name: string;
-  settings: Required<Pick<WS, "tickets_enabled" | "mail_enabled" | "pages_enabled" | "timezone" | "help_center_enabled" | "help_center_title" | "csat_enabled" | "gravatar" | "domain_logos" | "undo_send_seconds" | "undo_send_chat_seconds" | "message_delete" | "collab_ticket_replies" | "collab_ticket_reply_to" | "agent_online_time" | "snooze_presets" | "ticket_number_in_subject">> & {
+  settings: Required<Pick<WS, "tickets_enabled" | "mail_enabled" | "pages_enabled" | "timezone" | "help_center_enabled" | "help_center_title" | "csat_enabled" | "gravatar" | "domain_logos" | "undo_send_seconds" | "undo_send_chat_seconds" | "message_delete" | "collab_ticket_replies" | "collab_ticket_reply_to" | "agent_online_time" | "reports_team_members" | "snooze_presets" | "ticket_number_in_subject">> & {
     brand_color: string;
     locale: string;
     locale_fixed: boolean;
@@ -76,6 +76,7 @@ function toDraft(w: Workspace): Draft {
       collab_ticket_replies: w.settings.collab_ticket_replies ?? true,
       collab_ticket_reply_to: w.settings.collab_ticket_reply_to ?? "address",
       agent_online_time: w.settings.agent_online_time ?? true,
+      reports_team_members: w.settings.reports_team_members ?? false,
       ticket_number_in_subject: w.settings.ticket_number_in_subject ?? true,
       snooze_presets: [...snoozePresets(w.settings)],
     },
@@ -157,6 +158,8 @@ export default function WorkspaceSettings() {
       void qc.invalidateQueries({ queryKey: qk.collabStatus });
       // Tickets turned back on: the counts read while it was off are all zero.
       void qc.invalidateQueries({ queryKey: qk.counts });
+      // Counting a team by its people, and online time, change what the reports answer.
+      void qc.invalidateQueries({ queryKey: qk.reportsAll });
       toast.success(t("workspace.saved"));
     },
   });
@@ -420,6 +423,14 @@ export default function WorkspaceSettings() {
               aria-label={t("workspace.onlineTime")}
               checked={draft.settings.agent_online_time}
               onCheckedChange={(v) => set("agent_online_time", v)}
+              disabled={!canEdit}
+            />
+          </Row>
+          <Row label={t("workspace.teamMembers")} description={draft.settings.reports_team_members ? t("workspace.teamMembersOn") : t("workspace.teamMembersOff")}>
+            <Switch
+              aria-label={t("workspace.teamMembers")}
+              checked={draft.settings.reports_team_members}
+              onCheckedChange={(v) => set("reports_team_members", v)}
               disabled={!canEdit}
             />
           </Row>

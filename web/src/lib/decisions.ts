@@ -35,6 +35,8 @@ export function aiDecisions(t: Pick<Ticket, "custom"> | null | undefined): AIDec
   };
 }
 
+const isSuggestReason = (r: unknown): r is NonNullable<Suggestion["reason"]> => r === "below_threshold" || r === "field_off" || r === "not_on_team";
+
 export const SUGGESTION_FIELDS: SuggestionField[] = ["severity", "priority", "team", "labels", "spam"];
 
 /** custom.ai_suggestions, in display order, dropping anything malformed. */
@@ -52,7 +54,7 @@ export function aiSuggestions(t: Pick<Ticket, "custom"> | null | undefined): [Su
       : f === "severity" ? isSeverity(value)
       : typeof value === "string" && value !== "";
     if (!ok) continue;
-    out.push([f, { value: value as Suggestion["value"], confidence: num(v.confidence), probability: num(v.probability), model: typeof v.model === "string" ? v.model : "", decided_at: typeof v.decided_at === "string" ? v.decided_at : "" }]);
+    out.push([f, { value: value as Suggestion["value"], confidence: num(v.confidence), probability: num(v.probability), model: typeof v.model === "string" ? v.model : "", decided_at: typeof v.decided_at === "string" ? v.decided_at : "", ...(isSuggestReason(v.reason) ? { reason: v.reason } : {}) }]);
   }
   return out;
 }
@@ -70,8 +72,9 @@ export function withoutSuggestion<T extends Pick<Ticket, "custom">>(t: T, field:
 export const pct = (v: number | null | undefined) => (v == null ? null : Math.round(Math.max(0, Math.min(1, v)) * 100));
 
 /** What to say about one AI-set value: how sure, and whether Jev decided it. */
-export function decisionNote(d: AIDecisions | null, field: DecisionField): { sure: number | null; jev: boolean } | null {
+export function decisionNote(d: AIDecisions | null, field: DecisionField): { sure: number | null; jev: boolean; threshold: number | null } | null {
   const f = d?.fields[field];
   if (!d || !f) return null;
-  return { sure: d.engine === "jev" ? pct(f.confidence) : null, jev: d.engine === "jev" };
+  const jev = d.engine === "jev";
+  return { sure: jev ? pct(f.confidence) : null, jev, threshold: jev && f.confidence != null ? pct(d.threshold) : null };
 }

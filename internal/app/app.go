@@ -61,6 +61,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/supportchannels"
 	"github.com/useopendesk/opendesk/internal/version"
 	"github.com/useopendesk/opendesk/internal/webui"
+	"github.com/useopendesk/opendesk/internal/whatsapp"
 )
 
 type area struct {
@@ -79,6 +80,7 @@ var areas = []area{
 	{integrations.Register, integrations.RegisterWorkers, integrations.Periodic, integrations.Background},
 	{supportchannels.Register, supportchannels.RegisterWorkers, supportchannels.Periodic, supportchannels.Background},
 	{phone.Register, phone.RegisterWorkers, phone.Periodic, phone.Background},
+	{whatsapp.Register, whatsapp.RegisterWorkers, whatsapp.Periodic, whatsapp.Background},
 	{assistant.Register, assistant.RegisterWorkers, assistant.Periodic, assistant.Background},
 	{knowledge.Register, knowledge.RegisterWorkers, knowledge.Periodic, knowledge.Background},
 	{bots.Register, bots.RegisterWorkers, bots.Periodic, bots.Background},
@@ -292,9 +294,12 @@ func webCSP(cfg *config.Config) string {
 		"script-src 'self' https://challenges.cloudflare.com",
 		"style-src 'self' 'unsafe-inline'",
 		"img-src 'self' data: blob: https:",
+		// A call's recording is fetched with the session and played from a blob.
+		"media-src 'self' blob:",
 		"font-src 'self' data:",
 		"connect-src " + strings.Join(connect, " "),
-		"frame-src https://challenges.cloudflare.com " + strings.Join(embedFrameSources, " "),
+		// blob: is the attachment preview's PDF, made by the app from bytes it checked.
+		"frame-src https://challenges.cloudflare.com blob: " + strings.Join(embedFrameSources, " "),
 		"frame-ancestors 'none'",
 		"base-uri 'self'",
 		"form-action 'self'",

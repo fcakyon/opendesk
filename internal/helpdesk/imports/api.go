@@ -26,6 +26,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
+	"github.com/useopendesk/opendesk/internal/helpdesk/imports/csvfile"
 	"github.com/useopendesk/opendesk/internal/helpdesk/imports/source"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/ids"
@@ -96,7 +97,7 @@ type importUploadForm struct {
 	File huma.FormFile `form:"file" required:"true" doc:"A .csv file, at most 50 MB"`
 }
 
-const maxUploadBody = maxCSVBytes + 1<<20
+const maxUploadBody = csvfile.MaxBytes + 1<<20
 
 func limitBody(api huma.API) func(huma.Context, func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
@@ -355,24 +356,24 @@ func auditData(x row) map[string]any {
 // upload stores a CSV file after reading it once, so a file that cannot be imported is
 // refused before it is kept.
 func (s *Service) upload(ctx context.Context, p *auth.Principal, f huma.FormFile) (ImportCSVUpload, error) {
-	if f.Size > maxCSVBytes {
+	if f.Size > csvfile.MaxBytes {
 		return ImportCSVUpload{}, httpx.E(http.StatusRequestEntityTooLarge, "too_large", "CSV files can be at most 50 MB.")
 	}
 	filename := hd.CleanFilename(f.Filename)
 	if ext := strings.ToLower(filepath.Ext(filename)); ext != ".csv" && ext != ".tsv" && ext != ".txt" {
 		return ImportCSVUpload{}, httpx.E(http.StatusUnprocessableEntity, "file_type_refused", "Upload a .csv file. Spreadsheets can save one with File, then Download or Export, as CSV.")
 	}
-	raw, err := io.ReadAll(io.LimitReader(f.File, maxCSVBytes+1))
+	raw, err := io.ReadAll(io.LimitReader(f.File, csvfile.MaxBytes+1))
 	if err != nil {
 		return ImportCSVUpload{}, err
 	}
-	if len(raw) > maxCSVBytes {
+	if len(raw) > csvfile.MaxBytes {
 		return ImportCSVUpload{}, httpx.E(http.StatusRequestEntityTooLarge, "too_large", "CSV files can be at most 50 MB.")
 	}
 	if len(raw) == 0 {
 		return ImportCSVUpload{}, httpx.Validation("the file is empty")
 	}
-	parsed, err := parseCSV(raw)
+	parsed, err := csvfile.Parse(raw)
 	if err != nil {
 		return ImportCSVUpload{}, httpx.E(http.StatusUnprocessableEntity, "csv_unreadable", err.Error())
 	}
@@ -418,7 +419,7 @@ type upload struct {
 }
 
 // loadUpload reads a workspace's upload and parses it.
-func (s *Service) loadUpload(ctx context.Context, wid, id uuid.UUID) (upload, *csvFile, error) {
+func (s *Service) loadUpload(ctx context.Context, wid, id uuid.UUID) (upload, *csvfile.File, error) {
 	up := upload{id: id}
 	err := s.d.DB.Pool.QueryRow(ctx, `SELECT storage_key, filename, sha256 FROM import_uploads WHERE workspace_id = $1 AND id = $2`, wid, id).
 		Scan(&up.key, &up.filename, &up.sha)
@@ -562,7 +563,7 @@ func (s *Service) create(ctx context.Context, p *auth.Principal, in importCreate
 		if in.UploadID == nil {
 			return Import{}, httpx.Validation("upload_id is required for a CSV file")
 		}
-		var f *csvFile
+		var f *csvfile.File
 		if up, f, err = s.loadUpload(ctx, wid, *in.UploadID); err != nil {
 			return Import{}, err
 		}

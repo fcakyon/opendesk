@@ -72,6 +72,25 @@
   "quote": "Cita",
   "codeBlock": "Bloque de código",
   "image": "Imagen",
+  "signatureImage": {
+    "title": "Añadir una imagen",
+    "editTitle": "Imagen",
+    "choose": "Elegir una imagen",
+    "replace": "Reemplazar la imagen",
+    "uploading": "Subiendo…",
+    "uploadFailed": "No se pudo subir la imagen.",
+    "formats": "PNG, JPEG, GIF o WebP, 5 MB como máximo. Cualquiera que reciba la firma puede verla.",
+    "file": "Archivo de imagen",
+    "alt": "Descripción",
+    "altHint": "Se muestra en lugar de la imagen cuando el programa de correo bloquea las imágenes, y la leen los lectores de pantalla.",
+    "altPlaceholder": "Logo de la empresa",
+    "size": "Tamaño",
+    "small": "Pequeña",
+    "medium": "Mediana",
+    "large": "Grande",
+    "original": "Original",
+    "current": "Actual"
+  },
   "link": "Enlace",
   "linkAddress": "Dirección del enlace",
   "searchCompanies": "Buscar empresas",
@@ -206,5 +225,18 @@
     "automations": "Automatizaciones",
     "slaPolicies": "Políticas de SLA",
     "teams": "Equipos"
+  },
+  "attachments": {
+    "preview": "Vista previa de {{name}}",
+    "download": "Descargar {{name}}",
+    "downloadShort": "Descargar",
+    "position": "{{n}} de {{total}}",
+    "previous": "Archivo anterior",
+    "next": "Archivo siguiente",
+    "loading": "Cargando vista previa",
+    "failed": "No se pudo cargar la vista previa. Descarga el archivo para abrirlo.",
+    "refused": "Este archivo no se puede mostrar aquí. Descárgalo para abrirlo en tu dispositivo.",
+    "tooLarge": "Este archivo es demasiado grande para la vista previa. Descárgalo para abrirlo.",
+    "noViewer": "Los PDF no se pueden mostrar en esta app. Descarga el archivo para abrirlo."
   }
 }

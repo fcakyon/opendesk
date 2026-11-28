@@ -13,6 +13,7 @@ import (
 
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
+	"github.com/useopendesk/opendesk/internal/helpdesk/imports/csvfile"
 	"github.com/useopendesk/opendesk/internal/helpdesk/imports/source"
 	"github.com/useopendesk/opendesk/internal/jobs"
 )
@@ -85,17 +86,17 @@ func (e uploadReadError) Error() string { return "read upload: " + e.err.Error()
 func (e uploadReadError) Unwrap() error { return e.err }
 
 // readCSV reads and parses an upload. Only a parse error's text is for people.
-func (s *Service) readCSV(ctx context.Context, key string) (*csvFile, error) {
+func (s *Service) readCSV(ctx context.Context, key string) (*csvfile.File, error) {
 	rc, err := s.d.Storage.Get(ctx, key)
 	if err != nil {
 		return nil, uploadReadError{err}
 	}
 	defer rc.Close()
-	raw, err := io.ReadAll(io.LimitReader(rc, maxCSVBytes+1))
+	raw, err := io.ReadAll(io.LimitReader(rc, csvfile.MaxBytes+1))
 	if err != nil {
 		return nil, uploadReadError{err}
 	}
-	return parseCSV(raw)
+	return csvfile.Parse(raw)
 }
 
 // run works on an import until it is done, stopped, waiting or out of budget.

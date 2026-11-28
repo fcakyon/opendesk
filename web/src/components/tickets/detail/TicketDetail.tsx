@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, CircleCheck, CircleDot, Signal, Copy, GitMerge, History, MoreHorizontal, PanelRight, Printer, RotateCcw, ShieldAlert, ShieldCheck, Trash2, UserRound, Users, X, MessageSquare, MessagesSquare, StickyNote } from "lucide-react";
+import { ChevronDown, ChevronUp, CircleCheck, CircleDot, ClipboardCopy, Signal, Copy, GitMerge, History, MoreHorizontal, PanelRight, Printer, RotateCcw, ShieldAlert, ShieldCheck, Trash2, UserRound, Users, X, MessageSquare, MessagesSquare, StickyNote } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { tone } from "@/lib/tones";
@@ -46,11 +46,14 @@ import { Composer, type ComposerHandle } from "./Composer";
 import { TicketProperties, TicketPropertiesBar, type PropPicker } from "./TicketProperties";
 import { useTicketPropertiesPlace } from "@/lib/ticketPropertiesPlace";
 import { MergeDialog } from "./MergeDialog";
+import { FollowUpOf } from "./FollowUpOf";
 import { PrintDialog } from "./PrintDialog";
+import { useCopyForAgent } from "./copyForAgent";
 import { TicketTeamChips, useTeamsCtx } from "../teams";
 import { SnoozeMenu } from "./SnoozeMenu";
 import { readPanel, savePanel } from "./panel";
 import { useVisitorPresence, VisitorPresenceBar } from "./VisitorPresence";
+import { useChatVerification } from "@/components/contacts/VerificationBadge";
 
 const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
@@ -177,6 +180,7 @@ export default function TicketDetail({
   const { data: ticketFields } = useTicketFields();
   const reduced = useReducedMotion();
   const t = ticket.data;
+  const forAgent = useCopyForAgent(t);
   const teamsCtx = useTeamsCtx();
   useDocumentTitle(t ? `#${t.number} ${t.subject}` : null);
   usePageCrumb(t ? `#${t.number}` : null);
@@ -375,6 +379,7 @@ export default function TicketDetail({
               <TicketNumber n={t.number} className="shrink-0" />
               <SubjectEditor value={t.subject} disabled={!canEdit} onSave={(subject) => update.mutate({ id: t.id, patch: { subject } })} />
               <HeaderPills t={t} bar={bar} />
+              <FollowUpOf ticket={t} />
             </>
           ) : (
             <Skeleton className="h-3 w-64" />
@@ -448,6 +453,9 @@ export default function TicketDetail({
                 >
                   {tr("props.copyLink")}
                 </MenuItem>
+                <MenuItem icon={<ClipboardCopy />} disabled={!messages.data || !forAgent} onSelect={() => messages.data && forAgent?.ticket(messages.data)}>
+                  {tr("detail.copyForAgent")}
+                </MenuItem>
                 <MenuItem icon={<History />} onSelect={() => setTicketHistoryShown(!historyShown)}>
                   {historyShown ? tr("detail.hideHistory") : tr("detail.showHistory")}
                 </MenuItem>
@@ -496,6 +504,7 @@ export default function TicketDetail({
             onRetry={(m) => composer.current?.retry(m)}
             onToReply={canEdit ? (m) => composer.current?.fromNote(m) : undefined}
             onForward={canEdit ? (m) => composer.current?.forward(m) : undefined}
+            onCopyForAgent={forAgent?.message}
             onRetract={canEdit && t?.channel === "chat" ? retract : undefined}
             contactName={t?.contact?.name}
             receivedAt={t && t.channel !== "email" ? null : t?.received_at}
@@ -626,5 +635,5 @@ function HeaderSeverity({ t }: { t: Ticket }) {
 
 /** Whether a chat's visitor is on the page, above the conversation. */
 function ChatPresence({ ticket }: { ticket: Ticket }) {
-  return <VisitorPresenceBar p={useVisitorPresence(ticket)} />;
+  return <VisitorPresenceBar p={useVisitorPresence(ticket)} verification={useChatVerification(ticket)} />;
 }

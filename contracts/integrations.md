@@ -160,7 +160,8 @@ Activities: `linked{link_id, url, title, provider}`, `unlinked{url, title, provi
 ## Ticket panels (`internal/integrations/panels`)
 
 A ticket panel shows, beside the ticket, what another product knows about the ticket's
-contact: read-only, fetched when the ticket is open, never blocking it. It is not an MCP
+contact: fetched when the ticket is open, never blocking it. A panel from a URL may also offer
+actions ("Actions"); everything else about a panel is read-only. It is not an MCP
 connection and gives Ollie no tool. Two kinds:
 
 - `shopify`: the contact's customer and last orders in a Shopify store, found by the
@@ -288,7 +289,7 @@ into the same section.
 panel's secret: the scheme of outgoing webhooks (`contracts/events.md`), verified the same way.
 
 ```json
-{ "panel_id": "…", "workspace_id": "…", "refresh": false, "locale": "fr",
+{ "event": "lookup", "panel_id": "…", "workspace_id": "…", "refresh": false, "locale": "fr",
   "ticket": { "id": "…", "number": 1042, "subject": "Where is my order S00042?",
               "references": ["S00042", "INV/2026/00012"] },
   "contact": { "id": "…", "email": "ada@example.com", "name": "Ada Buyer",
@@ -329,7 +330,8 @@ type Block =
       lines?: Line[]; footer?: Field[] }
   | { type: "fields"; title?: string; items: Field[] }
   | { type: "list"; title?: string; items: { title: string; url?: string; subtitle?: string; value?: Value; badge?: Badge; links?: Link[] }[] }
-  | { type: "note"; text: string; tone?: Tone };
+  | { type: "note"; text: string; tone?: Tone }
+  | { type: "actions"; items: Action[] /* at most 4, "Actions" */ };
 interface Field { label: string; value: Value; url?: string }
 interface Link { label: string /* the button's name and tooltip */; url: string /* https */; icon?: LinkIcon }
 type LinkIcon = "external-link" | "store" | "shopping-cart" | "receipt" | "file-text" | "truck" | "package" | "user"
@@ -408,6 +410,62 @@ type Value = string | number | boolean
   { "type": "note", "text": "No open invoice." } ] }
 ```
 
+### Actions
+
+An `actions` block shows buttons the panel's own URL offers. Pressing one sends a signed request
+back to the URL, which does what it does (creates an invoice, updates a CRM record) and answers in
+a sentence. OpenDesk learns no product, and no script of the workspace's runs in the app.
+
+```ts
+interface Action { id: string /* 1 to 64 of letters, digits and _ . : -, unique in the answer */; label: string /* 40 */;
+  tone?: "neutral" | "danger"; confirm?: string /* 200: the agent confirms this sentence first */;
+  inputs?: Input[] /* at most 4: a small form filled in first */ }
+interface Input { name: string /* a-z then a-z, digits, _; 32 */; label: string /* 40 */; type: "text" | "textarea" | "select";
+  required?: boolean; placeholder?: string; default?: string; max_length?: number /* text, textarea: up to 500 */;
+  options?: { value: string /* 100 */; label?: string /* 40 */ }[] /* select: 1 to 20 */ }
+```
+
+- An action that does not read is left out, never the answer: an id that is not valid or repeats one
+  already in the answer, no label, an input with an invalid name, a type this version does not know,
+  a select without options, a duplicate name, or more than 4 inputs (a form that did not read would
+  send something the agent never filled in).
+- `POST /v1/tickets/{id}/panels/{panelId}/actions` `{action, inputs?, locale?}` → `ActionResult`
+  `{ok, message, tone, data?}`. A signed-in agent (`tickets:write`): an API key or an AI client is `403`,
+  because the URL is told who pressed the button. The ticket must be visible to the caller; a missing
+  or disabled panel, or another workspace's, is `404`; a Shopify panel is `422`.
+- The action must be one the panel's **current answer** offers for this ticket (the cached copy or a
+  new lookup), else `409 action_unavailable` ("The panel no longer offers this action"): a request is
+  never trusted to name an action. `inputs` must match the form: no input the form lacks, every
+  required one filled (trimmed), a select's value one of its options, a text within `max_length`, no
+  control characters (a textarea may have line breaks); otherwise `422` and nothing is sent.
+  At most 60 actions a minute per panel and 20 per person (`429`).
+- The request is the lookup's (`POST <url>`, `OD-Signature: t=<unix>,v1=<hex>` over `"<t>.<body>"`,
+  `OD-Panel-Id`, `User-Agent`) with `OD-Panel-Event: action` and `OD-Request-Id`, one per press, so
+  the URL can tell a retry from a second press. Its body carries `"event": "action"` (a lookup now
+  says `"event": "lookup"` and sends `OD-Panel-Event: lookup`), the same `panel_id`, `workspace_id`,
+  `ticket`, `contact` and `locale`, the `agent` who pressed it and the action:
+
+```json
+{ "event": "action", "request_id": "…", "panel_id": "…", "workspace_id": "…", "locale": "fr",
+  "action": { "id": "create_invoice", "inputs": { "amount": "120.00", "reason": "damaged" } },
+  "agent": { "id": "…", "name": "Maya Chen", "email": "maya@margin.app" },
+  "ticket": { "id": "…", "number": 1042, "subject": "…", "references": ["S00042"] },
+  "contact": { "id": "…", "email": "ada@example.com", "name": "Ada Buyer", "emails": ["ada@example.com"], "phone": "+32 470 12 34 56" } }
+```
+
+- The answer is JSON `{ message?: string /* 280 */, tone?: Tone, blocks?: Block[] }`. Any `2xx` is done
+  (`ok: true`, `message` shown, or "Done."); with `blocks` they replace the panel's answer (cleaned like
+  an answer's, `"empty"` when none read), else the panel is read again. `400`, `409` and `422` are the
+  URL refusing in its own words (`ok: false`, `tone: "danger"`, its `message`, else "The panel's URL
+  refused this action."). `401` and `403` are refused credentials: the panel is marked `error` as a lookup
+  would, and the agent is told to ask an admin to check the signing secret. Any other status, a timeout
+  (10 s, longer than a lookup's 3 s) or a failure is `ok: false` with a few words that name no URL and
+  say, for a timeout, that the action may still have gone through. The panel's cached answer is dropped
+  after every press.
+- A press is recorded on the ticket's timeline (activity `panel_action`: the panel, the action's id
+  and label, `ok` and the message) and in the audit log (`ticket_panel.action`: the ticket, the action's
+  id, `ok`, the request id), never the values filled in.
+
 ### Security
 
 - Client secrets, tokens and signing secrets are sealed with `d.Box` (`ticket_panels.secret_enc`:
@@ -416,7 +474,7 @@ type Value = string | number | boolean
   answers, events, logs or audit entries. Requests go through the outbound URL rules at connect
   time (https, public addresses only, no redirects, no proxy; loopback on development instances).
 - Audit: `ticket_panel.connected`, `ticket_panel.updated` (`changes` names the fields: `name`, `enabled`, `position`, `url`,
-  `credentials` for new Shopify credentials, `secret` for a rotation, `fields`, `orders_shown`, `reference_pattern`), `ticket_panel.disconnected`,
+  `credentials` for new Shopify credentials, `secret` for a rotation, `fields`, `orders_shown`, `reference_pattern`), `ticket_panel.action`, `ticket_panel.disconnected`,
   with the kind and host.
 - The ticket is read through domain visibility: a contact on a ticket of a private team the
   reader is not on is never looked up.

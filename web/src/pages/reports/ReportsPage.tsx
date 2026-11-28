@@ -19,11 +19,14 @@ import { ChannelBars } from "@/components/reports/ChannelBars";
 import { SeverityBars } from "@/components/reports/SeverityBars";
 import { AgentTable } from "@/components/reports/AgentTable";
 import { AgentWorkTable } from "@/components/reports/AgentWork";
+import { openWorkTeam, useTeamByPeople } from "@/components/reports/teamMembers";
+import { PersonFilter } from "@/components/reports/PersonFilter";
+import { MailboxFilter, openWorkMailbox, useReportMailboxes } from "@/components/reports/MailboxFilter";
 import { AnimatedNumber } from "@/components/motion";
 import { Bar, BreakdownBars, ShareBar, type BarRow } from "@/components/reports/Bars";
 import { BrandFilter, GroupTable, NO_TEAM, TeamFilter, brandRows, teamRows, useReportScope, type GroupRow } from "@/components/reports/TeamBrand";
 import { PriorityIcon, StatusIcon, priorityLabel, priorityOrder, statusLabel } from "@/components/tickets/bits";
-import type { ReportsOverview, ReportsQuery, ReportsRange, Ticket } from "@/lib/api/types";
+import type { Mailbox, ReportsOverview, ReportsQuery, ReportsRange, Ticket } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { minutes } from "@/lib/format";
 import { q } from "@/lib/queries";
@@ -44,8 +47,8 @@ function previous<R extends ReportsRange>(r: R): R {
 const OPEN_STATUSES = ["open", "pending", "on_hold"] as Ticket["status"][];
 
 /** The open tickets behind the backlog and open work cards, narrowed like the report. */
-function openWork(r: ReportsQuery) {
-  return { status: OPEN_STATUSES, team_id: r.team_id, brand_id: r.brand_id };
+function openWork(r: ReportsQuery, mailboxes: Mailbox[], byPeople: boolean) {
+  return { status: OPEN_STATUSES, ...openWorkTeam(r.team_id, byPeople), brand_id: r.brand_id, ...openWorkMailbox(r.mailbox_id, mailboxes), assignee: r.assignee_id };
 }
 
 export default function ReportsPage() {
@@ -56,7 +59,8 @@ export default function ReportsPage() {
   const scope = useReportScope();
   // Tickets by severity show only while the workspace uses severity.
   const severity = useDisplay().severity;
-  const filtered = !!(range.team_id || range.brand_id);
+  const filtered = !!(range.team_id || range.brand_id || range.mailbox_id || range.assignee_id);
+  const mailboxes = useReportMailboxes();
   // A link to a team the caller may not see (a private team they are not on) drops the filter.
   const lostTeam = !!search.team && search.team !== NO_TEAM && scope.teamsLoaded && !scope.team(search.team);
   useEffect(() => {
@@ -85,6 +89,10 @@ export default function ReportsPage() {
         actions={
           <>
             {scope.hasTeams && <TeamFilter scope={scope} value={search.team} onChange={(team) => void navigate({ search: (s) => ({ ...s, team }) })} />}
+            <PersonFilter value={search.person} onChange={(person) => void navigate({ search: (s) => ({ ...s, person }) })} />
+            {(mailboxes.length > 1 || search.mailbox) && (
+              <MailboxFilter mailboxes={mailboxes} value={search.mailbox} onChange={(mailbox) => void navigate({ search: (s) => ({ ...s, mailbox }) })} />
+            )}
             {(scope.multiBrand || search.brand) && <BrandFilter scope={scope} value={search.brand} onChange={(brand) => void navigate({ search: (s) => ({ ...s, brand }) })} />}
             <RangePicker value={range} onChange={(r) => void navigate({ search: (s) => ({ ...s, ...r }) })} />
           </>
@@ -108,7 +116,7 @@ export default function ReportsPage() {
             art="search"
             title={t("filtered.emptyTitle")}
             description={t("filtered.emptyDescription")}
-            action={<Button onClick={() => void navigate({ search: (s) => ({ ...s, team: undefined, brand: undefined }) })}>{t("filtered.clear")}</Button>}
+            action={<Button onClick={() => void navigate({ search: (s) => ({ ...s, team: undefined, brand: undefined, mailbox: undefined, person: undefined }) })}>{t("filtered.clear")}</Button>}
           />
         ) : (
           <div className={cn("flex flex-col gap-4 px-4 pb-12 pt-4 transition-opacity duration-150 md:px-6 md:pt-5", refetching && "opacity-60")}>
@@ -348,9 +356,11 @@ function VolumeCard({ d, className }: { d: ReportsOverview; className?: string }
 function BacklogCard({ filter, openNow }: { filter: ReportsQuery; openNow: number }) {
   const { t } = useTranslation("reports");
   useTranslation("indicators");
-  const narrowed = !!(filter.team_id || filter.brand_id);
+  const narrowed = !!(filter.team_id || filter.brand_id || filter.mailbox_id || filter.assignee_id);
+  const mailboxes = useReportMailboxes();
+  const byPeople = useTeamByPeople();
   const counts = useQuery({ ...q.counts(), enabled: !narrowed });
-  const list = useInfiniteQuery({ ...q.tickets(openWork(filter)), enabled: narrowed });
+  const list = useInfiniteQuery({ ...q.tickets(openWork(filter, mailboxes, byPeople)), enabled: narrowed });
   const tickets = list.data?.pages.flatMap((pg) => pg.data) ?? [];
   const c = narrowed
     ? list.data && {
@@ -429,7 +439,9 @@ function BrandCard({ rows }: { rows: GroupRow[] }) {
 function OpenWorkCards({ filter }: { filter: ReportsQuery }) {
   const { t } = useTranslation("reports");
   useTranslation("indicators");
-  const list = useInfiniteQuery(q.tickets(openWork(filter)));
+  const mailboxes = useReportMailboxes();
+  const byPeople = useTeamByPeople();
+  const list = useInfiniteQuery(q.tickets(openWork(filter, mailboxes, byPeople)));
   const tickets = list.data?.pages.flatMap((pg) => pg.data) ?? [];
   const sample = list.hasNextPage ? t("open.sample", { count: tickets.length }) : t("open.subtitle");
 

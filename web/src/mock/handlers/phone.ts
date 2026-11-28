@@ -40,7 +40,32 @@ const waiting = {
   last_event_at: null,
 } as const;
 
+/** A second of a soft tone as a WAV file, so the demo's recording plays. */
+function tone(): Uint8Array {
+  const rate = 8000;
+  const n = rate;
+  const out = new Uint8Array(44 + n);
+  const v = new DataView(out.buffer);
+  const text = (at: number, s: string) => [...s].forEach((c, i) => v.setUint8(at + i, c.charCodeAt(0)));
+  text(0, "RIFF");
+  v.setUint32(4, 36 + n, true);
+  text(8, "WAVEfmt ");
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true);
+  v.setUint32(28, rate, true);
+  v.setUint16(32, 1, true);
+  v.setUint16(34, 8, true);
+  text(36, "data");
+  v.setUint32(40, n, true);
+  for (let i = 0; i < n; i++) out[44 + i] = 128 + Math.round(24 * Math.sin((2 * Math.PI * 440 * i) / rate) * Math.min(1, (n - i) / 800));
+  return out;
+}
+
 export function registerPhone() {
+  // A recording the provider serves only to the connection: the app streams it.
+  get("/v1/phone/calls/:id/recording", () => new Response(tone() as BodyInit, { status: 200, headers: { "content-type": "audio/wav", "content-disposition": 'attachment; filename="call-recording"' } }));
   get("/v1/phone/providers", () => ({ data: providers }));
   get("/v1/phone/connections", (ctx) => ({ data: ctx.ws.phone }));
   get("/v1/phone/lines", (ctx) => ({ data: lines.filter((l) => ctx.ws.phone.some((c) => c.provider === l.provider)) }));

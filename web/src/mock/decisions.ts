@@ -54,7 +54,7 @@ export function applyDecisions(
   };
   const ok = (f: "priority" | "severity" | "labels" | "team", c: number) => allowed.has(f) && (opts.force || c >= threshold);
   const suggestions: AISuggestions = {};
-  const sugg = (value: string | string[], c: number) => ({ value, confidence: c, probability: Math.min(0.99, c + 0.08), model: "jev", decided_at: at });
+  const sugg = (value: string | string[], c: number) => ({ value, confidence: c, probability: Math.min(0.99, c + 0.08), model: "jev", decided_at: at, reason: "below_threshold" as const });
 
   const applyPriority = rank[p.priority] > rank[t.priority] && ok("priority", conf.priority);
   const applySeverity = sevRank(p.severity) > sevRank(t.severity) && ok("severity", conf.severity);
@@ -99,7 +99,7 @@ export function applyDecisions(
   for (const a of ws.activities.slice(before) as Activity[]) {
     a.actor = { type: "ai", user: null };
     a.created_at = at;
-    a.data = { ...a.data, via: opts.via, model: "jev", confidence: confFor[a.type] ?? null };
+    a.data = { ...a.data, via: opts.via, model: "jev", confidence: confFor[a.type] ?? null, threshold };
   }
   addActivity(ws, t, "ai_triaged", { category: p.category, sentiment: p.sentiment, language: p.language, priority: p.priority, severity: p.severity, via: opts.via, model: "jev", engine: "jev" }, null, at, false).actor = { type: "ai", user: null };
   t.custom = { ...t.custom, ai_decisions: decisions, ai_suggestions: suggestions, ai_sentiment: p.sentiment, language: p.language, ai_category: p.category, ai_triaged_at: at };

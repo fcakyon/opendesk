@@ -92,6 +92,11 @@
     "applyAria": "{{what}} übernehmen",
     "skipAria": "{{what}} überspringen",
     "sure": "{{name}} ist sich zu {{pct}} % sicher",
+    "why": {
+      "below_threshold": "Unter der Schwelle von {{pct}} %",
+      "field_off": "Die Triage ändert dieses Feld nicht",
+      "not_on_team": "Die zugewiesene Person ist nicht in diesem Team"
+    },
     "newTag": "Neues Label, wird beim Übernehmen erstellt",
     "done": "Fertig. Das Ticket ist aktualisiert.",
     "nothing": "Alles entspricht schon dem, was {{name}} wählen würde.",

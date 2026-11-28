@@ -631,7 +631,7 @@
   "panels": {
     "empty": "No panels yet. A Shopify store shows each contact’s orders; a URL of your own can show anything else.",
     "title": "Ticket panels",
-    "hint": "Show what Shopify, or a system of your own, knows about a ticket’s contact, beside the ticket. Read-only, looked up when a ticket is open.",
+    "hint": "Show what Shopify, or a system of your own, knows about a ticket’s contact, beside the ticket, looked up when a ticket is open. A URL of your own can also offer buttons that send it a request.",
     "adminsOnly": "Admins add and change ticket panels.",
     "add": "Add a panel",
     "kind": {
@@ -659,7 +659,7 @@
     "removed": "{{name}} removed",
     "updateError": "Couldn’t save the panel",
     "addTitle": "Add a ticket panel",
-    "addDescription": "OpenDesk only reads: it looks up the ticket’s contact when someone opens the ticket.",
+    "addDescription": "OpenDesk looks up the ticket’s contact when someone opens the ticket. Shopify is only read; a URL of your own can also offer buttons.",
     "shop": "Shop",
     "shopHint": "Its myshopify.com domain, such as my-store.myshopify.com.",
     "auth": {
@@ -674,7 +674,7 @@
     "token": "Admin API access token",
     "tokenHint": "Only for an app made in Shopify admin before 2026 (Settings → Apps → Develop apps) with the read_customers and read_orders scopes: its Admin API access token.",
     "url": "URL",
-    "urlHint": "OpenDesk posts the ticket, its contact and the references it finds to this URL, signed, and shows what it answers.",
+    "urlHint": "OpenDesk posts the ticket, its contact and the references it finds to this URL, signed, and shows what it answers. When an agent presses one of its buttons, it also posts the action, what the agent filled in, and the agent’s name and email.",
     "name": "Name",
     "namePlaceholder": "Odoo",
     "connect": "Add panel",
@@ -689,7 +689,7 @@
     "secretTitle": "Signing secret",
     "secretDescription": "Copy it now. You won’t see it again.",
     "secretVerify": "Every request carries OD-Signature, like webhook deliveries. Verify it before answering:",
-    "secretAnswer": "Answer JSON blocks (cards, labelled values, lists, notes), at most 64 KB:",
+    "secretAnswer": "Answer JSON blocks (cards, labelled values, lists, notes, buttons), at most 64 KB:",
     "secretSaved": "I’ve saved it",
     "fields": {
       "menu": "Choose what shows",

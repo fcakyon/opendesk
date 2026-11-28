@@ -109,7 +109,8 @@ rotates on use, reuse outside the 30 s grace window revokes it, 30-day cap wheth
   belongs to anyone else is refused and nothing rotates.
 - **Refresh** (`POST /v1/auth/refresh {user_id}`) rotates only the named account's cookie. Without `user_id` it refreshes
   the account whose session was used most recently. A refused refresh clears only that account's cookie; a replay
-  inside the grace window (another tab just rotated it) answers 401 without touching the cookie.
+  inside the grace window (another tab just rotated it) answers `409 refresh_in_progress` without touching the cookie
+  or the session, and the client tries again (1 s, then 2 s) with the cookie that tab received.
 - **Listing** (`POST /v1/auth/accounts`) reads every cookie without rotating anything and answers the accounts with
   live sessions, in the order they were added; ended ones are left out and their cookies cleared.
 - **Logout** signs out of the access token's account (or `user_id` when there is no valid access token) and clears its

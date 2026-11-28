@@ -73,6 +73,25 @@
     "error": "Une erreur s’est produite. Veuillez réessayer.",
     "offline": "Impossible de joindre le serveur. Vérifiez votre connexion."
   },
+  "chat_verify": {
+    "page_title": "Confirmez votre adresse e-mail",
+    "title": "Confirmez votre adresse e-mail",
+    "body": "Confirmez que cette adresse est bien la vôtre, pour que {{brand}} sache que la conversation vient vraiment de vous.",
+    "button": "Confirmer l’adresse e-mail",
+    "not_you": "Ce n’est pas vous ? Fermez cette page et rien ne change.",
+    "done_title": "Votre adresse e-mail est confirmée",
+    "already_title": "Votre adresse e-mail est déjà confirmée",
+    "done_body": "{{brand}} sait désormais que la conversation de {{email}} vient de vous. Vous pouvez fermer cette page et continuer à discuter.",
+    "invalid_title": "Ce lien n’est pas valide",
+    "invalid_body": "Il a peut-être expiré ou a déjà été utilisé. Demandez un nouvel e-mail dans la conversation.",
+    "error": "Une erreur s’est produite. Veuillez réessayer.",
+    "offline": "Impossible de joindre le serveur. Vérifiez votre connexion.",
+    "email_subject": "Confirmez votre adresse e-mail pour {{brand}}",
+    "email_intro": "Merci d’avoir discuté avec {{brand}}. Confirmez que cette adresse est bien la vôtre, pour que l’équipe sache que c’est vraiment vous.",
+    "email_meanwhile": "Vous pouvez continuer à discuter en attendant.",
+    "email_expiry": "Le lien fonctionne pendant {{hours}} heures.",
+    "email_reason": "Vous recevez cet e-mail parce que cette adresse a été indiquée dans le chat d’un site de {{brand}}. Si ce n’était pas vous, ignorez-le et rien ne change."
+  },
   "footer": {
     "powered_by": "Propulsé par",
     "language": "Langue"

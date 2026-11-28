@@ -75,6 +75,7 @@ func TestRegisterAll(t *testing.T) {
 		"/v1/widget/settings":                                 {"get", "patch"},
 		"/v1/contacts/{id}/avatar":                            {"put", "delete"},
 		"/v1/contacts/{id}/avatar/refresh":                    {"post"},
+		"/v1/tickets/{id}/customer-tickets":                   {"get"},
 		"/v1/companies/{id}/avatar":                           {"put", "delete"},
 		"/v1/companies/{id}/avatar/refresh":                   {"post"},
 		"/v1/assignment":                                      {"get", "patch"},

@@ -153,10 +153,12 @@ func errRefreshInvalid() *httpx.Error {
 }
 
 // rotateRefresh trades a refresh token for a new one. A token that was already rotated
-// (outside a short grace window) is treated as stolen and ends its session. With expect
-// set, the token must belong to that account. keep reports a refusal that must leave the
-// browser's cookie alone: a replay inside the grace window (another tab already holds the
-// new token) or a token of another account.
+// (outside a short grace window) is treated as stolen and ends its session; inside it,
+// another tab refreshed a moment earlier and the answer is 409 refresh_in_progress, so the
+// caller tries again with the new cookie instead of signing out. With expect set, the token
+// must belong to that account. keep reports a refusal that must leave the browser's cookie
+// alone: a replay inside the grace window (another tab already holds the new token) or a
+// token of another account.
 func (s *svc) rotateRefresh(ctx context.Context, token string, expect uuid.UUID, ri reqInfo) (out *authOut, keep bool, err error) {
 	if token == "" {
 		return nil, false, errRefreshInvalid()
@@ -186,7 +188,7 @@ func (s *svc) rotateRefresh(ctx context.Context, token string, expect uuid.UUID,
 			}
 			if rotated != nil && time.Since(*rotated) < refreshReuseGrace {
 				keep = true
-				return errRefreshInvalid()
+				return httpx.E(409, "refresh_in_progress", "Another tab refreshed this session. Try again.")
 			}
 			if _, err := endSession(ctx, tx, uid, sid); err != nil {
 				return err

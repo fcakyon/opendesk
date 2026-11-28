@@ -497,7 +497,7 @@ function ActionRow({
     case "set_status":
       control = (
         <SinglePick
-          items={statusItems().filter((s) => s.value !== "closed")}
+          items={statusItems()}
           value={a.value}
           onChange={set}
           placeholder={ts("edit.chooseStatus")}

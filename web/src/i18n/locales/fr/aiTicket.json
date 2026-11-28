@@ -93,6 +93,11 @@
     "applyAria": "Appliquer {{what}}",
     "skipAria": "Ignorer {{what}}",
     "sure": "{{name}} est sûr à {{pct}} %",
+    "why": {
+      "below_threshold": "Sous le seuil de {{pct}} %",
+      "field_off": "Le tri ne modifie pas ce champ",
+      "not_on_team": "La personne assignée n’est pas dans cette équipe"
+    },
     "newTag": "Une nouvelle étiquette, créée lors de l’application",
     "done": "Terminé. Le ticket est à jour.",
     "nothing": "Tout correspond déjà aux choix que ferait {{name}}.",

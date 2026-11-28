@@ -105,9 +105,17 @@
   "filter": {
     "teamLabel": "Tým: {{value}}",
     "brandLabel": "Značka: {{value}}",
+    "personLabel": "Osoba: {{value}}",
+    "allPeople": "Všechny osoby",
+    "searchPeople": "Hledat osoby",
     "allTeams": "Všechny týmy",
     "noTeam": "Bez týmu",
     "private": "Soukromé",
+    "mailboxLabel": "Schránka: {{value}}",
+    "allMailboxes": "Všechny schránky",
+    "noMailbox": "Bez schránky",
+    "noMailboxHint": "Chat, telefon, API",
+    "searchMailboxes": "Hledat schránky",
     "allBrands": "Všechny značky",
     "searchTeams": "Hledat týmy",
     "searchBrands": "Hledat značky"

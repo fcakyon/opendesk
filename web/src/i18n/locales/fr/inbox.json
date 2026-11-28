@@ -95,7 +95,11 @@
     "notFoundHint": "Il a peut-être été supprimé ou fusionné.",
     "loadError": "Impossible de charger ce ticket",
     "back": "Retour à la liste",
-    "movedPrivate": "Ce ticket a été déplacé vers une équipe privée"
+    "movedPrivate": "Ce ticket a été déplacé vers une équipe privée",
+    "followUpOf": "Suite de #{{number}}",
+    "followUpHidden": "Suite d’un ticket précédent",
+    "followUpHint": "Le client a réécrit après la clôture de #{{number}}",
+    "copyForAgent": "Copier le ticket pour un agent IA"
   },
   "commands": {
     "reply": "Répondre",
@@ -120,7 +124,9 @@
     "unspammed": "Retiré des indésirables",
     "deleted": "#{{number}} supprimé",
     "snoozed": "Mis en attente",
-    "linkCopied": "Lien copié"
+    "linkCopied": "Lien copié",
+    "copiedForAgent": "Copié. Collez-le dans votre agent IA.",
+    "copyFailed": "Impossible de copier. Réessayez."
   },
   "finish": {
     "close": {
@@ -183,7 +189,9 @@
     "soundOff": "Jouer un son lorsqu’un visiteur attend",
     "title_one": "● {{count}} client en attente",
     "title_other": "● {{count}} clients en attente",
-    "title_many": "● {{count}} clients en attente"
+    "title_many": "● {{count}} clients en attente",
+    "whatsapp": "WhatsApp",
+    "whatsappHint": "WhatsApp. Les réponses d’ici partent vers le WhatsApp du client."
   },
   "presence": {
     "viewing": "{{name}} consulte",
@@ -276,6 +284,10 @@
       "description": "Les nouvelles conversations arrivent ici lorsqu’une adresse, un widget ou une règle de routage les envoie à cette équipe.",
       "seeOpen": "Voir les tickets ouverts",
       "seeUnassigned": "Voir les tickets non attribués"
+    },
+    "all": {
+      "title": "Aucun ticket pour l’instant",
+      "description": "Chaque ticket s’affiche ici, quel que soit son statut, sauf les indésirables."
     }
   },
   "error": {
@@ -496,6 +508,8 @@
     "automation": "Une automatisation",
     "customer": "Le client",
     "ai": "IA",
+    "why": "Pourquoi ?",
+    "whyInternal": "Seule l’équipe voit ceci.",
     "noteEdited": "<b>{{who}}</b> a modifié une note interne",
     "noteDeleted": "<b>{{who}}</b> a supprimé une note interne",
     "status": "<b>{{who}}</b> a marqué ce ticket <b>{{status}}</b>",
@@ -514,6 +528,7 @@
     "unassigned": "<b>{{who}}</b> a retiré le responsable de ce ticket",
     "team": "<b>{{who}}</b> a déplacé ce ticket vers <b>{{team}}</b>",
     "contactChanged": "<b>{{who}}</b> a remplacé le contact <b>{{from}}</b> par <b>{{to}}</b>",
+    "contactAnswered": "<b>{{to}}</b> a répondu au message de <b>{{from}}</b> et est maintenant le contact",
     "noContact": "aucun contact",
     "teamRemoved": "<b>{{who}}</b> a retiré l’équipe",
     "tagged": "<b>{{who}}</b> a ajouté",
@@ -544,6 +559,12 @@
     "triagedAs": "<b>{{who}}</b> a classé ce ticket dans <b>{{category}}</b>",
     "aiAnswered": "<b>{{who}}</b> a répondu à partir de la base de connaissances",
     "aiAnsweredEmail": "<b>{{who}}</b> a répondu par e-mail",
+    "aiSkipped": "<b>{{who}}</b> a laissé ce message à l’équipe",
+    "skippedReason": {
+      "contact_limit": "Le client a atteint la limite de réponses que {{who}} donne à une personne en une heure.",
+      "monthly_cap": "{{who}} avait atteint son plafond mensuel.",
+      "no_balance": "Le solde IA est épuisé, {{who}} n’a donc pas pu répondre."
+    },
     "procedureRan": "<b>{{who}}</b> a exécuté <b>{{name}}</b>",
     "procedureNothing": "<b>{{who}}</b> a exécuté <b>{{name}}</b> : rien à faire",
     "procedureFailed": "<b>{{who}}</b> n’a pas pu terminer <b>{{name}}</b>",
@@ -551,10 +572,19 @@
     "aiSuggestedSent": "<b>{{who}}</b> a envoyé la réponse suggérée par {{ollie}}",
     "handoffCustomer": "Le client a demandé à parler à une personne",
     "handoffAi": "<b>{{who}}</b> a passé le relais à l’équipe",
+    "handoffReason": "Raison",
+    "handoffRule": {
+      "agent": "{{who}} a décidé qu’une personne était nécessaire.",
+      "visitor_request": "Le visiteur a demandé à parler à une personne.",
+      "reply_limit": "La conversation a atteint la limite de réponses de {{who}}.",
+      "needs_human": "{{who}} a jugé qu’une personne était nécessaire."
+    },
     "other": "<b>{{who}}</b> a mis à jour ce ticket <m>{{type}}</m>",
     "teamFrom": "<b>{{who}}</b> a déplacé ce ticket de <b>{{from}}</b> vers <b>{{team}}</b>",
     "teamRule": "Transmis à <b>{{team}}</b> par la règle <b>{{rule}}</b>",
-    "replyAddress": "les réponses sont désormais envoyées depuis <m>{{address}}</m>"
+    "replyAddress": "les réponses sont désormais envoyées depuis <m>{{address}}</m>",
+    "panelAction": "<b>{{who}}</b> a lancé <b>{{label}}</b> dans {{panel}}",
+    "panelActionFailed": "<b>{{who}}</b> a essayé <b>{{label}}</b> dans {{panel}}, sans succès : {{message}}"
   },
   "typing_one": "{{who}} écrit",
   "typing_other": "{{who}} écrivent",
@@ -571,6 +601,9 @@
     "theCustomer": "le client",
     "noteHint": "Seule votre équipe voit les notes. Tapez @ pour mentionner quelqu’un.",
     "ccBcc": "Cc / Cci",
+    "replyAll": "Répondre à tous",
+    "replyAllHint": "Répondre à tous : envoyer aussi cette réponse à {{list}}, en Cc",
+    "replyAllOff": "Revenir à Répondre : retire {{list}} du Cc",
     "cc": "Cc",
     "bcc": "Cci",
     "replyPlaceholder": "Rédigez une réponse. Tapez / pour les réponses enregistrées, {{braces}} pour les détails de ce ticket.",
@@ -669,7 +702,12 @@
       "member_gone": "Vous ne pouvez plus répondre sur ce ticket, la réponse n’a donc pas été envoyée.",
       "refused": "La réponse n’a pas pu être envoyée telle qu’elle était écrite à l’heure prévue. Vérifiez-la et renvoyez-la.",
       "failed": "La réponse programmée n’a pas pu être envoyée. Renvoyez-la."
-    }
+    },
+    "whatsappWindowOpen": "Fenêtre WhatsApp ouverte. {{left}} pour répondre.",
+    "whatsappWindowClosed": "La fenêtre de 24 heures est fermée : seul un modèle peut être envoyé.",
+    "whatsappDisconnected": "Ce numéro WhatsApp n’est pas connecté. Un admin peut le reconnecter dans Paramètres > WhatsApp.",
+    "whatsappTemplate": "Envoyer un modèle",
+    "whatsappOneFile": "WhatsApp accepte un fichier par message. Retirez le fichier pour en joindre un autre."
   },
   "sharedDraft": {
     "label": "Brouillon partagé",
@@ -682,6 +720,41 @@
     "replaceTitle": "Remplacer votre texte ?",
     "replaceBody": "Le brouillon de {{name}} remplace le texte que vous avez rédigé.",
     "replaceConfirm": "Remplacer"
+  },
+  "whatsappTemplate": {
+    "title": "Envoyer un modèle",
+    "description": "Seuls les modèles approuvés par Meta peuvent être envoyés, pendant ou après la fenêtre de 24 heures.",
+    "search": "Rechercher des modèles",
+    "loading": "Chargement des modèles",
+    "noTemplates": "Aucun modèle ne peut encore être envoyé. Synchronisez les modèles approuvés dans Paramètres > WhatsApp.",
+    "emptySearch": "Aucun modèle ne correspond à cette recherche.",
+    "preview": "Aperçu",
+    "header": "En-tête",
+    "headerMedia": "En-tête : {{kind}}",
+    "kind": {
+      "image": "Image",
+      "video": "Vidéo",
+      "document": "Document"
+    },
+    "headerChoose": "Choisir un fichier",
+    "headerFileHint": "Jusqu’à {{size}}.",
+    "headerUploading": "Importation",
+    "headerRemove": "Retirer le fichier d’en-tête",
+    "headerTooLarge": "{{name}} dépasse {{size}}.",
+    "headerUploadFailed": "Impossible d’importer {{name}}",
+    "headerValue": "En-tête : {{name}}",
+    "headerValueHint": "Jusqu’à 60 caractères.",
+    "params": "Remplissez les variables",
+    "paramHint": "S’insère à la place de cette variable dans le message.",
+    "buttons": "Liens des boutons",
+    "buttonValue": "Bouton : {{text}}",
+    "buttonNumber": "Bouton {{number}}",
+    "buttonHint": "S’insère dans le lien de ce bouton.",
+    "back": "Retour",
+    "cancel": "Annuler",
+    "send": "Envoyer le modèle",
+    "sent": "Modèle envoyé.",
+    "error": "Impossible d’envoyer ce modèle"
   },
   "message": {
     "from": "Message de {{name}}",
@@ -723,9 +796,6 @@
     "imagesHeld": "Les images distantes sont masquées pour protéger votre vie privée.",
     "loadImages": "Charger les images",
     "hideQuoted": "Masquer le texte cité",
-    "preview": "Aperçu de {{name}}",
-    "fullSize": "Ouvrir en taille réelle",
-    "download": "Télécharger {{name}}",
     "fromAddress": "de {{name}} <{{address}}>",
     "ownAddress": "Adresse personnelle",
     "ownAddressHint": "Envoyé depuis le compte de messagerie de son auteur plutôt que depuis l’adresse du ticket. Les réponses du client reviennent sur ce ticket.",
@@ -739,7 +809,14 @@
     "unverifiedHint": "Le domaine de l’expéditeur a échoué à la vérification d’authentification des e-mails. L’expéditeur n’est peut-être pas celui qu’il prétend être. Soyez prudent avec les liens et les demandes de ce message.",
     "viaForm": "Envoyé via le formulaire à l’adresse <m>{{address}}</m>",
     "forward": "Transférer",
-    "viewSource": "Afficher la source"
+    "viewSource": "Afficher la source",
+    "copyForAgent": "Copier pour un agent IA",
+    "whatsapp": {
+      "sent": "Envoyé",
+      "delivered": "Remis",
+      "read": "Lu",
+      "failed": "Non remis"
+    }
   },
   "merge": {
     "title": "Fusionner #{{number}} avec un autre ticket",
@@ -775,6 +852,8 @@
     "startTyping": "Commencez à écrire",
     "use": "Utiliser",
     "change": "Changer",
+    "addTo": "Ajouter quelqu’un",
+    "addCopies": "Ajouter Cc ou Cci",
     "noMailbox": "Aucune boîte mail",
     "bodyReply": "Rédigez votre message",
     "bodyNote": "Décrivez le problème",
@@ -807,7 +886,12 @@
     "open": "Ouvrir le contact",
     "copyEmail": "Copier l’adresse e-mail",
     "pastTickets": "Tickets précédents",
-    "noOther": "Aucun autre ticket"
+    "noOther": "Aucun autre ticket",
+    "verified": "Vérifié",
+    "unverified": "Non vérifié",
+    "verifiedByEmail": "A confirmé son adresse e-mail avec le lien que nous lui avons envoyé.",
+    "verifiedByIdentity": "S’est connecté sur votre site, qui a confirmé son identité.",
+    "unverifiedHint": "Son adresse e-mail vient de la conversation et n’est pas encore confirmée. Elle passe à Vérifié dès que le lien de notre e-mail est ouvert."
   },
   "fields": {
     "title": "Champs",
@@ -845,6 +929,7 @@
     "setBy": "Défini par {{name}}",
     "said": "{{name}} a répondu",
     "sure": "Confiance de {{pct}} %",
+    "threshold": "seuil {{pct}} %",
     "setThis": "Défini par {{name}}"
   },
   "suggest": {
@@ -1034,6 +1119,12 @@
     "line": "Ligne {{line}}",
     "playRecording": "Écouter l’enregistrement",
     "playVoicemail": "Écouter le message vocal",
+    "recording": "Enregistrement",
+    "loadingRecording": "Chargement…",
+    "tryAgain": "Réessayer",
+    "recordingNotReady": "L’enregistrement n’est pas encore prêt. Réessayez dans une minute.",
+    "recordingRefused": "Le fournisseur a refusé le jeton de la connexion. Il lui faut l’accès aux enregistrements d’appels.",
+    "recordingError": "Impossible de charger l’enregistrement.",
     "openIn": "Ouvrir dans {{provider}}",
     "summary": "Résumé",
     "showTranscript": "Afficher la transcription",
@@ -1103,7 +1194,13 @@
     "discountCodes_other": "Codes de réduction",
     "refunded": "Remboursé : {{amount}}",
     "openLink": "Ouvrir {{name}}",
-    "copyValue": "Copier {{name}}"
+    "copyValue": "Copier {{name}}",
+    "actions": {
+      "error": "Cela n’a pas abouti. Réessayez dans un instant.",
+      "cancel": "Annuler",
+      "fill": "Remplissez les champs obligatoires.",
+      "choose": "Choisir"
+    }
   },
   "print": {
     "action": "Imprimer ou enregistrer en PDF",

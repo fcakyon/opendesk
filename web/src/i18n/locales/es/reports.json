@@ -102,9 +102,17 @@
   "filter": {
     "teamLabel": "Equipo: {{value}}",
     "brandLabel": "Marca: {{value}}",
+    "personLabel": "Persona: {{value}}",
+    "allPeople": "Todas las personas",
+    "searchPeople": "Buscar personas",
     "allTeams": "Todos los equipos",
     "noTeam": "Sin equipo",
     "private": "Privado",
+    "mailboxLabel": "Buzón: {{value}}",
+    "allMailboxes": "Todos los buzones",
+    "noMailbox": "Sin buzón",
+    "noMailboxHint": "Chat, teléfono, API",
+    "searchMailboxes": "Buscar buzones",
     "allBrands": "Todas las marcas",
     "searchTeams": "Buscar equipos",
     "searchBrands": "Buscar marcas"

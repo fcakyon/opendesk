@@ -51,6 +51,7 @@ export const SETTINGS_RULES: Record<string, SettingsRule> = {
   "/settings/mailboxes": { role: "admin" },
   "/settings/mailboxes/new": { role: "admin" },
   "/settings/phone": { role: "admin" },
+  "/settings/whatsapp": { role: "admin" },
   "/settings/support-channels": { role: "agent" },
   // Collab mail accounts are each member's own.
   "/settings/mail-accounts": { needs: ["collab"] },

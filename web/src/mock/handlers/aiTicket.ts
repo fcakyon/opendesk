@@ -537,6 +537,8 @@ export function registerAiTicket() {
   post("/v1/tickets/:id/ai/summary", (ctx) => {
     guard(ctx);
     const t = ticketOf(ctx);
+    // The reader's language. The mock keeps its English sample text; a bad tag is ignored.
+    if (typeof ctx.body.language === "string" && ctx.body.language.length > 35) throw invalid("language is too long");
     reserve(ctx.ws, "summarize");
     const s = summarize(ctx.ws, t);
     t.custom = { ...t.custom, ai_summary: s, ai_sentiment: s.sentiment };
@@ -823,7 +825,7 @@ function seedAgentChat(ws: WsData, bot: string) {
   t.sla = computeSla(ws, t, false);
   const handedBy = botForTicket(ws, t);
   t.custom = { ...t.custom, ai_handoff: true, ai_handoff_at: at(start - 3.4), ai_handoff_bot: handedBy.name, language: "en" };
-  ws.activities.push({ id: uuid(), ticket_id: t.id, actor: { type: "ai", user: null }, type: "ai_handoff", data: { bot: handedBy.name, bot_id: handedBy.id }, created_at: at(start - 3.4) });
+  ws.activities.push({ id: uuid(), ticket_id: t.id, actor: { type: "ai", user: null }, type: "ai_handoff", data: { bot: handedBy.name, bot_id: handedBy.id, rule: "agent", reason: "Asks whether order #4822 arrives before Friday; I can't promise a delivery date" }, created_at: at(start - 3.4) });
   c.ticket_count++;
 }
 
@@ -870,7 +872,7 @@ function seedDocsBotChat(ws: WsData) {
   t.status = "open";
   t.sla = computeSla(ws, t, false);
   t.custom = { ...t.custom, ai_handoff: true, ai_handoff_at: at(start - 4.3), ai_handoff_bot: pip.name, language: "en" };
-  ws.activities.push({ id: uuid(), ticket_id: t.id, actor: { type: "ai", user: null }, type: "ai_handoff", data: { bot: pip.name, bot_id: pip.id }, created_at: at(start - 4.3) });
+  ws.activities.push({ id: uuid(), ticket_id: t.id, actor: { type: "ai", user: null }, type: "ai_handoff", data: { bot: pip.name, bot_id: pip.id, rule: "reply_limit" }, created_at: at(start - 4.3) });
   c.ticket_count++;
 }
 
@@ -883,7 +885,7 @@ function seedWaitingChats(ws: WsData, bot: string) {
   const people = ["Hugo Moreau", "Aisha Bello", "Julia Novak"].map((n) => ws.contacts.find((c) => c.name === n));
   const pick = (i: number) => people[i] ?? ws.contacts[(i * 7 + 3) % ws.contacts.length];
   const team = ws.teams.find((x) => x.name === "Support")?.id ?? null;
-  const chats: { subject: string; labels: string[]; thread: { who: "visitor" | "bot"; text: string; sec: number }[]; handoffSec?: number }[] = [
+  const chats: { subject: string; labels: string[]; thread: { who: "visitor" | "bot"; text: string; sec: number }[]; handoffSec?: number; skipped?: string }[] = [
     {
       subject: "Charged twice for my upgrade",
       labels: ["Billing", "Refund"],
@@ -909,6 +911,13 @@ function seedWaitingChats(ws: WsData, bot: string) {
       subject: "Do you have an education discount?",
       labels: ["Question"],
       thread: [{ who: "visitor", text: "Hello! I teach at a university. Do you have an education discount for my class?", sec: 12 }],
+    },
+    {
+      // The agent used its monthly cap, so it left this one for the team and said so.
+      subject: "Where do I find my invoices?",
+      labels: ["Question"],
+      thread: [{ who: "visitor", text: "Where can I download last quarter's invoices?", sec: 95 }],
+      skipped: "monthly_cap",
     },
   ];
   chats.forEach((c, i) => {
@@ -940,6 +949,10 @@ function seedWaitingChats(ws: WsData, bot: string) {
       const handedBy = botForTicket(ws, t);
       t.custom = { ...t.custom, ai_handoff: true, ai_handoff_at: at, ai_handoff_bot: handedBy.name, language: "en" };
       ws.activities.push({ id: uuid(), ticket_id: t.id, actor: { type: "ai", user: null }, type: "ai_handoff", data: { bot: handedBy.name, bot_id: handedBy.id }, created_at: at });
+    }
+    if (c.skipped) {
+      const leftBy = botForTicket(ws, t);
+      ws.activities.push({ id: uuid(), ticket_id: t.id, actor: { type: "ai", user: null }, type: "ai_skipped", data: { reason: c.skipped, bot: leftBy.name, bot_id: leftBy.id }, created_at: ago((c.thread[0].sec - 2) * 1000) });
     }
     contact.ticket_count++;
   });
